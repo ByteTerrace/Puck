@@ -1,26 +1,26 @@
 namespace Puck.Text;
 
 /// <summary>
-/// The missing distance-field generator piece: turns a raster COVERAGE atlas (a <see cref="FontAtlasKind.HardMask"/>
+/// The missing distance-field generator piece: turns a raster coverage atlas (a <see cref="FontAtlasKind.HardMask"/>
 /// or <see cref="FontAtlasKind.SoftMask"/> image, e.g. the GDI+/System.Drawing glyph raster the diegetic terminal
 /// already produces) into a single-channel signed distance field atlas (<see cref="FontAtlasKind.Sdf"/>) an SDF
 /// renderer can march. This is the runtime, no-toolchain fallback source; the higher-fidelity marchable source is a
 /// pre-baked MTSDF atlas (the font-atlas bake pipeline, <c>tools/font-atlas</c>) whose true single-channel distance
-/// lives in alpha (loaded, not generated here). Both encode the SAME convention so a decoder is source-agnostic.
+/// lives in alpha (loaded, not generated here). Both encode the same convention so a decoder is source-agnostic.
 /// </summary>
 /// <remarks>
 /// <para><b>Encoding convention (KEEP IN SYNC with the shader decode).</b> Every texel stores
 /// <c>encoded = 0.5 + signedDistance / distanceRange</c>, clamped to <c>[0, 1]</c>, where the signed distance is in
-/// TEXELS and is POSITIVE inside the glyph — the same convention the committed atlas metadata uses, matching
+/// texels and is positive inside the glyph — the same convention the committed atlas metadata uses, matching
 /// <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas)"/> (which reads <see cref="FontAtlas.DistanceRange"/> in
-/// texels and divides by <see cref="FontAtlas.Size"/> for the em range). The single-channel field is REPLICATED into
-/// all four RGBA channels, so a decoder that samples the true single-channel distance from ALPHA works uniformly for
-/// this generated atlas AND for a real MTSDF atlas (whose alpha is the true distance). The RGB median that MTSDF
-/// tooling reconstructs is NOT written here and must never be marched — it is only C0 at channel-crossover lines and
+/// texels and divides by <see cref="FontAtlas.Size"/> for the em range). The single-channel field is replicated into
+/// all four RGBA channels, so a decoder that samples the true single-channel distance from alpha works uniformly for
+/// this generated atlas and for a real MTSDF atlas (whose alpha is the true distance). The RGB median that MTSDF
+/// tooling reconstructs is not written here and must never be marched — it is only C0 at channel-crossover lines and
 /// so kinks a sphere-tracer's field; geometry samples the true channel.</para>
-/// <para><b>The transform is an EXACT Euclidean distance transform</b> (a separable O(n) lower-envelope algorithm
-/// over the inside- and outside-feature sets), NOT a chamfer approximation. The
-/// chamfer(1, √2) transform the earlier prototype used OVERESTIMATES true distance by up to ~8.24% off-axis (worst at
+/// <para><b>The transform is an exact Euclidean distance transform</b> (a separable O(n) lower-envelope algorithm
+/// over the inside- and outside-feature sets), not a chamfer approximation. The
+/// chamfer(1, √2) transform the earlier prototype used overestimates true distance by up to ~8.24% off-axis (worst at
 /// the 22.5° direction), and an overestimating field breaks conservative sphere tracing — so a glyph shape reading a
 /// chamfer atlas would need a <c>1 / 1.0824</c> step-scale penalty. The exact EDT keeps the field 1-Lipschitz in
 /// texel space (the Eikonal property), so the glyph shape is factor-1 with no step clamp; bilinear reconstruction on

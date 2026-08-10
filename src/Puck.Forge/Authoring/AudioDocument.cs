@@ -58,8 +58,8 @@ public sealed record AudioDocument(
     /// <summary>The default row count of the fallback silent pattern.</summary>
     public const int DefaultPatternRowCount = 16;
 
-    /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture. Null
-    /// when the document carries no unknown members. A settable (not <c>init</c>) accessor is required:
+    /// <summary>Gets or sets the unknown members preserved across a round-trip — the data-side plugin extensibility
+    /// posture. Null when the document carries no unknown members. A settable (not <c>init</c>) accessor is required:
     /// System.Text.Json appends to it during deserialization.</summary>
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }

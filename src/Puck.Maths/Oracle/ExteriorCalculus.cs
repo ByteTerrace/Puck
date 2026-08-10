@@ -4,7 +4,7 @@ namespace Puck.Maths;
 
 /// <summary>
 /// Discrete exterior calculus on a finite oriented complex: the cells' face order presented as an
-/// <see cref="IncidenceAlgebra{TValue, TOps}"/>, the oriented incidence numbers carried as ONE element of it, and the
+/// <see cref="IncidenceAlgebra{TValue, TOps}"/>, the oriented incidence numbers carried as one element of it, and the
 /// boundary and coboundary as the two sides that element multiplies on.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -26,7 +26,7 @@ namespace Puck.Maths;
 /// counit — and the fold is the product's own, so a pairing carries exactly one rounding.
 /// </para>
 /// <para>
-/// <b>Stokes' identity IS the associativity of that product.</b> <c>⟨dω, c⟩</c> brackets <c>(ω·δ)·c</c> and
+/// <b>Stokes' identity is the associativity of that product.</b> <c>⟨dω, c⟩</c> brackets <c>(ω·δ)·c</c> and
 /// <c>⟨ω, ∂c⟩</c> brackets <c>ω·(δ·c)</c>, so the adjunction is not a theorem about two operators, it is one product
 /// read two ways. It is exact at every exact material, and over <see cref="FixedQ4816"/> it is bit-identical for a
 /// reason rather than by luck: every incidence number is an exact integer of the carrier, so the intermediate

@@ -468,18 +468,15 @@ public static class WorldSubmissionCodec {
         }
     }
 
-    // THE LEAF-DISCRIMINANT RETIREMENT CONVENTION, stated once for every union below (session, composition, query,
-    // grant subject): a discriminant is RETIRED BY LEAVING ITS BYTE UNASSIGNED, never by handing that byte to a
-    // different leaf. The successor takes the next FREE value, so a stray retired byte decodes to UNKNOWN and fails
-    // loudly (LeafKindUnknown / EnumValueUnknown) rather than silently reading as some other leaf. The reason this
-    // holds even though the wire is in-session-only and has zero consumers: the discriminant tables here are the
-    // record of what each byte has ever meant, and reuse erases it. Retired so far — session 5 (`SessionRequest.Draw`),
-    // query 6 (`WorldQuery.Draws`), subject 8 (`GrantSubjectKind.Table`), all three when the draw subsystem collapsed
-    // into the generator and the keyed-table primitive collapsed into State; each byte is left unassigned, and each
-    // successor took a FRESH value rather than the retired one (`WorldQuery.Rules`, for one, is byte 8, and byte 6
-    // stays absent from both query switches). (`CapabilityFromWire`'s retired 2 spells its refusal out explicitly
-    // instead of falling through, because that reader is a bare value map with no type table to return null from —
-    // the same convention, said the only way that shape can say it.)
+    // THE LEAF-DISCRIMINANT RETIREMENT CONVENTION, stated once for every union below (session, composition,
+    // query, grant subject): a discriminant is retired by leaving its byte unassigned, never by handing that
+    // byte to a different leaf. The successor takes the next free value, so a stray retired byte decodes to
+    // unknown and fails loudly (LeafKindUnknown / EnumValueUnknown) rather than silently reading as some
+    // other leaf. This holds even though the wire is in-session-only and has zero consumers: the
+    // discriminant tables here are the record of what each byte has ever meant, and reuse erases it.
+    // (`CapabilityFromWire`'s retired 2 spells its refusal out explicitly instead of falling through,
+    // because that reader is a bare value map with no type table to return null from — the same convention,
+    // said the only way that shape can say it.)
     private static byte SessionKind(SessionRequest request) => request switch {
         SessionRequest.Join => 0,
         SessionRequest.Leave => 1,
@@ -682,8 +679,7 @@ public static class WorldSubmissionCodec {
         return (((UInt128)reader.ReadUInt64() << 64) | low);
     }
 
-    // Wire value 8 was GrantSubjectKind.Table, retired when the keyed-table primitive collapsed into State (a slot
-    // is a table with one key). Unassigned per the retirement convention above.
+    // Wire value 8 (formerly GrantSubjectKind.Table) is retired per the convention above — never reassign it.
     private static void WriteSubject(BinaryWriter writer, GrantSubject subject) {
         writer.Write(subject.Kind switch {
             GrantSubjectKind.All => (byte)0, GrantSubjectKind.Body => (byte)1, GrantSubjectKind.Screen => (byte)2,
@@ -713,7 +709,11 @@ public static class WorldSubmissionCodec {
     // is acted upon). The NESTED row of an UpsertGrant/RemoveGrant is the opposite case: that row is DOCUMENT DATA
     // this mutation writes into the Grants section, and a document principal is exactly the shape the cross-document
     // write-back channel reads back out of it — so the row admits one where the actor never does. Same shape rule,
-    // two different admissible kind sets, spelled by the caller rather than guessed at inside the rule.
+    // two different admissible kind sets, spelled by the caller rather than guessed at inside the rule. A market
+    // mutation's trade party (Seller/Bidder/Buyer/Canceler) is a third case, shaped like the acting principal
+    // (documentAllowed stays false — a document can no more trade than it can act) but never itself the acting
+    // principal: Server.WorldServer's own TryAuthorizeMarketParty is what checks a party against the actor
+    // submitting it, a live-runtime question this wire-shape check cannot answer and does not attempt to.
     private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure) {
         if (!TryValidatePrincipal(mutation.Principal, out failure)) {
             return false;
@@ -723,7 +723,17 @@ public static class WorldSubmissionCodec {
             WorldMutation.RemoveGrant value => value.Target.Principal,
             _ => (WorldPrincipal?)null,
         };
-        return (nested is not { } principal) || TryValidatePrincipal(principal, out failure, documentAllowed: true);
+        if ((nested is { } principal) && !TryValidatePrincipal(principal, out failure, documentAllowed: true)) {
+            return false;
+        }
+        var party = mutation switch {
+            WorldMutation.CreateMarketListing value => value.Seller,
+            WorldMutation.PlaceMarketBid value => value.Bidder,
+            WorldMutation.BuyoutMarketListing value => value.Buyer,
+            WorldMutation.CancelMarketListing value => value.Canceler,
+            _ => (WorldPrincipal?)null,
+        };
+        return (party is not { } tradeParty) || TryValidatePrincipal(tradeParty, out failure);
     }
 
     private static bool TryValidatePrincipal(WorldPrincipal principal, out WorldCodecFailure failure, bool documentAllowed = false) {

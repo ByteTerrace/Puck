@@ -4,9 +4,9 @@ using Puck.Abstractions.Machines;
 namespace Puck.Hosting;
 
 /// <summary>
-/// The machine-neutral time-travel layer — rewind, runahead, and fast-forward built ONCE over the snapshot surface any
-/// deterministic <see cref="ITimeTravelMachineCore{TInput}"/> exposes (the binjgb reference design). It is pure HOST
-/// state: it only READS the authoritative machine (through raw state capture) or drives a SEPARATE forked lookahead, so
+/// The machine-neutral time-travel layer — rewind, runahead, and fast-forward built once over the snapshot surface any
+/// deterministic <see cref="ITimeTravelMachineCore{TInput}"/> exposes (the binjgb reference design). It is pure host
+/// state: it only reads the authoritative machine (through raw state capture) or drives a separate forked lookahead, so
 /// it can never perturb the simulation trajectory whether its features are on or off.
 /// <para><b>Rewind.</b> Every <see cref="m_interval"/>th captured frame is a full keyframe (the restore anchor); the
 /// frames between two keyframes store only the (input, cycle-budget, host-accumulator) that produced each, so a rewind
@@ -18,10 +18,10 @@ namespace Puck.Hosting;
 /// their buffers on eviction, the per-frame record arrays are allocated once per segment), so the steady-state ring
 /// allocates nothing. There is no XOR/RLE delta encode: restore is keyframe-plus-replay (bit-exact by construction), so a
 /// full-state delta stream would be dead CPU/allocation cost for bytes a result can never read.</para>
-/// <para><b>Runahead.</b> ONE persistent lookahead fork (rented from the core's instance pool, never forked per input
+/// <para><b>Runahead.</b> One persistent lookahead fork (rented from the core's instance pool, never forked per input
 /// change) is kept N native frames ahead of the authoritative machine on predicted (currently-held) input; the host
-/// presents ITS framebuffer while the real machine stays the tick-locked authority and the only audio source. The layer
-/// advances the lookahead by the authority's OWN native-frame delta each submission (catching up to authority + N), so
+/// presents its framebuffer while the real machine stays the tick-locked authority and the only audio source. The layer
+/// advances the lookahead by the authority's own native-frame delta each submission (catching up to authority + N), so
 /// the lead stays exactly N under a mismatched host/native cadence and under fast-forward rather than drifting.</para>
 /// <para><b>Fast-forward.</b> A host-level cycle-budget multiplier the host reads and applies to its per-frame budget,
 /// with presentation frames skipped — never a timing hack inside the core. Clamped to <see cref="MaxFastForwardFactor"/>
@@ -287,7 +287,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     /// <summary>Advances the lookahead to stay exactly N native frames ahead of the authoritative machine — called after
     /// every stepped frame. On a prediction change (or the first advance) it rebases from the real machine's current
     /// state; then, whether primed or held, it advances the lookahead until it sits at the authority's current native
-    /// frame plus N. Because it tracks the authority's OWN native-frame position (not a fixed one-frame-per-call step),
+    /// frame plus N. Because it tracks the authority's own native-frame position (not a fixed one-frame-per-call step),
     /// the lead stays N under a mismatched host/native cadence and under fast-forward, where the authority advances
     /// several native frames per submission, rather than drifting ahead or behind. A no-op when runahead is disarmed.
     /// Reads the real machine only (a raw state capture).</summary>
@@ -315,8 +315,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
         // frame completed, several under fast-forward); right after a rebase it advances the full N. Driving on the fork's
         // real index (not a per-RunFrame counter) reports the fork's TRUE lead — N, or N+1 in the instant the
         // boundary-reaching frame's instruction overshoots one past the target (it self-corrects to N the next call). The
-        // fork is genuinely that many native frames ahead, rather than merely N RunFrame calls deep as the old counter
-        // claimed.
+        // fork is genuinely that many native frames ahead, not merely N RunFrame calls deep.
         var target = (realFrame + m_runaheadFrames);
 
         while (lookahead.NativeFrameIndex < target) {
@@ -405,7 +404,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     /// <summary>Integrates an authority advance the frame-oriented ring cannot replay — an instruction-granular sub-frame
     /// step, whose exact cycle boundary the (keyframe + whole-frame-input) reconstruction cannot express. Drops the
     /// captured rewind history so a later rewind never replays across the unrecorded instructions, and un-primes the
-    /// runahead lookahead WITHOUT disarming it, so the pane falls back to the real machine until the next
+    /// runahead lookahead without disarming it, so the pane falls back to the real machine until the next
     /// <see cref="AdvanceLookahead"/> rebases the fork from the now-advanced authority (the pane never serves the stale
     /// fork in the meantime). The rewind arming and the runahead configuration both survive; only the stale captured
     /// state is invalidated — the same drop-honestly hook class a poke or an out-of-band restore uses, minus the full

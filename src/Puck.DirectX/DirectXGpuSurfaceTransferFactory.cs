@@ -141,9 +141,9 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_disposed = true;
 
         // A deferred (submitted, not-yet-mapped) copy may still be executing into the very resources ReleaseBuffer
-        // frees — BakeRasterizer.DrainPending's give-up path disposes the engine with a read still in flight. Wait out
-        // that copy's own fence first (mirrors the Vulkan readback's TryWaitIdle). GetCompletedValue never throws, and a
-        // removed device returns UINT64_MAX (>= pending) so this exits immediately rather than hanging teardown.
+        // frees — a give-up path can dispose the engine with a read still in flight. Wait out that copy's own fence
+        // first (mirrors the Vulkan readback's TryWaitIdle). GetCompletedValue never throws, and a removed device
+        // returns UINT64_MAX (>= pending) so this exits immediately rather than hanging teardown.
         if (m_readInFlight && (0 != m_fence)) {
             var fence = (ID3D12Fence*)m_fence;
 

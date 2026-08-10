@@ -13,7 +13,8 @@ internal static class WorldOwnedWorldRegistration {
             var root = WorldStateRoot.Resolve();
             var directory = Path.Combine(path1: root, path2: "owned-worlds");
             var machineId = ResolveMachineId(root: root);
-            var worlds = new WorldOwnedWorlds(template: definition, directory: directory, machineId: machineId);
+            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory);
+            var worlds = new WorldOwnedWorlds(template: definition, directory: directory, machineId: machineId, neighbours: neighbours);
 
             Console.Error.WriteLine(value: $"[identity] loaded {worlds.All.Count} owned worlds from {directory}");
             return worlds;

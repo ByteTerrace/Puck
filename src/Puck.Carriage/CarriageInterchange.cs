@@ -5,7 +5,7 @@ namespace Puck.Carriage;
 
 /// <summary>
 /// The cross-implementation check (docs/signed-carriage-wire.md §17): mint a chain to files, or pin a chain
-/// minted by the OTHER implementation and verify it. The envelope is a specification each side implements
+/// minted by the other implementation and verify it. The envelope is a specification each side implements
 /// independently, and the only thing that proves the specification was written well enough is bytes minted
 /// by one side verifying in the other — so this is a file-in/file-out mode of the harness rather than
 /// anything the engine calls.
@@ -18,10 +18,10 @@ namespace Puck.Carriage;
 /// <item><c>binding-1.envelope</c> — root vouches issuing.</item>
 /// <item><c>binding-2.envelope</c> — issuing vouches subject.</item>
 /// <item><c>claim.envelope</c> — one signed claim by the subject key.</item>
-/// <item><c>sealed.envelope</c> — one SEALED claim: an ordinary signed envelope with
+/// <item><c>sealed.envelope</c> — one sealed claim: an ordinary signed envelope with
 /// <see cref="CarriagePayloadKind.Sealed"/>, whose payload is AEAD ciphertext under the recipient key
 /// below.</item>
-/// <item><c>recipient-sealing.pkcs8</c> — the recipient's PRIVATE sealing key, PKCS#8 DER. It is here so
+/// <item><c>recipient-sealing.pkcs8</c> — the recipient's private sealing key, PKCS#8 DER. It is here so
 /// the other side can actually unseal; see the warning below.</item>
 /// <item><c>manifest.txt</c> — <c>key=value</c> lines naming what the verifier must expect: domain,
 /// subject, algorithm, purpose, audience, sequence, and the sealed claim's purpose and expected
@@ -30,16 +30,16 @@ namespace Puck.Carriage;
 /// </list>
 /// <para><b>Why the sealed artifact has to exist.</b> Sealed carriage's key derivation
 /// (docs/signed-carriage-wire.md §14) fixes five construction inputs — raw agreement as HKDF input, absent
-/// salt, the <c>puck.carriage.sealed.v1</c> info label, 32-byte output, 16-byte AEAD tag — and NONE of them
+/// salt, the <c>puck.carriage.sealed.v1</c> info label, 32-byte output, 16-byte AEAD tag — and none of them
 /// is observable from a signed envelope. Two implementations disagreeing about any one of them fail with an
 /// AEAD tag mismatch, which is the same failure a tampered payload produces. Without ciphertext one side
 /// actually opens, §14 is cross-verified by reading prose and hoping. The signed envelopes never exercised
 /// it.</para>
-/// <para><b>The private key in the directory is deliberate and is a FIXTURE ONLY.</b> A recipient key that
+/// <para><b>The private key in the directory is deliberate and is a fixture only.</b> A recipient key that
 /// nobody can decrypt with proves nothing, so this one is minted fresh per export, used for one sealed
 /// payload, and belongs to no identity. Nothing here is a key management pattern.</para>
 /// <para><b>Neither verb may crash.</b> Every file in the directory is input, and input that is missing,
-/// truncated, corrupt, or simply not what it claims to be is a FAILED CHECK with a name and a non-zero exit
+/// truncated, corrupt, or simply not what it claims to be is a failed check with a name and a non-zero exit
 /// — never an unhandled exception. A cross-checking implementer reading a stack trace cannot tell "your
 /// bytes are bad" from "your tool fell over", and those are different verdicts (§17, the tool protocol).
 /// That is why every step here runs through <see cref="TryStep{T}"/>.</para>
@@ -53,7 +53,7 @@ public static class CarriageInterchange {
     private const string RootKeyFileName = "root.spki";
     private const string SealedFileName = "sealed.envelope";
 
-    /// <summary>The manifest keys §17 requires, every one of which must be present with a non-empty value. Any OTHER key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
+    /// <summary>The manifest keys §17 requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
     private static readonly string[] s_requiredManifestKeys = [
         "algorithm",
         "audience",
@@ -71,13 +71,13 @@ public static class CarriageInterchange {
     /// <summary>The purpose the interchange claim is minted with, so both sides expect the same one without negotiating.</summary>
     public const string InterchangePurpose = "carriage.cross-check";
 
-    /// <summary>The purpose the interchange SEALED claim is minted with.</summary>
+    /// <summary>The purpose the interchange sealed claim is minted with.</summary>
     public const string InterchangeSealedPurpose = "carriage.cross-check.sealed";
 
-    /// <summary>The audience BOTH interchange envelopes are directed at — §17 fixes the sealed envelope's audience as the claim's, so the manifest carries one value for both.</summary>
+    /// <summary>The audience both interchange envelopes are directed at — §17 fixes the sealed envelope's audience as the claim's, so the manifest carries one value for both.</summary>
     public const string InterchangeAudience = "world:interchange";
 
-    /// <summary>The sequence the interchange CLAIM carries. The sealed envelope deliberately carries none (§17): a mark store shared across runs would refuse the second verification of the same file as a replay, correctly.</summary>
+    /// <summary>The sequence the interchange claim carries. The sealed envelope deliberately carries none (§17): a mark store shared across runs would refuse the second verification of the same file as a replay, correctly.</summary>
     public const ulong InterchangeSequence = 1UL;
 
     /// <summary>The subject the interchange chain is minted for.</summary>
@@ -423,7 +423,7 @@ public static class CarriageInterchange {
     /// <param name="manifest">The parsed manifest.</param>
     /// <param name="trustList">The trust list pinning the exported root.</param>
     /// <param name="chain">The two verified bindings.</param>
-    /// <returns>The number of failures — 0 when the sealed claim verifies AND opens to the expected plaintext.</returns>
+    /// <returns>The number of failures — 0 when the sealed claim verifies and opens to the expected plaintext.</returns>
     private static int VerifySealed(
         ICarriageCodec codec,
         string directory,
@@ -549,7 +549,7 @@ public static class CarriageInterchange {
     }
 
     /// <summary>
-    /// Runs one fixture step and turns EVERY way it can fail into a named <c>[FAIL]</c> line rather than an
+    /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
     /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
     /// that arrived from somewhere else, so there is no exception type it could raise that is a better
     /// outcome than a reported failure. §17's tool protocol makes this normative — a crash and a refusal are
@@ -576,9 +576,9 @@ public static class CarriageInterchange {
     }
 
     /// <summary>
-    /// Runs a control that MUST refuse. A refusal reported as a verdict and a refusal raised as an exception
+    /// Runs a control that must refuse. A refusal reported as a verdict and a refusal raised as an exception
     /// are the same outcome here — §0's "refuse" is a negative verdict, and throw-or-return is a language
-    /// choice — so both pass and only an ACCEPTANCE fails.
+    /// choice — so both pass and only an acceptance fails.
     /// </summary>
     /// <param name="check">The check's name.</param>
     /// <param name="detail">What was done to the input, for the report line.</param>
@@ -628,8 +628,8 @@ public static class CarriageInterchange {
     }
 
     /// <summary>
-    /// Reads the manifest by §17's rules. Empty lines are ignored; every other line MUST hold a
-    /// <c>key=value</c> pair split at its FIRST <c>=</c>; a repeated key REFUSES rather than resolving by
+    /// Reads the manifest by §17's rules. Empty lines are ignored; every other line must hold a
+    /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
     /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
     /// which is a fixture that quietly checks less than it claims.
     /// </summary>

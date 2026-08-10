@@ -8,9 +8,9 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The class of the last edit act the editor HUD tags: a LIVE session lever
-/// (applies now, <c>world.save</c> folds it), an ordinary DOCUMENT mutation (applies live on delivery), or a
-/// DOCUMENT-DEFAULTS mutation (next boot; live levers unchanged).</summary>
+/// <summary>The class of the last edit act the editor HUD tags: a live session lever
+/// (applies now, <c>world.save</c> folds it), an ordinary document mutation (applies live on delivery), or a
+/// document-defaults mutation (next boot; live levers unchanged).</summary>
 internal enum EditorActClass {
     None,
     Live,
@@ -20,16 +20,16 @@ internal enum EditorActClass {
 
 /// <summary>
 /// The World-side feed behind the unified overlay's binding-bar source: once per produced frame (the node's
-/// <c>FeedTick</c>, render thread) it walks the joined roster seats, resolves each seat's ACTIVE
+/// <c>FeedTick</c>, render thread) it walks the joined roster seats, resolves each seat's active
 /// <see cref="Puck.Commands.BindingPageView"/> through <see cref="WorldSeatBindings"/>, joins it against the twelve
 /// physical layout slots for the connected controller family — chips lit from the router's carried held state
 /// (<see cref="InputRouter.IsCommandHeld"/>) — scopes it into that seat's split-screen viewport rect
 /// (<see cref="WorldFrameSource.LayoutRegion(int, int, int, float)"/>, editor layout policy included), and publishes one
-/// <see cref="OverlayBindingBarFrame"/> — plus, for every EDITING seat, one <see cref="OverlayEditorSeat"/> HUD entry
+/// <see cref="OverlayBindingBarFrame"/> — plus, for every editing seat, one <see cref="OverlayEditorSeat"/> HUD entry
 /// (selection readout, candidate/snap context, live drag line). Zero steady-state allocation: the per-seat arrays and
 /// pressed probes are preallocated and reused, and the HUD lines are re-formatted only when their source facts move
 /// (a selection change, a drag step, a definition delivery) — safe because the feed and the overlay reader run on the
-/// SAME thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
+/// same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
 /// </summary>
 internal sealed class WorldOverlayFeed {
     // Secondary-seat bars render at partial opacity so the split-screen HUD stays quiet.
@@ -179,7 +179,7 @@ internal sealed class WorldOverlayFeed {
     /// <summary>Notes an applied edit-boundary outcome (the server's <see cref="WorldServer.EchoTap"/> wiring calls
     /// this beside the toast publish) so the HUD's act-class tag reflects the last act honestly. Runs on the same
     /// window-pump thread as <see cref="Tick"/>.</summary>
-    /// <param name="documentOnly">Whether the applied edit was DOCUMENT-DEFAULTS class (next boot) rather than live.</param>
+    /// <param name="documentOnly">Whether the applied edit was document-defaults class (next boot) rather than live.</param>
     public void NoteMutationApplied(bool documentOnly) {
         m_lastActClass = (documentOnly ? EditorActClass.DocumentDefault : EditorActClass.Document);
         m_mutationNoted = true;

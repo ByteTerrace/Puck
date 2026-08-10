@@ -1,7 +1,7 @@
 namespace Puck.World;
 
 /// <summary>
-/// The world's EFFECTIVE storage host-section values after the CLI reflection overrides the world-doc defaults:
+/// The world's effective storage host-section values after the CLI reflection overrides the world-doc defaults:
 /// the per-user cloud endpoint, the explicit user-id override, and the direct-to-account discovery endpoint.
 /// <see cref="WorldStorageSyncHandle.Create"/> wires the owned-world sync engine from them when both the endpoint
 /// and identity resolve; <c>storage.status</c> echoes them either way.
@@ -32,24 +32,23 @@ internal sealed record WorldStorageSettings(string? Endpoint, string? UserId, st
 }
 
 /// <summary>
-/// Resolves the acting user to a per-user container id, or DECLINES. Two implementations exist:
+/// Resolves the acting user to a per-user container id, or declines. Two implementations exist:
 /// <see cref="ExplicitOverridePlayerStorageIdentityResolver"/> (the authored storage-section <c>userId</c> or its
 /// <c>--user-id</c> reflection) and <see cref="DecliningPlayerStorageIdentityResolver"/> (the local-only default). A
 /// resolution plus an endpoint wires the owned-world sync engine; a decline leaves the catalog local-only.
 /// </summary>
 /// <remarks>
-/// <para>NEVER a resolver that parses a storage access token: that stance is an owner ruling, not an oversight — a
-/// storage token authenticates against blob storage and carries no reliable claim about WHO is playing, only what the
-/// credential is scoped to.</para>
-/// <para>Nor an app registration. Game clients ARE users: they never receive one, they authenticate ambiently
+/// <para>Never a resolver that parses a storage access token: a storage token authenticates against blob storage
+/// and carries no reliable claim about who is playing, only what the credential is scoped to.</para>
+/// <para>Nor an app registration. Game clients are users: they never receive one, they authenticate ambiently
 /// (developer tooling, the OS broker, a shared token cache), and a hosted server runs as a user-assigned managed
 /// identity — one <c>DefaultAzureCredential</c> covers both, which is exactly what the data plane already does
 /// (<c>Puck.Storage.AzureBlobObjectBlobStoreBackend</c>). <c>storage.credential</c> reports whether that ambient
 /// credential can actually issue a storage token from this machine.</para>
-/// <para>The identity (container) id is therefore AUTHORED for now, not discovered: an Entra <c>oid</c> is a Guid and
+/// <para>The identity (container) id is therefore authored for now, not discovered: an Entra <c>oid</c> is a Guid and
 /// <c>Guid.ToString()</c> is a valid container name, so the operator names their own oid and oid-as-container stays
-/// the mapping. The recorded destination for discovering it without a registration is the SAME ambient credential
-/// taking a Microsoft Graph token and reading <c>/v1.0/me</c>, whose <c>id</c> IS the oid — on a user's machine only;
+/// the mapping. The recorded destination for discovering it without a registration is the same ambient credential
+/// taking a Microsoft Graph token and reading <c>/v1.0/me</c>, whose <c>id</c> is the oid — on a user's machine only;
 /// a managed identity has no <c>/me</c>. That is deliberately not built yet, and it is written down here so nobody
 /// reinvents an app registration to reach it.</para>
 /// </remarks>

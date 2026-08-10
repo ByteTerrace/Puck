@@ -33,15 +33,15 @@ internal static class PrimeKernels {
     /// </remarks>
     internal static ReadOnlySpan<int> WitnessBases => [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
 
-    /// <summary>Gets the least value <see cref="WitnessBases"/> decides WRONGLY — the smallest strong pseudoprime to
+    /// <summary>Gets the least value <see cref="WitnessBases"/> decides incorrectly — the smallest strong pseudoprime to
     /// all twelve of them, <c>318665857834031151167461 = 399165290221 * 798330580441</c>. Every value strictly below
-    /// it that survives all twelve rounds is prime; this one survives them and is composite, so it is the exact
-    /// EXCLUSIVE ceiling of the deterministic range.</summary>
+    /// it that survives all twelve rounds is prime; this one survives them and is composite, so it is the exact,
+    /// exclusive ceiling of the deterministic range.</summary>
     /// <remarks>
-    /// It lives here, beside the bases, because it is a FUNCTION of them: add or drop a single base and this number
-    /// changes. Stating it as a rounded <c>3.19 * 10^23</c> is what put the counterexample INSIDE the range the
-    /// library promised to decide exactly — the rounding went up, and the one value that breaks the set is
-    /// <c>3.18665... * 10^23</c>. Round a threshold like this DOWN or not at all.
+    /// It lives here, beside the bases, because it is a function of them: add or drop a single base and this number
+    /// changes. A rounded approximation such as <c>3.19 * 10^23</c> rounds up past the true value and would admit
+    /// the counterexample into the range this library promises to decide exactly; round a threshold like this down,
+    /// or not at all.
     /// </remarks>
     internal static BigInteger LeastWitnessFailure { get; } = BigInteger.Parse(value: "318665857834031151167461");
 
@@ -50,7 +50,7 @@ internal static class PrimeKernels {
     /// A cycle walk finds a factor <c>p</c> in about <c>√p</c> advances, so the worst legal operand — a semiprime of two
     /// primes either side of 2³² — costs on the order of 2¹⁶, and the offset restarts multiply that by a small constant.
     /// 2²⁴ therefore clears the worst legal operand by roughly two hundred times over: no input this kernel is
-    /// contracted to accept can reach it, and the ceiling exists ONLY so that every loop in the splitter terminates.
+    /// contracted to accept can reach it, and the ceiling exists only so that every loop in the splitter terminates.
     /// </remarks>
     private const int SplitAdvanceBudget = (1 << 24);
 
@@ -240,7 +240,7 @@ internal static class PrimeKernels {
     /// <remarks>
     /// <para>The polynomial offset advances through a fixed sequence until a walk succeeds, so the split is deterministic.</para>
     /// <para>
-    /// The search is BOUNDED, by <see cref="SplitAdvanceBudget"/> advances shared across every offset it tries. The
+    /// The search is bounded, by <see cref="SplitAdvanceBudget"/> advances shared across every offset it tries. The
     /// bound is not a quality-of-service knob but a termination guarantee: the offset sequence has no natural end, so
     /// without it an operand that is secretly prime — one whose primality gate answered wrongly — would spin here
     /// forever instead of failing.
@@ -267,7 +267,7 @@ internal static class PrimeKernels {
     /// <param name="value">The value to factor.</param>
     /// <param name="destination">The destination for the factors; sixty-four entries always suffice.</param>
     /// <returns>The number of factors written: <c>0</c> only when <paramref name="value"/> is below two, and <c>1</c> when it is prime.</returns>
-    /// <remarks>A prime reports ITSELF, and the count is therefore Ω — the number of prime factors with multiplicity — for every operand at or above two.</remarks>
+    /// <remarks>A prime reports itself, and the count is therefore Ω — the number of prime factors with multiplicity — for every operand at or above two.</remarks>
     internal static int Factorize(ulong value, Span<ulong> destination) {
         if (2UL > value) { return 0; }
         // Not merely an optimization: it is what spares a large prime the whole trial-division ladder before the pending

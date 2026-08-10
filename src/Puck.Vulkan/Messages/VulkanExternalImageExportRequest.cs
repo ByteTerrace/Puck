@@ -10,7 +10,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Width">The image width, in texels.</param>
 /// <param name="Height">The image height, in texels.</param>
 /// <param name="Format">The image format, as a <c>VkFormat</c> value.</param>
-/// <param name="UsageFlags">A bitmask of <c>VkImageUsageFlagBits</c> describing the intended usage (a render target wants COLOR_ATTACHMENT | SAMPLED; a storage image wants STORAGE | SAMPLED).</param>
+/// <param name="UsageFlags">A bitmask of <c>VkImageUsageFlagBits</c> describing the intended usage (a render target wants <c>COLOR_ATTACHMENT | SAMPLED</c>; a storage image wants <c>STORAGE | SAMPLED</c>).</param>
 public readonly record struct VulkanExternalImageExportRequest(
     nint DeviceHandle,
     nint InstanceHandle,

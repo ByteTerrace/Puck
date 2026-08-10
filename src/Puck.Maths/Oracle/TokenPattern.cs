@@ -45,10 +45,10 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
     /// <param name="predicate">The predicate; it must be one this alphabet was refined against, or a union of blocks
     /// of the partition, since only those are exactly covered.</param>
     /// <returns>The mask of letters the predicate accepts.</returns>
-    /// <exception cref="ArgumentException">A letter is SPLIT by the predicate — some of the block's tokens satisfy it
+    /// <exception cref="ArgumentException">A letter is split by the predicate — some of the block's tokens satisfy it
     /// and some do not — so no mask over this alphabet's letters names the predicate.</exception>
     /// <remarks>A letter is the smallest thing a mask can name, so the requirement in the parameter's own description is
-    /// checked rather than assumed: a block that merely INTERSECTS the predicate would, if returned, hand back a letter
+    /// checked rather than assumed: a block that merely intersects the predicate would, if returned, hand back a letter
     /// that also accepts tokens the predicate rejects, and the pattern built from it would silently match more than it
     /// was asked for. Refine the alphabet against the predicate and the split disappears by construction.</remarks>
     public ulong LettersOf(TPredicate predicate) {
@@ -116,7 +116,7 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
 /// <see cref="PresentedAlgebra{TValue, TOps}.Residual"/> at <see cref="ResidualTwist.Counit"/> and literally nothing
 /// else — <see cref="Derivative"/> is a one-line delegation, and compiling a pattern to a machine routes through
 /// <see cref="PresentedAlgebra{TValue, TOps}.TryCompileClosure"/>, which calls the same operator. The classical rules
-/// for the derivative of a union, a concatenation and an iteration hold here as THEOREMS about the shared operator
+/// for the derivative of a union, a concatenation and an iteration hold here as theorems about the shared operator
 /// applied to the materialized element; none of them is a code path.
 /// </para>
 /// <para>
@@ -210,7 +210,7 @@ public sealed class TokenPattern<TValue, TOps>
     /// <exception cref="ArgumentException">An operand belongs to another pattern algebra.</exception>
     /// <remarks>
     /// This is the diagonal of the pair-up: the tensor of two algebras carries the cell <c>(i, j)</c> at key
-    /// <c>i·n + j</c>, and the intersection of two elements of the SAME algebra is the part of their pair-up sitting on
+    /// <c>i·n + j</c>, and the intersection of two elements of the same algebra is the part of their pair-up sitting on
     /// <c>i = j</c>. It is computed here rather than through
     /// <see cref="PresentedAlgebra{TValue, TOps}.PairUp"/> because the tensor of this presentation with itself needs
     /// one generator per key pair and so exceeds the presentation cap for every useful window;
@@ -363,13 +363,13 @@ public sealed class TokenPattern<TValue, TOps>
 
 /// <summary>Complementation, which exists only where the material has a De Morgan complement.</summary>
 /// <remarks>
-/// It is a separate surface because that is what makes the gate a COMPILE error rather than a documented footgun: the
+/// It is a separate surface because that is what makes the gate a compile error rather than a documented footgun: the
 /// constraint is <see cref="IComplementedMaterial{TValue, TSelf}"/>, so <c>pattern.Complement(value)</c> does not
 /// resolve at a counting, tropical, fixed-point or field material and no runtime refusal is needed. The reason is a
 /// theorem rather than a taste: a semiring carrying a De Morgan complement and a top element satisfies
 /// <c>1 + 1 = 1</c>, which those materials do not. Two materials do: <see cref="BooleanMaterial"/>, where the
 /// complement is negation and a coefficient is membership, and <see cref="FuzzyMaterial"/>, where it is the exact
-/// <c>1 − x</c> and a coefficient is a DEGREE of membership — so a complemented pattern there is graded rather than
+/// <c>1 − x</c> and a coefficient is a degree of membership — so a complemented pattern there is graded rather than
 /// two-valued, and complementing twice returns the original pattern at both.
 /// </remarks>
 public static class PatternComplement {

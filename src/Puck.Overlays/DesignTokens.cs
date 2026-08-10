@@ -58,7 +58,7 @@ public readonly record struct BloomHue(RgbaColor Ring, RgbaColor Halo);
 public readonly record struct CubicBezier(float X1, float Y1, float X2, float Y2);
 
 /// <summary>
-/// The canonical Puck UI design tokens ("Instrument + grafts"). THIS FILE is the record — the prose write-up it was transcribed from is retired
+/// The canonical Puck UI design tokens ("Instrument + grafts"). This file is the record — the prose write-up it was transcribed from is retired
 /// constants. This is the design-token source of record: one C# definition every 2D overlay surface reads instead
 /// of hand-picked literals, so the whole UI shares one 4px grid, one radius/type scale, and one semantic palette.
 /// The palette reaches shaders only through the <see cref="OverlayTokenBlock"/> storage slab, never hand-mirrored
@@ -88,7 +88,7 @@ public static class DesignTokens {
 
     /// <summary>
     /// Section 2 — the 3-step radius scale. Diegetic hardware (bezel/plate 5px, screen 2px) is a rendered world
-    /// object and is EXEMPT from this scale.
+    /// object and is exempt from this scale.
     /// </summary>
     public static class Radius {
         public const float Radius1 = 3f;
@@ -97,8 +97,8 @@ public static class DesignTokens {
     }
 
     /// <summary>
-    /// Section 3 — the 5-step type scale. MSDF FLOOR RULE (Cabinet graft): primary chip labels are 12px; 11px is
-    /// the absolute minimum anywhere (eyebrows/legends/badge glyphs/micro readouts). NOTHING renders at 10px or
+    /// Section 3 — the 5-step type scale. MSDF floor rule (Cabinet graft): primary chip labels are 12px; 11px is
+    /// the absolute minimum anywhere (eyebrows/legends/badge glyphs/micro readouts). Nothing renders at 10px or
     /// below — below 11px, MSDF glyph coverage degrades over the moving world. Weights are 400/500/600 only.
     /// </summary>
     public static class Type {
@@ -118,7 +118,7 @@ public static class DesignTokens {
         public const float TypeLabelTracking = 0.01f;
         public const int TypeLabelWeight = 500;
 
-        /// <summary>Eyebrows/legends/tracker labels; UPPERCASE transform.</summary>
+        /// <summary>Eyebrows/legends/tracker labels; uppercase transform.</summary>
         public const float TypeMicroSize = 11f;
         public const float TypeMicroLine = 13f;
         public const float TypeMicroTracking = 0.08f;
@@ -135,7 +135,7 @@ public static class DesignTokens {
     }
 
     /// <summary>
-    /// Section 4 — the semantic color roles: near-neutral graphite surfaces, hairline outlines, and ONE electric
+    /// Section 4 — the semantic color roles: near-neutral graphite surfaces, hairline outlines, and one electric
     /// accent used sparingly and semantically. Dark theme only; the lit world is the theme.
     /// </summary>
     public static class Color {
@@ -190,8 +190,8 @@ public static class DesignTokens {
     }
 
     /// <summary>
-    /// Section 5 — the two-tier elevation rule. Tier 0 (RESTING) is a flat fill + hairline, no glow, ever. Tier 1
-    /// (LIT: active / held / selected / transient) is an SDF distance-falloff bloom in the element's OWN semantic
+    /// Section 5 — the two-tier elevation rule. Tier 0 (resting) is a flat fill + hairline, no glow, ever. Tier 1
+    /// (lit: active / held / selected / transient) is an SDF distance-falloff bloom in the element's own semantic
     /// hue. An element is Tier 1 exactly while it is the context-primary action, physically held, the current
     /// selection, or a transient echo (toast) — there is no third tier.
     /// </summary>
@@ -276,14 +276,14 @@ public static class DesignTokens {
         /// </summary>
         public const float EdgeHairlineWidth = 1f;
 
-        /// <summary>The REST-tier chip plate's translucency (the binding-bar graft's plate-darkness knob).</summary>
+        /// <summary>The rest-tier chip plate's translucency (the binding-bar graft's plate-darkness knob).</summary>
         public const float ChipRestOpacity = 0.62f;
     }
 
     /// <summary>
     /// Section 6 — the diegetic material's emboss/engrave physics (the world-geometry-side tier), kept here so the
     /// token set has one C# source. Law: raised fill is strictly brighter than the plate; engraved fill is strictly
-    /// darker; the two shadows carry OPPOSITE polarity.
+    /// darker; the two shadows carry opposite polarity.
     /// </summary>
     public static class Diegetic {
         public static readonly RgbaColor PlateTop = RgbaColor.FromHex(hexRgb: 0x2C2F33);
@@ -333,7 +333,7 @@ public static class DesignTokens {
 
     /// <summary>
     /// The world-render feedback tints — the editor's presentation-only albedo pulls (a material lerp, never a new
-    /// material system), fed to the SDF program CPU-side from this one token source. Hues sit deliberately OUTSIDE
+    /// material system), fed to the SDF program CPU-side from this one token source. Hues sit deliberately outside
     /// the chrome palette's accent budget: they paint world geometry, not UI chrome.
     /// </summary>
     public static class Feedback {
@@ -367,7 +367,7 @@ public static class DesignTokens {
 
         public static readonly CubicBezier EaseStd = new(X1: 0.2f, Y1: 0f, X2: 0f, Y2: 1f);
         public static readonly CubicBezier EaseOut = new(X1: 0.4f, Y1: 0f, X2: 1f, Y2: 1f);
-        /// <summary>The prompt caret's blink PERIOD, ms — <c>steps(1)</c>: a hard on/off toggle, never a fade.</summary>
+        /// <summary>The prompt caret's blink period, ms — <c>steps(1)</c>: a hard on/off toggle, never a fade.</summary>
         public const float CaretBlink = 1080f;
     }
 }

@@ -35,7 +35,7 @@
       "type": "integer"
     },
     "derivedFaceScreens": {
-      "description": "BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation FACES (a face declared by a placement\u0027s creation, lit by a feed), registered at [Client.WorldCreationFacets.DerivedFaceBase, DerivedFaceBase \u002B this). Bounded so the range stays within the engine\u0027s screen-surface ceiling.",
+      "description": "BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation FACES (a face declared by a placement\u0027s creation, lit by a feed), registered at [Client.WorldCreationFacets.DerivedFaceBase, DerivedFaceBase \u002B this). Bounded so the range stays below AwaySeatScreenBase, where traveler-follow presentation owns the engine table\u0027s final local-seat-sized band.",
       "type": "integer"
     }
   },

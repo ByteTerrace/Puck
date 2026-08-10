@@ -3,43 +3,108 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The server's multi-subscriber output publication point — two lanes, per the design's §1.6. The TYPED lane fans a
-/// tick's output out to every attached <see cref="IClientSink"/> SYNCHRONOUSLY on the tick thread: each subscriber
+/// The server's multi-subscriber output publication point — two lanes. The typed lane fans a
+/// tick's output out to every attached <see cref="IClientSink"/> synchronously on the tick thread: each subscriber
 /// receives the borrowed <see cref="WorldSnapshot"/> (its <see cref="WorldSnapshot.Entries"/> memory wraps a reused
 /// server-owned array — see <see cref="WorldServer"/>'s own remarks) and must fully consume or copy it before its
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
 /// backing array. <see cref="WorldServer.EmitSnapshot"/> only returns once every typed subscriber has done exactly
-/// that. The ENCODED lane is a SCAFFOLD ONLY — <see cref="SubscribeEncoded"/> exists so a future socket connection
-/// could register without a second wiring pass, but nothing is produced or delivered on it: the P7 TCP transport
+/// that. The encoded lane is a scaffold only — <see cref="SubscribeEncoded"/> exists so a future socket connection
+/// could register without a second wiring pass, but nothing is produced or delivered on it: the TCP transport
 /// (<see cref="Server.WorldTcpHost"/>) uses its own strictly request-then-response wire instead
 /// (<see cref="Server.WorldTcpWireFormat"/>) and never subscribes here, so this lane and
 /// <see cref="SubscribeEncoded"/> remain unused.
 /// </summary>
-/// <remarks>Replaces the single overwriting <c>AttachSink</c>/<c>m_sink</c> field this server used to carry — play-
-/// and-host (a local sink plus N future connections, plus the tape) is first-class here: every <see cref="Subscribe"/>
-/// call ADDS a subscriber, it never displaces one already attached.</remarks>
+/// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every
+/// <see cref="Subscribe"/> call adds a subscriber; it never displaces one already attached.</para>
+/// <para><b>Threading contract.</b> This hub carries no lock, so it is safe only when every call — every
+/// <see cref="Subscribe"/>, every disposal of the lease it returns, and every <c>Deliver*</c> — is mutually exclusive
+/// with the tick thread's own activity: no such call may ever be in flight at the same time as a <c>Deliver*</c> call
+/// or the tick work that leads to one. That is the actual invariant, stated in terms of exclusion rather than thread
+/// identity, because two windows legitimately satisfy it without the call literally running on the tick thread while
+/// it is ticking: (1) construction-time attach, before the launcher's window-pump/tick thread has started producing
+/// any tick — <c>Puck.World.WorldScreenBinder</c>'s boot-loop <c>AttachSink</c> call is this window, single-threaded
+/// startup with no tick activity yet to race; and (2) teardown-time detach, after that thread has stopped producing
+/// ticks for good — the same binder's <c>Dispose</c> disposing every slot's session lease is this window, host
+/// teardown with no tick activity left to race. Both are sanctioned by name. What remains forbidden is a call made
+/// during the pump's life from anything other than the tick thread itself — a second thread calling in concurrently
+/// with ticking, or a callback re-entering from off that thread
+/// while a <c>Deliver*</c> is in flight. Disposing a lease is idempotent and safe between deliveries (the ordinary
+/// case — a portal observer detaching once its view closes), and is also safe from within a <c>Deliver*</c> call — a
+/// sink disposing its own lease mid-callback, or a fault a few slots back detaching a different one, never corrupts
+/// the in-flight fan-out (each <c>Deliver*</c> walks by index and re-checks <c>Active</c> rather than using an
+/// enumerator, so no "collection was modified" exception is possible). <see cref="Subscribe"/> is the one member with
+/// a reentrancy rule on top of this: calling it from within a <c>Deliver*</c> callback throws, because the new
+/// subscriber's primer would be built into the same borrowed backing array the in-flight snapshot wraps (see
+/// <see cref="Subscribe"/>).</para>
+/// <para><b>Exception isolation.</b> A typed subscriber that throws out of any <c>Deliver*</c> call is caught,
+/// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
+/// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
+/// not get a second chance to corrupt delivery to the healthy ones.</para></remarks>
 public sealed class WorldOutputHub {
-    private readonly List<IClientSink> m_typed = new();
+    // One typed-lane slot. Active starts true and is flipped exactly once, either by the lease's own Dispose or by a
+    // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
+    // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
+    // this object; Dispose closes over it directly rather than needing a separate handle/index to invalidate.
+    private sealed class Subscription(WorldOutputHub hub, IClientSink sink) : IDisposable {
+        public readonly IClientSink Sink = sink;
+        public bool Active = true;
+
+        public void Dispose() {
+            if (!Active) {
+                return;
+            }
+
+            Active = false;
+            hub.m_activeCount--;
+        }
+    }
+
+    private readonly List<Subscription> m_typed = new();
     // SCAFFOLD list only — see the class remarks. Nothing ever iterates or delivers to this; the P7 TCP transport
     // does not subscribe here.
     private readonly List<object> m_encoded = new();
+    // Nonzero while a Deliver* fan-out is on the stack. Subscribe refuses while it is — a subscriber attached from
+    // inside a delivery callback would have its primer built into the SAME server-owned backing array the in-flight
+    // borrowed snapshot wraps, clobbering what later sinks in this very fan-out have not yet consumed.
+    private int m_deliveryDepth;
+    // Count of subscriptions with Active == true — maintained incrementally (Subscribe increments, a lease's Dispose
+    // or a caught fault decrements) so HasTypedSubscribers stays O(1) even while a detached-but-not-yet-compacted
+    // slot still physically occupies a place in m_typed between now and the next Deliver* pass.
+    private int m_activeCount;
 
     /// <summary>Gets a value indicating whether at least one typed-lane subscriber is attached — lets a caller skip building a snapshot/answer
-    /// nobody would receive (mirrors the old <c>m_sink is null</c> short-circuit).</summary>
-    public bool HasTypedSubscribers => (m_typed.Count > 0);
+    /// nobody would receive. Reflects only active subscribers —
+    /// a detached-but-not-yet-compacted slot never counts.</summary>
+    public bool HasTypedSubscribers => (m_activeCount > 0);
 
-    /// <summary>Adds a typed-lane subscriber. Delivered every subsequent tick's output SYNCHRONOUSLY, on the tick
-    /// thread, until the process ends — there is no unsubscribe today (loopback never detaches its one local sink).</summary>
+    /// <summary>Adds a typed-lane subscriber, delivered every subsequent tick's output synchronously, on the tick
+    /// thread, until either the process ends or the returned lease is disposed.</summary>
     /// <param name="sink">The subscriber to add.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed. Disposal is idempotent and must happen
+    /// on the tick thread (see the class remarks). A caller meant to stay attached for the process's whole lifetime
+    /// (today's local client sink) deliberately never disposes it — the lease still exists so that choice is a
+    /// visible, deliberate leak at the call site rather than an absent capability.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    public void Subscribe(IClientSink sink) {
+    /// <exception cref="InvalidOperationException">Called from within a <c>Deliver*</c> callback — see the class
+    /// remarks' threading contract.</exception>
+    public IDisposable Subscribe(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
-        m_typed.Add(item: sink);
+        if (m_deliveryDepth != 0) {
+            throw new InvalidOperationException(message: "WorldOutputHub.Subscribe was called from within a Deliver* fan-out; attaching mid-delivery would build the new sink's primer into the borrowed snapshot other subscribers are still consuming. Attach before or after a tick's delivery, never during.");
+        }
+
+        var subscription = new Subscription(hub: this, sink: sink);
+
+        m_typed.Add(item: subscription);
+        m_activeCount++;
+
+        return subscription;
     }
 
-    /// <summary>Registers an encoded-lane subscriber. SCAFFOLD — no byte encoding happens (see the class remarks):
-    /// the P7 TCP transport does not use this seam, and nothing else calls this method today.</summary>
+    /// <summary>Registers an encoded-lane subscriber. Scaffold — no byte encoding happens (see the class remarks):
+    /// the TCP transport does not use this seam, and nothing else calls this method today.</summary>
     /// <param name="subscriber">The encoded-lane subscriber to add.</param>
     /// <exception cref="ArgumentNullException"><paramref name="subscriber"/> is <see langword="null"/>.</exception>
     public void SubscribeEncoded(object subscriber) {
@@ -48,44 +113,197 @@ public sealed class WorldOutputHub {
         m_encoded.Add(item: subscriber);
     }
 
-    /// <summary>Fans a tick's snapshot out to every typed subscriber, synchronously, before returning.</summary>
+    /// <summary>Fans a tick's snapshot out to every typed subscriber, synchronously, before returning. A faulting
+    /// sink is isolated and detached — see the class remarks.</summary>
     /// <param name="snapshot">The tick snapshot.</param>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        foreach (var sink in m_typed) {
-            sink.DeliverSnapshot(snapshot: in snapshot);
+        m_deliveryDepth++;
+
+        try {
+            var writeIndex = 0;
+
+            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
+                var subscription = m_typed[readIndex];
+
+                if (!subscription.Active) {
+                    continue;
+                }
+
+                try {
+                    subscription.Sink.DeliverSnapshot(snapshot: in snapshot);
+                } catch (Exception exception) {
+                    Detach(subscription: subscription, callSite: nameof(DeliverSnapshot), exception: exception);
+                    continue;
+                }
+
+                if (subscription.Active) {
+                    m_typed[writeIndex++] = subscription;
+                }
+            }
+
+            Compact(writeIndex: writeIndex);
+        } finally {
+            m_deliveryDepth--;
         }
     }
 
-    /// <summary>Fans a composed query answer out to every typed subscriber.</summary>
+    /// <summary>Fans a composed query answer out to every typed subscriber. A faulting sink is isolated and
+    /// detached — see the class remarks.</summary>
     /// <param name="answer">The answer.</param>
     public void DeliverAnswer(in QueryAnswer answer) {
-        foreach (var sink in m_typed) {
-            sink.DeliverAnswer(answer: in answer);
+        m_deliveryDepth++;
+
+        try {
+            var writeIndex = 0;
+
+            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
+                var subscription = m_typed[readIndex];
+
+                if (!subscription.Active) {
+                    continue;
+                }
+
+                try {
+                    subscription.Sink.DeliverAnswer(answer: in answer);
+                } catch (Exception exception) {
+                    Detach(subscription: subscription, callSite: nameof(DeliverAnswer), exception: exception);
+                    continue;
+                }
+
+                if (subscription.Active) {
+                    m_typed[writeIndex++] = subscription;
+                }
+            }
+
+            Compact(writeIndex: writeIndex);
+        } finally {
+            m_deliveryDepth--;
         }
     }
 
     /// <summary>Fans the live world definition out to every typed subscriber (once per step with at least one applied
-    /// edit, or a definition swap).</summary>
+    /// edit, or a definition swap). A faulting sink is isolated and detached — see the class remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
     public void DeliverDefinition(WorldDefinition definition) {
-        foreach (var sink in m_typed) {
-            sink.DeliverDefinition(definition: definition);
+        m_deliveryDepth++;
+
+        try {
+            var writeIndex = 0;
+
+            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
+                var subscription = m_typed[readIndex];
+
+                if (!subscription.Active) {
+                    continue;
+                }
+
+                try {
+                    subscription.Sink.DeliverDefinition(definition: definition);
+                } catch (Exception exception) {
+                    Detach(subscription: subscription, callSite: nameof(DeliverDefinition), exception: exception);
+                    continue;
+                }
+
+                if (subscription.Active) {
+                    m_typed[writeIndex++] = subscription;
+                }
+            }
+
+            Compact(writeIndex: writeIndex);
+        } finally {
+            m_deliveryDepth--;
         }
     }
 
-    /// <summary>Fans an accepted live window-composition override out to every typed subscriber.</summary>
+    /// <summary>Fans an accepted live window-composition override out to every typed subscriber. A faulting sink is
+    /// isolated and detached — see the class remarks.</summary>
     /// <param name="composition">The composition override.</param>
     public void DeliverComposition(WorldComposition composition) {
-        foreach (var sink in m_typed) {
-            sink.DeliverComposition(composition: composition);
+        m_deliveryDepth++;
+
+        try {
+            var writeIndex = 0;
+
+            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
+                var subscription = m_typed[readIndex];
+
+                if (!subscription.Active) {
+                    continue;
+                }
+
+                try {
+                    subscription.Sink.DeliverComposition(composition: composition);
+                } catch (Exception exception) {
+                    Detach(subscription: subscription, callSite: nameof(DeliverComposition), exception: exception);
+                    continue;
+                }
+
+                if (subscription.Active) {
+                    m_typed[writeIndex++] = subscription;
+                }
+            }
+
+            Compact(writeIndex: writeIndex);
+        } finally {
+            m_deliveryDepth--;
         }
     }
 
-    /// <summary>Fans an accepted live session lever out to every typed subscriber.</summary>
+    /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
+    /// detached — see the class remarks.</summary>
     /// <param name="lever">The accepted lever write.</param>
     public void DeliverSessionLever(WorldSessionLever lever) {
-        foreach (var sink in m_typed) {
-            sink.DeliverSessionLever(lever: lever);
+        m_deliveryDepth++;
+
+        try {
+            var writeIndex = 0;
+
+            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
+                var subscription = m_typed[readIndex];
+
+                if (!subscription.Active) {
+                    continue;
+                }
+
+                try {
+                    subscription.Sink.DeliverSessionLever(lever: lever);
+                } catch (Exception exception) {
+                    Detach(subscription: subscription, callSite: nameof(DeliverSessionLever), exception: exception);
+                    continue;
+                }
+
+                if (subscription.Active) {
+                    m_typed[writeIndex++] = subscription;
+                }
+            }
+
+            Compact(writeIndex: writeIndex);
+        } finally {
+            m_deliveryDepth--;
+        }
+    }
+
+    // Narrates a faulting sink loudly (naming its concrete type, never swallowed silently) and detaches it — a
+    // broken observer never gets retried on a later tick. Shared by every Deliver* method's catch block. The Active
+    // guard is load-bearing, not defensive style: a sink that disposes its OWN lease and then throws has already
+    // decremented m_activeCount once through Dispose, and a second decrement here would drift the count low enough
+    // that HasTypedSubscribers reads false while healthy subscribers remain — silently starving them of every
+    // subsequent snapshot the server then skips building.
+    private void Detach(Subscription subscription, string callSite, Exception exception) {
+        Console.Error.WriteLine(value: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}");
+
+        if (subscription.Active) {
+            subscription.Active = false;
+            m_activeCount--;
+        }
+    }
+
+    // Physically drops every trailing slot a Deliver* pass did not write back (each inactive subscription, whether
+    // detached before this pass started, mid-pass by its own lease, or mid-pass by a caught fault) — a single
+    // RemoveRange rather than a second List.RemoveAll scan, folded into the SAME walk Deliver* already pays for.
+    private void Compact(int writeIndex) {
+        if (writeIndex < m_typed.Count) {
+            m_typed.RemoveRange(index: writeIndex, count: (m_typed.Count - writeIndex));
         }
     }
 }

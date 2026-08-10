@@ -4,30 +4,30 @@ using Puck.Input;
 namespace Puck.World;
 
 /// <summary>
-/// The engine-default binding document. It is the FIRST layer of every
+/// The engine-default binding document. It is the first layer of every
 /// seat's composed mapping (engine default ⊕ world overlays ⊕ profile bindings ⊕ live rebinds), code-authored
 /// (never serialized — a null profile <c>Bindings</c> section inherits
-/// it), and carries THREE page groups: the <see cref="PlayGroup"/> rows below (the <c>player.*</c> vocabulary), the
+/// it), and carries three page groups: the <see cref="PlayGroup"/> rows below (the <c>player.*</c> vocabulary), the
 /// <see cref="RosterGroup"/> row (a not-yet-active seat's group, selected by context row — see the class remarks),
 /// and the <see cref="WorldEditorBindings"/> rows (group <c>editor</c>, always compiled in — entering the editor is a
 /// per-seat <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).
 /// </summary>
 /// <remarks>
-/// The play group is EIGHT pages, one per ordered chord — the model every group in this document follows:
+/// The play group is eight pages, one per ordered chord — the model every group in this document follows:
 /// <c>[]</c> base, <c>[lt]</c>, <c>[rt]</c>, <c>[lt, rt]</c>, <c>[rt, lt]</c>, <c>[ctrl-l]</c>, <c>[ctrl-r]</c>,
 /// <c>[tab]</c>.
-/// Holding the chord IS the page turn: the binding bar re-renders the page the held chord selects, so the chord
+/// Holding the chord is the page turn: the binding bar re-renders the page the held chord selects, so the chord
 /// vocabulary is discoverable by squeezing (or pressing either Control key) rather than memorized. Pages 1..4 are
-/// deliberately SPARSE — they carry only the stick routers (a held analog re-dispatches against the ACTIVE page
+/// deliberately sparse — they carry only the stick routers (a held analog re-dispatches against the active page
 /// each tick, so a page without them would stall movement while its chord is held) and wait to be authored through
 /// the binding document. Pages 5 and 6, <see cref="ControlLeftPageId"/> and <see cref="ControlRightPageId"/>, carry
-/// the SAME keyboard movement rows as the base page for the identical reason — a held Control key must not strand a
+/// the same keyboard movement rows as the base page for the identical reason — a held Control key must not strand a
 /// keyboard player's movement any more than a held trigger strands a gamepad player's — plus Ctrl+C firing
 /// <see cref="EditorCommandModule.StatusCommand"/>. Both pages are declared, carrying identical entries, because
 /// <see cref="InputSources.Keyboard"/> has no unified "either side" modifier source: a chord group that means
-/// either Control key declares both. Page 7, <see cref="WheelHoldPageId"/>, is the play group's WHEEL HOLD page:
+/// either Control key declares both. Page 7, <see cref="WheelHoldPageId"/>, is the play group's wheel-hold page:
 /// holding Tab selects it, and selecting it presents the group's radial action menu (the <c>wheels</c> row below) —
-/// deliberately NO keyboard movement rows there, because the radial is a modal gesture (the avatar stands while a
+/// deliberately no keyboard movement rows there, because the radial is a modal gesture (the avatar stands while a
 /// sector is chosen); it carries the stick routers, the ring-cycle rows
 /// (<see cref="WorldWheelCommandModule.RingCommand"/> on Arrow Up/Down and D-pad Up/Down — the mouse-less twin of
 /// the mouse wheel), and Tab's own release edge firing <see cref="WorldWheelCommandModule.CommitCommand"/> (the
@@ -35,7 +35,7 @@ namespace Puck.World;
 /// machinery). Editor entry is Gamepad Back on the base page, or the wheel's Editor sector — Tab belongs wholly to
 /// the wheel.
 /// The keyboard movement layout — W/S forward/back, A/D strafe left/right, Q/E turn left/right (crisp planar walk, no
-/// auto-facing); the arrow keys mirror it (up/down forward/back, left/right turn). Each movement source binds TWICE —
+/// auto-facing); the arrow keys mirror it (up/down forward/back, left/right turn). Each movement source binds twice —
 /// a press edge (default phase) and a release edge (<see cref="CommandPhase.Completed"/>) — so one channel destination
 /// reads the phase to hold-or-free its axis. Enter confirms, F1..F4 claim a slot carried as the
 /// binding's constant <see cref="CommandValue.Axis(float)"/>, the sticks route structural movement and look, and
@@ -43,7 +43,7 @@ namespace Puck.World;
 /// The <see cref="RosterGroup"/> row: a <c>roster</c> context row (<see cref="WorldContextFamilies.Roster"/>) selects
 /// it for a seat whose participant lifecycle is not yet <see cref="WorldContextFamilies.RosterActive"/> — Gamepad
 /// South fires <see cref="PlayerCommandModule.ConfirmCommand"/> there instead of driving a channel, so a physical
-/// button never carries two meanings inside one command handler; the ACTIVE state ships no row, so an active seat
+/// button never carries two meanings inside one command handler; the active state ships no row, so an active seat
 /// falls through to its requested group (the play group by default). The roster group declares no wheel and no
 /// <c>[tab]</c> page — a not-yet-active seat's editor entry is Gamepad Back. No command name in this document ever
 /// names a physical button.
@@ -83,7 +83,7 @@ internal static class WorldDefaultBindings {
     /// per <see cref="InputSources.Keyboard"/>'s "either side declares both" rule; backs <see cref="ControlLeftPageId"/>.</summary>
     public const string LeftControlModifierId = "ctrl-l";
     /// <summary>The right Control key modifier id (chord vocabulary: <c>ctrl-r</c>) — <see cref="LeftControlModifierId"/>'s
-    /// mirror, declared via <see cref="InputSources.Keyboard.ControlRight"/> so holding EITHER physical Control key
+    /// mirror, declared via <see cref="InputSources.Keyboard.ControlRight"/> so holding either physical Control key
     /// reaches the equivalent page; backs <see cref="ControlRightPageId"/>.</summary>
     public const string RightControlModifierId = "ctrl-r";
 
@@ -99,8 +99,8 @@ internal static class WorldDefaultBindings {
 
     /// <summary>The Tab modifier id (chord vocabulary: <c>tab</c>) — the radial action menu's hold key, declared via
     /// <see cref="InputSources.Keyboard.Tab"/> the same way <see cref="LeftControlModifierId"/> declares a native
-    /// key. Tab belongs WHOLLY to the wheel: no page binds it to a command's press edge, and each wheel-bearing
-    /// group's hold page binds its RELEASE to <see cref="WorldWheelCommandModule.CommitCommand"/>.</summary>
+    /// key. Tab belongs wholly to the wheel: no page binds it to a command's press edge, and each wheel-bearing
+    /// group's hold page binds its release to <see cref="WorldWheelCommandModule.CommitCommand"/>.</summary>
     public const string TabModifierId = "tab";
 
     /// <summary>The play group's wheel hold page id (chord: Tab held) — see the class remarks.</summary>
@@ -332,10 +332,8 @@ internal static class WorldDefaultBindings {
         )
     );
 
-    // The three movement channel names every shipped world declares identically (see the class remarks on
-    // ChannelRef.Role's retirement) — the engine default binds the keyboard to these NAMES directly rather than
-    // through the former role indirection, since channel.role.<v> and channel.name.<v> always resolved to one
-    // identical destination.
+    // The three movement channel names every shipped world declares identically — the engine default binds the
+    // keyboard to these NAMES directly.
     private const string ForwardChannelName = "forward";
     private const string StrafeChannelName = "strafe";
     private const string TurnChannelName = "turn";

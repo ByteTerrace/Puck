@@ -21,7 +21,7 @@ public readonly record struct FunctorObstruction<TValue>(int RuleIndex, RewriteR
 /// <typeparam name="TOps">The material.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>An image is assigned to a generator SYMBOL, and the map is the linear extension over the basis.</b> The image of
+/// <b>An image is assigned to a generator symbol, and the map is the linear extension over the basis.</b> The image of
 /// a normal form is the ordered product of its letters' images, and the image of an element is that product summed
 /// against the element's own coefficients. A generator carrying a presentation charge — a quiver arrow's weight —
 /// therefore rides through by linearity, since <see cref="PresentedAlgebra{TValue, TOps}.Generator"/> is that charge
@@ -43,17 +43,17 @@ public readonly record struct FunctorObstruction<TValue>(int RuleIndex, RewriteR
 /// scalar multiplication and product in the one shared material.
 /// </para>
 /// <para>
-/// <b>Where the source has a finite basis the check is COMPLETE, and the rules alone are not.</b> A positive
+/// <b>Where the source has a finite basis the check is complete, and the rules alone are not.</b> A positive
 /// <see cref="ChargedPresentation{TValue, TOps}.WindowDegree"/> annihilates every over-heavy product without any rule
 /// saying so, so a second pass compares the images' product against the compiled cell at every ordered basis pair;
 /// with unitality that is exactly the statement that the map is a homomorphism, both products being bilinear. The rule
 /// pass still runs first, and first, because a failing relation is the readable diagnostic and it is the only check
-/// available where no finite basis exists. There the rules ARE complete, provided no window is set — and a windowed
+/// available where no finite basis exists. There the rules are complete, provided no window is set — and a windowed
 /// presentation with no finite basis is refused at construction rather than half-checked.
 /// </para>
 /// <para>
 /// <b>A substitution's word is never an element.</b> The fixed point of a substitution grows exponentially, so a word
-/// morphism — one whose every image is a single basis element at the material's one — carries its images as WORDS and
+/// morphism — one whose every image is a single basis element at the material's one — carries its images as words and
 /// <see cref="MapWord"/> substitutes letter by letter into a caller-sized buffer, allocating nothing and never forming
 /// a key. Composing two substitutions is <see cref="MapWord"/> of one letter's image through the other, so no
 /// composition operator is needed.

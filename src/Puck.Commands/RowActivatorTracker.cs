@@ -121,11 +121,11 @@ public sealed class RowActivatorTracker {
 
     // A proper KMP (Knuth-Morris-Pratt) failure-function walk: on a mismatch, fall back through the longest
     // proper prefix of what's matched so far that is ALSO a suffix of it, rather than discarding all progress or
-    // only special-casing a restart against step 0. The ad-hoc "restart at 1 iff this press equals step 0"
-    // heuristic this replaced under-matched a sequence with a repeated PREFIX (declared use case: a tapped
-    // sequence permits repeats, e.g. [a, a, b]) — under a, a, a, b it reset to 0 on the third "a" and so never
-    // saw the fourth press complete it, because the third "a" is ALSO a valid one-tap prefix ("a") the naive
-    // reset threw away. KMP is exactly the state machine that never discards a still-valid prefix.
+    // only special-casing a restart against step 0. A tapped sequence permits repeats (e.g. [a, a, b]), and a
+    // sequence with a repeated PREFIX needs the full walk: under a, a, a, b a naive "restart at 1 iff this press
+    // equals step 0" reset would reset to 0 on the third "a" and never see the fourth press complete it, because
+    // the third "a" is ALSO a valid one-tap prefix ("a") that reset would discard. KMP never discards a
+    // still-valid prefix.
     private RowActivatorTransition ApplyTapped(in InputSignal signal) {
         if (signal.Phase != CommandPhase.Started) {
             // Taps are rising edges only — Active/Completed/Canceled carry no step information either way (a

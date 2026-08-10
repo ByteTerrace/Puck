@@ -5,10 +5,10 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The World-side half of the addon ABI's wire vocabularies: the <see cref="GrantRule"/> → <see cref="AddonVerdict"/>
-/// mapping and the capability mask-bit mapping. These live HERE, not in the Simulation adapter, because one side of
-/// each mapping is a <c>Puck.World</c> type the adapter must not reference — the same visible-seam shape one layer
-/// up. The input CHANNEL vocabulary is not pinned here at all: what a guest may declare is whatever the world
-/// document's channels section declares, resolved beside this in <see cref="WorldAddonChannelResolver"/>.
+/// mapping and the capability mask-bit mapping. These live here, not in the Simulation adapter, because one side of
+/// each mapping is a <c>Puck.World</c> type the adapter must not reference. The input channel vocabulary is not
+/// pinned here at all: what a guest may declare is whatever the world document's channels section declares,
+/// resolved beside this in <see cref="WorldAddonChannelResolver"/>.
 /// </summary>
 internal static class WorldAddonWire {
     /// <summary>Maps a decided <see cref="GrantVerdict"/> rule onto its pinned wire value. Total over
@@ -26,8 +26,7 @@ internal static class WorldAddonWire {
             // its own (an addon CAN be a group member per WorldDefinitionValidator.IsLegitimateGroupMember, and CAN
             // own a group as an OwnershipOwnerKind.Principal), so both are reachable from this door and neither has
             // a wire value of its own — mapped onto HeldWildcard, the closest existing shape ("allowed, not via a
-            // concrete row of its own"), rather than left to throw. GroupHold's mapping closes a gap that predates
-            // this change (the group+binding substrate landed with no addon-wire case); OwnershipHold is new here.
+            // concrete row of its own"), rather than left to throw.
             GrantRule.GroupHold => AddonVerdict.HeldWildcard,
             GrantRule.OwnershipHold => AddonVerdict.HeldWildcard,
             // DriveGated never reaches here: Allows() never produces it (composition-core's Seam A is scoped to
@@ -84,18 +83,18 @@ internal static class WorldAddonWire {
 }
 
 /// <summary>
-/// The ONE channel-name resolver the server mounts addons with — <see cref="IAddonChannelResolver"/>'s single
-/// World-side implementation, and the ONE place the guest's channel vocabulary meets the world's. Resolution
+/// The one channel-name resolver the server mounts addons with — <see cref="IAddonChannelResolver"/>'s single
+/// World-side implementation, and the one place the guest's channel vocabulary meets the world's. Resolution
 /// failure is never a mount fault (an unresolved name is report-and-inert; see <see cref="AddonChannelBinding"/>),
-/// so this class does no vocabulary REFUSAL — it only looks a declared name up in the world document's compiled
+/// so this class does no vocabulary refusal; it only looks a declared name up in the world document's compiled
 /// channel table.
 /// </summary>
 /// <remarks>
-/// <para><b>Two ordinal namespaces meet here, and this is the mapping between them.</b> A guest addresses its OWN
+/// <para><b>Two ordinal namespaces meet here, and this is the mapping between them.</b> A guest addresses its own
 /// declared name table by position: the wire's act verb carries that guest-local index, which never leaves
 /// <c>AddonSimulationPump</c> — it is used there only to select the <see cref="AddonChannelBinding"/> the
 /// handshake decoded. The ordinal on the binding, and therefore on every act the server folds, is the one
-/// <see cref="TryResolve"/> returns: an index into the WORLD's <see cref="WorldChannelTable"/>, where every channel
+/// <see cref="TryResolve"/> returns: an index into the world's <see cref="WorldChannelTable"/>, where every channel
 /// occupies its consecutive document-order slot and role claims are table metadata. The two namespaces never
 /// coincide by construction — a guest declaring <c>["forward", "strafe", "jump"]</c> speaks 0/1/2 even when the
 /// world's declaration order assigns those names different ordinals — so a folded

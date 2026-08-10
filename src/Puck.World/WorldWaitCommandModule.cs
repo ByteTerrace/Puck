@@ -4,21 +4,21 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>
-/// The console's SEQUENCING primitive — <c>world.wait</c>, the one verb that makes a piped "drive, then read back"
-/// script honest. Every other verb returns the instant it is submitted (a movement verb only ENQUEUES a segment), so a
+/// The console's sequencing primitive — <c>world.wait</c>, the one verb that makes a piped "drive, then read back"
+/// script honest. Every other verb returns the instant it is submitted (a movement verb only enqueues a segment), so a
 /// read-back on the next line observes a pose one tick into the motion; this verb suspends the drain of the queued lines
 /// behind it until the simulation has advanced a stated number of ticks.
 /// </summary>
 /// <remarks>
 /// It composes with (rather than replaces) <see cref="TextCommandSource"/>'s deferred-mutation barrier: that barrier
 /// already stalls an Immediate line while a Simulation-routed mutation is pending, so a wait is never needed to see a
-/// mutation APPLY — only to let the world RUN. This verb is Immediate, so the barrier holds it until the preceding
+/// mutation apply — only to let the world run. This verb is Immediate, so the barrier holds it until the preceding
 /// mutation has landed and the tick countdown starts from a tick that already contains it. A separate "settle" verb
 /// would therefore duplicate the barrier and is deliberately absent.
 /// </remarks>
-internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate) : ICommandModule {
-    // Ten minutes at the host's 240 Hz fixed step — far past any scripted segment, and a loud ceiling on a fat-fingered
-    // wait that would otherwise wedge the pipe for hours.
+internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate, WorldInstanceHost instances) : ICommandModule {
+    // Ten minutes at the boot world's fixed step at its FASTEST authorable rate (50400 ticks/second) — far past any
+    // scripted segment, and a loud ceiling on a fat-fingered wait that would otherwise wedge the pipe for hours.
     private const ulong MaxWaitTicks = 144_000UL;
 
     /// <inheritdoc/>
@@ -26,7 +26,7 @@ internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate) : IComma
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.wait",
-            description: "Suspends the stdin stream until the simulation has advanced a number of fixed ticks: world.wait <ticks> — exactly one whole number, 1..144000 (the fixed step is 240 Hz, so 240 ticks is one second of world time). The lines queued behind it stay queued and run, in order, on the frame the tick count is reached; the sequencing primitive a scripted 'drive for a span, then read the pose back' needs, and tick-based rather than wall-clock so the same script reads the same pose on every run and machine. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Echoes the release tick.",
+            description: "Suspends the stdin stream until the boot world's simulation has advanced a number of fixed ticks: world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the boot world's own current step width and completed-tick count). The lines queued behind it stay queued and run, in order, on the tick the count is reached; the sequencing primitive a scripted 'drive for a span, then read the pose back' needs, and tick-based rather than wall-clock so the same script reads the same pose on every run and machine. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the boot world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
             handler: (context, args) => {
                 if (args.Count != 1) {
                     return CommandResult.Error(output: "[world.wait: expected exactly one value — <ticks>]");
@@ -38,6 +38,26 @@ internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate) : IComma
 
                 if ((ticks == 0UL) || (ticks > MaxWaitTicks)) {
                     return CommandResult.Error(output: $"[world.wait: {ticks} ticks is outside 1..{MaxWaitTicks}]");
+                }
+
+                // REFUSE BY NAME rather than arm a hold that can never release on its own: a paused or rate-0 boot
+                // world publishes no further completed ticks (WorldConsoleWaitGate.PublishTick only ever fires from
+                // a step that actually ran), so this wait would trap every line behind it — INCLUDING the very
+                // world.rate resume that would be the only thing able to lift it, since Immediate lines queue behind
+                // an armed wait too. See WorldConsoleWaitGate.ReleaseStalled for the OTHER edge this module does not
+                // own directly: a wait already armed when a pause lands mid-hold.
+                if (!instances.TryDescribeRate(name: WorldInstanceHost.BootInstanceName, status: out var status, reason: out var describeReason)) {
+                    // Unreachable in practice (the boot instance always exists), but a lookup failure must refuse
+                    // rather than silently arm against unknown state.
+                    return CommandResult.Error(output: $"[world.wait: refused (could not read the boot world's own schedule: {describeReason})]");
+                }
+
+                if (status.Stopped) {
+                    return CommandResult.Error(output: $"[world.wait: refused (the boot world authors rateHz 0 — a durable stop that never produces another completed tick, so this wait could never release; see world.rate)]");
+                }
+
+                if (status.Paused) {
+                    return CommandResult.Error(output: "[world.wait: refused (the boot world is paused — no further tick will complete until world.rate resume, so this wait could never release; resume it first)]");
                 }
 
                 var release = gate.Arm(ticks: ticks);

@@ -3,7 +3,7 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-A stage (M-06): proves a watchpoint hit reports the PC of the instruction that actually made the access —
+/// Tier-A stage: proves a watchpoint hit reports the PC of the instruction that actually made the access —
 /// <c>SystemBus.NoteInstructionStart</c>'s latch, fed once per <c>Sm83.StepInstruction</c> dispatch — rather than
 /// whatever the CPU's live PC has advanced to by drain time, across every granularity the debugger advances a paused
 /// cabinet with: a budget <c>Run</c> (continuous and frame-sized alike) and a <c>StepInstruction</c> loop (single-step
@@ -12,8 +12,8 @@ namespace Puck.HumbleGamingBrick.Post;
 /// at known addresses, so each leg arms exactly one watch kind and asserts the drained PC against the address that
 /// literally performed the access.
 /// <para>
-/// Program (0x0100): <c>LD A,0x7A</c> (write's deterministic value) · <c>LD (0xC060),A</c> — the WRITE instruction,
-/// PC 0x0102 · <c>LD A,(0xC050)</c> — the READ instruction, PC 0x0105 · <c>JR -2</c> — an infinite loop at 0x0108, so
+/// Program (0x0100): <c>LD A,0x7A</c> (write's deterministic value) · <c>LD (0xC060),A</c> — the write instruction,
+/// PC 0x0102 · <c>LD A,(0xC050)</c> — the read instruction, PC 0x0105 · <c>JR -2</c> — an infinite loop at 0x0108, so
 /// over-running the budget or step count never runs off into unmapped memory.
 /// </para>
 /// </summary>

@@ -14,15 +14,15 @@ namespace Puck.Carriage;
 /// </summary>
 /// <remarks>
 /// <para><b>Sealed carriage is deliberately unauthenticated as to sender.</b> The agreement is
-/// EPHEMERAL-static: a fresh sender keypair per seal against the recipient's long-lived sealing key. That
-/// buys confidentiality and forward secrecy on the sender's side, and buys nothing about WHO sealed it —
+/// ephemeral-static: a fresh sender keypair per seal against the recipient's long-lived sealing key. That
+/// buys confidentiality and forward secrecy on the sender's side, and buys nothing about who sealed it —
 /// anyone holding the recipient's public sealing key can produce a payload that unseals cleanly. A sealed
 /// payload therefore proves only "someone sealed this for you"; when the recipient needs to know who,
-/// the sealed payload travels as the payload of an ordinary SIGNED envelope, and the signature is what
+/// the sealed payload travels as the payload of an ordinary signed envelope, and the signature is what
 /// names the sender.</para>
 /// <para><b>Nonce uniqueness has two independent guarantees.</b> The nonce is 12 random bytes per seal,
 /// and the AEAD key is derived from a per-seal ephemeral agreement, so a (key, nonce) pair repeats only if
-/// an ephemeral keypair AND a nonce both collide. No counter is kept, which is what lets sealing stay a
+/// an ephemeral keypair and a nonce both collide. No counter is kept, which is what lets sealing stay a
 /// stateless operation outside the tick.</para>
 /// </remarks>
 public static class SealedCarriage {
@@ -41,10 +41,10 @@ public static class SealedCarriage {
     /// <b>Key type first, curve second</b> (docs/signed-carriage-wire.md §14). The import is what enforces
     /// the type: <c>ECDiffieHellman.ImportSubjectPublicKeyInfo</c> refuses an SPKI whose
     /// <c>AlgorithmIdentifier</c> is not <c>id-ecPublicKey</c> (1.2.840.10045.2.1), and it has to come first
-    /// because a non-EC SPKI — an RSA key, say — has no curve to ask about at all. What there is NO check
+    /// because a non-EC SPKI — an RSA key, say — has no curve to ask about at all. What there is no check
     /// for, deliberately, is signing-versus-agreement intent: an EC public key's SPKI is the same bytes
     /// either way, so an ephemeral key records no such intent and inventing one would refuse honest keys.
-    /// The §4 algorithm NAME is what separates a signing key from a sealing key here, never the key bytes.
+    /// The §4 algorithm name is what separates a signing key from a sealing key here, never the key bytes.
     /// </remarks>
     /// <param name="subjectPublicKeyInfo">The SPKI bytes to import.</param>
     /// <param name="what">What is being imported, for the refusal message.</param>
@@ -146,8 +146,8 @@ public static class SealedCarriage {
 
     /// <summary>
     /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
-    /// docs/signed-carriage-wire.md §14 fixes: the RAW secret agreement (the shared point's X coordinate,
-    /// unhashed) as HKDF input keying material, HKDF-SHA256 with an ABSENT salt, the ASCII info label
+    /// docs/signed-carriage-wire.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
+    /// unhashed) as HKDF input keying material, HKDF-SHA256 with an absent salt, the ASCII info label
     /// <c>puck.carriage.sealed.v1</c>, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
     /// length — is a construction input to <see cref="AesGcm"/> rather than to the derivation, and lives at
     /// both call sites as <see cref="TagLength"/>.

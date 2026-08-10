@@ -3,7 +3,7 @@ namespace Puck.HumbleGamingBrick;
 /// <summary>
 /// An infrared link between two machines' <see cref="InfraredPort"/>s, together with the deterministic pair-stepper the
 /// medium requires — the IR analogue of <see cref="SerialLinkSession"/>. Constructing the session wires the two
-/// transceivers as peers; the pair must then be advanced THROUGH the session: <see cref="Run"/> moves both machines
+/// transceivers as peers; the pair must then be advanced through the session: <see cref="Run"/> moves both machines
 /// forward by one shared wall-time budget (master-clock T-cycles, i.e. LCD dots — the same unit <see cref="Machine.Run"/>
 /// consumes), always stepping the machine that is further behind its own cumulative target, one instruction at a time,
 /// with ties going to the first machine. That interleave is a pure function of the two machines' states and the budget
@@ -11,13 +11,13 @@ namespace Puck.HumbleGamingBrick;
 /// per-machine targets are cumulative (anchored at connect), so instruction overshoot carries between calls instead of
 /// accreting into drift.
 /// <para>
-/// Unlike the serial cable there is NO clock to negotiate: infrared carries a light LEVEL, not a clocked bit stream, so
+/// Unlike the serial cable there is no clock to negotiate: infrared carries a light level, not a clocked bit stream, so
 /// the session does not arbitrate a shift edge — it only keeps the two machines' light states coherent by advancing them
 /// in the furthest-behind interleave. The latency model is therefore the same instruction-atomic contract the serial
 /// session offers: when a machine samples its received-light line, the peer's emitted light is the peer's state at its
 /// last instruction boundary — at most one instruction stale, well inside the many-thousand-cycle windows IR link
-/// software (Mystery Gift) times its pulses over. This per-interleave-step propagation IS the deterministic contract;
-/// there is no faster-than-one-instruction coupling and none is needed. In a parallel-stepping fleet a linked pair is ONE
+/// software (Mystery Gift) times its pulses over. This per-interleave-step propagation is the deterministic contract;
+/// there is no faster-than-one-instruction coupling and none is needed. In a parallel-stepping fleet a linked pair is one
 /// work item: never step the two machines on separate threads, and never advance either machine directly while the
 /// session is live. Disposing the session severs the cable; both machines then step independently again (their received
 /// line reverts to dark, as on an unpaired transceiver).
@@ -27,7 +27,7 @@ namespace Puck.HumbleGamingBrick;
 /// instruction-atomic, a machine typically ends a budget having overshot its cumulative target by a few cycles; that
 /// overshoot is a credit that carries into the next budget. <see cref="Suspend"/> severs the cable and hands back an
 /// <see cref="IrLinkResumeToken"/> capturing both credits, and the resume constructor re-anchors each machine's target at
-/// <c>CycleCount − credit</c> so a snapshot/restore/reconnect cycle continues the EXACT pacing the suspend severed at. A
+/// <c>CycleCount − credit</c> so a snapshot/restore/reconnect cycle continues the exact pacing the suspend severed at. A
 /// naive reconnect (the plain constructor) instead discards the credit and diverges the trace by construction — so a
 /// linked pair may only be snapshotted across a <see cref="Suspend"/>. IR needs no transfer-idle guard the way the serial
 /// cable does (no bit is ever mid-shift — the whole transceiver state is a level plus register bits, all snapshotted), so
@@ -84,7 +84,7 @@ public sealed class IrLinkSession : IDisposable {
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
     }
 
-    /// <summary>Advances BOTH machines forward by a shared budget of T-cycles (dots), interleaved deterministically — the
+    /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically — the
     /// seam a host drives in place of the two machines' own <see cref="Machine.Run"/> while they are linked.</summary>
     /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>

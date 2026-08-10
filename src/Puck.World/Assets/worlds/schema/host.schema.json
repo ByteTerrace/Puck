@@ -10,7 +10,17 @@
       ]
     },
     "backend": {
-      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto."
+      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "auto",
+        "directx",
+        "vulkan",
+        null
+      ]
     },
     "width": {
       "description": "The window client width in pixels.",
@@ -21,7 +31,12 @@
       "type": "integer"
     },
     "surfaceFormat": {
-      "description": "The swapchain surface format (Unknown is rejected by the validator)."
+      "description": "The swapchain surface format (Unknown is rejected by the validator).",
+      "type": "string",
+      "enum": [
+        "r8g8b8a8",
+        "b8g8r8a8"
+      ]
     },
     "fullscreen": {
       "description": "Whether the window enters borderless fullscreen when first shown.",
@@ -74,7 +89,12 @@
       ],
       "properties": {
         "source": {
-          "default": null
+          "description": "The declared source to draw from, by name \u2014 or null when Generator inlines one.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "generator": {
           "$ref": "./common.schema.json#/$defs/WorldGenerator"

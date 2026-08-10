@@ -6,7 +6,11 @@ namespace Puck.World.Protocol;
 /// <param name="Source">The peer's gap-filling intent source.</param>
 /// <param name="Identity">The exact generated peer principal. Carried explicitly so replay never re-invents identity
 /// from an index.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity);
+/// <param name="IdentityDomain">The cryptographically verified admission domain for a remote human, or empty for a
+/// document-authored/simulated peer. Replay needs this independently of <paramref name="Identity"/>, which is the
+/// generated runtime <c>peer:index:generation</c> principal rather than the identity that admission verified.</param>
+/// <param name="IdentitySubject">The verified admission subject, or empty when no remote identity was admitted.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject);
 
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>

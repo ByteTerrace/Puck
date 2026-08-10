@@ -1,10 +1,41 @@
 namespace Puck.Platform.Windows.Recording;
 
-// Parses the H.264 Annex-B elementary stream the MFT emits and assembles the Matroska `avcC` (AVCDecoderConfiguration-
-// Record) CodecPrivate from the SPS/PPS NAL units. The V_MPEG4/ISO/AVC mapping also requires the per-frame payload be
-// length-prefixed NAL units (not Annex-B start codes) with the parameter sets carried out-of-band, so the same walk
-// converts each access unit: start codes -> 4-byte big-endian length prefixes, SPS/PPS/AUD stripped.
-internal static class AvcConfigRecord {
+// Reads the H.264 Annex-B elementary stream the MFT emits: it assembles the Matroska `avcC` (AVCDecoderConfiguration-
+// Record) CodecPrivate from the SPS/PPS NAL units, converts each access unit to the length-prefixed form the
+// V_MPEG4/ISO/AVC mapping requires (start codes -> 4-byte big-endian length prefixes, SPS/PPS/AUD stripped, parameter
+// sets carried out-of-band), and reads from the NAL types whether an access unit is a random-access point.
+internal static class AvcBitstream {
+    private const int NalCodedSlice = 1;
+    private const int NalIdrSlice = 5;
+
+    /// <summary>Reads whether an access unit starts a random access point, from the bitstream rather than from an
+    /// encoder-reported flag: an IDR coded slice is one, a non-IDR coded slice is not.</summary>
+    /// <param name="annexB">The encoder's Annex-B output packet.</param>
+    /// <returns><see langword="true"/> for an IDR access unit, <see langword="false"/> for a non-IDR one, and
+    /// <see langword="null"/> when the unit carries no coded slice — the caller then has nothing to override its
+    /// encoder's own report with.</returns>
+    public static bool? TryReadIsIdr(ReadOnlySpan<byte> annexB) {
+        var sawCodedSlice = false;
+
+        foreach (var (offset, count) in SplitNalUnits(annexB: annexB)) {
+            if (count <= 0) {
+                continue;
+            }
+
+            var nalType = (annexB[offset] & 0x1F);
+
+            if (nalType == NalIdrSlice) {
+                return true;
+            }
+
+            sawCodedSlice |= (nalType == NalCodedSlice);
+        }
+
+        return (sawCodedSlice
+            ? false
+            : null);
+    }
+
     /// <summary>Splits an Annex-B access unit into its NAL units (payloads exclude the start code).</summary>
     /// <param name="annexB">The Annex-B byte stream (start codes 0x000001 or 0x00000001).</param>
     /// <returns>The NAL unit byte ranges, in stream order.</returns>
@@ -94,7 +125,7 @@ internal static class AvcConfigRecord {
     /// <param name="sps">The sequence parameter set NAL (including its 0x67 header byte).</param>
     /// <param name="pps">The picture parameter set NAL (including its 0x68 header byte).</param>
     /// <returns>The AVCDecoderConfigurationRecord bytes.</returns>
-    public static byte[] Build(ReadOnlySpan<byte> sps, ReadOnlySpan<byte> pps) {
+    public static byte[] BuildConfigRecord(ReadOnlySpan<byte> sps, ReadOnlySpan<byte> pps) {
         if ((sps.Length < 4) || (pps.Length < 1)) {
             return [];
         }

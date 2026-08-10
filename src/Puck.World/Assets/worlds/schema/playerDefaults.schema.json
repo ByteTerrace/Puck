@@ -13,7 +13,8 @@
         ],
         "properties": {
           "id": {
-            "description": "The stable profile id."
+            "description": "The stable profile id.",
+            "type": "string"
           },
           "name": {
             "description": "The display name.",

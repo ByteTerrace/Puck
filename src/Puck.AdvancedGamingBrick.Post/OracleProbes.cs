@@ -3,24 +3,24 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
-/// The self-authored cycle-oracle probe battery (survey #1). Each probe is a tiny hand-assembled ARM ROM (or a
-/// direct component script) that isolates ONE documented Direct-Memory-Access / timer / interrupt / halt behaviour and
-/// reports our core's measured value beside the documented hardware measurement. Two probes are self-checking gates
-/// whose expected values we derive from the hardware model itself (the Direct Sound FIFO ring/playing split, and the
-/// per-channel DMA read-latch isolation); the rest are our-harness measurements against the documented targets from
+/// The self-authored cycle-oracle probe battery. Each probe is a tiny hand-assembled ARM ROM (or a
+/// direct component script) that isolates one documented Direct-Memory-Access / timer / interrupt / halt behaviour and
+/// reports the core's measured value beside the documented hardware measurement. Two probes are self-checking gates
+/// whose expected values are derived from the hardware model itself (the Direct Sound FIFO ring/playing split, and the
+/// per-channel DMA read-latch isolation); the rest are harness measurements against the documented targets from
 /// the public hardware-test corpus.
 /// <para>
-/// Honesty note (the anti-constant-chasing doctrine): a cycle-count divergence here is EVIDENCE, not a fail signal to
-/// tune to. Our probe harness is not the external corpus's harness, so a documented number and ours can legitimately
-/// differ by the surrounding instruction shape without our core being wrong. Divergences are recorded, never chased;
-/// the two SELF-CHECK gates are the only hard pass/fail rows.
+/// Honesty note: a cycle-count divergence here is evidence, not a fail signal to
+/// tune to. This probe harness is not the external corpus's harness, so a documented number and the measured one can
+/// legitimately differ by the surrounding instruction shape without the core being wrong. Divergences are recorded,
+/// never chased; the two self-checking gates are the only hard pass/fail rows.
 /// </para>
 /// </summary>
 internal static class OracleProbes {
     private const uint IoBase = 0x04000000u;
     private const uint ResultBase = 0x02000000u;
 
-    /// <summary>Runs every probe against our core and prints the measured-vs-documented table. Returns 0 (the two
+    /// <summary>Runs every probe against the core and prints the measured-vs-documented table. Returns 0 (the two
     /// self-checking gates gate; the measurement rows never fail the process — they are evidence).</summary>
     public static int RunOracle(string[] args) {
         var bios = Diagnostics.BiosImage;

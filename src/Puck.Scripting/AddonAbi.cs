@@ -4,29 +4,29 @@ namespace Puck.Scripting;
 /// The frozen addon ABI contract: the single source of truth for the byte layout, export names, and pinned
 /// budgets a WASM addon and its host agree on. Every multi-byte value is little-endian; every fixed-point value
 /// is <see cref="Puck.Maths.FixedQ4816"/> raw <c>i64</c> bits; no floating point ever crosses the boundary. The
-/// one version-shaped constant is <see cref="AbiVersion"/> itself — a SHAPE-IDENTITY TOKEN pinned at <c>1</c>,
+/// one version-shaped constant is <see cref="AbiVersion"/> itself — a shape-identity token pinned at <c>1</c>,
 /// never a sequence: this host speaks exactly one addon ABI shape, and a breaking change re-keys the artifacts
 /// (regenerate the module, move the hash pins) while the token stays <c>1</c>.
 /// <para>
-/// THIS IS ONE OF TWO INDEPENDENT RE-KEY BOUNDARIES, never one key covering both. The other is the replay tape's
+/// This is one of two independent re-key boundaries, never one key covering both. The other is the replay tape's
 /// opaque magic (<c>Puck.World.WorldReplaySnapshot</c>). They are separately keyed but coupled in one direction: the
-/// tape header pins recorded-AT-MOUNT receipts (name, module content hash, fuel, lane) rather than the definition's
-/// declared rows, so a break HERE invalidates every existing tape through receipt mismatch even when the tape's own
+/// tape header pins recorded-at-mount receipts (name, module content hash, fuel, lane) rather than the definition's
+/// declared rows, so a break here invalidates every existing tape through receipt mismatch even when the tape's own
 /// byte layout is untouched. Re-key each boundary with the change that moves that boundary's shape; move only one and
 /// a stale artifact passes its own door and fails at the other's.
 /// </para>
 /// </summary>
 /// <remarks>
-/// Two numbering families, never mixed. DISCRIMINANTS — enumerated wire sets a leading byte reads as a closed
+/// Two numbering families, never mixed. Discriminants — enumerated wire sets a leading byte reads as a closed
 /// choice, where a zeroed cell must decode as invalid — are 1-based with <c>0</c> reserved-invalid: a cell's
 /// <c>Kind</c>, <see cref="AddonChannelKind"/>, and <see cref="AddonSubjectKind"/>. The malformed-zero guard
-/// lives at <c>Kind</c> and only <c>Kind</c>. ORDINALS — dense indices with no reserved value — are 0-based:
+/// lives at <c>Kind</c> and only <c>Kind</c>. Ordinals — dense indices with no reserved value — are 0-based:
 /// channel-relative verbs (<see cref="RequestVerbs"/>), multi-part answer indices, channel table indices, and
 /// batch ordinals.
 /// </remarks>
 public static class AddonAbi {
     /// <summary>The shape-identity token a guest must report from <c>puck_abi_version</c> (<c>1</c>, permanently —
-    /// not a sequence). This host speaks exactly ONE addon ABI shape; any other reported value refuses loudly at
+    /// not a sequence). This host speaks exactly one addon ABI shape; any other reported value refuses loudly at
     /// handshake (<c>AbiMismatch</c>). Staleness detection does not rest on this number alone: a stale artifact
     /// fails the export pre-flight or the content-hash pin regardless of what it reports here.</summary>
     public const int AbiVersion = 1;
@@ -36,7 +36,7 @@ public static class AddonAbi {
     public const long DefaultFuelPerTick = 1_000_000L;
     /// <summary>The size in bytes of a single host→guest input cell (<c>32</c>).</summary>
     public const int InCellBytes = 32;
-    /// <summary>The number of low bits of an input-channel <c>Act</c>'s <c>Verb</c> that are RESERVED and must be
+    /// <summary>The number of low bits of an input-channel <c>Act</c>'s <c>Verb</c> that are reserved and must be
     /// zero (<c>2</c>). A channel act carries no phase: contribution semantics are per-tick declarative, so a
     /// nonzero reserved bit is a protocol fault rather than a discriminant to decode.</summary>
     public const int InputVerbReservedBits = 2;
@@ -185,9 +185,9 @@ public static class AddonAbi {
         /// section acts through it with a JSON payload rather than a query — the request cell's <c>A</c>/<c>B</c>/
         /// <c>C</c> lanes carry the declared mutation-kind ordinal, an unsigned guest-memory pointer, and an
         /// unsigned byte length (bounded by <see cref="MaxMutationPayloadBytes"/>) rather than the all-zero shape
-        /// <see cref="BodyPose"/> requires. PREFIX GROWTH over <see cref="AbiVersion"/> <c>1</c>: a guest built
-        /// before this verb existed declares a smaller <c>VerbCount</c> and is unaffected — its hash pin does not
-        /// move.</summary>
+        /// <see cref="BodyPose"/> requires. This is prefix growth over <see cref="AbiVersion"/> <c>1</c>: a guest
+        /// built before this verb existed declares a smaller <c>VerbCount</c> and is unaffected — its hash pin does
+        /// not move.</summary>
         public const int SubmitMutation = 1;
         /// <summary>The number of <c>Answer</c> cells a <see cref="SubmitMutation"/> act produces (<c>1</c>) — one
         /// reserved cell per act, carrying <see cref="AddonVerdict.Applied"/> or a refusal; see the addon mutation
@@ -199,18 +199,18 @@ public static class AddonAbi {
         /// <summary>The number of <c>Answer</c> cells a <see cref="Designate"/> act produces (<c>1</c>).</summary>
         public const int DesignateAnswerParts = 1;
         /// <summary>The size of the pinned vocabulary — the ceiling on a guest's declared <c>VerbCount</c>, which
-        /// may be any non-empty PREFIX of it: growing this vocabulary must never refuse a guest built against
+        /// may be any non-empty prefix of it: growing this vocabulary must never refuse a guest built against
         /// fewer verbs (<c>3</c>).</summary>
         public const int Count = 3;
     }
 
     /// <summary>The host-written, 0-based disclosure verb vocabulary an <c>Observation</c> cell carries. Verbs
-    /// <c>1..9</c> are world EVENTS — edges delivered in pinned sim iteration order, gated by an Observe grant
+    /// <c>1..9</c> are world events — edges delivered in pinned sim iteration order, gated by an Observe grant
     /// carrying an event budget (see <c>Puck.World.Protocol.WorldGrant.EventBudget</c>); they mint no handle
     /// (<c>HandleIndex</c>/<c>HandleGeneration</c> are always zero on an event cell — events are data, never
     /// authority). The closed event-family vocabulary lives host-side (<c>Server.WorldEventFeed</c>); this ABI only
-    /// pins the wire shape. PREFIX GROWTH over <see cref="AbiVersion"/> <c>1</c>: a guest built before an event
-    /// verb existed simply never receives it (it declares no interest by holding no event-budgeted grant), so
+    /// pins the wire shape. This is prefix growth over <see cref="AbiVersion"/> <c>1</c>: a guest built before an
+    /// event verb existed simply never receives it (it declares no interest by holding no event-budgeted grant), so
     /// growing this set never breaks an existing module.</summary>
     public static class ObservationVerbs {
         /// <summary>The disclosure of a minted handle over a body the addon's principal was granted.</summary>
@@ -243,9 +243,9 @@ public static class AddonAbi {
         /// presentation (a headless host peeks no machine and publishes nothing on this verb — see
         /// <c>Server.WorldEventFeed</c>'s own remarks).</summary>
         public const int EventMachineMemoryChanged = 9;
-        /// <summary>The per-mount EVENT GAP SUMMARY cell — the overflow doctrine's resync signal. <c>A</c> = the
+        /// <summary>The per-mount event gap summary cell — the overflow doctrine's resync signal. <c>A</c> = the
         /// addon's lifetime dropped-event count (saturating); <c>B</c> is always zero. Emitted at most once per
-        /// batch, after every edge that fit, whenever the count is nonzero OR moved since the last batch that
+        /// batch, after every edge that fit, whenever the count is nonzero or moved since the last batch that
         /// carried it. A nonzero count means "resync by polling the level state you already observe" — the dropped
         /// edges are gone, never replayed.</summary>
         public const int EventGap = 10;
@@ -253,8 +253,8 @@ public static class AddonAbi {
 
     /// <summary>Encodes an input channel <c>Act</c> cell's <c>Verb</c> from the declared channel-name ordinal it
     /// addresses: the low <see cref="InputVerbReservedBits"/> bits are required-zero, the remaining bits are the
-    /// declared ordinal. Contribution semantics are per-tick declarative — there is no phase to pack alongside it
-    /// any more.</summary>
+    /// declared ordinal. Contribution semantics are per-tick declarative, so there is no phase to pack
+    /// alongside it.</summary>
     /// <param name="declaredOrdinal">The 0-based index into the channel's declared name table.</param>
     /// <returns>The encoded <c>Verb</c> value.</returns>
     public static ushort EncodeChannelVerb(int declaredOrdinal) {

@@ -17,12 +17,12 @@ namespace Puck.HumbleGamingBrick.Post;
 /// scripted link through the Cable Club is gated by the <see cref="ScriptedTradeLinkLockStage"/> (<c>link-lock</c>). The overworld
 /// factory writes the player and receptionist object structs because CONTINUE restores overworld objects from saved
 /// WRAM rather than regenerating them. The cartridge is a per-machine commercial asset, never committed:
-/// its path comes from <c>PUCK_GB_TRADEROM</c> (with a known dev-box fallback), and the stage SKIPS cleanly when absent.
+/// its path comes from <c>PUCK_GB_TRADEROM</c> (with a known dev-box fallback), and the stage skips cleanly when absent.
 /// </para>
 /// <para>
 /// Both machines are pinned to CGB, and this cart's link code never writes rKEY1 or
 /// SC_SPEED, so its same-model exchange always runs the normal (~8192&#160;Hz) serial clock — but that is a property of the
-/// GAME, not a licence to pin the emulator's serial to a real-time rate. KEY1 legitimately doubles the serial shift clock
+/// game, not a licence to pin the emulator's serial to a real-time rate. KEY1 legitimately doubles the serial shift clock
 /// on hardware and in <see cref="SerialComponent"/> (the fast-clock bit taps DIV bit&#160;3 instead of bit&#160;8); this
 /// cart simply never arms it.
 /// </para>

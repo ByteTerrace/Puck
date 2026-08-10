@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 /// <summary>The host seam <see cref="SdfCompositionFrameSource"/> calls once per <see cref="ISdfFrameSource.CaptureFrame"/>
 /// to turn the composed <see cref="SdfProgram"/> + dynamic transforms into a full <see cref="SdfFrame"/> — the "dress"
 /// half of frame production (views, camera/lighting mood, the grid-lock overlay, debug view flags) that has nothing to
-/// do with WHAT geometry exists and everything to do with HOW this frame presents it. Composition owns the emitter
+/// do with what geometry exists and everything to do with how this frame presents it. Composition owns the emitter
 /// list (content); a host implements this to own presentation, without needing to know how the program was built.</summary>
 public interface ISdfFrameDresser {
     /// <summary>Builds this frame's <see cref="SdfFrame"/> from the composed program/transforms.</summary>
@@ -24,37 +24,37 @@ public interface ISdfFrameDresser {
     SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 }
 
-/// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into ONE <see cref="ISdfFrameSource"/> — the
+/// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
-/// than one method inlining every content block, a host picks a LIST of emitters (a room, a sculpted scene, an
+/// than one method inlining every content block, a host picks a list of emitters (a room, a sculpted scene, an
 /// authoring pool, a debug takeover, …) and this type owns the shared mechanics every one of them needs — contiguous
 /// dynamic-transform slot assignment, the one-time worst-case capacity probe, and the material-scope wrap for any
 /// <see cref="ISdfSceneEmitter.OwnsMaterialScope"/> emitter.
 /// <para>
-/// SLOT ASSIGNMENT: at construction, each configured emitter is assigned
+/// Slot assignment: at construction, each configured emitter is assigned
 /// a contiguous <see cref="SdfEmitContext.SlotBase"/> equal to the running sum of every earlier emitter's
 /// <see cref="ISdfSceneEmitter.DynamicSlotCount"/> — emitter 0 starts at slot 0, emitter 1 starts where emitter 0's
 /// range ends, and so on. This never changes for the lifetime of this instance (an emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>
 /// must therefore stay constant — see its remarks).
 /// </para>
 /// <para>
-/// THE CAPACITY PROBE: also at construction, one COMBINED worst-case program is built by calling every emitter's
+/// The capacity probe: also at construction, one combined worst-case program is built by calling every emitter's
 /// <see cref="ISdfSceneEmitter.Emit"/> with <see cref="SdfEmitContext.Probe"/> set — each in its own material scope
 /// when <see cref="ISdfSceneEmitter.OwnsMaterialScope"/> is set — and measuring the result once
 /// (<see cref="WorstCaseProgramWordCapacity"/>/<see cref="WorstCaseInstanceCapacity"/>/<see cref="WorstCaseDynamicTransformCapacity"/>).
 /// This generalizes the per-host <c>MeasureWorstCaseEnvelope</c> pattern: any live rebuild (every real
-/// <see cref="CaptureFrame"/> call) is a program built from the SAME emitters' NON-probe branches, which by the probe
+/// <see cref="CaptureFrame"/> call) is a program built from the same emitters' non-probe branches, which by the probe
 /// contract (see <see cref="ISdfSceneEmitter"/>) can never exceed what the probe measured.
 /// </para>
 /// <para>
-/// REBUILD TRIGGER: the composed program rebuilds only when some emitter's revision components
-/// (<see cref="ISdfSceneEmitter.WriteRevision"/>) differ ELEMENTWISE from what that emitter reported when the held
+/// Rebuild trigger: the composed program rebuilds only when some emitter's revision components
+/// (<see cref="ISdfSceneEmitter.WriteRevision"/>) differ elementwise from what that emitter reported when the held
 /// program was built (or on the first call) — an emitter that never changes (the default
 /// <c>RevisionComponentCount =&gt; 0</c>) never forces a rebuild on its own. The comparison is against the whole
-/// FLATTENED vector of every emitter's every counter rather than any combined number, because a revision can move DOWN
+/// flattened vector of every emitter's every counter rather than any combined number, because a revision can move down
 /// (one is assigned from a server-supplied snapshot value): two counters moving in opposite directions by the same
 /// amount would cancel in any sum and hold a stale program, and any digest would only make that collision improbable
-/// rather than impossible. This is why the contract hands over COMPONENTS and not a single number — a per-emitter
+/// rather than impossible. This is why the contract hands over components and not a single number — a per-emitter
 /// aggregate would just relocate the same cancellation one level down, where the host cannot see it.
 /// </para></summary>
 public sealed class SdfCompositionFrameSource : ISdfFrameSource {
@@ -122,20 +122,20 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         WorstCaseDynamicTransformCapacity = m_transforms.Length;
     }
 
-    /// <summary>Where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
+    /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
     /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach (the default,
-    /// <c>(0, -1000, 0)</c>, is a generic "far below anything" fallback). Changing this does NOT rebuild the program
+    /// <c>(0, -1000, 0)</c>, is a generic "far below anything" fallback). Changing this does not rebuild the program
     /// (it only affects <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, called every frame regardless).</summary>
     public Vector3 ParkPosition { get; set; } = new(x: 0f, y: -1000f, z: 0f);
 
-    /// <summary>The packed-word floor the engine's program buffer must reserve — every registered emitter's probe
+    /// <summary>Gets the packed-word floor the engine's program buffer must reserve — every registered emitter's probe
     /// form, combined into one program, measured once at construction.</summary>
     public int WorstCaseProgramWordCapacity { get; }
 
-    /// <summary>The instance-count floor the engine's mask buffer must reserve (see <see cref="WorstCaseProgramWordCapacity"/>).</summary>
+    /// <summary>Gets the instance-count floor the engine's mask buffer must reserve (see <see cref="WorstCaseProgramWordCapacity"/>).</summary>
     public int WorstCaseInstanceCapacity { get; }
 
-    /// <summary>The dynamic-transform slot floor the render assembly must reserve — the sum of every registered
+    /// <summary>Gets the dynamic-transform slot floor the render assembly must reserve — the sum of every registered
     /// emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>.</summary>
     public int WorstCaseDynamicTransformCapacity { get; }
 

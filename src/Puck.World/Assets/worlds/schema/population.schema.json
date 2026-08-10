@@ -117,9 +117,9 @@
       "description": "The total authoritative body capacity, including reserved local seats.",
       "type": "integer"
     },
-    "reconnectGraceTicks": {
-      "description": "How many simulation ticks a disconnected body stays PARKED \u2014 retained in the sim/collider set at its last pose, still counted IsHumanOccupied \u2014 before the deferred teardown (body drop, and for a peer, its generation\u0027s grants) actually fires. 0 disables the grace window outright: a disconnect tears the body down immediately, the pre-park behavior. Read once at construction/rebuild, like the rest of this section (SetPopulationDefaults\u0027s own timing class) \u2014 a live edit takes effect on the NEXT disconnect, never retroactively on an already-parked body. See Server.WorldPopulation\u0027s park-with-grace remarks and the $parked:\u003CbodyRef\u003E reserved rule channel (ParkedPrefix) that reads a parked body\u0027s remaining count. Default 720 ticks \u2014 3 seconds at the fixed 240 Hz simulation rate.",
-      "type": "integer"
+    "reconnectGraceSeconds": {
+      "description": "How long a disconnected body stays PARKED \u2014 retained in the sim/collider set at its last pose, still counted IsHumanOccupied \u2014 before the deferred teardown (body drop, and for a peer, its generation\u0027s grants) actually fires. 0 disables the grace window outright: a disconnect tears the body down immediately, the pre-park behavior. A POSITIVE value authored against a world whose SimulationRateHz is 0 parks the body FOREVER \u2014 there is no tick mapping for a world that never advances, so the deferred teardown never fires (NEVER, not immediately and not zero; see CompiledTickDuration). Authored in SECONDS \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning this window \u2014 and compiled once to PopulationReconnectGraceTicks via WorldSimulationTickConversion. Read once at construction/rebuild, like the rest of this section (SetPopulationDefaults\u0027s own timing class) \u2014 a live edit takes effect on the NEXT disconnect, never retroactively on an already-parked body. See Server.WorldPopulation\u0027s park-with-grace remarks and the $parked:\u003CbodyRef\u003E reserved rule channel (ParkedPrefix) that reads a parked body\u0027s remaining count. Default 3 seconds \u2014 720 ticks at the fixed 240 Hz simulation rate.",
+      "type": "number"
     },
     "capacityDraw": {
       "description": "The census\u0027s authored-randomness facet, or null for an ordinary literal Capacity. A BOOT-ONLY site (PopulationCapacity): settled into Capacity, cleared, and narrated exactly like BackendDraw. The census coherence rule. The site\u0027s admissible domain is not the capacity ceiling alone \u2014 NetworkPlayers is validated against capacity MINUS the local seats, so a drawn capacity below that sum is a document this same validator would refuse once resolved. The domain is narrowed STATICALLY at authoring instead, so the roll can never decide whether the world boots. Not an XOR. Unlike BackendDraw, this site cannot refuse both-declared: WorldPopulationDefaults is a STRUCT, so an authored capacity: 128 and the C# default 128 are indistinguishable once parsed. When both are present the draw simply wins \u2014 a stated limitation, not a silent guess.",
@@ -129,7 +129,12 @@
       ],
       "properties": {
         "source": {
-          "default": null
+          "description": "The declared source to draw from, by name \u2014 or null when Generator inlines one.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "generator": {
           "$ref": "./common.schema.json#/$defs/WorldGenerator"

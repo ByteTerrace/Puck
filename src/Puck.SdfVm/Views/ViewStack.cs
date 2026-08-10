@@ -6,7 +6,7 @@ namespace Puck.SdfVm.Views;
 
 /// <summary>A stable handle for one <see cref="ViewStack"/> registration — returned by <see cref="ViewStack.Register"/>,
 /// consumed by <see cref="ViewStack.Release(ViewId)"/>. <see cref="None"/> is the sentinel a dropped (ceiling-exceeding)
-/// registration returns; every other caller resolves content by NAME (<see cref="ViewStack.Resolve"/>), so holding
+/// registration returns; every other caller resolves content by name (<see cref="ViewStack.Resolve"/>), so holding
 /// onto the id itself is only needed to release a specific registration later.</summary>
 /// <param name="Value">The raw id, unique for the lifetime of the owning <see cref="ViewStack"/> (never reused).</param>
 public readonly record struct ViewId(int Value) {
@@ -17,7 +17,7 @@ public readonly record struct ViewId(int Value) {
     public bool IsValid => (Value >= 0);
 }
 
-/// <summary>One piece of view CONTENT — anything that can produce a samplable image handle for a screen surface (or
+/// <summary>One piece of view content — anything that can produce a samplable image handle for a screen surface (or
 /// any other consumer) to show: a posed offscreen world render, a hosted guest's raw framebuffer, a nested world's
 /// own offscreen composite. The shared vocabulary <see cref="ViewStack"/> registers, budgets, and resolves by name;
 /// see <see cref="Views.SdfCameraView"/>/<see cref="Views.GuestSurfaceView"/>/<see cref="Views.NestedWorldView"/> for
@@ -34,16 +34,16 @@ public interface IViewContent {
     /// <param name="context">This frame's shared render inputs.</param>
     nint Resolve(in ViewRenderContext context);
 
-    /// <summary>This content's room-light contribution — zero for content that only FILMS an already-lit scene (a
-    /// camera, a nested world), non-zero for content that IS its own light source (a CPU-drawn face, a CRT terminal).</summary>
+    /// <summary>This content's room-light contribution — zero for content that only films an already-lit scene (a
+    /// camera, a nested world), non-zero for content that is its own light source (a CPU-drawn face, a CRT terminal).</summary>
     Vector3 RoomGlow { get; }
 
     /// <summary>Whether this content counts against <see cref="ViewStack.RefreshBudget"/>'s round-robin share.
     /// <see langword="true"/> (the default) for anything that pays a real render pass to resolve (an offscreen world
     /// engine submit) — <see cref="Views.SdfCameraView"/> and <see cref="Views.NestedWorldView"/> both do.
-    /// <see langword="false"/> for content whose <see cref="Resolve"/> is a cheap read of state some OTHER path
+    /// <see langword="false"/> for content whose <see cref="Resolve"/> is a cheap read of state some other path
     /// already refreshed (<see cref="Views.GuestSurfaceView"/> — its producer delegate is already ticked/uploaded by
-    /// its owner every frame, so gating it behind the budget would only serve a STALE cached handle on the frames it
+    /// its owner every frame, so gating it behind the budget would only serve a stale cached handle on the frames it
     /// is skipped).</summary>
     bool IsBudgeted => true;
 }
@@ -51,25 +51,33 @@ public interface IViewContent {
 /// <summary>This frame's shared render inputs, handed to every <see cref="IViewContent.Resolve"/> call — the same
 /// program/transforms/time the room itself rendered with, so a view content can pose a camera over the identical
 /// world a screen surface would otherwise show head-on.</summary>
+/// <remarks><see cref="HostFrame"/> is the primary member and the rest are conveniences beside it: an offscreen
+/// content derives its own frame from the room's rather than building one, so every per-frame lever the host set
+/// reaches it by construction. The convenience members are the ones a content needs before it has a frame to derive
+/// (which device, which program revision, what to pose a rig against), never a second spelling of something the
+/// frame already carries — duplicating the packed dynamic transforms here would let a content render the wrong
+/// array whenever the two copies drift.</remarks>
 /// <param name="Host">The host frame context (its <see cref="Puck.Hosting.FrameContext.Host"/> resolves the live GPU
 /// device).</param>
+/// <param name="HostFrame">The frame the room is rendering this frame — the base every offscreen content derives its
+/// own submission from (see <see cref="Views.SdfCameraView.Resolve"/>). Carries the shared program, the packed dynamic
+/// transforms, the content clock, and every per-frame quality/lighting lever.</param>
 /// <param name="Program">This frame's composed world program (the same instance every content shares — an offscreen
 /// engine re-uploads only when <paramref name="ProgramRevision"/> advances).</param>
 /// <param name="ProgramRevision">The program's revision counter — content compares this against its own
 /// last-uploaded revision to decide whether to re-upload.</param>
 /// <param name="Time">The frame's content clock (seconds) — content renders the same animated world the room does.</param>
 /// <param name="AuthoritativeTick">The latest authoritative simulation tick available to presentation.</param>
-/// <param name="DynamicTransforms">This frame's packed dynamic-transform buffer, identical to the main engine's.</param>
 /// <param name="ResolveScreenSource">Resolves a program-declared screen-surface index to its bound image handle —
-/// what a content's own render sees on every OTHER screen surface (see <see cref="ViewStack"/>'s self-reference
-/// remarks for why "OTHER" matters).</param>
+/// what a content's own render sees on every other screen surface (see <see cref="ViewStack"/>'s self-reference
+/// remarks for why "other" matters).</param>
 public readonly record struct ViewRenderContext(
     Puck.Hosting.FrameContext Host,
+    SdfFrame HostFrame,
     SdfProgram Program,
     int ProgramRevision,
     float Time,
     ulong AuthoritativeTick,
-    IReadOnlyList<DynamicTransform> DynamicTransforms,
     Func<int, nint> ResolveScreenSource
 );
 
@@ -77,24 +85,24 @@ public readonly record struct ViewRenderContext(
 /// Manages named, role-neutral view content for diegetic screens and other image consumers. A posed offscreen camera render
 /// (<see cref="Views.SdfCameraView"/>), a hosted guest's raw framebuffer (<see cref="Views.GuestSurfaceView"/>), and a
 /// fully nested world's own offscreen composite (<see cref="Views.NestedWorldView"/>) all register, budget, and
-/// resolve through this ONE small vocabulary — no consumer-specific channel exists.
+/// resolve through this one small vocabulary — no consumer-specific channel exists.
 /// <para>
 /// Registering a view is cheap: up to
-/// <see cref="MaxRegisteredViews"/> may be LIVE at once — but only <see cref="RefreshBudget"/> of the BUDGETED ones
+/// <see cref="MaxRegisteredViews"/> may be live at once — but only <see cref="RefreshBudget"/> of the budgeted ones
 /// (<see cref="IViewContent.IsBudgeted"/> true — an offscreen render pays a real GPU pass) actually re-render on any
 /// one produced frame; the rest keep their last resolved handle until the round-robin cursor reaches them again.
-/// UNBUDGETED content (a cheap producer some other path already refreshed) resolves every frame regardless — see
-/// <see cref="IViewContent.IsBudgeted"/>'s remarks. So a wall of monitors costs the SAME per-frame render as four:
-/// registration is cheap, only the refresh budget is spent each frame. Beyond the budget, views SHARE it
-/// round-robin (narrated, never dropped); only past the <see cref="MaxRegisteredViews"/> ceiling is a NEW
+/// Unbudgeted content (a cheap producer some other path already refreshed) resolves every frame regardless — see
+/// <see cref="IViewContent.IsBudgeted"/>'s remarks. So a wall of monitors costs the same per-frame render as four:
+/// registration is cheap, only the refresh budget is spent each frame. Beyond the budget, views share it
+/// round-robin (narrated, never dropped); only past the <see cref="MaxRegisteredViews"/> ceiling is a new
 /// registration truly refused (narrated).
 /// </para>
 /// <para>
-/// A registered budgeted view has no INTRINSIC "is anybody watching" gate — <see cref="RenderFrame"/> cannot see every
-/// legitimate consumer, since content is resolved by NAME. <see cref="Resolve"/>/<see cref="ResolveGlow"/> are valid,
+/// A registered budgeted view has no intrinsic "is anybody watching" gate — <see cref="RenderFrame"/> cannot see every
+/// legitimate consumer, since content is resolved by name. <see cref="Resolve"/>/<see cref="ResolveGlow"/> are valid,
 /// screen-free reads in their own right (a <c>ViewTransition</c> sampling a camera view by name for its own layout,
 /// never wiring it to a screen surface, is exactly this shape) — an intrinsic "wired to some screen" gate would starve
-/// that consumer silently, so that design is rejected. The gate is instead CONSUMER-SUPPLIED: <see cref="Register"/>
+/// that consumer silently, so that design is rejected. The gate is instead consumer-supplied: <see cref="Register"/>
 /// takes an optional <c>isLive</c> predicate — only the registrant knows its own full consumer set. When the predicate
 /// returns <see langword="false"/>, the round-robin cursor passes over that view without spending refresh budget on it
 /// (the budget goes to the next live view instead), and the view keeps serving its last resolved
@@ -106,25 +114,33 @@ public readonly record struct ViewRenderContext(
 /// <para>
 /// Inside a view's own render, any screen surface currently wired to that view
 /// binds 0 (the flat/procedural fallback) — a view never samples the image it is itself writing, which would compound
-/// every frame. Every OTHER screen (including one wired to a DIFFERENT view) resolves normally, so one-frame-lag
-/// TV-in-TV chains (a view showing a screen that shows a DIFFERENT view) are legal and desirable. A host records,
-/// per view name, which screen indices are wired to THAT view via <see cref="SetWiredScreens"/>; <see cref="RenderFrame"/>
+/// every frame. Every other screen (including one wired to a different view) resolves normally, so one-frame-lag
+/// TV-in-TV chains (a view showing a screen that shows a different view) are legal and desirable. A host records,
+/// per view name, which screen indices are wired to that view via <see cref="SetWiredScreens"/>; <see cref="RenderFrame"/>
 /// wraps the caller's <see cref="ViewRenderContext.ResolveScreenSource"/> per view so those indices always resolve to
 /// 0 for that view's own render.
 /// </para>
 /// </summary>
 public sealed class ViewStack : IDisposable {
     /// <summary>The most views the stack holds live at once.
-    /// registering/holding this many is cheap state, NOT this many render passes per frame (see <see cref="RefreshBudget"/>).
+    /// registering/holding this many is cheap state, not this many render passes per frame (see <see cref="RefreshBudget"/>).
     /// A registration past this ceiling is refused (narrated); the caller's fallback (its non-diegetic presentation)
     /// is its own call.</summary>
     public const int MaxRegisteredViews = 64;
 
     /// <summary>The per-frame render budget shared by every budgeted live view: how many actually re-render
     /// (one real offscreen pass each) on any
-    /// one produced frame. Beyond this, views refresh ROUND-ROBIN (each persists its last resolved handle on the
+    /// one produced frame. Beyond this, views refresh round-robin (each persists its last resolved handle on the
     /// frames it is skipped — diegetically honest for a wall of security CRTs), advancing a deterministic cursor on
     /// the produced frame (no wall clock).</summary>
+    /// <remarks><c>Puck.World.WorldSessionWindowCapacity.MaxSimultaneousWindows</c> hand-mirrors this constant's
+    /// value (it lives in <c>Puck.World.Data</c>, below this project in the layering, and may not reference this
+    /// type — see that constant's own remarks for the full reasoning). A window session is unbudgeted — it never
+    /// enters this round-robin share, resolving every produced frame unconditionally instead — so the mirrored
+    /// ceiling bounds the opposite risk: the worst-case count of full extra unconditional engine submits one
+    /// produced frame can be asked to pay, kept no larger than the number of budgeted views a frame already accepts
+    /// paying for here. Changing this value obligates that constant to the same change, by hand, in the same
+    /// commit.</remarks>
     public const int RefreshBudget = 4;
 
     private static readonly IReadOnlySet<int> EmptyScreenSet = new HashSet<int>();
@@ -143,6 +159,14 @@ public sealed class ViewStack : IDisposable {
         // [view-timing] (armed GPU timing): this entry's most recent Resolve wall time — 0 until it has resolved at
         // least once, or always 0 when ViewTiming.Enabled is false.
         public long LastResolveTicks;
+        // True once this view's own Resolve has thrown — permanently skipped by RenderFrame thereafter, never
+        // retried on a later produced frame, mirroring WorldOutputHub's own detach-on-fault contract for a typed
+        // subscriber that throws mid-delivery. The REGISTRATION itself survives (ActiveViewCount, the
+        // MaxRegisteredViews ceiling, and Release/Resolve-by-name all still see it) — only the render pass stops
+        // calling into content proven unsafe to call. Resolve/ResolveGlow keep serving whatever LastHandle/LastGlow
+        // this entry last resolved successfully (0/zero if it never resolved at all), which is what "holds the last
+        // completed image" means at this layer.
+        public bool Disabled;
     }
 
     private readonly Dictionary<string, Entry> m_byName = new(comparer: StringComparer.Ordinal);
@@ -173,17 +197,17 @@ public sealed class ViewStack : IDisposable {
         }
     }
 
-    /// <summary>Registers (or, for an existing name, UPDATES) one named view. Calling this again for a name already
+    /// <summary>Registers (or, for an existing name, updates) one named view. Calling this again for a name already
     /// held replaces its content/band in place and keeps its <see cref="ViewId"/> and any GPU resource that content
     /// instance itself owns — a caller that wants a persistent offscreen engine to survive across frames passes the
-    /// SAME <see cref="IViewContent"/> instance back every frame (mutating its own pose/binding fields), rather than
+    /// same <see cref="IViewContent"/> instance back every frame (mutating its own pose/binding fields), rather than
     /// constructing a fresh one each call. A first-time registration past <see cref="MaxRegisteredViews"/> is refused
     /// (narrated to stderr, like <c>CameraFeedPool</c>'s own ceiling) and returns <see cref="ViewId.None"/>.</summary>
     /// <param name="name">The view's stable name — the handle every consumer resolves by (see <see cref="Resolve"/>).</param>
     /// <param name="content">The content this name shows.</param>
     /// <param name="band">The view's priority band (today informational/ordering only — see the type remarks; a
-    /// screen-SURFACE slot claim is a SEPARATE arbitration, owned by the host).</param>
-    /// <param name="isLive">Optional registrant-supplied liveness gate for the BUDGETED round-robin (see the type
+    /// screen-surface slot claim is a separate arbitration, owned by the host).</param>
+    /// <param name="isLive">Optional registrant-supplied liveness gate for the budgeted round-robin (see the type
     /// remarks) — <see langword="null"/> (the default) means always live, today's behavior. Consulted only while this
     /// view's content is budgeted (<see cref="IViewContent.IsBudgeted"/>); unbudgeted content already resolves every
     /// frame unconditionally. Returning <see langword="false"/> skips this view's turn without spending refresh
@@ -251,7 +275,7 @@ public sealed class ViewStack : IDisposable {
     }
 
     /// <summary>Records which program-declared screen-surface indices are wired to view <paramref name="name"/> this
-    /// frame — the self-reference set <see cref="RenderFrame"/> zeroes out of that view's OWN
+    /// frame — the self-reference set <see cref="RenderFrame"/> zeroes out of that view's own
     /// <see cref="ViewRenderContext.ResolveScreenSource"/> (see the type remarks). A host calls this once per frame,
     /// alongside (or instead of, when unchanged) re-registering — a no-op for a name not currently registered.</summary>
     /// <param name="name">The view's name.</param>
@@ -282,11 +306,11 @@ public sealed class ViewStack : IDisposable {
     public bool IsLive(string name) =>
         (m_byName.TryGetValue(key: name, value: out var entry) && (entry.LastHandle != 0));
 
-    /// <summary>Renders this frame's views: every UNBUDGETED view resolves unconditionally, then up to
-    /// <see cref="RefreshBudget"/> BUDGETED views resolve round-robin (see the type remarks) — a budgeted view whose
+    /// <summary>Renders this frame's views: every unbudgeted view resolves unconditionally, then up to
+    /// <see cref="RefreshBudget"/> budgeted views resolve round-robin (see the type remarks) — a budgeted view whose
     /// <c>isLive</c> predicate (see <see cref="Register"/>) returns <see langword="false"/> is skipped for its turn
     /// without spending budget, and the cursor moves on to the next candidate. Each view's own render sees every
-    /// OTHER screen surface normally and its OWN wired screens as unbound (the self-reference rule).</summary>
+    /// other screen surface normally and its own wired screens as unbound (the self-reference rule).</summary>
     /// <param name="context">This frame's shared render inputs (see <see cref="ViewRenderContext"/>).</param>
     public void RenderFrame(in ViewRenderContext context) {
         if (m_order.Count == 0) {
@@ -298,6 +322,10 @@ public sealed class ViewStack : IDisposable {
         var timingEnabled = ViewTiming.Enabled;
 
         foreach (var entry in m_order) {
+            if (entry.Disabled) {
+                continue;
+            }
+
             if (entry.Content.IsBudgeted) {
                 m_budgetedScratch.Add(item: entry);
             } else {
@@ -319,8 +347,12 @@ public sealed class ViewStack : IDisposable {
 
         // Skipped (predicate-gated) views pass the cursor over WITHOUT spending refresh budget — `examined` bounds
         // the walk to one full cycle so an all-gated stack cannot spin forever, and `rendered` (not `examined`) is
-        // what the budget counts against.
-        var cursor = m_refreshCursor;
+        // what the budget counts against. The stored cursor is taken modulo THIS frame's budgetedCount before use:
+        // a view disabled by a caught Resolve fault (or one simply Released) can shrink the budgeted population
+        // between two RenderFrame calls, and an un-modulo'd stale cursor from a LARGER population would index
+        // m_budgetedScratch out of range on the very first access — the exact kind of unhandled exception this
+        // frame loop is meant to be safe from.
+        var cursor = (m_refreshCursor % budgetedCount);
         var rendered = 0;
         var examined = 0;
 
@@ -346,6 +378,14 @@ public sealed class ViewStack : IDisposable {
     // Resolves one entry, scoping its own wired screens to 0 (the self-reference rule) — a wrapped delegate only when
     // that entry actually has wired screens this frame (the common case, no wire at all, pays no closure). The `in`
     // context is copied to a local before the closure (an `in` parameter cannot itself be captured).
+    //
+    // EXCEPTION ISOLATION: a throwing Resolve/RoomGlow is caught here, narrated by name (the view's registered
+    // name AND its concrete content type, so the offending registrant is unambiguous), and the entry is permanently
+    // Disabled — mirroring WorldOutputHub's own detach-on-fault contract (a broken observer never gets a second
+    // chance to corrupt delivery to the healthy ones). LastHandle/LastGlow are left exactly as they were before this
+    // call, which is what "holds the last completed image" means for content that has no narrower recovery of its
+    // own; WorldSessionView's own upload/capacity catch (this wave's other half) is the narrower, self-healing case
+    // that this backstop never needs to see.
     private static void RenderEntry(Entry entry, in ViewRenderContext context, bool timingEnabled) {
         var baseline = context;
         var scoped = ((entry.WiredScreens.Count == 0)
@@ -358,8 +398,16 @@ public sealed class ViewStack : IDisposable {
         // different cadences (unbudgeted every frame, budgeted round-robin).
         var start = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
 
-        entry.LastHandle = entry.Content.Resolve(context: in scoped);
-        entry.LastGlow = entry.Content.RoomGlow;
+        try {
+            entry.LastHandle = entry.Content.Resolve(context: in scoped);
+            entry.LastGlow = entry.Content.RoomGlow;
+        } catch (Exception exception) {
+            entry.Disabled = true;
+
+            Console.Error.WriteLine(value: $"[view-stack] view '{entry.Name}' ({entry.Content.GetType().Name}) threw in Resolve — disabled (holding its last resolved image, handle={entry.LastHandle}): {exception}");
+
+            return;
+        }
 
         if (timingEnabled) {
             entry.LastResolveTicks = (Stopwatch.GetTimestamp() - start);

@@ -160,12 +160,9 @@ internal static class DeclarationsWalker {
             ? string.Join(separator: ", ", values: list.Types.Select(selector: static type => Flatten(node: type)))
             : null);
 
-    // A record is one line, and the syntax it renders is not: a base list, a parameter list or a cref can
-    // be written across several source lines, with comments — and, inside a documentation comment, the
-    // `///` that opens each continued line — sitting between the tokens. Only the tokens are rendered, so
-    // a record carries no prose that is not part of the code it names, and two tokens the source separated
-    // are separated by exactly one space. `--name` and `--base` filter this same form, so what a record
-    // prints is what a fragment has to match.
+    // A record is one line; the syntax it renders (a base list, parameter list, or cref) may span several
+    // source lines with comments between tokens. Flatten renders tokens only, collapsing any original
+    // separation to exactly one space, so `--name`/`--base` filtering matches what a record actually prints.
     private static string Flatten(SyntaxNode node) {
         var builder = new StringBuilder();
         var tokens = node.DescendantTokens().ToList();

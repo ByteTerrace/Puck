@@ -5,7 +5,7 @@ namespace Puck.HumbleGamingBrick;
 /// <summary>
 /// A bounded, thread-safe pool of parked <see cref="MachineInstance"/> siblings for a single fork lineage — all built
 /// from one configuration and composition. A fork rents a parked instance (or builds one when the pool is empty) and
-/// restores fresh state into it, sidestepping the ~3.4 ms container build; a disposed fork returns here rather than
+/// restores fresh state into it, sidestepping the container build; a disposed fork returns here rather than
 /// tearing its container down. A parked instance is indistinguishable from a fresh one because a full
 /// <see cref="Machine.Restore"/> replaces every byte of emulated state, and each instance owns its own DI container, so
 /// no component ever aliases another machine or carries a subscription across a reuse.

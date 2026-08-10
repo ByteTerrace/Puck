@@ -1,7 +1,7 @@
 # `puck.sdf.v1` host-internal-addressing survey — the rest of the `brickWordOffset` class
 
 **Commissioned 2026-08-01 against `00b99c6c`** (read-only survey; no builds, no
-runs) to discharge the capability-channels plan's own pre-Phase-3 demand:
+runs) to discharge the capability-channels campaign's own pre-Phase-3 demand:
 *"Parameters that encode host-internal addressing must not round-trip through an
 untrusted decoder at all … Find the rest of this class before Phase 3, not
 during it."* `SampledRegion.brickWordOffset` was the one known member. This

@@ -80,20 +80,16 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         );
     }
 
-    // The player.bind destination grammar: channel:<name> declares a CHANNEL destination instead of a plain command
+    // The player.bind destination grammar: channel:<name> declares a channel destination instead of a plain command
     // name. An optional trailing token modifies the destination: scale:<value> (channel only, its scale) or
     // value:<value> (command only, a constant CommandValue.Axis a digital source drives it with — the same
     // mechanism WorldDefaultBindings.Claim already uses for F1..F4's slot constant, now reachable live). Exactly
     // one of the two may ride a given bind; naming both is refused. Naming value: beside a destination whose
-    // declared ValueKind is not Axis1D is refused UPFRONT, by name, here (Digital included — every other bindable
-    // verb keeps its plain source→command behavior with no constant). The REVERSE gap — an Axis1D destination with
-    // NO value: token — is deliberately NOT re-checked here: a digital source with no constant dispatches its own
+    // declared ValueKind is not Axis1D is refused upfront, by name, here (Digital included — every other bindable
+    // verb keeps its plain source→command behavior with no constant). The reverse gap — an Axis1D destination with
+    // no value: token — is deliberately not re-checked here: a digital source with no constant dispatches its own
     // Digital sample, and the vocabulary gate below (WorldAffordances.Validate/BindingVocabularyCheck) already
-    // refuses that mismatch on its own ("sends digital … which takes axis1d") — the exact defect report's own
-    // wording — so value:'s absence needs no second, duplicate check.
-    // (The former role:<role> destination was retired alongside ChannelRef.Role — channel.role.<v> and
-    // channel.name.<v> always resolved to the identical channel, so it named nothing a plain channel: could not;
-    // see ChannelRef.cs's remarks.)
+    // refuses that mismatch on its own, so value:'s absence needs no second, duplicate check.
     private const string ChannelDestinationPrefix = "channel:";
     private const string ScaleTokenPrefix = "scale:";
     private const string ValueTokenPrefix = "value:";
@@ -158,7 +154,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: "[player.bind: scale:<value> is only meaningful beside a channel destination]");
                 }
 
-                if (!float.TryParse(s: token.AsSpan(start: ScaleTokenPrefix.Length), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsedScale)) {
+                if (!float.TryParse(s: token.AsSpan(start: ScaleTokenPrefix.Length), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsedScale) ||
+                    !float.IsFinite(f: parsedScale)) {
                     return CommandResult.Error(output: "[player.bind: expected scale:<value> as the fourth argument]");
                 }
 
@@ -176,7 +173,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: $"[player.bind: value:<value> only applies to a destination whose declared value kind is Axis1D — '{command}' takes {destinationMetadata.ValueKind.ToString().ToLowerInvariant()}]");
                 }
 
-                if (!float.TryParse(s: token.AsSpan(start: ValueTokenPrefix.Length), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsedValue)) {
+                if (!float.TryParse(s: token.AsSpan(start: ValueTokenPrefix.Length), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsedValue) ||
+                    !float.IsFinite(f: parsedValue)) {
                     return CommandResult.Error(output: "[player.bind: expected value:<value> as the fourth argument]");
                 }
 
@@ -187,6 +185,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
         var current = m_seatBindings.SessionRebind(slot: slot);
         BindingProfileDocument rebind;
+        BindingProfileDocument probe;
 
         if (source.StartsWith(value: ChordPrefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             if (!TryParseChordToken(token: source, group: out var group, members: out var members)) {
@@ -194,8 +193,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             }
 
             rebind = UpsertChordRebind(current: current, group: group, members: members, command: command, channel: channel, scale: scale, value: constantValue);
+            probe = UpsertChordRebind(current: null, group: group, members: members, command: command, channel: channel, scale: scale, value: constantValue);
         } else {
             rebind = UpsertRebind(current: current, source: source, command: command, channel: channel, scale: scale, value: constantValue);
+            probe = UpsertRebind(current: null, source: source, command: command, channel: channel, scale: scale, value: constantValue);
         }
 
         var destinationLabel = ((channel is not null) ? ChannelLabel(channel: channel) : FormatCommandDestination(command: command!, value: constantValue));
@@ -203,22 +204,26 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         // The vocabulary gate first: a command/channel name the registry/channel table does not carry (or one taking
         // a different value kind than this binding dispatches, or a scale that is meaningless on a binary channel) is
         // the most likely authoring mistake, and without this check it would echo success and bind a key the router
-        // silently drops at resolve time.
+        // silently drops at resolve time. Checked on THIS bind's own entry alone (PROBE — the same source/destination
+        // folded onto an empty base) rather than the whole accumulated session document: a PRIOR entry the seat
+        // carried out of a world it has since left (a channel the currently routed world no longer declares) is
+        // WorldSeatBindings.RecomposeSeat's own concern from here on — its skip-and-narrate pre-pass drops it with
+        // its own narration the moment SetSessionRebind recomposes below, and a genuinely structural leftover still
+        // rejects that recompose loudly there. Re-validating the whole document here would let one stale row veto
+        // every later bind on the seat, with no surgical way to remove just that row.
         var vocabularyErrors = new List<string>();
 
-        WorldAffordances.Validate(document: rebind, channels: m_seatBindings.Channels, errors: vocabularyErrors);
+        WorldAffordances.Validate(document: probe, channels: m_seatBindings.Channels(slot: slot), errors: vocabularyErrors);
 
         if (vocabularyErrors.Count > 0) {
             return CommandResult.Error(output: $"[player.bind: '{source}' → '{destinationLabel}' refused — {vocabularyErrors[0]}]");
         }
 
-        // Verify the composed result compiles before installing it, so the echo is truthful (an undeclared modifier
-        // id or a chord that collides with an existing meaning rejects HERE, loudly); SetSessionRebind's own
-        // recompose is the belt-and-braces.
-        try {
-            _ = BindingProfile.Compile(document: WorldBindingComposer.Compose(WorldDefaultBindings.BuildDocument(), rebind));
-        } catch (ArgumentException exception) {
-            return CommandResult.Error(output: $"[player.bind: '{source}' → '{destinationLabel}' does not compile ({exception.Message.ReplaceLineEndings(replacementText: " ")})]");
+        // Verify the ACTUAL routed composition before installing it, so the echo is truthful. The destination's
+        // overlays may declare groups the boot default does not, and stale rows from a prior world must receive the
+        // same surgical filtering RecomposeSeat applies instead of vetoing this unrelated bind.
+        if (!m_seatBindings.TryValidateSessionRebind(slot: slot, rebinds: rebind, reason: out var reason)) {
+            return CommandResult.Error(output: $"[player.bind: '{source}' → '{destinationLabel}' does not compose ({reason})]");
         }
 
         m_seatBindings.SetSessionRebind(slot: slot, rebinds: rebind);

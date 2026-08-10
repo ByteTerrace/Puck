@@ -92,7 +92,7 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     /// <returns>The unit rigid transform <c>q + ε·½·t·q</c>.</returns>
     /// <remarks>The dual encoding is fused: each component's leaf products of <c>t·q</c> (the translation
     /// quaternion's scalar lane is zero, so three per component) accumulate exactly at <see cref="Int128"/> width and
-    /// the halving folds into ONE ties-to-even rounding at shift 17. Rounding the Hamilton product to Q16 first and
+    /// the halving folds into one ties-to-even rounding at shift 17. Rounding the Hamilton product to Q16 first and
     /// halving afterwards would round twice, landing one raw off the nearest encoding on about a quarter of
     /// components.</remarks>
     public static FixedRigidTransform FromRotationTranslation(FixedQuaternion rotation, FixedVector3 translation) {
@@ -380,8 +380,8 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     /// <see cref="FixedQuaternion.Log"/>); <c>Dual</c> = the translational part (the screw moment times θ/2 plus the
     /// axis times the half-slide; for a pure translation <c>t</c>, exactly <c>t/2</c>). A rotation-free transform
     /// maps to <c>(Zero, dual.vector)</c>; the vector-free <c>W &lt; 0</c> pole mirrors
-    /// <see cref="FixedQuaternion.Log"/> in leaving the plane undefined, and carries a SIGN consequence with it:
-    /// the answer there is MINUS half the transform's own <see cref="Translation"/>, because
+    /// <see cref="FixedQuaternion.Log"/> in leaving the plane undefined, and carries a sign consequence with it:
+    /// the answer there is minus half the transform's own <see cref="Translation"/>, because
     /// <see cref="Translation"/> is <c>2·dual·conj(real)</c> and conjugating a negated real flips it. Only at
     /// <c>W &gt; 0</c> is the rotation-free dual part half the translation.</returns>
     /// <remarks>Inverse of <see cref="Exp"/>. Near-zero rotations amplify quantization ~1/‖vector part‖ in the dual
@@ -411,7 +411,7 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         // K = 2¹⁶ and raws H = halfAngle, S = sine, the real lanes are R·H/S, and the dual part
         // Dv·(θ/2)/s + rv·(d/2)·(1 − w·(θ/2)/s)/s with d/2 = −Dw/s closes to (D·H·S² − R·Dw·(K·S − W·H))/S³ per
         // lane — the three quotients folded into a single fraction, accumulated exactly in Int128 (the numerators
-        // stay under 2¹¹⁶ for unit transforms) and narrowed once. The chained Q16 quotients this replaces rounded
+        // stay under 2¹¹⁶ for unit transforms) and narrowed once. A naive per-lane Q16 quotient chain would round
         // four to five times, each amplified by ~1/sine.
         var h = halfAngle.Value;
         var s = sine.Value;

@@ -213,7 +213,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedVector2.Lerp and FixedVector3.Lerp, every component",
-        "Against": "Oracles.LerpRaw \u2014 the DOCUMENTED expression from \u002B (to \u2212 from)\u00B7amount re-derived in BigInteger, with the difference wrapped to the carrier, one Oracles.RoundDyadic at shift 16, and the sum wrapped again. ENVELOPE: the published contract itself names the intermediate wrap, so this law pins the wrap policy alongside the arithmetic",
+        "Against": "Oracles.LerpRaw \u2014 the true rational value re-derived independently in BigInteger with NO intermediate wrap at any width: fromRaw shifted left 16 bits plus the exact BigInteger difference (toRaw \u2212 fromRaw) times amountRaw, formed as one arbitrary-width integer, then Oracles.RoundDyadic at shift 16 \u2014 the ONE rounding, which would catch a subject that wraps (to \u2212 from) before multiplying even where every operand and the true result are representable",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

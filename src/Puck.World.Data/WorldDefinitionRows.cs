@@ -30,6 +30,24 @@ public static class WorldDefinitionRows {
         return null;
     }
 
+    /// <summary>Finds a placement's declared face by name — the primitive a
+    /// <see cref="WorldPlacementPortal.Counterpart"/> resolves its face half against (see
+    /// <see cref="WorldPortalCounterpart"/>), and every other placement/face reader (<c>world.portals</c>,
+    /// <c>world.faces</c>) already walks by hand.</summary>
+    /// <param name="placement">The placement to search.</param>
+    /// <param name="face">The face name to find.</param>
+    /// <returns>The face row, or <see langword="null"/> when the placement declares no <c>faceSources</c> row by
+    /// that name.</returns>
+    public static WorldPlacementFace? FindPlacementFace(WorldPlacement placement, string face) {
+        foreach (var row in (placement.FaceSources ?? [])) {
+            if ((row is not null) && string.Equals(a: row.Face, b: face, comparisonType: StringComparison.Ordinal)) {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Finds a kit by stable name.</summary>
     /// <param name="kits">The section's kits.</param>
     /// <param name="name">The kit name to find.</param>
@@ -58,8 +76,8 @@ public static class WorldDefinitionRows {
         return null;
     }
 
-    /// <summary>Finds a references row by stable name — the primitive a portal facet's <c>destination</c> resolves
-    /// against (see <see cref="WorldPlacementPortal.Destination"/>).</summary>
+    /// <summary>Finds a references row by stable name — the primitive a <see cref="WorldDestination.Reference"/>
+    /// resolves against.</summary>
     /// <param name="references">The section's references, or <see langword="null"/> for a document declaring none.</param>
     /// <param name="name">The reference name to find.</param>
     /// <returns>The reference, or <see langword="null"/> when the section declares none by that name.</returns>
@@ -67,6 +85,21 @@ public static class WorldDefinitionRows {
         foreach (var reference in (references ?? [])) {
             if ((reference is not null) && string.Equals(a: reference.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
                 return reference;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Finds a destinations row by stable name — the primitive a portal facet's <c>destination</c> resolves
+    /// against (see <see cref="WorldPlacementPortal.Destination"/>).</summary>
+    /// <param name="destinations">The section's destinations, or <see langword="null"/> for a document declaring none.</param>
+    /// <param name="name">The destination name to find.</param>
+    /// <returns>The destination, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldDestination? FindDestination(IReadOnlyList<WorldDestination>? destinations, string name) {
+        foreach (var destination in (destinations ?? [])) {
+            if ((destination is not null) && string.Equals(a: destination.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
+                return destination;
             }
         }
 

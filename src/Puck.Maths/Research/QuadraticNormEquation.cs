@@ -23,7 +23,7 @@ internal readonly record struct QuadraticNormSolution(BigInteger X, BigInteger Y
 /// <c>b² ≡ Δ (mod 4m)</c>, and it is principal exactly when the order carries an element of norm <c>±m</c>. Walking the
 /// exact surd recurrence from <c>(P₀, Q₀) = (b, 2m)</c> and accumulating the convergents <c>hᵢ/kᵢ</c>, the classical
 /// identity <c>(Q₀·hᵢ − P₀·kᵢ)² − Δ·kᵢ² = (−1)^(i+1)·Q₀·Q₍ᵢ₊₁₎</c> reads <c>Xᵢ² − Δ·kᵢ² = ±2m·Q₍ᵢ₊₁₎</c>, so the
-/// magnitude reaches <c>4m</c> exactly when <c>|Q₍ᵢ₊₁₎| = 2</c>. The states of that recurrence ARE the ideals equivalent
+/// magnitude reaches <c>4m</c> exactly when <c>|Q₍ᵢ₊₁₎| = 2</c>. The states of that recurrence are the ideals equivalent
 /// to the start, each of norm <c>|Q|/2</c>, so <c>|Q| = 2</c> is arrival at an ideal of norm one: the test is the
 /// principality test, and the convergent that reaches it exhibits the generator.
 /// </para>

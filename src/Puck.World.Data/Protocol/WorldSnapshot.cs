@@ -71,12 +71,9 @@ public readonly record struct EntitySnapshot(
 /// <param name="Revision">The declared-set/palette revision; a change drives the client program rebuild.</param>
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
-/// <remarks>Machine engagement pads no longer ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s
-/// per-screen pad fold is now read DIRECTLY by
-/// <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process, since machine stepping moved
-/// server-side — there is no longer a presentation-side consumer needing a wire lane for it (the former
-/// <c>Puck.World.WorldScreenBinder.AdvanceMachines</c> was the ONLY reader of the retired
-/// <c>ScreenPadSnapshot</c>/<c>EngagedPads</c> lane, so it was deleted rather than kept as dead wire shape).</remarks>
+/// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
+/// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
+/// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
 public readonly record struct WorldSnapshot(
     ulong Tick,
     int Revision,

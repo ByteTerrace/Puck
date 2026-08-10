@@ -6,14 +6,14 @@ namespace Puck.Overlays;
 /// the presentation-side twin of the document's <c>WorldHudLayer</c> (Puck.Overlays must not reference
 /// Puck.World.Data; the World-side feed maps the document token to this one).</summary>
 public enum OverlayHudBand : byte {
-    /// <summary>Draws BEFORE the base slot.</summary>
+    /// <summary>Draws before the base slot.</summary>
     Under,
 
-    /// <summary>Draws AFTER the base slot — always the topmost band.</summary>
+    /// <summary>Draws after the base slot — always the topmost band.</summary>
     Over,
 
-    /// <summary>Takes the BASE slot: while at least one live panel declares this band, every such panel draws in the
-    /// base slot INSTEAD of the five first-party writers.</summary>
+    /// <summary>Takes the base slot: while at least one live panel declares this band, every such panel draws in the
+    /// base slot instead of the five first-party writers.</summary>
     Replace,
 }
 
@@ -31,7 +31,7 @@ public enum OverlayHudElementKind : byte {
 }
 
 /// <summary>A normalized rect (origin top-left, Y down) in the same two coordinate spaces
-/// <c>Puck.World.WorldHudRect</c> uses: a panel's rect is SCREEN space, an element's rect is its owning panel's LOCAL
+/// <c>Puck.World.WorldHudRect</c> uses: a panel's rect is screen space, an element's rect is its owning panel's local
 /// space.</summary>
 /// <param name="X">Left, normalized.</param>
 /// <param name="Y">Top, normalized.</param>
@@ -39,8 +39,8 @@ public enum OverlayHudElementKind : byte {
 /// <param name="Height">Height, normalized.</param>
 public readonly record struct OverlayHudRect(float X, float Y, float Width, float Height);
 
-/// <summary>One run of an <see cref="OverlayHudElement.Template"/> — either a LITERAL run appended verbatim, or a
-/// PLACEHOLDER naming one closed-vocabulary binding token whose live value replaces it. Runs arrive ALREADY PARSED
+/// <summary>One run of an <see cref="OverlayHudElement.Template"/> — either a literal run appended verbatim, or a
+/// placeholder naming one closed-vocabulary binding token whose live value replaces it. Runs arrive already parsed
 /// from the host's HUD feed (<c>Puck.World.Data</c>'s <c>HudTemplate</c> owns the brace/escape grammar and is the
 /// only thing that speaks it), so nothing on the presentation side ever parses a template string.</summary>
 /// <param name="IsPlaceholder"><see langword="true"/> for a placeholder run; <see langword="false"/> for literal
@@ -58,7 +58,7 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// <param name="Text">The authored literal (meaningful for <see cref="OverlayHudElementKind.Text"/> when neither
 /// <paramref name="Binding"/> nor <paramref name="Template"/> is set).</param>
 /// <param name="Binding">The closed-vocabulary binding token, or <see langword="null"/> for an unbound element.</param>
-/// <param name="Template">The PARSED runs of a template — the presentation-side twin of
+/// <param name="Template">The parsed runs of a template — the presentation-side twin of
 /// <c>Puck.World.WorldHudElement.Template</c>, meaningful only for <see cref="OverlayHudElementKind.Text"/>. Empty
 /// for an untemplated element. Takes priority over <paramref name="Binding"/> when both are somehow present (the
 /// document validator refuses that combination before it ever reaches a live document, so this is a defensive
@@ -87,14 +87,14 @@ public readonly record struct OverlayHudPanel(
     ReadOnlyMemory<OverlayHudElement> Elements
 );
 
-/// <summary>One PLAYER-SCOPE HUD panel: a profile's private single panel plus the LOCAL seat viewport it is confined
+/// <summary>One player-scope HUD panel: a profile's private single panel plus the local seat viewport it is confined
 /// to (screen-normalized, the same convention <c>Puck.Abstractions.Presentation.NormalizedRect</c> uses for a seat's
 /// split-screen region) — the presentation-side twin of <c>Puck.World.WorldIdentity.Hud</c>. Only seats that
-/// are BOTH joined and have authored a panel appear in <see cref="OverlayHudFrame.SeatPanels"/>; there is no entry
+/// are both joined and have authored a panel appear in <see cref="OverlayHudFrame.SeatPanels"/>; there is no entry
 /// for an empty seat or an unauthored identity.</summary>
 /// <param name="Viewport">The owning seat's viewport rect, screen-normalized.</param>
 /// <param name="Panel">The profile's authored panel (its own <see cref="OverlayHudPanel.Rect"/> is normalized to
-/// THIS viewport's local space, not the whole screen — the same local-space convention an element's rect uses
+/// this viewport's local space, not the whole screen — the same local-space convention an element's rect uses
 /// against its owning panel).</param>
 public readonly record struct OverlayHudSeatPanel(
     OverlayHudRect Viewport,
@@ -107,8 +107,8 @@ public readonly record struct OverlayHudSeatPanel(
 /// state, which the definition revision does not cover) but from a preallocated per-seat array, so the rebuild is
 /// zero-allocation and cheap even though it is unconditional. Live binding values are resolved separately, per
 /// frame, by the writer via <see cref="IHudBindingResolver"/>.</summary>
-/// <param name="Panels">The authored WORLD-scope panels, in document order.</param>
-/// <param name="SeatPanels">The authored PLAYER-scope (per-seat) panels — at most one per local seat.</param>
+/// <param name="Panels">The authored world-scope panels, in document order.</param>
+/// <param name="SeatPanels">The authored player-scope (per-seat) panels — at most one per local seat.</param>
 public readonly record struct OverlayHudFrame(
     ReadOnlyMemory<OverlayHudPanel> Panels,
     ReadOnlyMemory<OverlayHudSeatPanel> SeatPanels = default
@@ -122,9 +122,9 @@ public interface IHudSource {
     bool TrySnapshot(out OverlayHudFrame frame);
 }
 
-/// <summary>Resolves a closed-vocabulary HUD binding token to its LIVE value, once per produced frame — the seam that
+/// <summary>Resolves a closed-vocabulary HUD binding token to its live value, once per produced frame — the seam that
 /// keeps binding resolution out of Puck.Overlays (which cannot know what <c>world.tick</c> or a seat position means)
-/// while keeping the actual per-frame resolve INSIDE the writer (presentation float; no document round-trip).</summary>
+/// while keeping the actual per-frame resolve inside the writer (presentation float; no document round-trip).</summary>
 public interface IHudBindingResolver {
     /// <summary>Resolves a binding token.</summary>
     /// <param name="binding">The token (e.g. <c>world.tick</c>).</param>
@@ -138,7 +138,7 @@ public interface IHudBindingResolver {
 /// <summary>
 /// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>, published only when
 /// the delivered world definition's HUD section actually changes (structure — panels/elements/rects/bindings), not
-/// every frame; live binding VALUES are resolved separately by <see cref="HudWriter"/> every produced frame. Same
+/// every frame; live binding values are resolved separately by <see cref="HudWriter"/> every produced frame. Same
 /// threading contract as <see cref="EditorHudStore"/>.
 /// </summary>
 public sealed class HudStore : IHudSource {

@@ -32,30 +32,30 @@ public readonly record struct DiscreteMeasure {
         Rate = rate;
     }
 
-    /// <summary>The non-negative exact amount per unit interval.</summary>
+    /// <summary>Gets the non-negative exact amount per unit interval.</summary>
     public QuadraticSurd Rate { get; }
 
-    /// <summary>The measure that assigns zero to every interval.</summary>
+    /// <summary>Gets the measure that assigns zero to every interval.</summary>
     public static DiscreteMeasure Zero => default;
 
     /// <summary>
-    /// The normalized affine offset in <c>[0, 1)</c>. It selects the allocation's origin without changing its rate.
+    /// Gets the normalized affine offset in <c>[0, 1)</c>, which selects the allocation's origin without changing its rate.
     /// </summary>
     public QuadraticSurd Offset { get; }
 
-    /// <summary>Whether the unit-interval allocation repeats periodically.</summary>
+    /// <summary>Gets a value indicating whether the unit-interval allocation repeats periodically.</summary>
     public bool IsPeriodic => Rate.IsRational;
 
     /// <summary>
-    /// The least positive period of the unit-interval allocation when <see cref="IsPeriodic"/> is true; otherwise
+    /// Gets the least positive period of the unit-interval allocation when <see cref="IsPeriodic"/> is true; otherwise
     /// <see langword="null"/>.
     /// </summary>
     public BigInteger? Period => (Rate.IsRational ? Rate.Denominator : null);
 
-    /// <summary>The smaller of the two possible amounts assigned to a unit interval.</summary>
+    /// <summary>Gets the smaller of the two possible amounts assigned to a unit interval.</summary>
     public BigInteger MinimumAmount => Rate.Floor();
 
-    /// <summary>The larger of the two possible amounts assigned to a unit interval.</summary>
+    /// <summary>Gets the larger of the two possible amounts assigned to a unit interval.</summary>
     public BigInteger MaximumAmount => Rate.Ceiling();
 
     /// <summary>Creates an exact discrete measure from a non-negative rational or quadratic-surd rate.</summary>

@@ -11,7 +11,7 @@ namespace Puck.Launcher;
 /// offset after the latest arrival, wrapped to the shortest direction) drives a light PI filter whose per-frame output
 /// is bounded to a small fraction of the render period — so the cadence stays inside the VRR window and the closed-loop
 /// present re-anchor is slewed, never fought. Stale arrivals (producer stopped) freeze the controller and bleed off the
-/// integral. Silent with no publisher; <c>PUCK_GENLOCK=0</c> disables it. Render-side only — never the fixed-step sim.
+/// integral. Silent with no publisher; disabled through <see cref="LauncherOptions"/>. Render-side only — never the fixed-step sim.
 /// </summary>
 public sealed class GenlockPhaseAligner {
     private readonly ExternalPresentClock m_clock;

@@ -4,7 +4,7 @@
 2026-08-01** — the F-key row of "The Windows half of the same defect" below was
 wrong; see that section for the correction. Surfaced
 while scoping keyboard-chord support for
-[capability channels](../capability-channels-plan.md); the hole turned out to be
+[capability channels](../campaign.md); the hole turned out to be
 far larger than the work that found it. This is a measurement and a handoff, not a
 plan — no fix is scoped here.
 

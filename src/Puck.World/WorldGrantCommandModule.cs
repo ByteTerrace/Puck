@@ -9,12 +9,12 @@ namespace Puck.World;
 
 /// <summary>
 /// The capability-grant console surface — the dev reflection of the principal/grant model: <c>world.grant</c> and
-/// <c>world.revoke</c> mutate the server's ONE grant table over the wire, <c>world.grants</c> echoes it, and
-/// <c>world.why</c> echoes the <see cref="GrantVerdict"/> a single check produces (which RULE decides, not merely
+/// <c>world.revoke</c> mutate the server's one grant table over the wire, <c>world.grants</c> echoes it, and
+/// <c>world.why</c> echoes the <see cref="GrantVerdict"/> a single check produces (which rule decides, not merely
 /// whether). Grant
-/// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply SYNCHRONOUSLY at submit
+/// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply synchronously at submit
 /// (like a command), so a following <c>world.grants</c> read behind the stdin barrier sees the settled table; the
-/// server prints the loud accept/reject line. This is a SEPARATE module from the mutation surface to keep both under
+/// server prints the loud accept/reject line. This is a separate module from the mutation surface to keep both under
 /// their analyzer ceilings.
 /// </summary>
 /// <remarks>Principal tokens: <c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
@@ -24,31 +24,31 @@ namespace Puck.World;
 /// <c>screen:&lt;n&gt;</c> | <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c>
 /// (a placement's volume facet) | <c>seat:&lt;n&gt;</c> (0..3, local seats) | <c>all</c>. Trailing
 /// tokens, any order, each at most once: <c>exclusive</c> on <c>world.grant</c> requests an exclusive hold
-/// (rejected if a live holder owns it, in either order — the seeded permissive wildcard is exempt in BOTH
+/// (rejected if a live holder owns it, in either order — the seeded permissive wildcard is exempt in both
 /// directions, so it can always be narrowed and re-widened regardless of what exclusive holds exist elsewhere),
-/// <c>budget:&lt;n&gt;</c> (1..65535) sets the row's per-tick dispatch allowance — REQUIRED on an <c>observe</c>,
+/// <c>budget:&lt;n&gt;</c> (1..65535) sets the row's per-tick dispatch allowance — required on an <c>observe</c>,
 /// <c>drive</c>, or <c>mutate</c> grant to an untrusted <c>addon:</c>/<c>peer:</c> principal (refused by name otherwise),
-/// REFUSED on every other row (trusted principals read/drive/mutate unmetered; no capability but observe/drive/mutate
-/// has a dispatch door to meter yet), and <c>budget:0</c> is refused AT PARSE TIME (0 is not a spelling for "no budget" — omit the token instead);
-/// and <c>events:&lt;n&gt;</c> (1..65535), the WORLD-EVENTS sibling budget on an <c>observe</c> row — REQUIRED on
-/// <c>screen:</c>/<c>region:</c>/<c>seat:</c> subjects (they carry no other meaning), OPTIONAL on <c>body:</c>. Two
-/// MASK tokens ride here too, deliberately spelled apart because they are two vocabularies over one bit-lane shape:
+/// refused on every other row (trusted principals read/drive/mutate unmetered; no capability but observe/drive/mutate
+/// has a dispatch door to meter yet), and <c>budget:0</c> is refused at parse time (0 is not a spelling for "no budget" — omit the token instead);
+/// and <c>events:&lt;n&gt;</c> (1..65535), the world-events sibling budget on an <c>observe</c> row — required on
+/// <c>screen:</c>/<c>region:</c>/<c>seat:</c> subjects (they carry no other meaning), optional on <c>body:</c>. Two
+/// mask tokens ride here too, deliberately spelled apart because they are two vocabularies over one bit-lane shape:
 /// <c>verbs:&lt;name,...&gt;</c> names <see cref="Puck.World.Protocol.WorldMutation"/> kinds (on
 /// <c>mutate section:&lt;name&gt;</c> or <c>edit state:&lt;name&gt;</c>), and <c>writes:&lt;name,...&gt;</c> names
 /// <see cref="Puck.World.Protocol.WorldDocumentWriteKind"/> operations (on <c>mutate state:&lt;name&gt;</c>, the
-/// cross-document durable-state write-back channel). EVERY
+/// cross-document durable-state write-back channel). Every
 /// capability rejects any subject shape it does not
 /// legitimately admit (see <see cref="Puck.World.Server.WorldGrants"/>'s own remarks for the full table and why):
-/// <c>drive</c> accepts <c>body:&lt;n&gt;</c> naming a body that actually exists for ANY principal (an addon/peer
+/// <c>drive</c> accepts <c>body:&lt;n&gt;</c> naming a body that actually exists for any principal (an addon/peer
 /// must carry <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat only — an <c>addon:</c> principal is restricted to
 /// <c>body:&lt;n&gt;</c> alone); <c>control</c>
 /// accepts <c>screen:&lt;n&gt;</c> (any principal) or <c>all</c> (console/seat/peer); <c>mutate</c> accepts
 /// <c>section:&lt;name&gt;</c> (any principal; an addon/peer must carry <c>budget:&lt;n&gt;</c>) or <c>all</c>
 /// (console/seat); <c>edit</c> accepts
 /// <c>state:&lt;name&gt;</c> (any principal, whether the row is a scalar slot or a keyed table — a slot is a table
-/// with one key; a CONCRETE row may additionally carry <c>verbs:&lt;name,...&gt;</c>, the mutation-kind mask that
+/// with one key; a concrete row may additionally carry <c>verbs:&lt;name,...&gt;</c>, the mutation-kind mask that
 /// separates the per-cell writes from the whole-row re-authoring) or <c>all</c> (console/seat); <c>observe</c>
-/// additionally accepts <c>body:&lt;n&gt;</c> naming a body that exists for ANY principal (an addon/peer must carry
+/// additionally accepts <c>body:&lt;n&gt;</c> naming a body that exists for any principal (an addon/peer must carry
 /// <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat).</remarks>
 internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink link) : ICommandModule {
     /// <inheritdoc/>
@@ -92,7 +92,7 @@ internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.why",
-            description: "Echoes WHICH RULE decides an authority check (Immediate; reads the settled table behind the stdin barrier): world.why <principal> <capability> <subject> [verbs:<name,...>] [writes:<name,...>]. Same token grammar as world.grant (minus the mutating trailing tokens). The answer is the check's own verdict — reserver-match | beaten-by-reserver (naming the reserver) | concrete-hold | wildcard-hold | no-hold — so 'denied' stops being one indistinguishable state, and a surface with NO denial line at all can be positively cleared ('authority was fine, look elsewhere') instead of investigated. The pipe-assertable attribution read (docs/capability-channels-plan.md's 'A decision is data, never a boolean'). With a trailing verbs:<name,...> token on a mutate or edit check, additionally names the DECIDING row's kind mask (ConcreteHold beats WildcardHold, same as the bare check) and reports each queried kind as admitted or denied-by-mask — a row carrying NO mask admits every kind, since the mask is opt-in narrowing. writes:<name,...> does the same over the cross-document Set/Add vocabulary, where an ABSENT mask instead admits nothing.",
+            description: "Echoes WHICH RULE decides an authority check (Immediate; reads the settled table behind the stdin barrier): world.why <principal> <capability> <subject> [verbs:<name,...>] [writes:<name,...>]. Same token grammar as world.grant (minus the mutating trailing tokens). The answer is the check's own verdict — reserver-match | beaten-by-reserver (naming the reserver) | concrete-hold | wildcard-hold | no-hold — so 'denied' stops being one indistinguishable state, and a surface with NO denial line at all can be positively cleared ('authority was fine, look elsewhere') instead of investigated. The pipe-assertable attribution read (the capability-channels campaign's 'A decision is data, never a boolean'). With a trailing verbs:<name,...> token on a mutate or edit check, additionally names the DECIDING row's kind mask (ConcreteHold beats WildcardHold, same as the bare check) and reports each queried kind as admitted or denied-by-mask — a row carrying NO mask admits every kind, since the mask is opt-in narrowing. writes:<name,...> does the same over the cross-document Set/Add vocabulary, where an ABSENT mask instead admits nothing.",
             handler: (_, args) => {
                 if (!TryParseGrant(args: args, exclusiveAllowed: false, verb: "world.why", grant: out var query, error: out var error, channels: server.Population.Channels, targets: server.Population.TargetRegisters, verbsAllowed: true)) {
                     return error;
@@ -249,9 +249,9 @@ internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink li
         return CommandResult.None;
     }
 
-    /// <summary>Parses the SAME <c>&lt;principal&gt; &lt;capability&gt; &lt;subject&gt; [exclusive] [budget:&lt;n&gt;]</c>
+    /// <summary>Parses the same <c>&lt;principal&gt; &lt;capability&gt; &lt;subject&gt; [exclusive] [budget:&lt;n&gt;]</c>
     /// grammar <c>world.grant</c>/<c>world.revoke</c> use, shared with <see cref="WorldMutationCommandModule"/>'s
-    /// <c>world.grant.set</c>/<c>world.grant.remove</c> — ONE grammar for a grant token sequence regardless of
+    /// <c>world.grant.set</c>/<c>world.grant.remove</c> — one grammar for a grant token sequence regardless of
     /// whether it ends up live (this module) or document-authored (that one). The two trailing tokens are both gated
     /// by <paramref name="exclusiveAllowed"/> (revoke/remove accept neither — a revoke matches by
     /// (principal, capability, subject) alone and ignores both), and either may come first: <c>exclusive budget:8</c>
@@ -268,7 +268,7 @@ internal sealed class WorldGrantCommandModule(WorldServer server, IServerLink li
     /// <param name="targets">The world's compiled target-register table, needed to resolve a
     /// <c>registers:&lt;name,...&gt;</c> token into the shared reach bitspace.</param>
     /// <param name="verbsAllowed">Whether a trailing <c>verbs:&lt;name,...&gt;</c> token is accepted — independent of
-    /// <paramref name="exclusiveAllowed"/>, since <c>world.why</c> accepts ONLY this one trailing token (a read-only
+    /// <paramref name="exclusiveAllowed"/>, since <c>world.why</c> accepts only this one trailing token (a read-only
     /// diagnostic) while accepting none of the four mutating ones.</param>
     /// <returns><see langword="true"/> when the tokens parsed to a well-formed grant.</returns>
     internal static bool TryParseGrant(in WireArgs args, bool exclusiveAllowed, string verb, out WorldGrant grant, out CommandResult error, WorldChannelTable? channels = null, WorldTargetRegisterTable? targets = null, bool verbsAllowed = false) {

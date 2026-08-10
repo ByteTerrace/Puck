@@ -10,7 +10,7 @@ namespace Puck.Maths;
 /// their tables and polynomial coefficients (<c>fixed_generated.rs</c>), and <see cref="EmitVectors"/>
 /// produces known-answer vectors computed by calling the real <see cref="FixedQ4816"/> at generation time
 /// (<c>fixed_vectors.rs</c>). Every numeric table/coefficient is read from the live
-/// <see cref="FixedQ4816"/> type by NAME (<c>FixedQ4816.AtanTableQ61</c>, <c>FixedQ4816.SinPolyC0Q60</c>,
+/// <see cref="FixedQ4816"/> type by name (<c>FixedQ4816.AtanTableQ61</c>, <c>FixedQ4816.SinPolyC0Q60</c>,
 /// ...) rather than transcribed as a literal, so this cannot silently drift from the host even if this
 /// file is never touched again.
 /// </summary>

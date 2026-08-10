@@ -5,16 +5,16 @@ namespace Puck.World;
 
 /// <summary>
 /// The World-side feed behind the unified overlay's authored-HUD source. Two reconcile domains share one published
-/// <see cref="HudStore"/> frame: WORLD-scope panels (<see cref="WorldDefinition.Hud"/>) reconcile only when
+/// <see cref="HudStore"/> frame: world-scope panels (<see cref="WorldDefinition.Hud"/>) reconcile only when
 /// <see cref="WorldClient.DefinitionRevision"/> moves (the <c>WorldFrameSource</c> revision-reconcile pattern), so
-/// most produced frames pay only the revision-compare cost; PLAYER-scope panels (each joined seat's
-/// <c>WorldProfile.Hud</c>) recompose EVERY produced frame from a preallocated array — they depend on the roster
+/// most produced frames pay only the revision-compare cost; player-scope panels (each joined seat's
+/// <c>WorldProfile.Hud</c>) recompose every produced frame from a preallocated array — they depend on the roster
 /// (who is joined, in what view order), which the definition revision does not cover; the walk is bounded to
-/// <see cref="PlayerRoster.MaxSlots"/> seats and each seat's PANEL is memoized against the document row it was
+/// <see cref="PlayerRoster.MaxSlots"/> seats and each seat's panel is memoized against the document row it was
 /// built from, so a steady frame allocates nothing. Both halves publish
 /// together (one <see cref="HudStore.Publish"/> call) so neither half's snapshot can lag behind a call that only
-/// refreshed the other. Live binding VALUES are resolved separately, every frame, by <see cref="HudWriter"/> through
-/// <see cref="WorldHudBindingResolver"/>; this feed only republishes STRUCTURE (which panels/elements exist, their
+/// refreshed the other. Live binding values are resolved separately, every frame, by <see cref="HudWriter"/> through
+/// <see cref="WorldHudBindingResolver"/>; this feed only republishes structure (which panels/elements exist, their
 /// rects, their style, which binding token or parsed template runs each names, and which seat's viewport a
 /// player-scope panel is confined to).
 /// </summary>

@@ -15,7 +15,7 @@ public enum CarriageKeyRole {
 /// key-agreement/AEAD scheme (for sealing). <see cref="KeyId.Algorithm"/> stores the <see cref="Name"/> of
 /// one of these; nothing else may appear there, and the algorithm rule (docs/world-model.md, "Signed
 /// carriage") requires the verifier to resolve the actual crypto parameters from this table via the
-/// PINNED key's algorithm — never from an untrusted envelope field.
+/// pinned key's algorithm — never from an untrusted envelope field.
 /// </summary>
 /// <param name="Name">The wire string, e.g. <c>ecdsa-p256-sha256</c>. Curve and hash are both named because a
 /// P-256 key can sign under SHA-256 or SHA-384: curve alone does not pin the scheme.</param>
@@ -80,13 +80,13 @@ public static class CarriageAlgorithms {
         throw new NotSupportedException(message: $"'{algorithm}' is not a carriage algorithm this prototype understands.");
     }
 
-    /// <summary>Whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
+    /// <summary>Determines whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
     /// <param name="algorithm">The candidate algorithm name.</param>
     public static bool IsKnown(string algorithm) => s_descriptors.ContainsKey(key: algorithm);
 }
 
 /// <summary>
-/// Curve identity for imported keys. An algorithm NAME promises a curve, and an SPKI blob carries its own —
+/// Curve identity for imported keys. An algorithm name promises a curve, and an SPKI blob carries its own —
 /// so every key imported from bytes has the two compared before it is used, or a name promising P-256 would
 /// happily verify against a key on some other curve (the invalid-curve family of attacks). Named curves do
 /// not compare by value across platforms — the same curve arrives as an OID on one and a friendly name on
@@ -102,7 +102,7 @@ public static class CarriageCurves {
         "secp256r1",
     };
 
-    /// <summary>Whether <paramref name="key"/>'s curve is the one <paramref name="expected"/> names.</summary>
+    /// <summary>Determines whether <paramref name="key"/>'s curve is the one <paramref name="expected"/> names.</summary>
     /// <param name="key">The curve reported by an imported key's exported parameters.</param>
     /// <param name="expected">The curve the pinned algorithm's descriptor names.</param>
     /// <returns><see langword="true"/> only when both are recognisably the same named curve.</returns>
@@ -116,7 +116,7 @@ public static class CarriageCurves {
         return ((keyIsP256 == IsNistP256(curve: expected)) && keyIsP256);
     }
 
-    /// <summary>Whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
+    /// <summary>Determines whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
     /// <param name="curve">The curve to test.</param>
     public static bool IsNistP256(ECCurve curve) =>
         (curve.IsNamed &&

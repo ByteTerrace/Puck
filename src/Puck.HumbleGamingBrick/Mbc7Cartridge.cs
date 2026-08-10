@@ -5,13 +5,13 @@ namespace Puck.HumbleGamingBrick;
 /// <summary>
 /// The MBC7 mapper: an eight-bit ROM bank select (a written zero reading as one) plus a two-axis accelerometer and a
 /// 93LC56 serial EEPROM (128 sixteen-bit words) for saves, both reached through the <c>0xA000</c>–<c>0xAFFF</c>
-/// register window once BOTH enable gates are open — <c>0x0A</c> at <c>0x0000</c>–<c>0x1FFF</c> and then <c>0x40</c>
+/// register window once both enable gates are open — <c>0x0A</c> at <c>0x0000</c>–<c>0x1FFF</c> and then <c>0x40</c>
 /// at <c>0x4000</c>–<c>0x5FFF</c>. The second gate only arms while the first is open and drops with it. The
 /// accelerometer follows the erase-then-latch protocol (<c>0x55</c> resets the latches to <c>0x8000</c>, <c>0xAA</c>
-/// captures a reading from <see cref="Sensor"/>) — the <see cref="ITiltSensor"/> DI seam, on the same <c>TryAdd</c>
-/// precedent as the camera cartridge's <c>ICameraSensor</c>. The default sensor is motionless (every capture reads the
-/// centered value <c>0x81D0</c>, bit-identical to the mapper's pre-seam behavior); a host that records tilt input
-/// registers its own sensor in place of it. The EEPROM's command state machine (EWEN/EWDS/READ/WRITE/ERASE/ERAL/WRAL)
+/// captures a reading from <see cref="Sensor"/>) — the <see cref="ITiltSensor"/> DI seam, using the same
+/// <c>TryAdd</c> registration as the camera cartridge's <c>ICameraSensor</c>. The default sensor is motionless
+/// (every capture reads the centered value <c>0x81D0</c>); a host that records tilt input registers its own sensor
+/// in place of it. The EEPROM's command state machine (EWEN/EWDS/READ/WRITE/ERASE/ERAL/WRAL)
 /// is implemented bit-serially over the CS/CLK/DI/DO pins with the chip's clear-then-OR write semantics and the
 /// busy-then-ready pattern on DO after programming commands; EWDS write protection covers the data bits as well as the
 /// command itself.
@@ -59,8 +59,8 @@ public sealed class Mbc7Cartridge : CartridgeBase {
         (m_ramEnablePrimary && m_ramEnableSecondary);
 
     /// <summary>Gets or sets the accelerometer's tilt source, read at each <c>0xAA</c> latch step. Defaults to a
-    /// motionless <see cref="TiltSensorComponent"/> (bit-identical to the mapper's pre-seam fixed-center behavior); a
-    /// host wires its own recorded-input sensor here (the same DI seam <c>CameraCartridge.Sensor</c> uses).</summary>
+    /// motionless <see cref="TiltSensorComponent"/> that always reports the centered reading; a host wires its own
+    /// recorded-input sensor here (the same DI seam <c>CameraCartridge.Sensor</c> uses).</summary>
     public ITiltSensor Sensor {
         get => m_sensor;
         set => m_sensor = (value ?? throw new ArgumentNullException(paramName: nameof(value)));

@@ -4,7 +4,7 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The machine's one infrared transceiver: the shared IR LED (light out) and phototransistor (light in) that the CGB
-/// infrared port (RP, <c>0xFF56</c>) and the HuC1/HuC3 cartridge IR windows are two register views of. It is NOT a
+/// infrared port (RP, <c>0xFF56</c>) and the HuC1/HuC3 cartridge IR windows are two register views of. It is not a
 /// clocked component — light is a level, not a bit stream, so there is no per-cycle work and nothing on the hot path:
 /// the state changes only on an RP or cart IR write (edge-driven), and the received line is derived from a linked peer
 /// plus hardware self-sensing on read. All emulated state (the RP register byte, the cart IR LED latch) is captured for
@@ -13,13 +13,13 @@ namespace Puck.HumbleGamingBrick;
 /// <para>
 /// One physical medium. The light this machine emits is its RP LED bit (<c>RP</c> bit 0) OR-ed with the cart IR-mode LED
 /// write — both views drive the same LED. The light it receives is a linked peer's emitted light (see
-/// <c>IrLinkSession</c>) OR-ed with this machine's OWN emitted light when hardware self-sensing applies (see
+/// <c>IrLinkSession</c>) OR-ed with this machine's own emitted light when hardware self-sensing applies (see
 /// <see cref="ReceivedLight"/>): a bare CGB with no cable reads its own lit LED back rather than reading dark.
 /// </para>
 /// <para>
 /// RP semantics: a read returns the written data-enable bits 7-6 and LED bit 0, with the unused bits reading 1, and
 /// received light clears bit 1 only while the data-read-enable bits 7-6 are both set. The analog receiver's warm-up/decay
-/// curve is deliberately NOT reproduced here: it would require per-cycle ticking (against the zero-per-cycle-cost
+/// curve is deliberately not reproduced here: it would require per-cycle ticking (against the zero-per-cycle-cost
 /// constraint) and a digital light level is exact for the deterministic link and the synthetic gate. RP is Color-only;
 /// the bus gates it on the model exactly as it gates KEY1. The transceiver itself is registered on every model because
 /// HuC1/HuC3 cart IR works on monochrome hardware too.
@@ -73,12 +73,12 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// <c>gb-&gt;effective_ir_input</c>, which <c>Core/timing.c</c>'s <c>ir_run</c> (~line 140) computes as
     /// <c>peer_input || cart_ir || (RP &amp; 1)</c> — peer light OR the local cart LED latch OR the local RP LED-output
     /// bit. <c>ir_run</c>'s own gate (same function, ~line 136) skips that computation entirely — freezing effective
-    /// input toward false — unless the model is CGB-E-or-earlier in CGB mode, OR the cartridge is HuC1/HuC3; the RP
+    /// input toward false — unless the model is CGB-E-or-earlier in CGB mode, or the cartridge is HuC1/HuC3; the RP
     /// register's own display additionally re-checks <c>model &lt;= GB_MODEL_CGB_E</c> before showing self-sensed light
     /// (memory.c ~line 728), a per-view split SameBoy's own comment flags as an interaction inaccuracy ("the way this
     /// thing works makes the CGB IR port behave inaccurately when used together with HUC1/3 IR ports", timing.c ~line
     /// 133). Puck's one shared transceiver deliberately does not fork that per-view split: RP, HuC1, and HuC3 all read
-    /// the SAME <see cref="ReceivedLight"/> value, so the CGB costume (our stand-in for CGB-E-and-earlier) senses peer
+    /// the same <see cref="ReceivedLight"/> value, so the CGB costume (our stand-in for CGB-E-and-earlier) senses peer
     /// light plus its own RP LED bit plus its own cart LED latch unconditionally, and the Agb costume (newer-than-CGB-E)
     /// senses peer light plus its own emitted light only when a HuC1/HuC3 cartridge is present — matching Puck's
     /// existing correct AGB-RP-no-self-sense behavior when no HuC cartridge is loaded.

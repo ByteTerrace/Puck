@@ -55,7 +55,14 @@ TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
 `world.wait` clock counts completed simulation ticks) → replay `NoteTick`
 when armed. `WorldSimulation` wraps it with seat-intent submission before the
 shell and seat-context sync plus analog/editor latching after it. The launcher
-owns time; `WorldReplaySnapshot.SimulationRate = 240` is the fixed rate.
+owns time, pacing off `IFixedStepSimulation.RatePerSecond` (240 Hz by
+default — `WorldSimulationDefaults.DefaultRateHz` — but authored per world via
+the document's `simulation.rateHz` field; see
+[documents.md](documents.md)). A `.puckreplay` tape carries its OWN
+`SimulationRate`, stamped at record time from the live world's own rate, and
+`Drive` refuses a disagreement with the embedded definition's own
+`SimulationRateHz` by name, right after deserializing it, rather than
+re-driving at the wrong step size (see [replay.md](replay.md)).
 
 ## Applying one mutation (`TryApplyMutation`)
 
@@ -197,6 +204,7 @@ nested records, which are the authority:
 | Interactions | UpsertInteraction 54, RemoveInteraction 55 |
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
 | PlayerDefaults | SetPlayerDefaults 64 |
+| Market | CreateMarketListing 65, PlaceMarketBid 66, BuyoutMarketListing 67, CancelMarketListing 68, SettleMarketListing 69, PruneMarketListings 70 |
 
 Rules the catalog encodes:
 
@@ -244,8 +252,8 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 65 kinds (ordinals 0–64) on a 128-bit lane.**
-Ordinals 65–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 71 kinds (ordinals 0–70) on a 128-bit lane.**
+Ordinals 71–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses

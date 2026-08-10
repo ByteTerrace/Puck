@@ -1,3 +1,4 @@
+using System.Globalization;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.Scripting;
@@ -5,14 +6,10 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The machine-memory PEEK seam. <see cref="WorldMachineHost"/> — the authoritative machine host every
-/// boot shape constructs (authoritative-machines campaign, 2026-08-03) — is the ONE implementation, reached directly
-/// via <see cref="WorldServer.Machines"/>: no longer a settable, presentation-only-populated property, since a
-/// machine now boots and steps in EVERY boot shape and there is no longer a "no screen binder to peek through" case
-/// to guard against (see <c>WorldAddonRuntime</c>'s own remarks on this family, updated in the same change). This
-/// interface survives only as the narrow, side-effect-free seam <c>WorldAddonRuntime</c> reads through — mirroring
-/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s own contract — never a reason to reach past it into the
-/// concrete host.</summary>
+/// <summary>Defines the memory-peek seam that <c>WorldAddonRuntime</c> reads through, mirroring
+/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s contract. <see cref="WorldMachineHost"/>, reached via
+/// <see cref="WorldServer.Machines"/>, is the only implementation; callers should not reach past this interface into
+/// the concrete host.</summary>
 public interface IWorldMachineMemoryPeek {
     /// <summary>Reads one byte from a screen's booted machine, or fails when the screen has no machine or the
     /// machine does not support memory peek.</summary>
@@ -25,10 +22,10 @@ public interface IWorldMachineMemoryPeek {
 
 /// <summary>What kind of edit boundary a <see cref="WorldEditEcho"/> narrates — the class the editor HUD tags.</summary>
 public enum WorldEditEchoKind {
-    /// <summary>A world-document mutation that applies LIVE on delivery (cameras included).</summary>
+    /// <summary>A world-document mutation that applies live on delivery (cameras included).</summary>
     Mutation,
 
-    /// <summary>A DOCUMENT-DEFAULTS mutation — it changes what the next boot wakes on while the live session levers
+    /// <summary>A document-defaults mutation — it changes what the next boot wakes on while the live session levers
     /// keep their values (<c>world.row.set render</c> / <c>world.row.set population</c>).</summary>
     DocumentDefaults,
 
@@ -65,7 +62,7 @@ public enum WorldEditEchoKind {
 /// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
 /// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>) and the at-site position source the
 /// applied-cue lane derives from; <see langword="null"/> otherwise.</param>
-/// <param name="Denied">Whether the rejection was a CAPABILITY denial (a missing mutate grant, a refused grant
+/// <param name="Denied">Whether the rejection was a capability denial (a missing mutate grant, a refused grant
 /// acquisition) rather than a validator/guard rejection — the discriminator the cue lane's <c>grant.denied</c> vs
 /// <c>mutation.rejected</c> tokens ride.</param>
 /// <param name="ConnectionId">The submitting envelope's connection id (<see cref="SubmissionEnvelope.LocalConnectionId"/>
@@ -74,7 +71,7 @@ public enum WorldEditEchoKind {
 /// methods directly, with no originating envelope, which is correctly "local" for both.</param>
 /// <param name="CorrelationId">The submitting envelope's correlation id, or <c>0</c> when none (see
 /// <see cref="ConnectionId"/>'s own remarks for why direct callers default here).</param>
-/// <param name="RebuildOrigin">For a SUCCESSFUL <see cref="WorldEditEchoKind.Rebuild"/> outcome that replaced the
+/// <param name="RebuildOrigin">For a successful <see cref="WorldEditEchoKind.Rebuild"/> outcome that replaced the
 /// base (<c>world.load</c>/<c>world.reload</c>), the new origin path — the seam <c>Puck.World</c>'s composition root
 /// uses to keep the console's tracked document origin (<c>world.save</c>'s default target, <c>world.status</c>'s
 /// reported source, <c>world.reload</c>'s re-read target) truthful after a runtime rebuild. <see langword="null"/>
@@ -82,16 +79,16 @@ public enum WorldEditEchoKind {
 public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, string? RebuildOrigin = null);
 
 /// <summary>
-/// The authoritative world server — one logical instance owning the LIVE <see cref="WorldDefinition"/>, the entity
+/// The authoritative world server — one logical instance owning the live <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Every non-intent submission
-/// (command/grant/revoke/session/definition/mutation/undo/composition/lever/query) arrives as ONE
+/// (command/grant/revoke/session/definition/mutation/undo/composition/lever/query) arrives as one
 /// <see cref="SubmissionEnvelope"/> through <see cref="Submit"/> — the server's single ordered domain, never split by
-/// kind. Command/grant/revoke/session/composition/lever/query still apply SYNCHRONOUSLY at submit exactly as before
+/// kind. Command/grant/revoke/session/composition/lever/query still apply synchronously at submit exactly as before
 /// (the host guarantees submissions arrive inside the command-apply window immediately preceding the tick's
 /// <see cref="Step"/>, so every one lands before that tick's advance in stdin FIFO order — a grant a script submits
-/// immediately before a command is guaranteed visible to it). Live world EDITS — mutations, definition swaps, and
-/// journal undo — still BUFFER and drain at <see cref="Step"/>, before the intent drain, so they stay tick-aligned:
-/// the envelope reshape unifies HOW every kind is submitted, not WHEN a buffered kind applies. No submission returns a
+/// immediately before a command is guaranteed visible to it). Live world edits — mutations, definition swaps, and
+/// journal undo — still buffer and drain at <see cref="Step"/>, before the intent drain, so they stay tick-aligned:
+/// the envelope reshape unifies how every kind is submitted, not when a buffered kind applies. No submission returns a
 /// value directly; every envelope resolves to a typed <see cref="WorldSubmissionResult"/> (an inline callback for a
 /// local caller, fired before <see cref="Submit"/> returns). Per-tick intents buffer separately (their own queue, not
 /// the ordered domain) and drain at <see cref="Step"/> too, which then advances every body and pushes the tick's
@@ -219,10 +216,9 @@ public sealed class WorldServer : IWorldServerHost {
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
     // always has). Reset itself never writes this: reset targets the base WITHOUT moving it.
     private string m_baseOrigin = "the boot document";
-    // The multi-subscriber output hub (design §1.6) — replaces the single overwriting sink field so play-and-host
-    // (a local sink plus N future connections) is first-class. See WorldOutputHub's own remarks.
+    // The multi-subscriber output hub — supports a local sink plus N future connections. See WorldOutputHub's own remarks.
     private readonly WorldOutputHub m_output = new();
-    // The ONE ordered domain for every non-intent submission (design §1.4) — command, grant, revoke, session,
+    // The ONE ordered domain for every non-intent submission — command, grant, revoke, session,
     // definition, mutation, undo, composition, lever, and query all enqueue here, never a per-kind queue. A local
     // caller (LoopbackTransport) enqueues and immediately drains inline (see Submit/DrainOrdered), so this queue
     // never holds more than the single in-flight envelope for loopback; it exists as the ONE front door a future
@@ -244,7 +240,7 @@ public sealed class WorldServer : IWorldServerHost {
     // The solid-field revision — bumped each time m_solids is rebuilt (a solid-affecting edit under the field provider),
     // the world.collision.status read-back. Starts at 1 when the boot world uses the field provider, else 0.
     private int m_solidRevision;
-    // The engagement fold (headless design §1.8) — the seat/peer→screen route decision, its per-tick pad fold, and the
+    // The engagement fold — the seat/peer→screen route decision, its per-tick pad fold, and the
     // screen-removal admin cleanup. Assigned in the constructor (not a field initializer: it needs the constructor's
     // own population/definition parameters), never rebuilt afterward — channels are boot-fixed, so its compiled
     // per-screen translation tables never go stale.
@@ -253,7 +249,7 @@ public sealed class WorldServer : IWorldServerHost {
     // the fifth, machine-memory watches, is addon-scoped instead). Collected once per Step, after the population
     // advances; drained by WorldAddonRuntime.ResolveReads the same tick.
     private readonly WorldEventFeed m_events;
-    // The authoritative screen-machine host (authoritative-machines campaign, 2026-08-03) — a PEER singleton
+    // The authoritative screen-machine host — a PEER singleton
     // assigned in the constructor, never owned/disposed here (see WorldMachineHost's own remarks).
     private readonly WorldMachineHost m_machines;
     // The compiled `rules` section, rebuilt on every Install (and once at construction, which never calls Install)
@@ -278,6 +274,11 @@ public sealed class WorldServer : IWorldServerHost {
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];
     private ulong m_lastCompletedTick;
+    // The step width EmitSnapshot delivered the most recently completed tick's snapshot with — set alongside
+    // m_lastCompletedTick at the end of Step. Exists so a primer built OUTSIDE a Step (AttachSink, at an arbitrary
+    // point on the tick thread) can stamp itself with the server's actual current tick/step width rather than the
+    // literal 0/0 that is only honest before the first Step has ever run — see BuildPrimerSnapshot.
+    private ulong m_lastStepTicks;
 
     /// <summary>Gets the optional host sink for the player-keyed durable writes emitted by each completed tick.</summary>
     public Action<IReadOnlyList<DurableStateOutput>>? DurableStateOutputTap { get; set; }
@@ -287,8 +288,8 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Gets the tick a durable input submitted during the current command window must name.</summary>
     public ulong NextInputTick => (m_lastCompletedTick + 1UL);
 
-    /// <summary>Gets this server's own running-instance identity — the draw seed ladder's INSTANCE rung (see
-    /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the SAME value the boot/first-fill resolver
+    /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
+    /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
 
@@ -301,9 +302,9 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="profiles">The profile catalog.</param>
     /// <param name="envelope">The render-capacity oracle a scene/screen mutation is checked against at apply time.</param>
     /// <param name="machines">The authoritative screen-machine host (owns every booted <c>IScreenMachine</c>) — a
-    /// PEER singleton, not a private field this constructor builds, so the composition root disposes it (see
+    /// peer singleton, not a private field this constructor builds, so the composition root disposes it (see
     /// <see cref="WorldMachineHost"/>'s own remarks on why).</param>
-    /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's INSTANCE
+    /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's instance
     /// rung (see <c>WorldGeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Data</c>). Defaults to the boot
     /// instance's own constant name (<c>Puck.World.WorldInstanceHost.BootInstanceName</c>, not referenced directly —
     /// this project sits below <c>Puck.World</c> in the layering).</param>
@@ -318,6 +319,7 @@ public sealed class WorldServer : IWorldServerHost {
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
         InstanceIdentity = instanceIdentity;
+        BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         m_machines = machines;
         m_driveDenied = new bool[population.Capacity];
         m_contended = new bool[population.Capacity];
@@ -342,7 +344,7 @@ public sealed class WorldServer : IWorldServerHost {
         m_definition = definition;
         m_base = definition;
         m_population = population;
-        m_inputHold = new WorldInputHoldRuntime(settings: definition.InputHold, capacity: population.Capacity);
+        m_inputHold = new WorldInputHoldRuntime(settings: definition.CompiledInputHold, capacity: population.Capacity);
         m_profiles = profiles;
         m_envelope = envelope;
         // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
@@ -361,8 +363,7 @@ public sealed class WorldServer : IWorldServerHost {
         m_population.ReconcileInhabitants(definition: definition, admitted: admittedAtBoot, disconnected: disconnectedAtBoot);
         ApplyLifecycleEvents(admitted: admittedAtBoot, disconnected: disconnectedAtBoot, ordered: false);
 
-        // The document's SHIPPED grants (docs/capability-channels-plan.md's "a way for a world to ship grants...
-        // reviewable"): applied AFTER the permissive seed, in document order, through the identical Grant() path
+        // The document's SHIPPED grants: applied AFTER the permissive seed, in document order, through the identical Grant() path
         // world.grant submits through — so an illegitimate or conflicting authored row prints the same loud accept/
         // reject line an operator would see typing it, rather than being silently seated or silently dropped. Empty
         // (every world authored before this section existed) prints nothing and changes nothing. Applied BEFORE any
@@ -447,12 +448,40 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Gets the entity table this server advances.</summary>
     public WorldPopulation Population => m_population;
 
+    /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
+    /// source renders this instance (the boot world's own <c>WorldFrameSource</c>, or an observing destination's
+    /// session/away-seat view), so a document mutation the same instance receives is checked against the same
+    /// probed floor a renderer already committed to. Unconfigured (nothing renders this instance yet) reads as
+    /// "fits" — <see cref="WorldRenderEnvelope"/>'s own documented default.</summary>
+    public WorldRenderEnvelope Envelope => m_envelope;
+
+    /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
+    /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
+    /// <see cref="WorldAuthoringDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
+    /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
+    /// renderer holds.</summary>
+    public int BootDerivedFaceScreens { get; }
+
+    // The boot-frozen derived-face reservation gate, shared by the mutation and rebuild apply paths so the two can
+    // never disagree about what the binder can actually show.
+    private bool ExceedsBootDerivedFaceReservation(WorldDefinition candidate, out string reason) {
+        if (candidate.Authoring.DerivedFaceScreens <= BootDerivedFaceScreens) {
+            reason = string.Empty;
+
+            return false;
+        }
+
+        reason = $"authoring.derivedFaceScreens {candidate.Authoring.DerivedFaceScreens} exceeds the boot-reserved {BootDerivedFaceScreens} derived-face screen slot(s); the binder registers that band once at boot and the render provider key set is frozen there, so restart the host to load a wider one";
+
+        return true;
+    }
+
     /// <summary>Observes server-authored ordered events after they take effect. The replay tape attaches only while
     /// armed; clients never receive this submission-only seam.</summary>
     public Action<WorldServerEvent>? ServerEventTap { get; set; }
 
     /// <summary>Observes a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)
-    /// once <see cref="ApplyRebuild"/> has RESOLVED its candidate and computed its CAS content hash, but BEFORE any
+    /// once <see cref="ApplyRebuild"/> has resolved its candidate and computed its CAS content hash, but before any
     /// refusal gate (grant check, dirty-journal guard, validate, capacity, solids) runs — so a rebuild the door goes
     /// on to refuse is still taped and reproduces as the identical refusal on replay, matching
     /// <see cref="ServerEventTap"/>/<c>LoopbackTransport</c>'s own taps. Apply-time, not submission-time, because
@@ -465,9 +494,9 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Gets the profile catalog (the routed store persists through it).</summary>
     public WorldOwnedWorlds Profiles => m_profiles;
 
-    /// <summary>Gets the capability table's <see cref="IWorldGrantsView"/> — the ONE grant primitive the engagement view, the
+    /// <summary>Gets the capability table's <see cref="IWorldGrantsView"/> — the one grant primitive the engagement view, the
     /// addon runtime, and the grant/mutation command modules read (plus the two engagement-route writes the view
-    /// carries). Reads are loopback-local today; a socket transport moves grant changes onto the wire. Deliberately NOT
+    /// carries). Reads are loopback-local today; a socket transport moves grant changes onto the wire. Deliberately not
     /// the concrete <see cref="WorldGrants"/>: its <see cref="WorldGrants.TryGrant"/>/<see cref="WorldGrants.Revoke"/>
     /// authority doors stay reachable only through <see cref="Grant"/>/<see cref="Revoke"/> below, which run the actor
     /// check those two methods do not — a caller that only holds this property can never skip it.</summary>
@@ -484,23 +513,22 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Gets the world-scoped event feed — the four senses-lane families collected once per <see cref="Step"/>
     /// (collision pairs, region enter/exit, seat join/leave, route/engagement transitions). Read by
     /// <see cref="WorldAddonRuntime"/>'s read pump; a diagnostic/delivery surface, never itself hashed (the
-    /// UNDERLYING state it derives from already is).</summary>
+    /// underlying state it derives from already is).</summary>
     public WorldEventFeed Events => m_events;
 
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IScreenMachine</c>, its memory-peek
     /// surface (<see cref="WorldMachineHost"/> implements <see cref="IWorldMachineMemoryPeek"/> directly), and the
-    /// screen-op verb surface's runtime target. ALWAYS present (never null): machines are core state now, booted
-    /// and stepped in every boot shape (authoritative-machines campaign, 2026-08-03) — see this type's own remarks
-    /// for why the former settable, presentation-only <c>MachineMemoryPeek</c> seam is gone.</summary>
+    /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
+    /// every boot shape.</summary>
     public WorldMachineHost Machines => m_machines;
 
-    /// <summary>Observes EVERY screen op (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/
+    /// <summary>Observes every screen op (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/
     /// <c>.link</c>/<c>.unlink</c>) after <see cref="TryApplyScreenOp"/> finishes — success or refusal alike, so a
     /// screen op the Control-authority gate refuses is still taped and reproduces as the identical refusal on
-    /// replay (the SAME property <see cref="RebuildTap"/> establishes, reached here by a simpler route: unlike a
+    /// replay (the same property <see cref="RebuildTap"/> establishes, reached here by a simpler route: unlike a
     /// rebuild, a screen op applies synchronously with no drain-time gap for its content to move between submission
-    /// and apply, so the authority gate runs FIRST, before any content is read). The carried content hash is
-    /// non-null only for a SUCCESSFUL <see cref="WorldScreenOp.Insert"/> — every other op kind and every refusal
+    /// and apply, so the authority gate runs first, before any content is read). The carried content hash is
+    /// non-null only for a successful <see cref="WorldScreenOp.Insert"/> — every other op kind and every refusal
     /// carries <see langword="null"/>, since nothing else on the tape needs a CAS pin (see
     /// <see cref="WorldScreenOp.Insert"/>'s own remarks on why <see cref="WorldScreenOp.Select"/> needs none). The
     /// replay tape attaches only while armed; clients never receive this submission-only seam.</summary>
@@ -510,7 +538,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// count, and the <c>world.undo</c> budget).</summary>
     public int JournalLength => m_journal.Count;
 
-    /// <summary>Gets the live SDF contact field under the FIELD provider, or <see langword="null"/> under the analytic
+    /// <summary>Gets the live SDF contact field under the field provider, or <see langword="null"/> under the analytic
     /// provider — the <c>world.collision.probe</c>/<c>world.collision.status</c> reads' window onto the
     /// surface the simulation itself solves against.</summary>
     public WorldSolidField? SolidField => m_solids;
@@ -528,20 +556,61 @@ public sealed class WorldServer : IWorldServerHost {
     public Action<WorldEditEcho>? EchoTap { get; set; }
 
     /// <summary>Gets the rule-fired <c>save</c> effect's own I/O seam, invoked with the settling tick from
-    /// <c>FireWorldRuleEffect</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s own "the server calls
-    /// out, the composition root supplies the capability" shape, and load-bearing here for the SAME reason those are
-    /// optional rather than direct calls: this project (<c>Puck.World.Server</c>) references no rendering or input,
-    /// so it cannot itself run the settle-at-save capture the manual <c>world.save</c> verb runs
-    /// (<c>WorldSessionCapture.Capture</c>, in the composition root, needs the live render levers, screen binder,
-    /// audio director and pacing control — none of which exist here). A <see langword="null"/> tap is a silent no-op,
-    /// the same convention <see cref="EchoTap"/> follows; every LIVE boot shape wires one
+    /// <c>FireWorldRuleEffect</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
+    /// out, the composition root supplies the capability" shape: this project (<c>Puck.World.Server</c>) references
+    /// no rendering or input, so it cannot itself run the settle-at-save capture the manual <c>world.save</c> verb
+    /// runs (<c>WorldSessionCapture.Capture</c>, in the composition root, needs the live render levers, screen
+    /// binder, audio director and pacing control — none of which exist here). A <see langword="null"/> tap is a
+    /// silent no-op, the same convention <see cref="EchoTap"/> follows; every live boot shape wires one
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
-    /// drive — wires its OWN narration-only tap instead of the live closure: replay verification is side-effect-free
-    /// by owner ruling (2026-08-06), so a fired save effect there is suppressed, never reaching disk, and is named on
-    /// stderr rather than left indistinguishable from a rule that never fired. See <c>ActionEffect.Save</c>'s
-    /// remarks for why this effect submits no <see cref="WorldMutation"/> and so needs a seam other than
-    /// <c>TryApplyMutation</c> at all.</summary>
+    /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
+    /// side-effect-free: a fired save effect there is suppressed, never reaching disk, and is named on stderr rather
+    /// than left indistinguishable from a rule that never fired. See <c>ActionEffect.Save</c>'s remarks for why this
+    /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
+    /// all.</summary>
     public Action<ulong>? SaveEffectTap { get; set; }
+
+    /// <summary>Gets or sets the injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/> reads
+    /// for a cross-document border-margin check on a mapped portal facet's <see cref="WorldPlacementPortal.MarginDepth"/>
+    /// — the same "the server calls out, the composition root supplies the capability" shape as <see cref="EchoTap"/>/
+    /// <see cref="SaveEffectTap"/>, and for the identical reason: <c>Puck.World.Server</c> carries no storage
+    /// or filesystem dependency, so it cannot construct either resolver itself. Read only during synchronous
+    /// submission/load preparation, before a rebuild is buffered: live wiring supplies a local-first composite whose
+    /// second resolver is the storage transport. <see cref="ApplyRebuild"/> runs later from <see cref="Step"/> and
+    /// deliberately performs document-local validation only, so neither the composite nor its blocking storage read
+    /// is reachable from the tick path. The resolver is likewise never read from <see cref="TryApplyMutation"/> or
+    /// <see cref="ApplyUndo"/>: cross-document border compatibility is proved once at load, never re-litigated per
+    /// mutation or journal entry. <see langword="null"/> (the default) is correct for an offline replay drive with no
+    /// reachable transport and means an authored <see cref="WorldPlacementPortal.MarginDepth"/> refuses by name for
+    /// want of proof rather than silently passing.</summary>
+    public IWorldNeighbourResolver? Neighbours { get; set; }
+
+    /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
+    /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
+    public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }
+
+    /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>
+    public IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+
+        return (RebuildNeighbours?.Invoke(arg: path) ?? Neighbours);
+    }
+
+    /// <summary>Gets or sets the injected runtime border-margin neighbour resolver every live body's contact
+    /// resolution consults while standing inside a mapped portal facet's authored margin — the per-tick counterpart
+    /// to <see cref="Neighbours"/> (which proves the strip's shape once, at document-load time). The same
+    /// "the server calls out, the composition root supplies the capability" shape as <see cref="Neighbours"/>/
+    /// <see cref="EchoTap"/>: <c>Puck.World.Server</c> carries no cross-instance dependency, so it cannot resolve a
+    /// sibling instance itself. Forwards straight to <see cref="Population"/>'s own contact-field composition — see
+    /// <see cref="Server.WorldPopulation.ConfigureBorderMargin"/> — so a caller that sets this after the server
+    /// already stepped still takes effect on the very next tick, no restart. <see langword="null"/> (the default) is
+    /// correct whenever no resolver is wired, and simply means every mapped portal facet's <c>marginDepth</c> band
+    /// stays inert — a body straddling the seam solves against this world's own geometry alone, byte-identical to
+    /// the pre-margin-strip behavior.</summary>
+    public IWorldBorderMarginSource? BorderMargin {
+        get => m_population.BorderMargin;
+        set => m_population.ConfigureBorderMargin(source: value);
+    }
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
@@ -552,20 +621,35 @@ public sealed class WorldServer : IWorldServerHost {
         m_journal.Clear();
     }
 
-    /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering a primer
-    /// snapshot of the current table so the client renders the boot state before the first tick. A SUBSCRIBE, not an
-    /// overwrite: <see cref="WorldOutputHub"/> supports more than one attached sink (play-and-host — a local sink
-    /// plus N future connections plus the tape all subscribing), so a second call adds a second subscriber rather
-    /// than displacing the first.</summary>
+    /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
+    /// definition followed by a primer snapshot of the current table, so the client renders the current state before
+    /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more
+    /// than one attached sink (play-and-host — a local sink plus N future connections plus the tape all
+    /// subscribing), so a second call adds a second subscriber rather than displacing the first.</summary>
     /// <param name="sink">The sink to deliver snapshots to.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed — see
+    /// <see cref="WorldOutputHub.Subscribe"/> for the threading/idempotency contract. Disposal takes the sink out of
+    /// every future delivery; it never retracts what the primer or an earlier tick already delivered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    public void AttachSink(IClientSink sink) {
+    public IDisposable AttachSink(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
-        m_output.Subscribe(sink: sink);
-        // The primer goes to the NEWLY attached sink only (not a hub-wide broadcast) — an already-attached sink must
-        // not replay a stale tick-0 snapshot every time a later sink joins.
-        sink.DeliverSnapshot(snapshot: BuildSnapshot(tick: 0UL, stepTicks: 0UL));
+        var lease = m_output.Subscribe(sink: sink);
+
+        // Both the definition and the primer go to the NEWLY attached sink only (not a hub-wide broadcast) — an
+        // already-attached sink must not replay a stale definition/snapshot every time a later sink joins. Isolated
+        // the SAME way WorldOutputHub isolates an ordinary tick delivery fault (its own remarks): a sink that throws
+        // during its own attach primer must not take down whoever called AttachSink, and is detached before it ever
+        // reaches an ordinary tick delivery.
+        try {
+            sink.DeliverDefinition(definition: m_definition);
+            sink.DeliverSnapshot(snapshot: BuildPrimerSnapshot());
+        } catch (Exception exception) {
+            Console.Error.WriteLine(value: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+            lease.Dispose();
+        }
+
+        return lease;
     }
 
     /// <summary>Attaches the mounted addon runtime this server pumps at the three pinned points of <see cref="Step"/>,
@@ -591,38 +675,38 @@ public sealed class WorldServer : IWorldServerHost {
         m_tickCollided = new bool[capacity];
     }
 
-    /// <summary>Gets the attached addon runtime's mount receipts, in mount order — EMPTY when no runtime is attached (a
+    /// <summary>Gets the attached addon runtime's mount receipts, in mount order — empty when no runtime is attached (a
     /// world that enables no addon, or an offline re-drive read before its own mount). The record side of the replay
     /// tape reads this at record-start so a saved tape pins the guests it will re-run.</summary>
     public IReadOnlyList<WorldAddonReceipt> AddonReceipts => (m_addons?.Receipts ?? Array.Empty<WorldAddonReceipt>());
 
-    /// <summary>Gets a value indicating whether ANY mounted addon has ever had an admitted execution attempted (a real
-    /// <c>TickAddons</c> pump, not merely mounting) — the boot-anchored replay arm predicate (Phase-3 plan AXIS 1).
+    /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted (a real
+    /// <c>TickAddons</c> pump, not merely mounting) — a boot-anchored replay arm predicate.
     /// <c>false</c> for a world that mounts no addon, or one whose mounted addons never reached their first tick.
     /// Latched per mounted entry the first time it is pumped and never cleared — a guest's accumulated memory/tick
     /// state before a recording began is exactly what offline replay cannot re-establish (fresh guests, sim
     /// counter zero), so <c>replay.record</c> refuses to arm once this is <see langword="true"/>.</summary>
     public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
 
-    /// <summary>Gets a value indicating whether ANY booted screen machine has ever had a step/segment actually submitted — the IDENTICAL
+    /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually submitted — the identical
     /// boot-anchored replay arm predicate <see cref="AnyAddonEverPumped"/> applies to addons: offline replay
-    /// rehydrates a FRESH <see cref="WorldMachineHost"/> from the tape's embedded
-    /// definition, which can reconstruct a machine's BOOT image but never its accumulated core state (WRAM, CPU
+    /// rehydrates a fresh <see cref="WorldMachineHost"/> from the tape's embedded
+    /// definition, which can reconstruct a machine's boot image but never its accumulated core state (WRAM, CPU
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
-    /// BEFORE its first step, same as a world that mounts an addon must arm before its first tick.</summary>
+    /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
     public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
 
-    /// <summary>Gets a value indicating whether ANY screen op has ever APPLIED (changed host state — <c>ok</c> from
-    /// <see cref="TryApplyScreenOp"/>, never merely attempted) this session — a THIRD boot-anchored replay arm
+    /// <summary>Gets a value indicating whether any screen op has ever applied (changed host state — <c>ok</c> from
+    /// <see cref="TryApplyScreenOp"/>, never merely attempted) this session — a third boot-anchored replay arm
     /// predicate beside <see cref="AnyAddonEverPumped"/>/<see cref="AnyMachineEverPumped"/>. Screen ops apply
-    /// SYNCHRONOUSLY, between fixed steps, not inside <see cref="Step"/> — so a
+    /// synchronously, between fixed steps, not inside <see cref="Step"/> — so a
     /// <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/<c>.unlink</c> that lands
-    /// BEFORE <c>replay.record</c> arms (even with zero steps run since) changes live host state
+    /// before <c>replay.record</c> arms (even with zero steps run since) changes live host state
     /// (<see cref="WorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
-    /// reflects — these ops are NOT document mutations, so nothing about them exists in
+    /// reflects — these ops are not document mutations, so nothing about them exists in
     /// <see cref="WorldDefinition"/> for the snapshot to capture, and they are only ever added to the tape's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time onward) — never
-    /// retroactively. Left ungated, offline replay reconstruction (a FRESH
+    /// retroactively. Left ungated, offline replay reconstruction (a fresh
     /// <see cref="WorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
     /// entirely, a divergence the pose-only hash cannot see. Latched the instant any op applies and never cleared,
     /// mirroring <see cref="AnyMachineEverPumped"/>'s own shape exactly. Only ever added to a recording's own
@@ -643,7 +727,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Buffers one live world mutation for the next <see cref="Step"/> (drained before intents). Retains the
     /// submitting envelope's connection/correlation identity so the eventual accept/reject <see cref="WorldEditEcho"/>
     /// routes back to the submitter (see <see cref="WorldEditEcho.ConnectionId"/>) — a deferred op's echo fires later
-    /// than its submission, so that identity must travel WITH the buffered entry rather than being read live.</summary>
+    /// than its submission, so that identity must travel with the buffered entry rather than being read live.</summary>
     /// <param name="mutation">The mutation to apply.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
@@ -665,17 +749,27 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="principal">The acting identity the rebuild is checked against.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="expectedContentHash">REPLAY ONLY: the CAS content hash a recorded tape entry pins. When set,
-    /// <see cref="ApplyRebuild"/> compares it against the hash it computes for THIS drive's own resolved candidate
+    /// <param name="expectedContentHash">Replay only: the CAS content hash a recorded tape entry pins. When set,
+    /// <see cref="ApplyRebuild"/> compares it against the hash it computes for this drive's own resolved candidate
     /// (its own base for Reset, a fresh re-read of <see cref="WorldRebuildRequest.PathHint"/> for Load/Reload) and
-    /// refuses BY NAME on a mismatch, before any other guard runs. <see langword="null"/> (the default) is the LIVE
-    /// path — nothing to compare against, since the live drive IS what establishes the hash a later recording pins.
+    /// refuses by name on a mismatch, before any other guard runs. <see langword="null"/> (the default) is the live
+    /// path — nothing to compare against, since the live drive is what establishes the hash a later recording pins.
     /// <see cref="WorldReplaySnapshot.Drive"/> is the one caller that ever passes a non-null value.</param>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
     public void EnqueueRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) {
         ArgumentNullException.ThrowIfNull(argument: request);
 
-        m_pending.Enqueue(item: new PendingOp.Rebuild(Request: request, Principal: principal, ConnectionId: connectionId, CorrelationId: correlationId, ExpectedContentHash: expectedContentHash));
+        string? preparationFailure = null;
+
+        // A carried document is available at submission time, outside Step. Prove its neighbour claims here and carry
+        // any refusal into the ordered tick-boundary decision; ApplyRebuild repeats only document-local checks.
+        var rebuildNeighbours = ((request.PathHint is { } candidatePath) ? ResolveRebuildNeighbours(path: candidatePath) : Neighbours);
+
+        if ((request.Definition is { } supplied) && !WorldDefinitionValidator.TryValidate(definition: supplied, reason: out var proofReason, neighbours: rebuildNeighbours)) {
+            preparationFailure = $"cross-document load proof failed before enqueue — {proofReason}";
+        }
+
+        m_pending.Enqueue(item: new PendingOp.Rebuild(Request: request, Principal: principal, ConnectionId: connectionId, CorrelationId: correlationId, ExpectedContentHash: expectedContentHash, PreparationFailure: preparationFailure));
     }
 
     /// <summary>Buffers a journal undo of the last <paramref name="count"/> mutations for the next <see cref="Step"/>.
@@ -690,7 +784,7 @@ public sealed class WorldServer : IWorldServerHost {
     }
 
     /// <summary>Buffers a live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>)
-    /// for the next <see cref="Step"/> — drained at the SAME door <see cref="EnqueueMutation"/> uses (before
+    /// for the next <see cref="Step"/> — drained at the same door <see cref="EnqueueMutation"/> uses (before
     /// intents), so a mount lands at the same defined tick-boundary point a document mutation does. Retains the
     /// submitting envelope's connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
     /// <param name="lifecycle">The mount/unmount action.</param>
@@ -704,10 +798,10 @@ public sealed class WorldServer : IWorldServerHost {
         m_pending.Enqueue(item: new PendingOp.AddonLifecycle(Lifecycle: lifecycle, Principal: principal, ConnectionId: connectionId, CorrelationId: correlationId));
     }
 
-    /// <summary>Adds a grant to the table SYNCHRONOUSLY (the <c>world.grant</c> half; like a command, so the next tick's
-    /// checks observe it). Checks <paramref name="actor"/> — the principal ASKING, distinct from
-    /// <see cref="WorldGrant.Principal"/> (the principal RECEIVING it) — via
-    /// <see cref="WorldGrants.HoldsForAdministration"/>, which is enforced ONLY for actors outside the trust boundary
+    /// <summary>Adds a grant to the table synchronously (the <c>world.grant</c> half; like a command, so the next tick's
+    /// checks observe it). Checks <paramref name="actor"/> — the principal asking, distinct from
+    /// <see cref="WorldGrant.Principal"/> (the principal receiving it) — via
+    /// <see cref="WorldGrants.HoldsForAdministration"/>, which is enforced only for actors outside the trust boundary
     /// (an <c>Addon</c> or <c>Peer</c> may only grant authority it itself holds); a <c>Console</c> or <c>Seat</c> actor
     /// passes unconditionally, because gating a fully-trusted operator's own grant path is ceremony, not security — see
     /// the check's own doc for why. A denied actor prints the same loud, attributed line as a conflicting exclusive
@@ -717,15 +811,21 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="connectionId">The submitting envelope's connection id (see <see cref="WorldEditEcho.ConnectionId"/>);
     /// defaults to the local connection for a direct caller (replay, the addon runtime) with no originating envelope.</param>
     /// <param name="correlationId">The submitting envelope's correlation id; defaults to none.</param>
-    /// <remarks><b>The no-Peer-consent door (owner ruling 2026-08-02).</b> A Drive grant whose subject is a
-    /// remote-admitted human body (<see cref="WorldPopulation.IsAdmittedPeer"/>) refuses loudly here, by name, for
-    /// any <see cref="WorldGrant.Principal"/> other than that body's OWN <see cref="PrincipalKind.Peer"/> — UX over
-    /// the sound arithmetic: with no Peer-authored consent grammar (P9), <c>Reach ∧ Consent</c> is <c>0</c> by
-    /// construction for any OTHER principal, so such a row would compose to nothing anyway; this says so at the
-    /// door instead of leaving an operator to infer it from a pool that silently never moves. Latent today —
-    /// <see cref="WorldPopulation.IsAdmittedPeer"/> is permanently <see langword="false"/> until the P7 socket phase
-    /// — landed now so the door rule needs no separate change the day admission exists.</remarks>
-    public void Grant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+    /// <remarks>A Drive grant whose subject is a remote-admitted human body
+    /// (<see cref="WorldPopulation.IsAdmittedPeer"/>) refuses, by name, for any <see cref="WorldGrant.Principal"/>
+    /// other than that body's own <see cref="PrincipalKind.Peer"/>: with no Peer-authored consent grammar,
+    /// <c>Reach ∧ Consent</c> is <c>0</c> by construction for any other principal, so such a row would compose to
+    /// nothing anyway; the refusal states this at the door instead of leaving an operator to infer it from a pool
+    /// that silently never moves. <see cref="WorldPopulation.IsAdmittedPeer"/> is currently always
+    /// <see langword="false"/>, so this door does not yet trigger.</remarks>
+    public void Grant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+        _ = TryApplyGrant(grant: grant, actor: actor, connectionId: connectionId, correlationId: correlationId);
+
+    // The ordinary public door intentionally remains void: callers submit an authority operation and observe its
+    // attributed echo. Admission re-authorization additionally needs to know whether the row ACTUALLY reached the
+    // live table so a conflict refusal is not later misclassified as an explicit revoke; it uses this identical
+    // implementation and keeps the boolean inside the server.
+    private bool TryApplyGrant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
 
         if (!m_grants.HoldsForAdministration(principal: actor, capability: grant.Capability, subject: grant.Subject)) {
@@ -735,7 +835,7 @@ public sealed class WorldServer : IWorldServerHost {
                 correlationId: correlationId
             );
 
-            return;
+            return false;
         }
 
         if ((grant.Capability == WorldCapability.Drive) &&
@@ -748,7 +848,7 @@ public sealed class WorldServer : IWorldServerHost {
                 correlationId: correlationId
             );
 
-            return;
+            return false;
         }
 
         if (m_grants.TryGrant(grant: grant, reason: out var reason)) {
@@ -765,14 +865,18 @@ public sealed class WorldServer : IWorldServerHost {
             }
 
             EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label}{(grant.Exclusive ? " exclusive" : string.Empty)}", Rejected: false, Kind: WorldEditEchoKind.GrantTable, ConnectionId: connectionId, CorrelationId: correlationId));
+
+            return true;
         } else {
             Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
             EchoTap?.Invoke(obj: new WorldEditEcho(Message: $"grant {label} rejected: {reason}", Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true, ConnectionId: connectionId, CorrelationId: correlationId));
+
+            return false;
         }
     }
 
-    /// <summary>Removes a grant from the table SYNCHRONOUSLY (the <c>world.revoke</c> half). Checks <paramref name="actor"/>
-    /// against the SAME administration rule as <see cref="Grant"/> — enforced only for an <c>Addon</c>/<c>Peer</c> actor,
+    /// <summary>Removes a grant from the table synchronously (the <c>world.revoke</c> half). Checks <paramref name="actor"/>
+    /// against the same administration rule as <see cref="Grant"/> — enforced only for an <c>Addon</c>/<c>Peer</c> actor,
     /// which must itself hold <see cref="WorldGrant.Capability"/> over <see cref="WorldGrant.Subject"/> (ignoring the
     /// exclusivity override <see cref="WorldGrants.Allows"/> enforces at use, so an untrusted actor can always revoke an
     /// exclusive grant it itself authorized); a <c>Console</c> or <c>Seat</c> actor passes unconditionally — see
@@ -812,7 +916,7 @@ public sealed class WorldServer : IWorldServerHost {
         EchoTap?.Invoke(obj: new WorldEditEcho(Message: denial, Rejected: true, Kind: WorldEditEchoKind.GrantTable, Denied: true, ConnectionId: connectionId, CorrelationId: correlationId));
     }
 
-    /// <summary>Applies a LIVE window-composition override SYNCHRONOUSLY (the <c>view.override layout</c>/<c>view.override camera</c>
+    /// <summary>Applies a live window-composition override synchronously (the <c>view.override layout</c>/<c>view.override camera</c>
     /// path). Checks <see cref="WorldCapability.Control"/> over
     /// <see cref="GrantSubject.Composition"/>; on accept pushes it to the client composer, on denial prints a loud line
     /// and changes nothing. Never durable — no document, no journal.</summary>
@@ -837,14 +941,14 @@ public sealed class WorldServer : IWorldServerHost {
         m_output.DeliverComposition(composition: composition);
     }
 
-    /// <summary>Applies a LIVE SESSION LEVER — the same shape as <see cref="ApplyComposition"/> one section over:
-    /// checked against <see cref="WorldCapability.Mutate"/> over the section the lever FOLDS INTO, then pushed to the
+    /// <summary>Applies a live session lever — the same shape as <see cref="ApplyComposition"/> one section over:
+    /// checked against <see cref="WorldCapability.Mutate"/> over the section the lever folds into, then pushed to the
     /// client to write onto its presentation service. Synchronous at submit (like a command), never journaled, and
     /// never a <see cref="WorldMutation"/> — a slider must not mint an undo entry, and "live now, document owns boot"
     /// is the asymmetry a lever exists for.</summary>
-    /// <remarks>This is the boundary the lever family previously did not reach. A console module writing the injected
-    /// service directly could move a knob — and persist it through <c>world.save</c> — while holding no grant over the
-    /// section that knob folds into, because a verb that never reaches this type never reaches its check.</remarks>
+    /// <remarks>Writing the injected presentation service directly, bypassing this method, skips the grant check
+    /// below and lets an ungranted caller move — and persist through <c>world.save</c> — a knob in a section it
+    /// holds no grant over.</remarks>
     /// <param name="lever">The lever write.</param>
     /// <param name="principal">The acting identity the lever is checked against.</param>
     /// <param name="connectionId">The submitting envelope's connection id (see <see cref="WorldEditEcho.ConnectionId"/>);
@@ -1103,6 +1207,17 @@ public sealed class WorldServer : IWorldServerHost {
 
         switch (request) {
             case SessionRequest.Join join: {
+                // LOOPBACK STAYS CREDENTIAL-FREE BY CONSTRUCTION. This is the in-process Session.Join path — the
+                // boot client, the console, and every local seat all reach it through LoopbackTransport, never a
+                // socket — so it checks WorldHelloDoor's protocol-version compatibility and STOPS there; it never
+                // calls Protocol.WorldAdmissionDoor. The reason is the BOUNDARY, not the code path: an identity
+                // check exists to answer "is the party on the other side of this wire who they claim to be", and
+                // there is no wire here — the caller is this same process, already running as whichever principal
+                // the OS session grants it. The trust boundary this door polices is the process boundary itself;
+                // requiring a signed claim from your own process to talk to your own process would authenticate
+                // nothing real while adding a key-management burden with no attacker on the other side of it. A
+                // REMOTE connection (Server.WorldTcpHost) crosses a real wire and passes through WorldAdmissionDoor
+                // in addition to this check, once this one succeeds.
                 if (!WorldHelloDoor.TryAccept(offeredKey: join.WireProtocolKey, refusal: out var helloRefusal)) {
                     return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: $"{helloRefusal}: wire key 0x{join.WireProtocolKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}");
                 }
@@ -1216,6 +1331,20 @@ public sealed class WorldServer : IWorldServerHost {
         };
     }
 
+    // The public Answer surface remains the trusted in-process read-back composer. An envelope, however, may have
+    // arrived over WorldTcpHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
+    // Console and pass through the same check using the permissive local seed rather than a separate bypass.
+    private QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) {
+        var subject = query.ObservationSubject();
+        var verdict = m_grants.Allows(principal: principal, capability: WorldCapability.Observe, subject: subject);
+
+        if (!verdict.IsAllowed) {
+            return new QueryAnswer(Text: $"[query refused: {principal.Describe()} cannot observe {subject.Describe()} ({verdict.DescribeDenial()})]", Refused: true);
+        }
+
+        return Answer(query: query);
+    }
+
     private void StageOwnedState(int slot, WorldIdentity? profile) {
         if ((profile is null) || (Body(index: slot) is not { } body)) {
             return;
@@ -1251,7 +1380,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Composes the <c>player.channels</c> echo — the fold and held-image join's read-back
     /// (the arithmetic rule lives in <see cref="FixedContributionFold"/>), so a script can tell "the addon asked for more
     /// and the pool held it" apart from "the addon asked for exactly this" without inferring it from displacement
-    /// across ticks. Reports every DECLARED channel of <paramref name="bodyIndex"/>'s last write: the folded value
+    /// across ticks. Reports every declared channel of <paramref name="bodyIndex"/>'s last write: the folded value
     /// the simulation received, the owning seat's own base <c>h</c>, every contributor that reached it tagged by
     /// principal (trusted/untrusted), the pool ceiling in force, whether the pool actually clamped, the held overlay
     /// admitted later by <see cref="WorldBody"/>, and the value after that overlay composed with the movement tier.</summary>
@@ -1320,27 +1449,27 @@ public sealed class WorldServer : IWorldServerHost {
         _ => "bipolar",
     };
 
-    /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code FIRST (see
+    /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code first (see
     /// <see cref="WorldAddonRuntime.TickAddons"/>, which applies nothing) → drain the buffered live edits (mutations,
     /// swaps, undo), applying each at the tick boundary and delivering the new definition once if any applied → drain
     /// the tick's submitted intents → apply the addons' staged contributions
-    /// (<see cref="WorldAddonRuntime.ApplyContributions"/>) → FOLD every human-occupied body's tick (see
+    /// (<see cref="WorldAddonRuntime.ApplyContributions"/>) → fold every human-occupied body's tick (see
     /// <see cref="FoldChannelContributions"/>) → settle per-body contention over the tick as a whole → advance every
     /// body (peers, then seats) → resolve the addons' reads against the stepped state
     /// (<see cref="WorldAddonRuntime.ResolveReads"/>) → deliver the tick's <see cref="WorldSnapshot"/>.</summary>
-    /// <remarks>The three addon points are PINNED, and each is pinned for a reason: guests run before anything is
+    /// <remarks>The three addon points are pinned, and each is pinned for a reason: guests run before anything is
     /// applied so a guest's own effect never depends on where in the tick it happened to be pumped; reads resolve
     /// after the step of the tick they were written in, so a verdict, a minted handle, and a pose all describe the
-    /// same settled instant. <b>An addon's contribution to a HUMAN-OCCUPIED body is never a plain overwrite of the
+    /// same settled instant. <b>An addon's contribution to a human-occupied body is never a plain overwrite of the
     /// seat's own submission (<see cref="FixedContributionFold"/>).</b> <see cref="ApplyIntentSubmission"/> routes a
     /// non-owning contributor into a per-tick contribution set instead of calling <see cref="WorldBody.SubmitIntent"/>
     /// directly, and <see cref="FoldChannelContributions"/> — the fourth point, run once contributions have finished
     /// landing and before the population advances — folds each occupied body's owning-seat base with its tick's
     /// pooled/unpooled contributions into the single value <see cref="WorldBody.SubmitIntent"/> receives. An
-    /// UNOCCUPIED body (no seat, or an inactive one) is untouched by any of this and keeps plain overwrite
+    /// unoccupied body (no seat, or an inactive one) is untouched by any of this and keeps plain overwrite
     /// semantics, because occupancy is what makes a pool exist at all (a bot at full authority is not an oversight
     /// there). <see cref="WorldBody.NextIntent"/>'s tape-outranks-submitted ladder is itself untouched; only how the
-    /// SUBMITTED tier is produced differs by occupancy.</remarks>
+    /// submitted tier is produced differs by occupancy.</remarks>
     /// <param name="context">The launcher's fixed-step context for this tick.</param>
     public void Step(in FixedStepContext context) {
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
@@ -1444,9 +1573,15 @@ public sealed class WorldServer : IWorldServerHost {
         // World rules evaluate HERE — after the event feed (so a $region gate reads this tick's settled occupancy)
         // and before the addon read pump and the snapshot (so a rule's write is visible to the same tick's guest
         // reads and delivery).
-        EvaluateWorldRules(tick: tick);
+        EvaluateWorldRules(tick: tick, stepTicks: context.StepTicks);
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
+        // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
+        // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
+        SettleExpiredMarketListings(tick: tick);
+        // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
+        // past market.retentionSeconds so the section's lifetime listing count stays bounded.
+        PruneExpiredMarketListings(tick: tick);
         // Reconnect-park recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
         // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's.
         m_population.ReclaimExpiredParks(tick: tick);
@@ -1454,13 +1589,10 @@ public sealed class WorldServer : IWorldServerHost {
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         m_engagement.FoldTick();
 
-        // Step every booted machine off THIS tick's freshly-folded pads — authoritative-machines campaign
-        // (2026-08-03): reads WorldEngagement.BuildPadSnapshot() DIRECTLY, in-process, no client/wire round-trip
-        // (the former WorldSnapshot.EngagedPads lane is gone — see WorldSnapshot's own remarks). Runs in EVERY boot
-        // shape via WorldServerStepShell.Step (headless and windowed alike both call WorldServer.Step), which is
-        // exactly the inversion: ROM state IS sim state now, not merely presentation-fed. The exact-rational T-cycle
-        // bridge is preserved verbatim — context.StepTicks is forwarded exactly as the pre-inversion
-        // WorldScreenBinder.AdvanceMachines forwarded it.
+        // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
+        // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step
+        // (headless and windowed alike both call WorldServer.Step) — ROM state IS sim state, not presentation-fed.
+        // context.StepTicks is forwarded exactly, preserving the exact-rational T-cycle bridge.
         m_machines.Advance(stepTicks: context.StepTicks, pads: m_engagement.BuildPadSnapshot());
 
         // A body-target route's contribution lands on the TARGET's NEXT tick — FoldTick runs after this tick's
@@ -1478,23 +1610,24 @@ public sealed class WorldServer : IWorldServerHost {
 
         EmitSnapshot(tick: (context.Tick + 1UL), stepTicks: context.StepTicks);
         m_lastCompletedTick = (context.Tick + 1UL);
+        m_lastStepTicks = context.StepTicks;
     }
 
-    /// <summary>Returns the context-sensitive-button interception's ELIGIBILITY pass (the RPG A-button, <c>CLAUDE.md</c>'s
+    /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>CLAUDE.md</c>'s
     /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
     /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
     /// <see cref="WorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
     /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
     /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the
-    /// seat's PRE-MOVE position (this tick's population has not advanced yet — <c>Step</c> calls this before
+    /// seat's pre-move position (this tick's population has not advanced yet — <c>Step</c> calls this before
     /// <see cref="WorldPopulation.AdvanceSeats"/>), and would actually pass <see cref="WorldEngagement.CheckEngage"/>.
     /// <para>
-    /// <see cref="WorldEngagement.Engage"/>'s own remarks leave engageable/proximity/machine POLICY to the caller
+    /// <see cref="WorldEngagement.Engage"/>'s own remarks leave engageable/proximity/machine policy to the caller
     /// (ordinarily the client, ahead of a manual <c>player.engage</c>'s submission) — this is that same policy,
-    /// resolved HERE instead, from document and grant state alone. Pure sim state in, pure sim state out: a shadow
+    /// resolved here instead, from document and grant state alone. Pure sim state in, pure sim state out: a shadow
     /// replay re-derives the identical decision at the identical tick from the identical taped inputs, with nothing
-    /// new to tape — the same "RE-DERIVED, not recorded" shape <see cref="WorldEngagement"/>'s own body-route
+    /// new to tape — the same "re-derived, not recorded" shape <see cref="WorldEngagement"/>'s own body-route
     /// contributions already establish (see its class remarks).
     /// </para></summary>
     /// <param name="ordinals">Per-seat-slot output: the channel ordinal to probe this tick, or <c>-1</c> for none —
@@ -1599,45 +1732,41 @@ public sealed class WorldServer : IWorldServerHost {
         return true;
     }
 
-    /// <summary>Applies ONE submission to a live body under the per-tick Drive check, and returns the verdict that
+    /// <summary>Applies one submission to a live body under the per-tick Drive check, and returns the verdict that
     /// decided it. The one write path every intent producer shares — the seat drain and every mounted addon's staged
     /// contributions — so authority, the fold routing below, and the denial latch can never diverge between them.
-    /// <para>A submission whose principal does not hold <see cref="WorldCapability.Drive"/> over the target body applies
-    /// NOTHING and is reported loud ONCE per denial episode (a revoked driver keeps submitting; the first refused tick
-    /// logs, then the body idles until re-granted). Allocation-free O(1). The line prints the VERDICT's reason, never
-    /// its own: "exclusively reserved by seat1" and "no grant names it" were previously one indistinguishable message,
-    /// and the caller could not have known better — the bool collapsed the states before any message site saw them (the
-    /// plan's "A decision is data" section). The <c>m_driveDenied</c> reporting latch stays deliberately outside the
+    /// <para>A submission whose principal does not hold <see cref="WorldCapability.Drive"/> over the target body
+    /// applies nothing and is reported once per denial episode (a revoked driver keeps submitting; the first
+    /// refused tick logs, then the body idles until re-granted). Allocation-free, O(1). The line prints the
+    /// verdict's reason, so distinct denial causes such as "exclusively reserved by seat1" and "no grant names it"
+    /// surface as distinct messages. The <c>m_driveDenied</c> reporting latch stays deliberately outside the
     /// verdict.</para>
-    /// <para><b>An ALLOWED submission then routes one of two ways, because one body has exactly ONE base: the participant
-    /// that owns it.</b> The body's OWNING seat or peer (its principal index equals the entity index) — or ANY
-    /// principal when the body is not human-occupied (<see cref="WorldPopulation.IsHumanOccupied"/>: an unoccupied
-    /// body is a bot at full authority by construction) — applies exactly as before: <see cref="WorldBody.SubmitIntent"/>
-    /// overwrites, and this tick's write is tracked for contention reporting. Everything else — an addon's contribution,
-    /// or a DIFFERENT seat co-driving a body it does not own — is staged into the per-tick contribution set instead
-    /// (<see cref="StageContribution"/>, which carries BOTH the submission's intent and its held-channel composition
-    /// image) and folded later by <see cref="FoldChannelContributions"/>; it is never tracked as contention, because a
-    /// consented (or default-denied) contribution is the FEATURE, not a race — reporting it as contention would make
-    /// composition look like a defect.</para></summary>
-    /// <param name="body">The LIVE body the submission targets — the caller resolves it, because a submission naming an
-    /// entity that holds no body is not an authority outcome and must not be answered as one.</param>
+    /// <para>An allowed submission then routes one of two ways, because one body has exactly one base: the
+    /// participant that owns it. The body's owning seat or peer (its principal index equals the entity index) — or
+    /// any principal when the body is not human-occupied (<see cref="WorldPopulation.IsHumanOccupied"/>: an
+    /// unoccupied body is a bot at full authority by construction) — writes through
+    /// <see cref="WorldBody.SubmitIntent"/>, which overwrites, and this tick's write is tracked for contention
+    /// reporting. Everything else — an addon's contribution, or a different seat co-driving a body it does not own
+    /// — is staged into the per-tick contribution set instead (<see cref="StageContribution"/>, which carries both
+    /// the submission's intent and its held-channel composition image) and folded later by
+    /// <see cref="FoldChannelContributions"/>; it is never tracked as contention, because a consented (or
+    /// default-denied) contribution is a deliberate composition path, not a race.</para></summary>
+    /// <param name="body">The live body the submission targets — the caller resolves it, because a submission
+    /// naming an entity that holds no body is not an authority outcome and must not be answered as one.</param>
     /// <param name="submission">The tick, entity index, principal, intent, and held-lane image.</param>
     /// <returns>The verdict that decided the check; nothing was applied unless it allows.</returns>
-    /// <remarks><b>CC/DEATH GATING (composition-core, Seam A) checked FIRST, ahead of the grant table.</b> A body
-    /// carrying a nonzero cell on a <see cref="WorldStateRow.GatesDrive"/> row (<see cref="TryDriveGateVerdict"/>,
-    /// resynced from live document state — see <see cref="WorldGrants.SyncState"/>) has its intent refused
-    /// REGARDLESS of any Drive hold, including an exclusive reservation: a status effect is a fact about the BODY,
-    /// not about who is allowed to drive it, so it must outrank even a principal that genuinely holds Drive.
-    /// DOOR-READS-STATE, never rule-writes-grants — no rule or effect ever touches the grant table to express this;
-    /// the admission door reads the state fact directly, exactly the same "deciding fact beyond the static grant
-    /// table" shape <see cref="GrantRule.OwnershipHold"/> reads a DIFFERENT fact through. Released, never latched:
-    /// the very next tick the gate row's cell reads zero, this same check passes straight through to the ordinary
-    /// <see cref="WorldGrants.Allows"/> call below. <b>Two call sites, one rule</b> (the same posture
-    /// <c>TryAdmitMutation</c> documents for its own callers): <see cref="ApplyCommand"/>'s generic Drive gate
-    /// checks the IDENTICAL <see cref="TryDriveGateVerdict"/> before its own <see cref="WorldGrants.Allows"/> call,
-    /// so a scripted tape segment (<c>player.fly</c>/<c>EnqueueSegment</c>) is refused by the SAME fact a raw
-    /// per-tick channel submission is — "drive/action intents" names every producer that reaches a body's motion,
-    /// never only the device-stream one.</remarks>
+    /// <remarks>A body carrying a nonzero cell on a <see cref="WorldStateRow.GatesDrive"/> row
+    /// (<see cref="TryDriveGateVerdict"/>, resynced from live document state — see
+    /// <see cref="WorldGrants.SyncState"/>) has its intent refused before the grant table is checked, regardless of
+    /// any Drive hold, including an exclusive reservation: a status effect is a fact about the body, not about who
+    /// is allowed to drive it, so it outranks a principal that genuinely holds Drive. No rule or effect touches the
+    /// grant table to express this; the check reads the state fact directly, the same "deciding fact beyond the
+    /// static grant table" shape <see cref="GrantRule.OwnershipHold"/> reads a different fact through. The gate is
+    /// released, never latched: once the gate row's cell reads zero, this check passes straight through to the
+    /// ordinary <see cref="WorldGrants.Allows"/> call below. <see cref="ApplyCommand"/>'s generic Drive gate checks
+    /// the same <see cref="TryDriveGateVerdict"/> before its own <see cref="WorldGrants.Allows"/> call, so a
+    /// scripted tape segment (<c>player.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
+    /// channel submission is.</remarks>
     internal GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
         if (TryDriveGateVerdict(bodyIndex: submission.EntityIndex, verdict: out var gated)) {
             if (!m_driveDenied[submission.EntityIndex]) {
@@ -1695,10 +1824,10 @@ public sealed class WorldServer : IWorldServerHost {
     }
 
     /// <summary>Determines whether <paramref name="bodyIndex"/> carries a nonzero cell on a state row declaring
-    /// <see cref="WorldStateRow.GatesDrive"/> — Composition-core's CC/death gating (Seam A), the ONE rule both
+    /// <see cref="WorldStateRow.GatesDrive"/> — Composition-core's CC/death gating (Seam A), the one rule both
     /// Drive-admission doors consult (<see cref="ApplyIntentSubmission"/>'s per-tick channel submission,
     /// <see cref="ApplyCommand"/>'s generic Drive gate over an authority command such as
-    /// <c>EnqueueSegment</c>/<c>SnapPose</c>). DOOR-READS-STATE — this never touches the grant table, and neither
+    /// <c>EnqueueSegment</c>/<c>SnapPose</c>). The door reads state — this never touches the grant table, and neither
     /// caller consults it before this check: a status effect refuses regardless of what <see cref="WorldGrants.Allows"/>
     /// would otherwise answer, including for a principal that genuinely holds Drive (an exclusive reserver
     /// included).</summary>
@@ -1706,10 +1835,10 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="verdict">The <see cref="GrantRule.DriveGated"/> verdict, when gated.</param>
     /// <returns><see langword="true"/> when the body is gated — the caller must refuse without consulting the grant
     /// table at all.</returns>
-    /// <remarks>The COMPLETE ingress inventory obliged to call this before admitting a drive (a new drive ingress is
+    /// <remarks>The complete ingress inventory obliged to call this before admitting a drive (a new drive ingress is
     /// obliged to call it too — that is what keeps a two-call-site pattern honest over time): <see cref="ApplyIntentSubmission"/>
     /// — seat-channel submissions, addon FoldActs, the unoccupied-body bot at full authority, and co-drive folds all
-    /// land there — and <see cref="ApplyCommand"/>, the command-shaped drive path. Two call-sites, ONE rule.</remarks>
+    /// land there — and <see cref="ApplyCommand"/>, the command-shaped drive path. Two call-sites, one rule.</remarks>
     private bool TryDriveGateVerdict(int bodyIndex, out GrantVerdict verdict) {
         if (m_grants.TryGetDriveGate(bodyIndex: bodyIndex, gateRow: out var gateRow)) {
             verdict = new GrantVerdict(Rule: GrantRule.DriveGated, GateRow: gateRow);
@@ -1727,10 +1856,10 @@ public sealed class WorldServer : IWorldServerHost {
     // BOTH halves of the submission ride: the movement/analog `Intent` accumulates into the tick's sums, and the
     // HeldChannels composition image accumulates into m_contributedHeld via WorldChannelTable.ComposeHeld's shape rule
     // — max for unipolar/binary, RAW UNCLAMPED SUM for bipolar (see that method's own remarks on why this accumulator
-    // must not clamp per contributor) — a contributor's composition act is an act, and dropping it here is what used
-    // to make a guest's press vanish the moment a tape drove the body it was pressing on.
+    // must not clamp per contributor) — a contributor's composition act is an act; dropping it here would make a
+    // guest's press vanish the moment a tape drives the body it is pressing on.
     //
-    // TRUSTED-BY-AUTHORSHIP (owner ruling 2026-08-02, headless P6b): classification keys on HOST LOCUS, not on
+    // TRUSTED-BY-AUTHORSHIP: classification keys on HOST LOCUS, not on
     // principal KIND by coincidence of vocabulary alone. THREE terms exist today:
     //   - Console/Seat (another seat co-driving the body it does not own; a console press once one reaches this
     //     path): a human's own tool, added OUTSIDE the pool, wholly UNMASKED — no reach, no ceiling.
@@ -1858,13 +1987,13 @@ public sealed class WorldServer : IWorldServerHost {
         Array.Clear(array: m_channelReadClamped, index: start, length: ChannelLimits.MaxChannels);
     }
 
-    /// <summary>Runs THE FOLD PHASE (<see cref="FixedContributionFold"/>) once per tick,
+    /// <summary>Runs the fold phase (<see cref="FixedContributionFold"/>) once per tick,
     /// after every seat submission and every mounted addon's contribution has landed (see <see cref="Step"/>) and
     /// before the population advances. For each human-occupied local seat that received at least one contribution
     /// this tick, folds its owning seat's own base <c>h</c> (zero when the seat submitted nothing this tick) with the
     /// tick's pooled untrusted sum and unpooled trusted sum, per channel, and calls <see cref="WorldBody.SubmitIntent"/>
     /// once with the composed result — replacing the pass-through write <see cref="ApplyIntentSubmission"/> already
-    /// made for the owning seat's own submission. The HELD-device image is composed the same pass by
+    /// made for the owning seat's own submission. The held-device image is composed the same pass by
     /// <see cref="WorldChannelTable.ComposeHeld"/>'s shape-aware rule (see <see cref="WorldBody.SetHeldChannels"/>: a
     /// unipolar/binary channel joins by maximum — a {0, One} overlay, so a contributor's composition act joins the
     /// seat's the way two simultaneous composition contributors already join inside <see cref="WorldBody"/> — a
@@ -1873,7 +2002,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// its value away from <c>h</c>. Another co-driving seat is a trusted human tool, so its term is added outside the
     /// pool and consumes none of that ceiling. Occupancy is load-bearing: only a human-occupied body has an owning
     /// seat whose consent can define a pool; an unoccupied bot stays on the full-authority overwrite path.
-    /// An occupied body with NO contribution this tick (the overwhelming common case) is untouched here: <see
+    /// An occupied body with no contribution this tick (the overwhelming common case) is untouched here: <see
     /// cref="ApplyIntentSubmission"/>'s own direct writes already stand, so this method costs one bool check per
     /// seat.</summary>
     private void FoldChannelContributions() {
@@ -2018,7 +2147,7 @@ public sealed class WorldServer : IWorldServerHost {
                 // re-entering the budget gate here would charge one guest dispatch twice against the same tick's
                 // allowance. Every other source — console, loopback, a peer's submission — is metered right here.
                 PendingOp.Mutate mutate => TryApplyMutation(mutation: mutate.Mutation, tick: tick, connectionId: mutate.ConnectionId, correlationId: mutate.CorrelationId, preMetered: (mutate.SourceAddonIndex >= 0)),
-                PendingOp.Rebuild rebuild => ApplyRebuild(request: rebuild.Request, principal: rebuild.Principal, connectionId: rebuild.ConnectionId, correlationId: rebuild.CorrelationId, expectedContentHash: rebuild.ExpectedContentHash),
+                PendingOp.Rebuild rebuild => ApplyRebuild(request: rebuild.Request, principal: rebuild.Principal, connectionId: rebuild.ConnectionId, correlationId: rebuild.CorrelationId, expectedContentHash: rebuild.ExpectedContentHash, preparationFailure: rebuild.PreparationFailure),
                 PendingOp.Undo undo => ApplyUndo(count: undo.Count, principal: undo.Principal, connectionId: undo.ConnectionId, correlationId: undo.CorrelationId),
                 PendingOp.AddonLifecycle lifecycle => TryApplyAddonLifecycle(lifecycle: lifecycle.Lifecycle, principal: lifecycle.Principal, connectionId: lifecycle.ConnectionId, correlationId: lifecycle.CorrelationId),
                 _ => false,
@@ -2053,31 +2182,57 @@ public sealed class WorldServer : IWorldServerHost {
         return applied;
     }
 
+    /// <summary>The administrative drain — applies every buffered document-level operation (mutations, rebuilds,
+    /// undo, addon lifecycle changes) without advancing simulation time: no addon tick, no intent drain, no body
+    /// integration, no rules, no event collection, and no snapshot delivery. <see cref="DrainPendingOps"/> is
+    /// normally reached only from inside <see cref="Step"/>, so an instance that never steps (an authored
+    /// <c>simulation.rateHz</c> of 0, or a live <c>world.rate pause</c>) could otherwise never apply the very
+    /// mutation that would change that — a permanent self-lock. Called on the host's own master timeline in place
+    /// of <see cref="Step"/> for a tick a stopped/paused instance does not take (see <c>Puck.World.WorldInstanceHost</c>'s
+    /// per-instance scheduling remarks for the host-side half of this contract — that type lives a layer above this
+    /// assembly, hence prose rather than a cref here).</summary>
+    /// <remarks>Opens a fresh per-tick mutation-dispatch allowance exactly as <see cref="Step"/>'s own top does
+    /// (<see cref="WorldMutationBudgetMeter.BeginTick"/> is a plain clear — safe to call once per administrative
+    /// drain, same as once per real tick), so an untrusted principal keeps a steady dispatch rate while stopped
+    /// rather than being starved by a budget that never resets. Every applied entry journals against
+    /// <see cref="m_lastCompletedTick"/> — the tick that does not move while stopped — so <c>world.undo</c> stays
+    /// coherent: an administrative entry undoes exactly like an ordinary one, it is simply attributed to a tick
+    /// number that repeats until the instance actually steps again. Document mutations are outside the replay
+    /// tape's own recorded scope already (<see cref="Puck.World.WorldReplayTape"/>'s honest-scope remarks — the
+    /// tape records the human/authority command stream, never a raw <see cref="Protocol.WorldMutation"/>), so this
+    /// method introduces no new tape interaction.</remarks>
+    /// <returns><see langword="true"/> when anything applied (a definition delivery occurred).</returns>
+    public bool DrainAdministrative() {
+        m_mutationBudget.BeginTick();
+
+        return DrainPendingOps(tick: m_lastCompletedTick);
+    }
+
     /// <summary>
-    /// Applies THE admission predicate for a mutation — the ONE place the whole authority decision for a document write is
+    /// Applies the admission predicate for a mutation — the one place the whole authority decision for a document write is
     /// made, and the only place any ingress is allowed to make it.
     /// </summary>
     /// <remarks>
-    /// <para>Before the gates, ONE structural exemption: a <see cref="PrincipalKind.World"/> principal — the document
+    /// <para>Before the gates, one structural exemption: a <see cref="PrincipalKind.World"/> principal — the document
     /// acting on itself (a rule's effects, a kit's generate effect), never an actor — is admitted outright as
     /// <c>WorldMutationAdmissionRule.Structural</c>, before any authority is consulted. The gates below decide every
-    /// OTHER principal.</para>
+    /// other principal.</para>
     /// <para>Four gates, in order: (1) the coarse Mutate hold over the mutation's own document section; (2) the
-    /// DECIDING Mutate row's <see cref="MutationKindMask"/>; (3) for a state-row or state-cell write, the row-scoped
+    /// deciding Mutate row's <see cref="MutationKindMask"/>; (3) for a state-row or state-cell write, the row-scoped
     /// Edit hold over the concrete <c>state:&lt;name&gt;</c> subject and, beneath it, that deciding row's own kind
-    /// mask; (4) for an UNTRUSTED principal, the per-tick dispatch budget. "Deciding row" always means the rule the
+    /// mask; (4) for an untrusted principal, the per-tick dispatch budget. "Deciding row" always means the rule the
     /// verdict itself reports — <c>ConcreteHold</c> beats <c>WildcardHold</c> — never a union of a concrete and a
     /// wildcard row's masks.</para>
-    /// <para><b>An ABSENT kind mask is FULL REACH.</b> A mask is opt-in narrowing beneath an already deny-by-default
+    /// <para><b>An absent kind mask is full reach.</b> A mask is opt-in narrowing beneath an already deny-by-default
     /// capability, never a second authority check: Console legitimately holds maskless <c>Mutate/section:*</c> rows
     /// from the boot seed, so refuse-all-on-unmasked here would deny every trusted mutation in the engine. Untrusted
-    /// strictness lives at the GRANT door instead (<c>WorldGrants.Conflicts</c> refuses a maskless untrusted
+    /// strictness lives at the grant door instead (<c>WorldGrants.Conflicts</c> refuses a maskless untrusted
     /// Mutate/section row outright), which is what makes an unmasked untrusted row unreachable rather than
     /// permissive.</para>
     /// <para>Every mutating ingress passes this: <see cref="TryApplyMutation"/> for the ordered domain (loopback,
     /// console, and the <c>WorldTcpHost</c> peer door, which converge there), and the addon mutation seam's
-    /// pre-flight (<c>WorldAddonRuntime.ResolveMutations</c>), which keeps its own EARLIER call site — it refuses
-    /// before decode so a guest cannot probe the decoder for free — but as a CALL to this rule, never a second copy
+    /// pre-flight (<c>WorldAddonRuntime.ResolveMutations</c>), which keeps its own earlier call site — it refuses
+    /// before decode so a guest cannot probe the decoder for free — but as a call to this rule, never a second copy
     /// of it. Call-site duplication is fine; rule reimplementation is the defect class this predicate exists to
     /// close.</para>
     /// </remarks>
@@ -2087,7 +2242,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="rowScopedEditSubject">The concrete <c>state:&lt;name&gt;</c> subject a state write names, or
     /// <see langword="null"/> when the mutation is not row-scoped — or when the caller cannot yet know it (the addon
     /// pre-flight runs before decode, so its state writes take gate (3) later, at apply).</param>
-    /// <param name="meter">Whether THIS call is the metering point for the dispatch. False only where the ingress
+    /// <param name="meter">Whether this call is the metering point for the dispatch. False only where the ingress
     /// already charged it (an addon act charged at its pre-flight, re-entering at apply).</param>
     /// <param name="admission">The decided outcome — which gate fired and the row-level evidence behind it.</param>
     /// <returns><see langword="true"/> when every gate cleared (and the dispatch was charged, when metered).</returns>
@@ -2124,8 +2279,8 @@ public sealed class WorldServer : IWorldServerHost {
 
         // A state-row OR state-cell mutation is checked a SECOND time: Edit over the CONCRETE state:<name> subject the
         // mutation names — the SAME subject whether the write is whole-row (UpsertStateRow/RemoveStateRow) or per-cell
-        // (UpsertStateCell/RemoveStateCell), beneath the coarse section-level Mutate hold above — the campaign's
-        // "concrete rows" ruling. The domain-seeded Edit/all every seat and Console already holds reaches every row and
+        // (UpsertStateCell/RemoveStateCell), beneath the coarse section-level Mutate hold above.
+        // The domain-seeded Edit/all every seat and Console already holds reaches every row and
         // every cell until an operator deliberately narrows it (see WorldCapability.Edit's remarks).
         if (rowScopedEditSubject is { } editSubject) {
             var editVerdict = m_grants.Allows(principal: principal, capability: WorldCapability.Edit, subject: editSubject);
@@ -2203,7 +2358,7 @@ public sealed class WorldServer : IWorldServerHost {
             return false;
         }
 
-        candidate = RebaseAdvanceEpoch(candidate: candidate, mutation: mutation, tick: tick);
+        candidate = RebaseAdvanceEpoch(original: m_definition, candidate: candidate, mutation: mutation, tick: tick);
 
         if ((mutation is WorldMutation.UpsertKit upsertKit) && !m_population.CanReplaceKit(replacement: upsertKit.Kit, refusal: out var sourceReason)) {
             Reject(mutation: mutation, reason: sourceReason, connectionId: connectionId, correlationId: correlationId);
@@ -2211,8 +2366,23 @@ public sealed class WorldServer : IWorldServerHost {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var validationReason)) {
+        // Cross-document margin claims are proved at load, never from this tick path. An edit that can change a
+        // standing claim or one of its floor inputs must go through a document reload; unrelated edits revalidate
+        // only the facts owned by this document.
+        if (HasMarginDepth(definition: candidate) && MarginProofInputsChanged(current: m_definition, candidate: candidate, mutation: mutation)) {
+            Reject(mutation: mutation, reason: "the mutation changes a border-margin proof input; apply it through world.load/world.reload so the neighbour can be re-proved outside the tick path", connectionId: connectionId, correlationId: correlationId);
+
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out var validationReason)) {
             Reject(mutation: mutation, reason: validationReason, connectionId: connectionId, correlationId: correlationId);
+
+            return false;
+        }
+
+        if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
+            Reject(mutation: mutation, reason: reservationReason, connectionId: connectionId, correlationId: correlationId);
 
             return false;
         }
@@ -2293,7 +2463,7 @@ public sealed class WorldServer : IWorldServerHost {
     // reset around — this closes that loudly, by construction, rather than by omission). The console handler already
     // validated a Load/Reload file (WorldDefinitionLoader.TryLoadFile); this
     // re-check is the defensive apply-time gate every install passes through, same as the prior world.load-only path.
-    private bool ApplyRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId, long correlationId, string? expectedContentHash = null) {
+    private bool ApplyRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = request.Kind switch {
             WorldRebuildKind.Reset => "world.reset",
             WorldRebuildKind.Load => "world.load",
@@ -2322,7 +2492,7 @@ public sealed class WorldServer : IWorldServerHost {
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a Load/Reload request carrying a document must also carry its content hash."));
         } else if (request.PathHint is not { } path) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: a Load/Reload request with no embedded document must carry a path hint to re-read for replay.");
-        } else if (!WorldDefinitionFileSource.TryLoad(path: path, definition: out var reread, contentHash: out var rereadHash, reason: out var rereadReason)) {
+        } else if (!WorldDefinitionFileSource.TryLoadLocally(path: path, definition: out var reread, contentHash: out var rereadHash, reason: out var rereadReason)) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {rereadReason}");
         } else {
             candidate = reread!;
@@ -2361,7 +2531,15 @@ public sealed class WorldServer : IWorldServerHost {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var validationReason)) {
+        if (preparationFailure is not null) {
+            RejectRebuild(verb: verb, reason: preparationFailure, connectionId: connectionId, correlationId: correlationId);
+
+            return false;
+        }
+
+        // The load command already proved cross-document claims before enqueue. Apply-time validation runs from
+        // Step, so it repeats only document-local checks and never reaches transport from the tick path.
+        if (!WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out var validationReason)) {
             RejectRebuild(verb: verb, reason: validationReason, connectionId: connectionId, correlationId: correlationId);
 
             return false;
@@ -2369,6 +2547,12 @@ public sealed class WorldServer : IWorldServerHost {
 
         if (candidate.Population.Capacity != m_population.Capacity) {
             RejectRebuild(verb: verb, reason: $"population capacity {candidate.Population.Capacity} differs from the boot-allocated capacity {m_population.Capacity}; restart the host to load it", connectionId: connectionId, correlationId: correlationId);
+
+            return false;
+        }
+
+        if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
+            RejectRebuild(verb: verb, reason: reservationReason, connectionId: connectionId, correlationId: correlationId);
 
             return false;
         }
@@ -2394,8 +2578,25 @@ public sealed class WorldServer : IWorldServerHost {
         Install(definition: candidate, rebuildPopulation: true);
         m_journal.Clear();
 
-        // THE GRANT-TABLE HALF, RULED EXPLICITLY (owner ruling): "runtime grants otherwise drop; document grants
-        // re-apply as at boot." A world.grant/world.revoke acquisition is RUNTIME state — orthogonal to the document
+        // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
+        // which of its ORIGINAL admission-minted rows it still actually holds — BEFORE the reset below discards the
+        // whole table. A row present at connection time but absent here is a live world.revoke the operator issued
+        // against this exact peer since; RemintPeerAdmissionGrants must not resurrect it. A PARKED peer (disconnected,
+        // inside its reconnect grace — WorldPopulation.IsAdmittedPeer stays true through that window) is excluded
+        // outright: it has no live session to act through, so it is re-authorized (and, if still trusted, reminted)
+        // only on an actual reconnect, never on a rebuild that happens to land during its grace window.
+        var preRebuildPeerRows = new Dictionary<int, IReadOnlyList<WorldGrant>>();
+
+        for (var peerIndex = WorldPopulation.LocalSeatCount; (peerIndex < m_population.Capacity); peerIndex++) {
+            if (!m_population.IsAdmittedPeer(bodyIndex: peerIndex) || m_population.IsParked(index: peerIndex)) {
+                continue;
+            }
+
+            preRebuildPeerRows[peerIndex] = m_grants.Rows(principal: m_population.PeerPrincipal(index: peerIndex));
+        }
+
+        // THE GRANT-TABLE HALF: runtime grants drop; document grants re-apply as at boot.
+        // A world.grant/world.revoke acquisition is RUNTIME state — orthogonal to the document
         // and never touched by Install/Rebuild on its own — so a rebuild that left it standing would silently keep
         // whatever authority the PRE-rebuild session had accumulated, including grants a fresh boot of this exact
         // document would never have seeded. Reset silently to the SAME permissive local-play defaults the
@@ -2413,12 +2614,12 @@ public sealed class WorldServer : IWorldServerHost {
             Grant(grant: WithoutAuthoredConsent(grant: grant), actor: WorldPrincipal.Console, connectionId: connectionId, correlationId: correlationId);
         }
 
-        // Admitted PEER CONNECTIONS are the one exception the ruling calls out by name: "admitted peers survive"
+        // Admitted PEER CONNECTIONS are the one exception: "admitted peers survive"
         // means their CONNECTION stays (WorldPopulation never dropped them — Install/Rebuild's own Install call
         // above left every admitted peer body active), but the reset above just wiped their admission grant along
-        // with everything else, because a peer is not a boot-time seat and not a document row either. Re-mint it
-        // from the connection table, the SAME mint admission itself performs.
-        RemintPeerAdmissionGrants();
+        // with everything else, because a peer is not a boot-time seat and not a document row either. RE-AUTHORIZE
+        // (never blindly re-mint) each one against the CANDIDATE's own current admission policy.
+        RemintPeerAdmissionGrants(candidate: candidate, preRebuildPeerRows: preRebuildPeerRows);
 
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
         // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
@@ -2441,19 +2642,77 @@ public sealed class WorldServer : IWorldServerHost {
         return true;
     }
 
-    // Re-establishes every currently-admitted peer connection's admission grant (Control/all, minted at the point of
-    // admission — see ApplyLifecycleEvents' identical mint below) after ApplyRebuild's WorldGrants.Reset wiped the
-    // whole runtime grant table. A peer is a CONNECTION, not a document row or a boot-time seat, so nothing in
-    // WorldGrants.Reset or the document-Grants replay re-establishes it — this is the one thing that must run AFTER
-    // both. A re-grant of an already-held row is a no-op acceptance, not a duplicate (WorldGrants keys on the
-    // (principal, capability, subject) triple).
-    private void RemintPeerAdmissionGrants() {
-        for (var index = WorldPopulation.LocalSeatCount; (index < m_population.Capacity); index++) {
-            if (!m_population.IsAdmittedPeer(bodyIndex: index)) {
+    // Re-establishes admission grants for every peer connection ApplyRebuild's snapshot pass captured (admitted,
+    // NOT parked — see that pass's own remarks) — after WorldGrants.Reset wiped the whole runtime grant table. A
+    // peer is a CONNECTION, not a document row or a boot-time seat, so nothing in WorldGrants.Reset or the
+    // document-Grants replay re-establishes it — this is the one thing that must run AFTER both.
+    //
+    // Re-authorizes each peer rather than replaying its stored, connection-time templates, so a world.revoke
+    // against a peer, or an operator narrowing/removing its admission entry, is honored across a
+    // world.reset/load/reload rather than silently undone:
+    //
+    //  1. Re-match the peer's verified (Domain, Subject) — WorldPopulation.PeerIdentity, stored at
+    //     TryAdmitRemotePeer, never recomputed here — against the CANDIDATE document's OWN admission entries,
+    //     through WorldAdmissionDoor.TryMatchEntry: the SAME (domain, subject, mode) rule a fresh connection would
+    //     be judged by. No match at all (the identity's entry was removed, or never existed in this candidate)
+    //     mints nothing — "an identity no longer trusted... gets the current verdict, not the boot-time one".
+    //  2. A match's CURRENT Grants list governs, not the stored connection-time templates — narrower or wider than
+    //     what was minted at connection, exactly as if this peer connected fresh right now.
+    //  3. Any row that WAS successfully installed in the peer's prior authorization, but is missing from the caller's preRebuildPeerRows
+    //     snapshot (taken an instant before the wipe), was explicitly revoked live — that omission is preserved
+    //     rather than re-derived, because live revocation is runtime state a document can never express. The baseline
+    //     advances to the successfully-installed rows after every re-authorization, so a policy row rejected by the
+    //     grant door is retried later rather than misremembered as revoked.
+    //
+    // A re-grant of an already-held row is a no-op acceptance, not a duplicate (WorldGrants keys on the (principal,
+    // capability, subject) triple).
+    private void RemintPeerAdmissionGrants(WorldDefinition candidate, IReadOnlyDictionary<int, IReadOnlyList<WorldGrant>> preRebuildPeerRows) {
+        foreach (var (index, priorRows) in preRebuildPeerRows) {
+            var principal = m_population.PeerPrincipal(index: index);
+            var baselineTemplates = m_population.PeerAdmissionInstalledGrantTemplates(bodyIndex: index);
+            var (domain, subject) = m_population.PeerIdentity(bodyIndex: index);
+
+            // Everything in baselineTemplates that is NOT still present in priorRows (the live snapshot taken right
+            // before the wipe) was revoked at runtime since connection — never resurrect it. Anything never in
+            // the baseline is not a revocation candidate (there was nothing to revoke under that policy generation).
+            var revokedKeys = new HashSet<(WorldCapability Capability, GrantSubject Subject)>(collection: m_population.PeerAdmissionRevokedKeys(bodyIndex: index));
+
+            foreach (var template in baselineTemplates) {
+                revokedKeys.Add(item: (template.Capability, template.Subject));
+            }
+
+            foreach (var row in priorRows) {
+                // A live re-grant is just as explicit as a live revoke: if the row is held again when the next
+                // rebuild snapshots it, forget any older remembered revocation for this key.
+                revokedKeys.Remove(item: (row.Capability, row.Subject));
+            }
+
+            m_population.SetPeerAdmissionRevokedKeys(bodyIndex: index, revokedKeys: revokedKeys);
+
+            if (!Protocol.WorldAdmissionDoor.TryMatchEntry(entries: candidate.Admission, domain: domain, subject: subject, grants: out var currentGrants)) {
+                m_population.SetPeerAdmissionInstalledGrantTemplates(bodyIndex: index, grantTemplates: []);
+
                 continue;
             }
 
-            Grant(grant: new WorldGrant(Principal: m_population.PeerPrincipal(index: index), Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false), actor: WorldPrincipal.Console);
+            var installedTemplates = new List<WorldAdmissionGrant>();
+
+            foreach (var template in currentGrants) {
+                if (revokedKeys.Contains(item: (template.Capability, template.Subject))) {
+                    continue;
+                }
+
+                if (TryApplyGrant(grant: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.Subject, Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask), actor: WorldPrincipal.Console)) {
+                    installedTemplates.Add(item: template);
+                }
+            }
+
+            // The next absence comparison may only contain rows that ACTUALLY reached the live table. An authored
+            // row rejected by exclusivity or another grant-door rule was never present to revoke; recording it here
+            // would turn that refusal into a permanent remembered revoke and prevent a later conflict-free rebuild
+            // from retrying the current policy. Explicitly revoked rows need no baseline entry — revokedKeys already
+            // carries them independently until a live re-grant clears them.
+            m_population.SetPeerAdmissionInstalledGrantTemplates(bodyIndex: index, grantTemplates: installedTemplates);
         }
     }
 
@@ -2503,9 +2762,10 @@ public sealed class WorldServer : IWorldServerHost {
             // live apply this replays — see RebaseAdvanceEpoch's remarks. Doing this BEFORE revalidation is what lets
             // world.undo rewind a regen row's accumulation bit-identically, same as it already does for a generator's
             // $cursor.
-            next = RebaseAdvanceEpoch(candidate: next, mutation: entry.Mutation, tick: entry.Tick);
+            next = RebaseAdvanceEpoch(original: candidate, candidate: next, mutation: entry.Mutation, tick: entry.Tick);
 
-            if (!WorldDefinitionValidator.TryValidate(definition: next, reason: out var reason) ||
+            // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
+            if (!WorldDefinitionValidator.TryValidateLocally(definition: next, reason: out var reason) ||
                 (AffectsRenderEnvelope(mutation: entry.Mutation) && !m_envelope.TryFit(candidate: next, reason: out reason)) ||
                 (AffectsSolidField(mutation: entry.Mutation) && !TryBuildSolids(definition: next, solids: out _, reason: out reason))) {
                 var refusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {reason}";
@@ -2583,14 +2843,14 @@ public sealed class WorldServer : IWorldServerHost {
         return !rejected;
     }
 
-    /// <summary>Applies one screen op SYNCHRONOUSLY, under the ordinary Control-authority gate — the public entry
+    /// <summary>Applies one screen op synchronously, under the ordinary Control-authority gate — the public entry
     /// point <see cref="WorldReplaySnapshot.Drive"/> re-applies a recorded <see cref="WorldReplayEntry.ScreenOp"/>
     /// through (mirroring <see cref="ApplyCommand"/>/<see cref="Grant"/>/<see cref="Revoke"/>'s own re-drive shape:
     /// a live screen op never buffers, so a replayed one does not either).</summary>
     /// <param name="op">The screen op.</param>
     /// <param name="principal">The acting identity the op is checked against.</param>
-    /// <param name="expectedContentHash">REPLAY ONLY: the CAS pin a recorded <see cref="WorldScreenOp.Insert"/> or
-    /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (a real <c>sha256-64</c> hash, OR
+    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded <see cref="WorldScreenOp.Insert"/> or
+    /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (a real <c>sha256-64</c> hash, or
     /// <see cref="WorldMachineHost"/>'s "content absent" sentinel when the recording itself never read the file) —
     /// see <see cref="WorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
     /// and for the live path.</param>
@@ -2697,7 +2957,7 @@ public sealed class WorldServer : IWorldServerHost {
     // document-only.
     private void Install(WorldDefinition definition, bool rebuildPopulation) {
         m_definition = definition;
-        m_inputHold.Reconfigure(settings: definition.InputHold);
+        m_inputHold.Reconfigure(settings: definition.CompiledInputHold);
         RecompileRules(definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
@@ -2713,8 +2973,7 @@ public sealed class WorldServer : IWorldServerHost {
         // dictionary diff over a handful of declared screens), and the one choke point every screen-affecting
         // mutation AND every whole-document rebuild both pass through. The host reports which indices it removed;
         // this project (not the host — see WorldMachineHost's own remarks on why) owns the engagement-side admin
-        // cleanup for them, exactly like the pre-inversion WorldScreenBinder.ReconcileScreens used to call
-        // m_engagement.DisengageScreen itself before disposing a removed slot's machine.
+        // cleanup for them: m_engagement.DisengageScreen runs before the removed slot's machine is disposed.
         foreach (var removed in m_machines.ReconcileScreens(screens: definition.Screens)) {
             m_engagement.DisengageScreen(screenIndex: removed);
         }
@@ -2781,9 +3040,9 @@ public sealed class WorldServer : IWorldServerHost {
     // tick are a sequence, not a simultaneous snapshot, and a chain (rule A sets a flag, rule B gates on it, rule C
     // copies it) fires end to end within one tick. That is deterministic because document order is: the same
     // document and the same input produce the same sequence on every run, machine, and backend.
-    private void EvaluateWorldRules(ulong tick) {
-        EvaluateCompiledRules(rules: m_rules, latch: m_ruleGateHeld, tick: tick);
-        EvaluateCompiledRules(rules: m_interactions, latch: m_interactionGateHeld, tick: tick);
+    private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
+        EvaluateCompiledRules(rules: m_rules, latch: m_ruleGateHeld, tick: tick, stepTicks: stepTicks);
+        EvaluateCompiledRules(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
     }
 
     // The rule/interaction ARRAY is snapshotted first (the caller's own m_rules/m_interactions read), which is a
@@ -2791,7 +3050,7 @@ public sealed class WorldServer : IWorldServerHost {
     // m_rules/m_interactions — and iterating a field an inner call reassigns is how a rule would silently stop seeing
     // its siblings mid-tick. Every row declared at the top of the tick evaluates during this tick; a row ADDED by
     // this tick's effects starts on the next one, the same next-tick boundary every other mutation already lands on.
-    private void EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick) {
+    private void EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
         if (rules.Length == 0) {
             return;
         }
@@ -2813,7 +3072,7 @@ public sealed class WorldServer : IWorldServerHost {
             }
 
             foreach (var effect in rule.Effects) {
-                FireWorldRuleEffect(effect: effect, tick: tick);
+                FireWorldRuleEffect(effect: effect, tick: tick, stepTicks: stepTicks);
             }
         }
     }
@@ -2838,6 +3097,47 @@ public sealed class WorldServer : IWorldServerHost {
         }
     }
 
+    // MARKET DEADLINE RECOVERY — the SAME "recovery is a LIFETIME RULE" shape ReclaimExpiredEscrows establishes,
+    // fired right beside it: an Active listing whose DeadlineTick has passed settles (a standing bid wins) or
+    // expires (no bid ever landed) with no operator action, under WorldPrincipal.World, the identical structural
+    // exemption a rule effect's own writes use. `listings` is read once, before any mutation in this pass swaps
+    // m_definition, matching ReclaimExpiredEscrows' own safe-iteration remark.
+    private void SettleExpiredMarketListings(ulong tick) {
+        var listings = (m_definition.Market ?? WorldMarketSection.Empty).Listings ?? [];
+
+        foreach (var listing in listings) {
+            if ((listing.Status == WorldMarketListingStatus.Active) && (unchecked((long)tick) >= listing.DeadlineTick)) {
+                _ = TryApplyMutation(mutation: new WorldMutation.SettleMarketListing(Principal: WorldPrincipal.World, ListingId: listing.Id), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
+            }
+        }
+    }
+
+    // Market retention sweep — the same "recovery is a lifetime rule" shape ReclaimExpiredEscrows/
+    // SettleExpiredMarketListings establish: once a terminal row has stood past market.retentionSeconds, fires
+    // exactly one PruneMarketListings mutation (never one per row — its own compose arm removes every eligible row
+    // in the same candidate) under WorldPrincipal.World. Checked here, before submitting, so a quiescent market with
+    // nothing yet eligible never drives a mutation that would only compose to a loud no-op refusal every tick — the
+    // identical reason SettleExpiredMarketListings/ReclaimExpiredEscrows pre-filter their own loops.
+    private void PruneExpiredMarketListings(ulong tick) {
+        var market = (m_definition.Market ?? WorldMarketSection.Empty);
+
+        if (m_definition.SimulationRateHz <= 0) {
+            return;
+        }
+
+        var retentionTicks = unchecked((long)WorldSimulationTickConversion.DurationTicks(seconds: market.RetentionSeconds, ratePerSecond: (uint)m_definition.SimulationRateHz));
+
+        foreach (var listing in (market.Listings ?? [])) {
+            if ((listing.Status != WorldMarketListingStatus.Active)
+                && (listing.ResolvedTick is { } resolvedTick)
+                && (unchecked((long)tick) >= unchecked(resolvedTick + retentionTicks))) {
+                _ = TryApplyMutation(mutation: new WorldMutation.PruneMarketListings(Principal: WorldPrincipal.World), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
+
+                return;
+            }
+        }
+    }
+
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
         foreach (var predicate in gate) {
             var value = ReadWorldFact(operand: predicate.Left, tick: tick);
@@ -2848,9 +3148,9 @@ public sealed class WorldServer : IWorldServerHost {
             // schedule) sees the post-advance value on the VERY NEXT evaluation, never the value it opened against.
             var expected = ((predicate.Comparand is { } comparand)
                 ? ReadWorldFact(operand: comparand, tick: tick)
-                : predicate.Value);
+                : new WorldFact(Value: predicate.Value, IsForever: false));
 
-            if (!predicate.Comparison.Holds(value: value, expected: expected)) {
+            if (!predicate.Comparison.Holds(value: value.Value, valueIsForever: value.IsForever, expected: expected.Value, expectedIsForever: expected.IsForever)) {
                 return false;
             }
         }
@@ -2858,30 +3158,46 @@ public sealed class WorldServer : IWorldServerHost {
         return true;
     }
 
+    // One live fact off a rule operand: a fixed-point value, or POSITIVE INFINITY (IsForever) for the one channel
+    // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
+    // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
+    private readonly record struct WorldFact(FixedQ4816 Value, bool IsForever);
+
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
-    // the two reads can never diverge in how a reserved channel or a declared row resolves to a live FixedQ4816.
-    private FixedQ4816 ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
-        WorldRuleFactKind.Tick => FixedQ4816.FromInteger(value: unchecked((long)tick)),
-        WorldRuleFactKind.Population => FixedQ4816.FromInteger(value: m_population.ActiveCount()),
-        WorldRuleFactKind.RegionOccupancy => FixedQ4816.FromInteger(value: m_events.OccupantCount(placementId: operand.Row!)),
+    // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
+    private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
+        WorldRuleFactKind.Tick => Finite(value: FixedQ4816.FromInteger(value: unchecked((long)tick))),
+        WorldRuleFactKind.Population => Finite(value: FixedQ4816.FromInteger(value: m_population.ActiveCount())),
+        WorldRuleFactKind.RegionOccupancy => Finite(value: FixedQ4816.FromInteger(value: m_events.OccupantCount(placementId: operand.Row!))),
         // The SAME IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
         // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
         // as 0 — never a hard refusal, since the machine can boot on a later tick.
-        WorldRuleFactKind.MachineMemory => FixedQ4816.FromInteger(value: (Machines.TryPeek(screen: operand.Screen, address: operand.Address, out var raw) ? raw : (byte)0)),
-        WorldRuleFactKind.Reduction => ReadReduction(row: operand.Row!, op: operand.Reduce, tick: tick),
-        WorldRuleFactKind.ArgBody => FixedQ4816.FromInteger(value: ResolveArgBody(row: operand.Row!, op: operand.Reduce, tick: tick)),
-        WorldRuleFactKind.BodyDistance => ReadBodyDistance(bodyA: operand.BodyA!.Value, bodyB: operand.BodyB!.Value, tick: tick),
-        WorldRuleFactKind.LineOfSight => FixedQ4816.FromInteger(value: (ReadBodyLineOfSight(bodyA: operand.BodyA!.Value, bodyB: operand.BodyB!.Value, tick: tick) ? 1 : 0)),
-        WorldRuleFactKind.Parked => FixedQ4816.FromInteger(value: ReadParkedRemaining(bodyRef: operand.BodyA!.Value, tick: tick)),
-        _ => ReadStateCell(row: operand.Row!, key: operand.Key!, tick: tick),
+        WorldRuleFactKind.MachineMemory => Finite(value: FixedQ4816.FromInteger(value: (Machines.TryPeek(screen: operand.Screen, address: operand.Address, out var raw) ? raw : (byte)0))),
+        WorldRuleFactKind.Reduction => Finite(value: ReadReduction(row: operand.Row!, op: operand.Reduce, tick: tick)),
+        WorldRuleFactKind.ArgBody => Finite(value: FixedQ4816.FromInteger(value: ResolveArgBody(row: operand.Row!, op: operand.Reduce, tick: tick))),
+        WorldRuleFactKind.BodyDistance => Finite(value: ReadBodyDistance(bodyA: operand.BodyA!.Value, bodyB: operand.BodyB!.Value, tick: tick)),
+        WorldRuleFactKind.LineOfSight => Finite(value: FixedQ4816.FromInteger(value: (ReadBodyLineOfSight(bodyA: operand.BodyA!.Value, bodyB: operand.BodyB!.Value, tick: tick) ? 1 : 0))),
+        // Preserve the reserved channel's authored contract: $parked reports the population deadline's own
+        // SIMULATION-tick unit. Engine-tick countdown rows use countdownState instead; changing this unrelated
+        // channel's unit would silently retune every existing raw compareState threshold and fromState copy.
+        WorldRuleFactKind.Parked => ((ReadParkedRemaining(bodyRef: operand.BodyA!.Value, tick: tick) is { } remaining)
+            ? Finite(value: FixedQ4816.FromInteger(value: remaining))
+            : new WorldFact(Value: FixedQ4816.Zero, IsForever: true)),
+        _ => Finite(value: ReadStateCell(row: operand.Row!, key: operand.Key!, tick: tick)),
     };
 
+    private static WorldFact Finite(FixedQ4816 value) => new(Value: value, IsForever: false);
+
     // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the SAME ResolveBodyRef
-    // walk $distance:/$los: use for each of their two body references. A reference resolving to no live body reads
-    // as 0 through WorldPopulation.ParkedRemainingTicks' own out-of-range guard, the ordinary "absent reads as the
-    // neutral falsy value" convention (see WorldRuleFacts.ParkedPrefix's own remarks for why 0 — not an
-    // s_noBodyDistance-shaped sentinel — is the right absence value here).
-    private long ReadParkedRemaining(CompiledBodyRef bodyRef, ulong tick) =>
+    // walk $distance:/$los: use for each of their two body references. THREE REGIMES, deliberately distinct:
+    // ABSENT (a reference resolving to no live body, or an unparked one) reads as 0 through
+    // WorldPopulation.ParkedRemainingTicks' own guards — the ordinary "absent reads as the neutral falsy value"
+    // convention (see WorldRuleFacts.ParkedPrefix's remarks for why 0 is right for absence); FINITE parks read
+    // their real remaining count; FOREVER (a null deadline — parked at rate 0) reads as null here and becomes
+    // POSITIVE INFINITY in the fact layer, never a numeric sentinel: it IS parked (remaining > 0 holds, > any
+    // finite holds, <= any finite does not), but there is no number to compare with or copy — a copy operand
+    // alone cannot fire from it (see ApplyRuleEffect's own forever guard).
+    private long? ReadParkedRemaining(CompiledBodyRef bodyRef, ulong tick) =>
         m_population.ParkedRemainingTicks(index: ResolveBodyRef(bodyRef: bodyRef, tick: tick), tick: tick);
 
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
@@ -2986,7 +3302,7 @@ public sealed class WorldServer : IWorldServerHost {
     // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private void FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick) {
+    private void FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
         if (effect.Kind == WorldRuleEffectKind.Save) {
             // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
             // capture 'world.save' itself runs, straight to the world's own loaded file. A null tap (no composition
@@ -2996,7 +3312,7 @@ public sealed class WorldServer : IWorldServerHost {
             return;
         }
 
-        if (effect.Kind == WorldRuleEffectKind.Write) {
+        if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown) {
             // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
             // zero (an Add mints it), an absent ROW is nothing to write. On an ADVANCING row that is the LIVE value,
             // not the stored base, which is what the could-this-move skip below needs: a base is a fixed point of
@@ -3012,7 +3328,15 @@ public sealed class WorldServer : IWorldServerHost {
             // A live 'from' operand is read fresh EVERY firing (Install swaps m_definition on every apply, so this
             // reads the same settled state a compareState comparand would this tick) and converted to the
             // destination row's own encoding; a literal effect keeps the value the compiler already converted once.
-            var raw = ((effect.From is { } from) ? ConvertWorldFactToRaw(value: ReadWorldFact(operand: from, tick: tick), kind: row.Kind) : effect.RawValue);
+            // A FOREVER fact ($parked: on a forever-parked body) has no number to store — the copy silently does not
+            // fire, the same no-narration shape a level gate's own not-holding takes (see ReadParkedRemaining).
+            if ((effect.Kind != WorldRuleEffectKind.Countdown) && (effect.From is { } foreverProbe) && ReadWorldFact(operand: foreverProbe, tick: tick).IsForever) {
+                return;
+            }
+
+            var raw = effect.Kind == WorldRuleEffectKind.Countdown
+                ? -Math.Min(val1: current, val2: checked((long)stepTicks))
+                : ((effect.From is { } from) ? ConvertWorldFactToRaw(value: ReadWorldFact(operand: from, tick: tick).Value, kind: row.Kind) : effect.RawValue);
             var next = ((effect.Write == WorldDocumentWriteKind.Add) ? unchecked(current + raw) : raw);
 
             // SUBMIT ONLY WHAT COULD MOVE THE DESTINATION. Arithmetic identity is not the whole of that test: a cell
@@ -3190,6 +3514,28 @@ public sealed class WorldServer : IWorldServerHost {
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation;
 
+    // Margin proofs depend on the profileless motion ceiling, every kit's motion/collider, and the creation/placement
+    // rows that define each claimed face. Those edits need a fresh neighbour proof at the load boundary.
+    private static bool MarginProofInputsChanged(WorldDefinition current, WorldDefinition candidate, WorldMutation mutation) => mutation switch {
+        WorldMutation.SetMotion => (current.Motion != candidate.Motion),
+        WorldMutation.UpsertKit or WorldMutation.RemoveKit => !current.Kits.SequenceEqual(second: candidate.Kits),
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => !current.Creations.SequenceEqual(second: candidate.Creations),
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => !current.Placements.SequenceEqual(second: candidate.Placements),
+        _ => false,
+    };
+
+    private static bool HasMarginDepth(WorldDefinition definition) {
+        foreach (var placement in definition.Placements) {
+            foreach (var face in (placement?.FaceSources ?? [])) {
+                if (face?.Portal?.MarginDepth is not null) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     // Build the SDF contact field for a candidate — null when the requirements permit analytic contact (the set is
     // derived inside the population's compile, not here), the built field under the FIELD provider, or a
     // named failure when a solid names an op the warp-free evaluator cannot interpret.
@@ -3272,6 +3618,7 @@ public sealed class WorldServer : IWorldServerHost {
             or WorldMutation.OfferOwnership or WorldMutation.SettleOwnership => WorldSection.Groups,
         WorldMutation.SetProperty => WorldSection.Properties,
         WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => WorldSection.Interactions,
+        WorldMutation.CreateMarketListing or WorldMutation.PlaceMarketBid or WorldMutation.BuyoutMarketListing or WorldMutation.CancelMarketListing or WorldMutation.SettleMarketListing or WorldMutation.PruneMarketListings => WorldSection.Market,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm throws the first time that kind is mapped — surfaced loudly at runtime rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(mutation), actualValue: mutation, message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."),
@@ -3408,6 +3755,12 @@ public sealed class WorldServer : IWorldServerHost {
         WorldMutation.SetProperty m => (m.Remove ? $"RemoveProperty '{m.Name}'" : $"UpsertProperty '{m.Name}'"),
         WorldMutation.UpsertInteraction m => $"UpsertInteraction '{m.Interaction.Name}'",
         WorldMutation.RemoveInteraction m => $"RemoveInteraction '{m.Name}'",
+        WorldMutation.CreateMarketListing m => $"CreateMarketListing {m.Quantity}x'{m.ItemRow}' seller={m.Seller.Describe()} by {m.Principal.Describe()}",
+        WorldMutation.PlaceMarketBid m => $"PlaceMarketBid #{m.ListingId} {m.Amount} bidder={m.Bidder.Describe()} by {m.Principal.Describe()}",
+        WorldMutation.BuyoutMarketListing m => $"BuyoutMarketListing #{m.ListingId} buyer={m.Buyer.Describe()} by {m.Principal.Describe()}",
+        WorldMutation.CancelMarketListing m => $"CancelMarketListing #{m.ListingId} canceler={m.Canceler.Describe()} by {m.Principal.Describe()}",
+        WorldMutation.SettleMarketListing m => $"SettleMarketListing #{m.ListingId}",
+        WorldMutation.PruneMarketListings => "PruneMarketListings",
         _ => "unknown",
     };
 
@@ -3997,7 +4350,28 @@ public sealed class WorldServer : IWorldServerHost {
                 return true;
             }
             case WorldMutation.SetInputHold m:
-                candidate = (current with { InputHold = m.Settings });
+                // The mutation's own wire shape is the COMPILED (ticks) form — the addon-mutation ABI's raw-ticks
+                // contract, unchanged — but InputHold itself stores the AUTHORED (seconds) shape (see its remarks), so
+                // decompile through the candidate's OWN rate before storing. Exact for a row-set verb's compiled
+                // seconds (round-trips through the SAME rate it compiled from); the addon ABI's raw ticks are the one
+                // narrow exception WorldInputHoldSettings.ToAuthoring's remarks already accept.
+                //
+                // THE UNIT-GAP REFUSAL (rate-0 self-lock follow-on): a tick-denominated write has no meaning in a
+                // world whose simulation.rateHz is the durable stop — there is no tick↔seconds mapping to decompile
+                // through, and dividing by the rate would produce Infinity/NaN that later throws unguarded out of
+                // Serialize on save/sync/record. Now that the administrative drain applies buffered mutations even
+                // while an instance never steps, this path is reachable, not hypothetical, so it is refused HERE, by
+                // name, at the apply door — the legible verdict in front of the structural backstop
+                // WorldInputHoldSettings.ToAuthoring's own division-by-rate is separately being hardened to refuse
+                // rather than divide; this refusal does not rely on catching that exception.
+                if (current.SimulationRateHz <= 0) {
+                    candidate = current;
+                    reason = $"'{nameof(WorldMutation.SetInputHold)}' carries raw engine ticks, which have no seconds mapping in a world whose simulation.rateHz is 0 (the document's own durable stop) — author input-hold seconds directly, or write this while the world's rate is nonzero";
+
+                    return false;
+                }
+
+                candidate = (current with { InputHold = m.Settings.ToAuthoring(ratePerSecond: (uint)current.SimulationRateHz) });
 
                 return true;
             case WorldMutation.Generate m:
@@ -4055,6 +4429,19 @@ public sealed class WorldServer : IWorldServerHost {
             case WorldMutation.FormGroup m: {
                 var groupsSection = (current.Groups ?? WorldGroupsSection.Empty);
 
+                // The earliest door a LIVE-minted group id crosses (WorldSafeName's own doctrine — see
+                // WorldGroup.Id's remarks): a document-authored id already crossed this door at JSON parse, but
+                // FormGroup mints one at RUNTIME, so this mutation's own apply site IS that door for it. Refused by
+                // name rather than let an unsafe id reach WorldGroup.Id, which the id-to-instance-name composition
+                // (WorldSessionResolver.MintInstanceName) depends on staying safe for every group id, live-formed or
+                // authored alike.
+                if (!WorldSafeName.TryParse(candidate: m.Id, name: out var safeId, reason: out var idReason)) {
+                    candidate = current;
+                    reason = $"group id '{m.Id}' is not a safe name — {idReason}";
+
+                    return false;
+                }
+
                 if (FindGroupRow(groups: groupsSection.Groups, id: m.Id) is not null) {
                     candidate = current;
                     reason = $"group '{m.Id}' already exists";
@@ -4069,7 +4456,7 @@ public sealed class WorldServer : IWorldServerHost {
                     return false;
                 }
 
-                candidate = (current with { Groups = (groupsSection with { Groups = Upsert(list: groupsSection.Groups, item: new WorldGroup(Id: m.Id, KindName: m.KindName, Members: []), keyOf: static (WorldGroup row) => row.Id) }) });
+                candidate = (current with { Groups = (groupsSection with { Groups = Upsert(list: groupsSection.Groups, item: new WorldGroup(Id: safeId, KindName: m.KindName, Members: []), keyOf: static (WorldGroup row) => row.Id) }) });
 
                 return true;
             }
@@ -4314,12 +4701,642 @@ public sealed class WorldServer : IWorldServerHost {
 
                 return true;
             }
+            case WorldMutation.CreateMarketListing m:
+                return TryComposeCreateMarketListing(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
+            case WorldMutation.PlaceMarketBid m:
+                return TryComposePlaceMarketBid(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
+            case WorldMutation.BuyoutMarketListing m:
+                return TryComposeBuyoutMarketListing(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
+            case WorldMutation.CancelMarketListing m:
+                return TryComposeCancelMarketListing(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
+            case WorldMutation.SettleMarketListing m:
+                return TryComposeSettleMarketListing(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
+            case WorldMutation.PruneMarketListings m:
+                return TryComposePruneMarketListings(current: current, mutation: m, tick: tick, candidate: out candidate, reason: out reason);
             default:
                 candidate = current;
                 reason = "unknown mutation kind";
 
                 return false;
         }
+    }
+
+    // The item/currency fact vocabulary's cell key for a market participant. A seat's index is its own stable
+    // identity (generation is always 0), so its key is the plain 0-based entity index — the same addressing
+    // WorldRuleFacts.ArgMaxPrefix/ArgMinPrefix already read off an unkeyed row. A peer's index is not stable on its
+    // own: WorldPopulationLimits recycles a vacated population slot for a later, unrelated connection, and
+    // WorldGrants/the ownership escrow substrate both key a peer's real authority on the full (index, generation)
+    // pair (WorldPrincipal's own equality) — so a market cell keys the same pair, or a later occupant of the same
+    // slot would silently inherit the departed peer's balance/items/listing proceeds. The compound key never
+    // collides with a seat's plain-integer key (it always carries a reserved '_' the kernel would otherwise refuse
+    // in an authored key) and reads as a non-candidate to ArgExtremum's int.TryParse scan, exactly like any other
+    // non-numeric key already does. Only a real player (seat or peer) may hold a market fact; console/world/addon/
+    // document/group principals refuse here rather than minting a cell no player could ever read back.
+    private static bool TryPlayerCellKey(WorldPrincipal principal, out string key) {
+        switch (principal.Kind) {
+            case PrincipalKind.Seat:
+                key = principal.Index.ToString(CultureInfo.InvariantCulture);
+
+                return true;
+            case PrincipalKind.Peer:
+                key = $"{principal.Index.ToString(CultureInfo.InvariantCulture)}_{principal.Generation.ToString(CultureInfo.InvariantCulture)}";
+
+                return true;
+            default:
+                key = string.Empty;
+
+                return false;
+        }
+    }
+
+    // The trade-party authority split every market mutation checks beneath the coarse Mutate/section:market hold:
+    // the acting principal may name itself as the trade party (a real connected client acting for itself) or,
+    // narrowly, Console may name any seat/peer — the split stdin's own Console-stamped, seat-naming submissions rely
+    // on. A seat's own boot-seeded Mutate/section:market hold is authority to trade its own inventory, never another
+    // seat's — a hold over the section was never a hold over every party inside it, the same distinction the
+    // row-scoped Edit/state:&lt;row&gt; check draws for state writes. WorldPrincipal.World is exempt for the same
+    // reason Console is (both are trusted, structural or operator identities that never impersonate a live player),
+    // even though no engine sweep constructs a market mutation naming a party today.
+    private static bool TryAuthorizeMarketParty(WorldPrincipal actingPrincipal, WorldPrincipal party, out string reason) {
+        if ((actingPrincipal == party) || (actingPrincipal.Kind is PrincipalKind.Console or PrincipalKind.World)) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = $"{actingPrincipal.Describe()} may not act as trade party {party.Describe()} — only Console or {party.Describe()} itself may name it";
+
+        return false;
+    }
+
+    // Reads a market fact cell, defaulting to zero for a holder who has never traded — the SAME "absent key ==
+    // zero" convention UpsertStateCell's own Add operand already follows.
+    private static long ReadMarketCellValue(WorldDefinition definition, WorldCellName row, string key, ulong tick) {
+        _ = WorldStateReader.TryRead(definition: definition, rowName: row, key: key, tick: tick, row: out _, rawValue: out var raw, text: out _);
+
+        return (raw ?? 0L);
+    }
+
+    // Writes a market fact cell's quantity/balance, preserving whatever Advance/Provenance the cell already carried
+    // (a market move is a value write, never a re-mint) — the SAME base-value-write-preserves-advance rule
+    // UpsertStateCell's own compose arm follows. Assumes `rowName` already resolved against `rows` (every caller
+    // validates existence first); the row's declared envelope (Min/Max/NonNegative) is left to the whole-document
+    // revalidation TryApplyMutation runs after compose, exactly like every other state write here.
+    private static IReadOnlyList<WorldStateRow> WriteMarketCell(IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, long value) {
+        var row = WorldDefinitionRows.FindStateRow(rows: rows, name: rowName)!;
+        var cellKey = WorldCellName.Parse(candidate: key);
+        WorldStateAdvance? existingAdvance = null;
+        string? existingProvenance = null;
+
+        foreach (var cell in (row.Cells ?? [])) {
+            if (cell.Key == cellKey) {
+                existingAdvance = cell.Advance;
+                existingProvenance = cell.Provenance;
+
+                break;
+            }
+        }
+
+        var cells = Upsert(list: (row.Cells ?? []), item: new WorldStateCell(Key: cellKey, Value: value, Advance: existingAdvance, Provenance: existingProvenance), keyOf: static (WorldStateCell cell) => cell.Key);
+
+        return Upsert(list: rows, item: (row with { Cells = cells }), keyOf: static (WorldStateRow r) => r.Name);
+    }
+
+    // The house fee on a settled amount, in basis points — bounded well inside `long` (amount is capped at
+    // WorldStateCapacity.MaxIntCellValue and feeBasisPoints at WorldMarketCapacity.MaxFeeBasisPoints, so the
+    // intermediate product can never overflow).
+    private static long MarketFee(long amount, int feeBasisPoints) => ((amount * feeBasisPoints) / 10_000L);
+
+    private static WorldMarketListing? FindMarketListing(IReadOnlyList<WorldMarketListing> listings, long id) {
+        foreach (var listing in listings) {
+            if (listing.Id == id) {
+                return listing;
+            }
+        }
+
+        return null;
+    }
+
+    // market.list — escrows Quantity out of the seller's own ItemRow cell atomically with minting the listing row.
+    private static bool TryComposeCreateMarketListing(WorldDefinition current, WorldMutation.CreateMarketListing mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        if (current.Market is not { } market) {
+            reason = "this world authors no market section";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: mutation.Seller, key: out var sellerKey)) {
+            reason = $"seller {mutation.Seller.Describe()} must be a seat or peer";
+
+            return false;
+        }
+
+        if (!TryAuthorizeMarketParty(actingPrincipal: mutation.Principal, party: mutation.Seller, reason: out reason)) {
+            return false;
+        }
+
+        var admitted = false;
+
+        foreach (var format in market.EffectiveFormats) {
+            if (format == mutation.Format) {
+                admitted = true;
+
+                break;
+            }
+        }
+
+        if (!admitted) {
+            reason = $"market does not admit format '{mutation.Format}'";
+
+            return false;
+        }
+
+        if (!float.IsFinite(f: mutation.DurationSeconds) || (mutation.DurationSeconds < market.MinDurationSeconds) || (mutation.DurationSeconds > market.MaxDurationSeconds)) {
+            reason = $"durationSeconds {mutation.DurationSeconds} is outside {market.MinDurationSeconds}..{market.MaxDurationSeconds}";
+
+            return false;
+        }
+
+        if (mutation.Quantity <= 0) {
+            reason = $"quantity {mutation.Quantity} must be positive";
+
+            return false;
+        }
+
+        if (WorldDefinitionRows.FindStateRow(rows: current.State, name: mutation.ItemRow) is not { } itemRow) {
+            reason = $"no state row named '{mutation.ItemRow}'";
+
+            return false;
+        }
+
+        if (WorldDefinitionRows.FindStateRow(rows: current.State, name: mutation.CurrencyRow) is not { } currencyRow) {
+            reason = $"no state row named '{mutation.CurrencyRow}'";
+
+            return false;
+        }
+
+        if ((itemRow.Kind != CellKind.Int) || (itemRow.Capacity is null)) {
+            reason = $"'{mutation.ItemRow}' is not a capacity-bounded int state row";
+
+            return false;
+        }
+
+        if ((currencyRow.Kind != CellKind.Int) || (currencyRow.Capacity is null)) {
+            reason = $"'{mutation.CurrencyRow}' is not a capacity-bounded int state row";
+
+            return false;
+        }
+
+        if (mutation.Format == WorldMarketFormat.English) {
+            if (mutation.StartPrice <= 0) {
+                reason = "startPrice must be positive for an English listing";
+
+                return false;
+            }
+        } else {
+            if ((mutation.BuyoutPrice is not { } requiredBuyout) || (requiredBuyout <= 0)) {
+                reason = "a buyout listing requires a positive buyoutPrice";
+
+                return false;
+            }
+
+            // startPrice is unused by buyout (market.list's own help text says so); refused rather than silently
+            // carried, the same door-not-type instinct WorldDefinitionValidator.ValidateMarket's Buyout arm applies
+            // to currentBid/currentBidder — this is the immediate, per-field refusal, before whole-document
+            // revalidation would catch the same thing with a less specific reason.
+            if (mutation.StartPrice != 0) {
+                reason = "startPrice is unused by buyout — pass 0";
+
+                return false;
+            }
+        }
+
+        if ((mutation.BuyoutPrice is { } declaredBuyout) && (declaredBuyout <= 0)) {
+            reason = "buyoutPrice must be positive";
+
+            return false;
+        }
+
+        if (current.SimulationRateHz <= 0) {
+            reason = "a market listing needs a tick-mapped duration, refused in a rate-0 world";
+
+            return false;
+        }
+
+        var sellerBalance = ReadMarketCellValue(definition: current, row: mutation.ItemRow, key: sellerKey, tick: tick);
+
+        if (sellerBalance < mutation.Quantity) {
+            reason = $"seller holds {sellerBalance} of '{mutation.ItemRow}', short of the {mutation.Quantity} listed";
+
+            return false;
+        }
+
+        var durationTicks = WorldSimulationTickConversion.DurationTicks(seconds: mutation.DurationSeconds, ratePerSecond: (uint)current.SimulationRateHz);
+        var deadlineTick = unchecked((long)tick + (long)durationTicks);
+
+        var state = WriteMarketCell(rows: current.State, rowName: mutation.ItemRow, key: sellerKey, value: (sellerBalance - mutation.Quantity));
+
+        var listing = new WorldMarketListing(
+            Id: market.NextListingId,
+            Seller: mutation.Seller,
+            ItemRow: mutation.ItemRow,
+            Quantity: mutation.Quantity,
+            CurrencyRow: mutation.CurrencyRow,
+            Format: mutation.Format,
+            StartPrice: mutation.StartPrice,
+            BuyoutPrice: mutation.BuyoutPrice,
+            DeadlineTick: deadlineTick
+        );
+
+        var newMarket = (market with {
+            Listings = Upsert(list: (market.Listings ?? []), item: listing, keyOf: static (WorldMarketListing l) => l.Id),
+            NextListingId = (market.NextListingId + 1),
+        });
+
+        candidate = (current with { State = state, Market = newMarket });
+
+        return true;
+    }
+
+    // market.bid — escrows Amount out of the bidder's own currency cell, refunding any standing bidder in the SAME
+    // candidate. English format only. A standing bidder raising their OWN bid is netted against their own standing
+    // escrow (one read, one write, delta-charged) rather than charged the full new amount and then "refunded" the
+    // old one through a second read of the very cell this compose pass just wrote — that second read would see the
+    // cell's pre-rebase Advance/EpochTick (RebaseAdvanceEpoch runs AFTER TryCompose) and re-apply the elapsed
+    // accrual TryRead already folded into the first read, on top of a base that already carries it.
+    private static bool TryComposePlaceMarketBid(WorldDefinition current, WorldMutation.PlaceMarketBid mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        var market = (current.Market ?? WorldMarketSection.Empty);
+
+        if (FindMarketListing(listings: (market.Listings ?? []), id: mutation.ListingId) is not { } listing) {
+            reason = $"no listing #{mutation.ListingId}";
+
+            return false;
+        }
+
+        if (listing.Status != WorldMarketListingStatus.Active) {
+            reason = $"listing #{mutation.ListingId} is {listing.Status}, not active";
+
+            return false;
+        }
+
+        if (unchecked((long)tick) >= listing.DeadlineTick) {
+            reason = $"listing #{mutation.ListingId} has reached its deadline";
+
+            return false;
+        }
+
+        if (listing.Format != WorldMarketFormat.English) {
+            reason = $"listing #{mutation.ListingId} is {listing.Format}, which takes no incremental bids";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: mutation.Bidder, key: out var bidderKey)) {
+            reason = $"bidder {mutation.Bidder.Describe()} must be a seat or peer";
+
+            return false;
+        }
+
+        if (!TryAuthorizeMarketParty(actingPrincipal: mutation.Principal, party: mutation.Bidder, reason: out reason)) {
+            return false;
+        }
+
+        if (mutation.Bidder == listing.Seller) {
+            reason = "the seller may not bid on their own listing";
+
+            return false;
+        }
+
+        // long.MaxValue is a legal carried balance/bid, but it has no representable successor. Refuse explicitly:
+        // adding one would wrap the minimum negative, admit a lower bid, and make a self-bid's net charge negative.
+        if (listing.CurrentBid == long.MaxValue) {
+            reason = $"listing #{mutation.ListingId} already carries the maximum representable bid and cannot be raised";
+
+            return false;
+        }
+
+        var minBid = ((listing.CurrentBid > 0) ? (listing.CurrentBid + 1) : listing.StartPrice);
+
+        if (mutation.Amount < minBid) {
+            reason = $"bid {mutation.Amount} does not meet the minimum {minBid}";
+
+            return false;
+        }
+
+        var isSelfRaise = (mutation.Bidder == listing.CurrentBidder);
+        var netCharge = (isSelfRaise ? (mutation.Amount - listing.CurrentBid) : mutation.Amount);
+
+        var bidderBalance = ReadMarketCellValue(definition: current, row: listing.CurrencyRow, key: bidderKey, tick: tick);
+
+        if (bidderBalance < netCharge) {
+            reason = isSelfRaise
+                ? $"bidder holds {bidderBalance} of '{listing.CurrencyRow}', short of the {netCharge} additional needed to raise from {listing.CurrentBid} to {mutation.Amount}"
+                : $"bidder holds {bidderBalance} of '{listing.CurrencyRow}', short of the {mutation.Amount} bid";
+
+            return false;
+        }
+
+        var state = WriteMarketCell(rows: current.State, rowName: listing.CurrencyRow, key: bidderKey, value: (bidderBalance - netCharge));
+
+        if (!isSelfRaise && (listing.CurrentBidder is { } previousBidder) && TryPlayerCellKey(principal: previousBidder, key: out var previousKey)) {
+            var previousBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.CurrencyRow, key: previousKey, tick: tick);
+
+            state = WriteMarketCell(rows: state, rowName: listing.CurrencyRow, key: previousKey, value: (previousBalance + listing.CurrentBid));
+        }
+
+        var updatedListing = (listing with { CurrentBid = mutation.Amount, CurrentBidder = mutation.Bidder });
+        var newMarket = (market with { Listings = Upsert(list: (market.Listings ?? []), item: updatedListing, keyOf: static (WorldMarketListing l) => l.Id) });
+
+        candidate = (current with { State = state, Market = newMarket });
+
+        return true;
+    }
+
+    // market.buyout — settles a listing immediately at its declared BuyoutPrice: pays the seller net of fee, refunds
+    // any standing English bidder, credits the buyer's item cell, all in the SAME candidate.
+    private static bool TryComposeBuyoutMarketListing(WorldDefinition current, WorldMutation.BuyoutMarketListing mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        var market = (current.Market ?? WorldMarketSection.Empty);
+
+        if (FindMarketListing(listings: (market.Listings ?? []), id: mutation.ListingId) is not { } listing) {
+            reason = $"no listing #{mutation.ListingId}";
+
+            return false;
+        }
+
+        if (listing.Status != WorldMarketListingStatus.Active) {
+            reason = $"listing #{mutation.ListingId} is {listing.Status}, not active";
+
+            return false;
+        }
+
+        if (unchecked((long)tick) >= listing.DeadlineTick) {
+            reason = $"listing #{mutation.ListingId} has reached its deadline";
+
+            return false;
+        }
+
+        if (listing.BuyoutPrice is not { } buyoutPrice) {
+            reason = $"listing #{mutation.ListingId} declares no buyoutPrice";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: mutation.Buyer, key: out var buyerKey)) {
+            reason = $"buyer {mutation.Buyer.Describe()} must be a seat or peer";
+
+            return false;
+        }
+
+        if (!TryAuthorizeMarketParty(actingPrincipal: mutation.Principal, party: mutation.Buyer, reason: out reason)) {
+            return false;
+        }
+
+        if (mutation.Buyer == listing.Seller) {
+            reason = "the seller may not buy out their own listing";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: listing.Seller, key: out var sellerKey)) {
+            reason = "listing seller is not a seat or peer";
+
+            return false;
+        }
+
+        // A standing bidder buying themselves out only owes the difference — their own escrowed bid is refunded
+        // and re-spent in the SAME move, never round-tripped through a separate refund the caller could observe.
+        var refundToSelf = ((listing.CurrentBidder == mutation.Buyer) ? listing.CurrentBid : 0L);
+        var buyerBalance = ReadMarketCellValue(definition: current, row: listing.CurrencyRow, key: buyerKey, tick: tick);
+        var effectiveCost = (buyoutPrice - refundToSelf);
+
+        if (buyerBalance < effectiveCost) {
+            reason = $"buyer holds {buyerBalance} of '{listing.CurrencyRow}', short of the {effectiveCost} needed";
+
+            return false;
+        }
+
+        var state = WriteMarketCell(rows: current.State, rowName: listing.CurrencyRow, key: buyerKey, value: (buyerBalance - effectiveCost));
+
+        if ((listing.CurrentBidder is { } previousBidder) && (previousBidder != mutation.Buyer) && TryPlayerCellKey(principal: previousBidder, key: out var previousKey)) {
+            var previousBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.CurrencyRow, key: previousKey, tick: tick);
+
+            state = WriteMarketCell(rows: state, rowName: listing.CurrencyRow, key: previousKey, value: (previousBalance + listing.CurrentBid));
+        }
+
+        var fee = MarketFee(amount: buyoutPrice, feeBasisPoints: market.FeeBasisPoints);
+        var sellerBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.CurrencyRow, key: sellerKey, tick: tick);
+
+        state = WriteMarketCell(rows: state, rowName: listing.CurrencyRow, key: sellerKey, value: (sellerBalance + (buyoutPrice - fee)));
+
+        var buyerItemBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.ItemRow, key: buyerKey, tick: tick);
+
+        state = WriteMarketCell(rows: state, rowName: listing.ItemRow, key: buyerKey, value: (buyerItemBalance + listing.Quantity));
+
+        var updatedListing = (listing with { Status = WorldMarketListingStatus.Settled, ResolvedTick = unchecked((long)tick) });
+
+        candidate = (current with {
+            State = state,
+            Market = (market with {
+                Listings = Upsert(list: (market.Listings ?? []), item: updatedListing, keyOf: static (WorldMarketListing l) => l.Id),
+                FeeReserve = (market.FeeReserve + fee),
+            }),
+        });
+
+        return true;
+    }
+
+    // market.cancel — withdraws a listing, returning the escrowed item to the seller and refunding any standing
+    // English bidder, all in the SAME candidate. Seller-only.
+    private static bool TryComposeCancelMarketListing(WorldDefinition current, WorldMutation.CancelMarketListing mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        var market = (current.Market ?? WorldMarketSection.Empty);
+
+        if (FindMarketListing(listings: (market.Listings ?? []), id: mutation.ListingId) is not { } listing) {
+            reason = $"no listing #{mutation.ListingId}";
+
+            return false;
+        }
+
+        if (listing.Status != WorldMarketListingStatus.Active) {
+            reason = $"listing #{mutation.ListingId} is {listing.Status}, not active";
+
+            return false;
+        }
+
+        if (!TryAuthorizeMarketParty(actingPrincipal: mutation.Principal, party: mutation.Canceler, reason: out reason)) {
+            return false;
+        }
+
+        if (mutation.Canceler != listing.Seller) {
+            reason = $"only the seller {listing.Seller.Describe()} may cancel listing #{mutation.ListingId}";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: listing.Seller, key: out var sellerKey)) {
+            reason = "listing seller is not a seat or peer";
+
+            return false;
+        }
+
+        var sellerItemBalance = ReadMarketCellValue(definition: current, row: listing.ItemRow, key: sellerKey, tick: tick);
+        var state = WriteMarketCell(rows: current.State, rowName: listing.ItemRow, key: sellerKey, value: (sellerItemBalance + listing.Quantity));
+
+        if ((listing.CurrentBidder is { } bidder) && TryPlayerCellKey(principal: bidder, key: out var bidderKey)) {
+            var bidderBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.CurrencyRow, key: bidderKey, tick: tick);
+
+            state = WriteMarketCell(rows: state, rowName: listing.CurrencyRow, key: bidderKey, value: (bidderBalance + listing.CurrentBid));
+        }
+
+        var updatedListing = (listing with { Status = WorldMarketListingStatus.Cancelled, ResolvedTick = unchecked((long)tick) });
+        var newMarket = (market with { Listings = Upsert(list: (market.Listings ?? []), item: updatedListing, keyOf: static (WorldMarketListing l) => l.Id) });
+
+        candidate = (current with { State = state, Market = newMarket });
+
+        return true;
+    }
+
+    // The engine's own deadline sweep, fired by Server.WorldServer's per-tick market pass (the SAME shape as its own
+    // ReclaimExpiredEscrows) under WorldPrincipal.World — never reachable from a player submission. A standing
+    // English bid settles (pays the seller net of fee, credits the winner's item cell); no bid at all expires
+    // (returns the escrowed item to the seller).
+    private static bool TryComposeSettleMarketListing(WorldDefinition current, WorldMutation.SettleMarketListing mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        if (mutation.Principal != WorldPrincipal.World) {
+            reason = "only the engine's own timeout sweep may settle a listing";
+
+            return false;
+        }
+
+        var market = (current.Market ?? WorldMarketSection.Empty);
+
+        if (FindMarketListing(listings: (market.Listings ?? []), id: mutation.ListingId) is not { } listing) {
+            reason = $"no listing #{mutation.ListingId}";
+
+            return false;
+        }
+
+        if (listing.Status != WorldMarketListingStatus.Active) {
+            reason = $"listing #{mutation.ListingId} is {listing.Status}, not active";
+
+            return false;
+        }
+
+        if (unchecked((long)tick) < listing.DeadlineTick) {
+            reason = $"listing #{mutation.ListingId} has not yet reached its deadline";
+
+            return false;
+        }
+
+        if (!TryPlayerCellKey(principal: listing.Seller, key: out var sellerKey)) {
+            reason = "listing seller is not a seat or peer";
+
+            return false;
+        }
+
+        if ((listing.CurrentBidder is { } winner) && TryPlayerCellKey(principal: winner, key: out var winnerKey)) {
+            var fee = MarketFee(amount: listing.CurrentBid, feeBasisPoints: market.FeeBasisPoints);
+            var sellerBalance = ReadMarketCellValue(definition: current, row: listing.CurrencyRow, key: sellerKey, tick: tick);
+            var state = WriteMarketCell(rows: current.State, rowName: listing.CurrencyRow, key: sellerKey, value: (sellerBalance + (listing.CurrentBid - fee)));
+            var winnerItemBalance = ReadMarketCellValue(definition: (current with { State = state }), row: listing.ItemRow, key: winnerKey, tick: tick);
+
+            state = WriteMarketCell(rows: state, rowName: listing.ItemRow, key: winnerKey, value: (winnerItemBalance + listing.Quantity));
+
+            var settled = (listing with { Status = WorldMarketListingStatus.Settled, ResolvedTick = unchecked((long)tick) });
+
+            candidate = (current with {
+                State = state,
+                Market = (market with {
+                    Listings = Upsert(list: (market.Listings ?? []), item: settled, keyOf: static (WorldMarketListing l) => l.Id),
+                    FeeReserve = (market.FeeReserve + fee),
+                }),
+            });
+
+            return true;
+        }
+
+        // No bid ever landed — expiry, not a sale: return the escrowed item.
+        var sellerItemBalance = ReadMarketCellValue(definition: current, row: listing.ItemRow, key: sellerKey, tick: tick);
+        var expiredState = WriteMarketCell(rows: current.State, rowName: listing.ItemRow, key: sellerKey, value: (sellerItemBalance + listing.Quantity));
+        var expired = (listing with { Status = WorldMarketListingStatus.Expired, ResolvedTick = unchecked((long)tick) });
+
+        candidate = (current with {
+            State = expiredState,
+            Market = (market with { Listings = Upsert(list: (market.Listings ?? []), item: expired, keyOf: static (WorldMarketListing l) => l.Id) }),
+        });
+
+        return true;
+    }
+
+    // market retention sweep — removes every terminal (settled/cancelled/expired) row whose ResolvedTick lies at
+    // least market.retentionSeconds (converted the same way a listing's own duration becomes its DeadlineTick)
+    // behind the applying tick, in the same candidate. An active row is never touched, and NextListingId never
+    // rewinds — a pruned id is retired, not reissued. World-only, fired by PruneExpiredMarketListings once at least
+    // one row is eligible; refuses (a no-op) if it somehow fires with nothing eligible, rather than journaling an
+    // empty "prune".
+    private static bool TryComposePruneMarketListings(WorldDefinition current, WorldMutation.PruneMarketListings mutation, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = current;
+        reason = string.Empty;
+
+        if (mutation.Principal != WorldPrincipal.World) {
+            reason = "only the engine's own retention sweep may prune market listings";
+
+            return false;
+        }
+
+        if (current.Market is not { } market) {
+            reason = "this world authors no market section";
+
+            return false;
+        }
+
+        if (current.SimulationRateHz <= 0) {
+            reason = "market retention needs a tick-mapped window, refused in a rate-0 world";
+
+            return false;
+        }
+
+        var retentionTicks = unchecked((long)WorldSimulationTickConversion.DurationTicks(seconds: market.RetentionSeconds, ratePerSecond: (uint)current.SimulationRateHz));
+        var listings = (market.Listings ?? []);
+        List<WorldMarketListing>? kept = null;
+
+        for (var index = 0; (index < listings.Count); index++) {
+            var listing = listings[index];
+            var eligible = ((listing.Status != WorldMarketListingStatus.Active)
+                && (listing.ResolvedTick is { } resolvedTick)
+                && (unchecked((long)tick) >= unchecked(resolvedTick + retentionTicks)));
+
+            if (eligible) {
+                kept ??= new List<WorldMarketListing>(collection: listings.Take(count: index));
+
+                continue;
+            }
+
+            kept?.Add(item: listing);
+        }
+
+        if (kept is null) {
+            reason = "no terminal listing has yet reached market.retentionSeconds";
+
+            return false;
+        }
+
+        candidate = (current with { Market = (market with { Listings = kept }) });
+
+        return true;
     }
 
     private static bool ContainsMember(IReadOnlyList<WorldPrincipal> members, WorldPrincipal member) {
@@ -4524,14 +5541,31 @@ public sealed class WorldServer : IWorldServerHost {
     }
 
     // An EXPLICIT write to an advancing cell — a whole-row UpsertStateRow (which re-bases the row's OWN slot advance
-    // AND every keyed cell's own advance, since it re-declares the whole row), or an UpsertStateCell (which re-bases
+    // AND every keyed cell's own advance, since it re-declares the whole row), an UpsertStateCell (which re-bases
     // ONLY the one cell it names — the row's slot advance when that cell IS the slot key, or that cell's own advance
-    // otherwise) — re-bases WorldStateAdvance.EpochTick to `tick`, unconditionally overwriting whatever epoch the
-    // write's own payload carried (see WorldStateAdvance's remarks). Runs AFTER TryCompose so it sees the row/cell
-    // TryCompose just installed, and BEFORE validation/journal so a rebased epoch is what gets journaled, replayed by
-    // world.undo, and read back. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that
-    // carries no advance trait at all.
-    private static WorldDefinition RebaseAdvanceEpoch(WorldDefinition candidate, WorldMutation mutation, ulong tick) {
+    // otherwise), or a market mutation (which re-bases every (row, key) cell it actually wrote through
+    // WriteMarketCell — see MarketCellTouches) — re-bases WorldStateAdvance.EpochTick to `tick`, unconditionally
+    // overwriting whatever epoch the write's own payload carried (see WorldStateAdvance's remarks). A market write
+    // that skipped this would let a cell's elapsed accrual apply a second time on its very next read: WriteMarketCell
+    // preserves the pre-write Advance record verbatim (it is a value move, never a re-mint), so the base it installs
+    // already has that accrual baked in — an un-rebased epoch would let the same elapsed span compute again from the
+    // old epoch against the new base. Runs AFTER TryCompose so it sees the row/cell TryCompose just installed, and
+    // BEFORE validation/journal so a rebased epoch is what gets journaled, replayed by world.undo, and read back.
+    // `original` is the document the mutation composed against (before this mutation applied) — market's own touches
+    // need it to resolve a listing's pre-write state (its standing bidder, in particular) since `candidate` already
+    // reflects the write. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries
+    // no advance trait at all.
+    private static WorldDefinition RebaseAdvanceEpoch(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
+        if (MarketCellTouches(original: original, mutation: mutation) is { } touches) {
+            var touchedState = candidate.State;
+
+            foreach (var touch in touches) {
+                touchedState = RebaseKeyedCellAdvanceEpoch(rows: touchedState, rowName: touch.Row, key: touch.Key, tick: tick);
+            }
+
+            return (ReferenceEquals(objA: touchedState, objB: candidate.State) ? candidate : (candidate with { State = touchedState }));
+        }
+
         string? rowName;
         string? cellKey; // null on a whole-row write (every advancing cell re-bases); the named key on a per-cell write.
 
@@ -4581,6 +5615,132 @@ public sealed class WorldServer : IWorldServerHost {
         return (ReferenceEquals(objA: rebasedRow, objB: row)
             ? candidate
             : (candidate with { State = Upsert(list: candidate.State, item: rebasedRow, keyOf: static (WorldStateRow r) => r.Name) }));
+    }
+
+    // One (row, key) cell a market compose arm wrote through WriteMarketCell.
+    private readonly record struct MarketCellTouch(WorldCellName Row, string Key);
+
+    // The (row, key) pairs a market mutation actually wrote — derived the same way each TryCompose*Market* arm
+    // derives its own keys (TryPlayerCellKey off each party's principal), reading `original`'s pre-write listing for
+    // a bid/buyout/cancel/settle since `candidate` already carries this mutation's own write (in particular,
+    // PlaceMarketBid's previous bidder is only findable in the listing as it stood before this bid replaced it).
+    // Returns null for every non-market mutation kind, distinguishing "not a market mutation" from "a market
+    // mutation that happens to touch nothing" (an empty list) — the latter can occur when a party is somehow not a
+    // seat/peer at this point (defensive; TryCompose already refused before this ever runs).
+    private static IReadOnlyList<MarketCellTouch>? MarketCellTouches(WorldDefinition original, WorldMutation mutation) {
+        switch (mutation) {
+            case WorldMutation.CreateMarketListing m: {
+                if (!TryPlayerCellKey(principal: m.Seller, key: out var sellerKey)) {
+                    return [];
+                }
+
+                return [new MarketCellTouch(Row: m.ItemRow, Key: sellerKey)];
+            }
+            case WorldMutation.PlaceMarketBid m: {
+                if (FindMarketListing(listings: (original.Market?.Listings ?? []), id: m.ListingId) is not { } listing) {
+                    return [];
+                }
+
+                var touches = new List<MarketCellTouch>(capacity: 2);
+
+                if (TryPlayerCellKey(principal: m.Bidder, key: out var bidderKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: bidderKey));
+                }
+
+                if ((listing.CurrentBidder is { } previous) && TryPlayerCellKey(principal: previous, key: out var previousKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: previousKey));
+                }
+
+                return touches;
+            }
+            case WorldMutation.BuyoutMarketListing m: {
+                if (FindMarketListing(listings: (original.Market?.Listings ?? []), id: m.ListingId) is not { } listing) {
+                    return [];
+                }
+
+                var touches = new List<MarketCellTouch>(capacity: 4);
+
+                if (TryPlayerCellKey(principal: m.Buyer, key: out var buyerKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: buyerKey));
+                    touches.Add(item: new MarketCellTouch(Row: listing.ItemRow, Key: buyerKey));
+                }
+
+                if (TryPlayerCellKey(principal: listing.Seller, key: out var sellerKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: sellerKey));
+                }
+
+                if ((listing.CurrentBidder is { } previous) && (previous != m.Buyer) && TryPlayerCellKey(principal: previous, key: out var previousKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: previousKey));
+                }
+
+                return touches;
+            }
+            case WorldMutation.CancelMarketListing m: {
+                if (FindMarketListing(listings: (original.Market?.Listings ?? []), id: m.ListingId) is not { } listing) {
+                    return [];
+                }
+
+                var touches = new List<MarketCellTouch>(capacity: 2);
+
+                if (TryPlayerCellKey(principal: listing.Seller, key: out var sellerKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.ItemRow, Key: sellerKey));
+                }
+
+                if ((listing.CurrentBidder is { } bidder) && TryPlayerCellKey(principal: bidder, key: out var bidderKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: bidderKey));
+                }
+
+                return touches;
+            }
+            case WorldMutation.SettleMarketListing m: {
+                if (FindMarketListing(listings: (original.Market?.Listings ?? []), id: m.ListingId) is not { } listing) {
+                    return [];
+                }
+
+                var touches = new List<MarketCellTouch>(capacity: 2);
+
+                if ((listing.CurrentBidder is { } winner) && TryPlayerCellKey(principal: winner, key: out var winnerKey) && TryPlayerCellKey(principal: listing.Seller, key: out var winSellerKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.CurrencyRow, Key: winSellerKey));
+                    touches.Add(item: new MarketCellTouch(Row: listing.ItemRow, Key: winnerKey));
+                } else if (TryPlayerCellKey(principal: listing.Seller, key: out var expiredSellerKey)) {
+                    touches.Add(item: new MarketCellTouch(Row: listing.ItemRow, Key: expiredSellerKey));
+                }
+
+                return touches;
+            }
+            default:
+                return null;
+        }
+    }
+
+    // Rebases one keyed cell's WorldStateAdvance.EpochTick to `tick` — the same rebase RebaseAdvanceEpoch's own
+    // UpsertStateCell arm performs on a single named cell, factored out so a market write (which may touch several
+    // cells across two rows in one mutation) can apply it per touch without duplicating the clamp-free with-expression
+    // rebuild. A no-op for a cell that carries no advance trait, or a row/key MarketCellTouches named that this
+    // document does not (or no longer) declare.
+    private static IReadOnlyList<WorldStateRow> RebaseKeyedCellAdvanceEpoch(IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, ulong tick) {
+        if (WorldDefinitionRows.FindStateRow(rows: rows, name: rowName) is not { } row) {
+            return rows;
+        }
+
+        var cellKey = WorldCellName.Parse(candidate: key);
+        var cells = (row.Cells ?? []);
+
+        for (var index = 0; (index < cells.Count); index++) {
+            var cell = cells[index];
+
+            if ((cell.Key != cellKey) || (cell.Advance is not { } advance)) {
+                continue;
+            }
+
+            var rebasedCells = new List<WorldStateCell>(collection: cells);
+
+            rebasedCells[index] = (cell with { Advance = (advance with { EpochTick = unchecked((long)tick) }) });
+
+            return Upsert(list: rows, item: (row with { Cells = rebasedCells }), keyOf: static (WorldStateRow r) => r.Name);
+        }
+
+        return rows;
     }
 
     // The KEYED counterpart of a slot cell's row-level rebase target: looks up an already-installed cell's own
@@ -4666,8 +5826,20 @@ public sealed class WorldServer : IWorldServerHost {
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
     // reused m_snapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
     // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next
-    // tick's BuildSnapshot call overwrites this same backing array.
-    private WorldSnapshot BuildSnapshot(ulong tick, ulong stepTicks) {
+    // tick's BuildSnapshot call overwrites this same backing array. Consumes (TakeContinuity) every body's one-shot
+    // continuity hint — the ORDINARY per-tick broadcast path (EmitSnapshot). A late AttachSink must NOT call this
+    // overload: see BuildPrimerSnapshot.
+    private WorldSnapshot BuildSnapshot(ulong tick, ulong stepTicks) => BuildSnapshotCore(tick: tick, stepTicks: stepTicks, consumeContinuity: true);
+
+    // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
+    // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
+    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/world-model.md's
+    // "Observation and display" section). Stamped with the server's actual current tick/step width
+    // (m_lastCompletedTick/m_lastStepTicks), which are still their default 0/0 before the very first Step has ever
+    // run — the one case where 0/0 is the honest answer, preserved exactly.
+    private WorldSnapshot BuildPrimerSnapshot() => BuildSnapshotCore(tick: m_lastCompletedTick, stepTicks: m_lastStepTicks, consumeContinuity: false);
+
+    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
         var count = 0;
 
         for (var index = 0; (index < m_population.Capacity); index++) {
@@ -4683,7 +5855,7 @@ public sealed class WorldServer : IWorldServerHost {
                 Active: true,
                 Kit: m_population.KitIndex(index: index),
                 Look: m_population.LookIndex(index: index),
-                Continuity: body.TakeContinuity(),
+                Continuity: (consumeContinuity ? body.TakeContinuity() : body.PeekContinuity()),
                 PlacementId: m_population.InhabitantPlacementId(index: index)
             );
         }
@@ -4709,7 +5881,7 @@ public sealed class WorldServer : IWorldServerHost {
         // Answer cell EmitDisclosures already withheld space for gets its verdict staged at ResolveReads(T), for
         // delivery in the guest's batch T+1 — never applied here, only routed.
         public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, int SourceAddonIndex = -1, ushort ActOrdinal = 0) : PendingOp;
-        public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null) : PendingOp;
+        public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
         public sealed record AddonLifecycle(WorldAddonLifecycle Lifecycle, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
     }
@@ -4721,9 +5893,9 @@ public sealed class WorldServer : IWorldServerHost {
         public sealed record ServerEvent(WorldServerEvent Value) : OrderedEntry;
     }
 
-    /// <summary>Submits ONE envelope into the ordered domain — the single front door every non-intent submission kind
+    /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains
-    /// the WHOLE queue inline, so a submission applies synchronously before this call returns — exactly matching the
+    /// the whole queue inline, so a submission applies synchronously before this call returns — exactly matching the
     /// per-kind synchronous methods it replaces. The in-process <c>LoopbackTransport</c> submits on connection 0;
     /// <c>WorldTcpHost</c> submits each admitted socket peer under its own per-connection id.</summary>
     /// <param name="envelope">The envelope to submit.</param>
@@ -4803,7 +5975,7 @@ public sealed class WorldServer : IWorldServerHost {
 
                 return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.Query query:
-                return new WorldSubmissionResult.Query(Answer: Answer(query: query.Value));
+                return new WorldSubmissionResult.Query(Answer: AnswerSubmittedQuery(query: query.Value, principal: envelope.Principal));
             case WorldSubmissionPayload.AddonLifecycle lifecycle:
                 EnqueueAddonLifecycle(lifecycle: lifecycle.Value, principal: envelope.Principal, connectionId: envelope.ConnectionId, correlationId: envelope.CorrelationId);
 
@@ -4826,33 +5998,75 @@ public sealed class WorldServer : IWorldServerHost {
         }
     }
 
-    /// <summary>Admits ONE remote-human peer connection through the population door and dispatches the
-    /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the SAME ordered domain every other lifecycle event
+    /// <summary>Admits one remote-human peer connection through the population door and dispatches the
+    /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
     /// drains through — <c>Server.WorldTcpHost</c>'s Hello door is the one caller, and it calls this only from the
-    /// tick thread (the population/grant tables carry no lock). Refused by name on whichever capacity bound
-    /// <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
+    /// tick thread (the population/grant tables carry no lock), only after <see cref="Protocol.WorldAdmissionDoor"/>
+    /// has already verified the connecting peer's identity off the tick thread. Refused by name on whichever
+    /// capacity bound <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
+    /// <param name="grantTemplates">The verified admission entry's own grant templates
+    /// (<see cref="Protocol.WorldAdmissionDoor.AdmissionOutcome.Grants"/>), minted for the admitted body's
+    /// principal instead of a blanket <c>Control</c>/<c>all</c> grant. Empty (never null) mints nothing, which is a
+    /// legitimate authored outcome (see <see cref="Protocol.WorldAdmissionEntry.Grants"/>).</param>
+    /// <param name="identityDomain">The verified identity's own domain, stored on the admitted slot so
+    /// <see cref="RemintPeerAdmissionGrants"/> can re-authorize it later.</param>
+    /// <param name="identitySubject">The verified identity's own subject, stored the same way.</param>
+    /// <param name="expectedAdmissionEntries">The <c>admission</c> section <c>Protocol.WorldAdmissionDoor.TryAdmit</c>
+    /// actually consulted to decide <paramref name="grantTemplates"/>, captured by the caller before crossing onto
+    /// the tick thread. Identity verification runs off the tick thread against a snapshot of the document, but this
+    /// method is where the decision commits, on the tick thread, single-threaded with every mutation and rebuild —
+    /// the one place that can prove the policy has not moved in between. Compared by reference against the live
+    /// <see cref="Definition"/>'s own <c>Admission</c> list: <c>WorldDefinition</c>'s sections are immutable
+    /// records, so an unrelated mutation or rebuild that never touches <c>Admission</c> leaves this exact reference
+    /// standing, while one that does (a concurrent <c>world.reset</c>/<c>load</c>/<c>reload</c>, or a live edit to
+    /// the section) mints a new list, which this method treats as the policy having moved and asks the peer to
+    /// reconnect.</param>
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    internal bool TryAdmitPeerConnection(out WorldPeerEventEntry admitted, out string refusal) {
-        if (!m_population.TryAdmitRemotePeer(source: IntentSource.Live, admitted: out admitted, refusal: out refusal)) {
+    internal bool TryAdmitPeerConnection(IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+
+        if (!ReferenceEquals(objA: m_definition.Admission, objB: expectedAdmissionEntries)) {
+            admitted = default;
+            refusal = "the world's admission policy changed while this connection was verifying its identity — reconnect to be re-evaluated against the current policy";
+
             return false;
         }
 
-        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true);
+        if (!m_population.TryAdmitRemotePeer(source: IntentSource.Live, grantTemplates: grantTemplates, identityDomain: identityDomain, identitySubject: identitySubject, admitted: out admitted, refusal: out refusal)) {
+            return false;
+        }
+
+        var minted = BuildAdmissionGrants(principal: admitted.Identity, templates: grantTemplates);
+
+        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true, overrideMintedGrants: minted);
 
         return true;
     }
 
     /// <summary>Disconnects one remote-human peer connection: revokes every grant that generation held and drops the
-    /// body, through the SAME <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
+    /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
     /// uses. <c>Server.WorldTcpHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
     internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
         ApplyLifecycleEvents(admitted: [], disconnected: [peer], ordered: true);
     }
 
-    private void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered) {
+    // Builds the CONCRETE minted grant rows for one just-admitted peer from its verified admission templates — the
+    // Principal a template cannot carry (unknowable until TryAdmitRemotePeer assigns a body index/generation) is the
+    // ONE field this fills in; every other field passes through unchanged.
+    private static List<WorldGrant> BuildAdmissionGrants(WorldPrincipal principal, IReadOnlyList<WorldAdmissionGrant> templates) {
+        var minted = new List<WorldGrant>(capacity: templates.Count);
+
+        foreach (var template in templates) {
+            minted.Add(item: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.Subject, Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask));
+        }
+
+        return minted;
+    }
+
+    private void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered, IReadOnlyList<WorldGrant>? overrideMintedGrants = null) {
         if (disconnected.Count > 0) {
             var revoked = new List<WorldGrant>();
 
@@ -4864,14 +6078,26 @@ public sealed class WorldServer : IWorldServerHost {
         }
 
         if (admitted.Count > 0) {
-            var minted = new List<WorldGrant>(capacity: admitted.Count);
-
-            foreach (var peer in admitted) {
-                minted.Add(item: new WorldGrant(Principal: peer.Identity, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false));
-            }
+            // overrideMintedGrants is supplied ONLY by TryAdmitPeerConnection (the actual remote-peer TCP door),
+            // built from the connecting identity's OWN verified admission templates. Every other admitted-list
+            // caller here (boot inhabitant reconciliation, world.population's SetSimulatedCount, a definition
+            // swap's post-Rebuild reconciliation) activates a body with no connecting identity to verify at all —
+            // those keep minting the historical Control/all seed, which is orthogonal to this task's admission-door
+            // scope (CLAUDE.md: the ADMISSION DOOR ONLY, never simulated/bot population housekeeping).
+            var minted = (overrideMintedGrants ?? BuildDefaultPeerControlGrants(admitted: admitted));
 
             DispatchServerEvent(serverEvent: new WorldServerEvent.PeerAdmitted(Entries: [.. admitted], MintedGrants: minted), ordered: ordered);
         }
+    }
+
+    private static List<WorldGrant> BuildDefaultPeerControlGrants(IReadOnlyList<WorldPeerEventEntry> admitted) {
+        var minted = new List<WorldGrant>(capacity: admitted.Count);
+
+        foreach (var peer in admitted) {
+            minted.Add(item: new WorldGrant(Principal: peer.Identity, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false));
+        }
+
+        return minted;
     }
 
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
@@ -4893,7 +6119,7 @@ public sealed class WorldServer : IWorldServerHost {
         switch (serverEvent) {
             case WorldServerEvent.PeerAdmitted admitted:
                 foreach (var peer in admitted.Entries) {
-                    m_population.ApplyPeerAdmitted(peer: in peer);
+                    m_population.ApplyPeerAdmitted(peer: in peer, grantTemplates: []);
 
                     foreach (var stale in m_grants.StalePeerGenerations(index: peer.BodyIndex, currentGeneration: peer.Generation)) {
                         foreach (var row in m_grants.Rows(principal: stale)) {
@@ -4902,8 +6128,18 @@ public sealed class WorldServer : IWorldServerHost {
                     }
                 }
 
+                var installedGrants = new List<WorldGrant>();
+
                 foreach (var grant in admitted.MintedGrants) {
-                    Grant(grant: grant, actor: WorldPrincipal.Console);
+                    if (TryApplyGrant(grant: grant, actor: WorldPrincipal.Console)) {
+                        installedGrants.Add(item: grant);
+                    }
+                }
+
+                foreach (var peer in admitted.Entries) {
+                    var installedTemplates = AdmissionTemplatesFor(peer: peer, mintedGrants: installedGrants);
+
+                    m_population.SetPeerAdmissionInstalledGrantTemplates(bodyIndex: peer.BodyIndex, grantTemplates: installedTemplates);
                 }
 
                 break;
@@ -4923,5 +6159,26 @@ public sealed class WorldServer : IWorldServerHost {
         }
 
         ServerEventTap?.Invoke(obj: serverEvent);
+    }
+
+    // PeerAdmitted already records concrete minted rows. Stripping their generated principal reconstructs the exact
+    // admission templates without duplicating those rows in the tape; the verified domain/subject on the peer entry
+    // distinguishes a genuine zero-grant remote admission from ordinary simulated-population lifecycle events.
+    private static IReadOnlyList<WorldAdmissionGrant> AdmissionTemplatesFor(WorldPeerEventEntry peer, IReadOnlyList<WorldGrant> mintedGrants) {
+        if (string.IsNullOrEmpty(value: peer.IdentityDomain)) {
+            return [];
+        }
+
+        var templates = new List<WorldAdmissionGrant>();
+
+        foreach (var grant in mintedGrants) {
+            if (grant.Principal != peer.Identity) {
+                continue;
+            }
+
+            templates.Add(item: new WorldAdmissionGrant(Capability: grant.Capability, Subject: grant.Subject, Exclusive: grant.Exclusive, Budget: grant.Budget, EventBudget: grant.EventBudget, KindMask: grant.KindMask));
+        }
+
+        return templates;
     }
 }

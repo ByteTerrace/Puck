@@ -18,8 +18,8 @@ internal sealed class SeatController {
 
     // The device-image fold primitive per channel ordinal: base zero, contributions are (control value × scale), no
     // pool, accumulate in RAW Int64 and clamp EXACTLY ONCE at the end. A saturating clamp per contribution is
-    // commutative but NOT associative — order-dependent near the ceiling, which is what the old per-add Clamp here
-    // did. Producing the device image IS the fold primitive under a degenerate configuration, never a second merge
+    // commutative but NOT associative — order-dependent near the ceiling. Producing the device image IS the fold
+    // primitive under a degenerate configuration, never a second merge
     // rule beside it — which is why holding W and S while a stick reports +0.3 still yields +0.3, where a sign-group
     // or max-of-group rule would have to be invented (and would get that case wrong) to reproduce it.
     // Keyed by the CONTRIBUTING CONTROL's identity (the binding source, e.g. "keyboard.w"), never by
@@ -217,7 +217,7 @@ internal sealed class SeatController {
         // The role-channel fold primitive, mirroring HeldChannels' vector accumulate above: seed raw with the three
         // analog samples, sum every held role contribution into raw[ordinal] (RAW Int64, no per-add clamp — see
         // HeldChannels' remarks on why a saturating clamp per contribution is order-dependent), then clamp each role
-        // EXACTLY ONCE below. Replaces a six-way ordinal if/else chain with the same indexed-accumulate shape.
+        // EXACTLY ONCE below.
         // [-One, One] is safe on every role ordinal below (here and in the no-held-controls fold above) because every
         // role channel IS bipolar by validator rule (WorldDefinitionValidator.ValidateChannels refuses any other
         // declared shape on a role channel).

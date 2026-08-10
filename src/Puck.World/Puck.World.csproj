@@ -41,6 +41,9 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <!-- WorldRemoteClient's connect harness signs its identity claim with this directly (ECDsa key import,
+             CarriageSigner, FixedLayoutCarriageCodec) to answer the TCP door's admission challenge. -->
+        <ProjectReference Include="..\Puck.Carriage\Puck.Carriage.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <!-- The D3D12-host GPU capture transport (WorldScreenBinder) constructs DirectXGpuSurfaceExportFactory and reads
              the render adapter LUID off IDirectXDeviceContext; the concrete simultaneous-access opener is not on a
@@ -70,7 +73,7 @@
              mounts the world document's addon rows through its AddonHost and pumps them inside WorldServer.Step. The
              pinned Wasmtime [44.0.0] native engine flows transitively. -->
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
-        <!-- The Simulation-lane adapter (docs/capability-channels-plan.md's assembly split): AddonSimulationPump is
+        <!-- The Simulation-lane adapter (the capability-channels campaign's assembly split): AddonSimulationPump is
              the one crossing from guest bytes to typed submissions, and the World supplies the source-id vocabulary
              its guests may declare (Server/WorldAddonSourceResolver, over the adapter's InputSources-derived catalog). -->
         <ProjectReference Include="..\Puck.Scripting.Simulation\Puck.Scripting.Simulation.csproj" />

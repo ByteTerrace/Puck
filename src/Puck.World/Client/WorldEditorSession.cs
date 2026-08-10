@@ -124,7 +124,7 @@ internal sealed class WorldEditorSession {
         }
     }
 
-    /// <summary>Whether the seat is currently in editor mode.</summary>
+    /// <summary>Returns a value indicating whether the seat is currently in editor mode.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public bool IsEditing(int slot) => (((uint)slot < (uint)m_seats.Length) && m_seats[slot].Active);
 
@@ -197,18 +197,13 @@ internal sealed class WorldEditorSession {
         var controller = m_roster.Seat(slot: slot);
 
         seat.PriorSource = (controller?.Source ?? IntentSource.Live);
-        // The diversion is the existing player.control contract, applied on both halves in one act so the mask lands
-        // with no tick gap: the avatar idles honestly (a live tape or player.press still drives it — script outranks
-        // idle), and the transition drops held keys/lanes so nothing leaks into or out of the mode. Submitted under
-        // the slot's ACTUAL acting identity (see PlayerRoster.PrincipalOf) — never a hardcoded Console — so reaching
-        // Enter through a bound gesture on a slot an addon holds no grant over hits the SAME Drive/body:slot check any
-        // other authority command does and is dropped, instead of laundering through Console's seeded Drive/all. An
-        // ordinary, unclaimed seat reports its own WorldPrincipal.Seat here, which already carries that grant, so
-        // local play is unchanged.
-        // THE GROUP FLIP IS A PRECONDITION, so it is attempted BEFORE anything else mutates. A profile that declares
-        // no editor group (an overlay renamed or dropped it) makes the mode unenterable: its verbs would resolve
-        // against the play page, so the seat would sit "in editor mode" driving an avatar. The return value used to be
-        // discarded here, which is exactly how that became silent.
+        // The diversion is the existing player.control contract, applied on both halves in one act so the mask
+        // lands with no tick gap: the avatar idles honestly (a live tape or player.press still drives it), and the
+        // transition drops held keys/lanes. Submitted under the slot's actual acting identity (see
+        // PlayerRoster.PrincipalOf), never a hardcoded Console, so it hits the same Drive/body:slot authority check
+        // any other command does.
+        // The group flip is a precondition, attempted before anything else mutates: a profile that declares no
+        // editor group makes the mode unenterable, so this return value must be checked rather than discarded.
         if (!m_bindings.SetActiveGroup(slot: slot, group: WorldEditorBindings.GroupId)) {
             return EditorModeOutcome.NoBindingGroup;
         }

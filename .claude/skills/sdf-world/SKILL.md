@@ -19,9 +19,9 @@ envelope, content seams, and unsupported graph requests was deleted on
 > `world.load`/`world.save` — never only through a CLI flag. `Puck.World` has
 > no content-authoring flags at all.
 
-> **`Puck.Demo.*` symbols below are RECORDED HISTORY — do not go read them.**
-> `Puck.Demo` is quarantined under `experimental/` and **off limits** by owner
-> ruling: it may not be opened, built, run, or ported from. The contracts stated
+> **`Puck.Demo.*` symbols below are recorded history.** `Puck.Demo` is
+> quarantined under `experimental/`: read it as prior art, but it may not be
+> built, run, or revived in place. The contracts stated
 > here were accurate when written and are kept because they explain why the
 > engine seams have the shape they do. They are not live collaborators, they are
 > not available to call, and **nothing plans re-homing them into `Puck.World`** —
@@ -489,7 +489,7 @@ plus the existing instanced==flat stages.
 ## Verifying
 
 **Nothing gates the world path today.** The POST battery whose world-path stages
-exercised every kernel is quarantined with `Puck.Post` and off limits, the
+exercised every kernel is quarantined with `Puck.Post` and never run, the
 `--run`/`--capture` entry points that drove the example documents left with the
 `Puck.Demo` composition root, and nothing replaced either. A kernel, ISA, or
 render-assembly change is unverified by machine.

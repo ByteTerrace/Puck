@@ -59,10 +59,11 @@ sequences it.
   shader contract.
 - Simulation state uses deterministic fixed-point data. Presentation shaders
   may use floating point, and are supposed to hold cross-backend parity within
-  the configured thresholds — but nothing measures that today. The parity stages
-  were quarantined with `Puck.Post`; only the threshold *document* model
-  (`ParityThresholdsDocument`) survives, and no runner reads it. Treat parity as
-  an unchecked intent, not a gate.
+  the configured thresholds — but nothing measures that today. The parity
+  stages were quarantined with `Puck.Post`; only the calibrated threshold
+  values (`ParityThresholds`/`ParityThresholdSet` in
+  `experimental/Puck.Post/ParityCheck.cs`) survive there, out of the build and
+  read by no runner. Treat parity as an unchecked intent, not a gate.
 - The analytic instruction stream and authored carve list are authoritative.
   `SampledRegion` bricks are bounded, invalidatable render caches, never the
   simulation or persistence representation.

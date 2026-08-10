@@ -64,11 +64,11 @@ public readonly record struct PellResidue(BigInteger X, BigInteger Y);
 
 /// <summary>Exact continued-fraction and finite-orbit operations for Pell equations.</summary>
 public static class PellEquation {
-    /// <summary>Returns the fundamental positive solution of <c>X^2-DY^2=1</c> — the fundamental NORM-ONE unit.</summary>
+    /// <summary>Returns the fundamental positive solution of <c>X^2-DY^2=1</c> — the fundamental norm-one unit.</summary>
     /// <remarks>
     /// <para>
     /// Norm one is stronger than "the fundamental unit", and the distinction is load-bearing: whenever the minimal
-    /// solution of <c>X^2-DY^2=+-1</c> has norm minus one, this method returns its SQUARE. At <c>D=13</c> the minimal
+    /// solution of <c>X^2-DY^2=+-1</c> has norm minus one, this method returns its square. At <c>D=13</c> the minimal
     /// solution is <c>18^2-13*5^2=-1</c> and this returns <c>649^2-13*180^2=1</c>. Deriving a minimal <c>+-1</c> or
     /// <c>+-4</c> answer from what this returns is therefore wrong. Callers that need determinant one —
     /// <see cref="ResidueCycle(PellUnit, BigInteger, BigInteger, BigInteger)"/> and the orbit box of
@@ -113,7 +113,7 @@ public static class PellEquation {
     /// </para>
     /// <para>
     /// Cost follows the box: the walk is linear in <c>U</c>, which grows exponentially in <c>sqrt(D)</c>, so a radicand
-    /// with a large fundamental unit puts this method out of reach however small <c>N</c> is. That price buys EVERY
+    /// with a large fundamental unit puts this method out of reach however small <c>N</c> is. That price buys every
     /// orbit; a caller that needs one solution of a given norm — one element of the order — wants
     /// <see cref="QuadraticNormEquation"/> instead, which reaches it along the ideal's continued fraction and never
     /// enumerates the box.

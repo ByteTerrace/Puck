@@ -48,20 +48,20 @@ public sealed class PpuTimingParameters {
     /// valid, so a coincidence that holds across the line boundary never sees the interrupt line dip — hardware's
     /// STAT-interrupt-blocking guarantee. A negative shift may push the pulse onto the tail of the previous line.</summary>
     public int OamPulseOffset { get; init; } = 1;
-    /// <summary>Dots the POLLED mode-3→0 STAT edge trails the internal transition at single speed; double speed adds
+    /// <summary>Dots the polled mode-3→0 STAT edge trails the internal transition at single speed; double speed adds
     /// one more dot on top (a documented 173.5-dot half-cycle made observable at half-dot resolution). One dot tighter
     /// than the interrupt lag — the acceptance battery's sprite-timing case pins the polled edge while its
     /// line/SCX-timing case pins the interrupt, and they disagree by exactly one dot.</summary>
     public int PolledMode0Lag { get; init; } = 4;
-    /// <summary>Dots the POLLED mode-2→3 STAT edge trails the internal transition at the end of the OAM scan (the
+    /// <summary>Dots the polled mode-2→3 STAT edge trails the internal transition at the end of the OAM scan (the
     /// interrupt-side conditions are unaffected). Also moves the color-palette-RAM lock, which follows the polled
     /// mode.</summary>
     public int PolledMode3Lag { get; init; } = 4;
-    /// <summary>The DOUBLE-speed length, in dots, of the window activation phase — the pipeline freeze between the WX
+    /// <summary>The double-speed length, in dots, of the window activation phase — the pipeline freeze between the WX
     /// match and the fetcher restart (the hardware window penalty beyond the restart's six fetch dots). Co-swept with
     /// the STAT mode-0 lags because the freeze lengthens mode 3 and shifts the mode-3→0 boundary on window lines.</summary>
     public int WindowActivationDotsDouble { get; init; } = 4;
-    /// <summary>The SINGLE-speed base length, in dots, of the window activation phase; the commit is additionally
+    /// <summary>The single-speed base length, in dots, of the window activation phase; the commit is additionally
     /// stretched up to two dots to land in the second half of the machine's 4-dot grid. The same shared mode-3 boundary
     /// couples this to the STAT mode-0 lags, so it is co-swept with them rather than in isolation.</summary>
     public int WindowActivationDotsSingle { get; init; } = 6;

@@ -9,12 +9,18 @@ namespace Puck.World;
 /// (<see cref="RingCommand"/> steps the active ring, the mouse-less twin of the mouse wheel;
 /// <see cref="CommitCommand"/> consumes an author-bound release-commit) plus the pipe-assertable
 /// <c>world.view.wheel</c> read (the <c>world.view.pointer</c> sibling: live radial presentation state nothing else
-/// can echo). The wheel CONTENT is authored data — the binding substrate's <c>wheels</c> rows, edited through the
+/// can echo). The wheel content is authored data — the binding substrate's <c>wheels</c> rows, edited through the
 /// ordinary binding layers — and a committed sector returns its compiled activation to the input router, so this module carries no
-/// authority of its own. A SEPARATE module from <see cref="WorldViewCommandModule"/> to keep every class under its
+/// authority of its own. A separate module from <see cref="WorldViewCommandModule"/> to keep every class under its
 /// analyzer ceilings.
 /// </summary>
-internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster roster) : ICommandModule {
+/// <remarks>Core-registered for command-vocabulary parity (the document validators must see the same committed
+/// vocabulary in every boot shape — <see cref="RingCommand"/>/<see cref="CommitCommand"/> are stock wheel-hold-page
+/// rows every group's wheel carries): <see cref="WorldWheelFeed"/> is genuinely presentation-only (it reads the
+/// mouse/pointer and viewport state <see cref="WorldBootComposition.AddWorldPresentation"/> alone registers), so it is optional here
+/// (default <see langword="null"/> — DI supplies the default rather than throwing headless) and every handler
+/// refuses by name at use when it is absent, rather than the module going unregistered.</remarks>
+internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFeed? feed = null) : ICommandModule {
     /// <summary>The ring-cycle act — bound on the wheel hold pages (Arrow Up/Down, D-pad Up/Down) with a constant
     /// Axis1D direction, and typed as <c>player.wheel.ring [next|prev] [player]</c>.</summary>
     public const string RingCommand = "player.wheel.ring";
@@ -29,8 +35,13 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
     /// <summary>The author-bindable explicit cancel act.</summary>
     public const string CancelCommand = "player.wheel.cancel";
 
-    private readonly WorldWheelFeed m_feed = feed;
+    private readonly WorldWheelFeed? m_feed = feed;
     private readonly PlayerRoster m_roster = roster;
+
+    // The headless refusal shared by every handler below — named per verb so a scripted caller reads exactly which
+    // act was refused, never a generic "unavailable".
+    private CommandResult RequiresWindowed(string verb) =>
+        CommandResult.Error(output: $"[{verb}: requires a windowed boot — headless registers this verb for vocabulary parity only]");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -72,6 +83,10 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
     }
 
     private CommandResult RingHandler(CommandContext context, WireArgs args) {
+        if (m_feed is not { } feed) {
+            return RequiresWindowed(verb: RingCommand);
+        }
+
         int slot;
         int direction;
 
@@ -102,7 +117,7 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
             slot = PlayerRoster.SlotFromDisplay(number: player);
         }
 
-        if (!m_feed.TryCycleRing(slot: slot, direction: direction, activeRing: out var activeRing, ringCount: out var ringCount, ringLabel: out var ringLabel, excursionControlled: out var excursionControlled)) {
+        if (!feed.TryCycleRing(slot: slot, direction: direction, activeRing: out var activeRing, ringCount: out var ringCount, ringLabel: out var ringLabel, excursionControlled: out var excursionControlled)) {
             if (excursionControlled) {
                 return CommandResult.Error(output: $"[{RingCommand}: refused — seat {PlayerRoster.DisplayNumber(slot: slot)} radial selects rings from authored neutral-relative excursion]");
             }
@@ -117,6 +132,10 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
     }
 
     private CommandResult CommitHandler(CommandContext context, WireArgs args) {
+        if (m_feed is not { } feed) {
+            return RequiresWindowed(verb: CommitCommand);
+        }
+
         int slot;
 
         if (context.Source is not null) {
@@ -126,7 +145,7 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
             // handler (the bound row's ActivateOn gate passes only the real Completed edge and the Canceled
             // synthesis) — an alt-tab mid-hold revokes silently, never commits.
             if (context.Phase == CommandPhase.Canceled) {
-                m_feed.Revoke(slot: slot);
+                feed.Revoke(slot: slot);
 
                 return CommandResult.None;
             }
@@ -138,7 +157,7 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
             slot = PlayerRoster.SlotFromDisplay(number: player);
         }
 
-        var outcome = m_feed.Commit(slot: slot);
+        var outcome = feed.Commit(slot: slot);
 
         return outcome.Status switch {
             BindingWheelCommitStatus.NotArmed => CommandResult.Error(output: $"[{CommitCommand}: refused — no radial commit is armed for seat {PlayerRoster.DisplayNumber(slot: slot)}]"),
@@ -154,16 +173,24 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
     }
 
     private CommandResult SelectHandler(CommandContext context, WireArgs args) {
+        if (m_feed is not { } feed) {
+            return RequiresWindowed(verb: SelectCommand);
+        }
+
         if (context.Source is null) {
             return CommandResult.Error(output: $"[{SelectCommand}: this Axis2D act is driven by an authored binding]");
         }
 
-        m_feed.Select(slot: context.Slot, axis: context.Value.AsAxis2D);
+        feed.Select(slot: context.Slot, axis: context.Value.AsAxis2D);
 
         return CommandResult.None;
     }
 
     private CommandResult CancelHandler(CommandContext context, WireArgs args) {
+        if (m_feed is not { } feed) {
+            return RequiresWindowed(verb: CancelCommand);
+        }
+
         int slot;
 
         if (context.Source is not null) {
@@ -174,21 +201,29 @@ internal sealed class WorldWheelCommandModule(WorldWheelFeed feed, PlayerRoster 
             slot = PlayerRoster.SlotFromDisplay(number: player);
         }
 
-        m_feed.Revoke(slot: slot);
+        feed.Revoke(slot: slot);
 
         return new CommandResult(Output: $"[{CancelCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} cancelled]");
     }
 
     private CommandResult ViewHandler(CommandContext context, WireArgs args) {
+        if (m_feed is not { } feed) {
+            return RequiresWindowed(verb: "world.view.wheel");
+        }
+
         if (args.Count == 0) {
-            return new CommandResult(Output: Describe(status: m_feed.Status));
+            return new CommandResult(Output: Describe(status: feed.Status));
+        }
+
+        if (args.Count > 1) {
+            return CommandResult.Error(output: $"[world.view.wheel: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
         if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var player)) {
             return CommandResult.Error(output: $"[world.view.wheel: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
-        return new CommandResult(Output: Describe(status: m_feed.StatusFor(slot: PlayerRoster.SlotFromDisplay(number: player))));
+        return new CommandResult(Output: Describe(status: feed.StatusFor(slot: PlayerRoster.SlotFromDisplay(number: player))));
     }
 
     private static string Describe(WorldWheelStatus status) {

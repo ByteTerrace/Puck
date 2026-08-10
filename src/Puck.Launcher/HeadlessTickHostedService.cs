@@ -100,11 +100,25 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 : null);
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
-            var stepTicks = EngineTicks.PerRate(ratePerSecond: LauncherHostLoop.TargetUpdateRate);
+            // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
+            // (console pump alone) AND the fallback while the registered simulation reports 0 (an authored
+            // simulation.rateHz durable stop) — the loop's own pacing (this wait grid, and the pump's calling
+            // cadence below) is presentation-adjacent host pacing, never sim state, and must never depend on a rate
+            // that can legitimately be zero (EngineTicks.PerRate refuses zero outright). The registered simulation
+            // still gates whether it actually steps internally (WorldSimulation.ShouldStepBoot); this value only
+            // decides how often Advance is called, so a stopped world's console keeps answering.
+            //
+            // Resolved per iteration, not once before the loop: a live world.load can swap in a differently-rated
+            // document mid-session, and this boot shape must adopt the new cadence — both the step width handed to
+            // Advance and the wall-clock wait grid below — the next iteration rather than keep pacing at a stale
+            // rate.
+            static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
+                var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
+
+                return ((simRatePerSecond == 0U) ? LauncherHostLoop.DefaultUpdateRate : simRatePerSecond);
+            }
+
             var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
-            // The wall-clock pacing grid for ONE fixed step — presentation-adjacent only (paces the wait, never enters
-            // sim state); the TickClock sample above is what actually measures elapsed time for the accumulator.
-            var period = (frequency / (long)LauncherHostLoop.TargetUpdateRate);
             var nextDeadline = Stopwatch.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + (long)(exitAfter.TotalSeconds * frequency))
@@ -129,6 +143,13 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 }
 
                 var deltaTicks = clock.Sample();
+                // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.
+                var ratePerSecond = ResolveRatePerSecond(simulation: m_simulation);
+                var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
+                // The wall-clock pacing grid for ONE fixed step — presentation-adjacent only (paces the wait, never
+                // enters sim state); the TickClock sample above is what actually measures elapsed time for the
+                // accumulator.
+                var period = (frequency / (long)ratePerSecond);
 
                 pump?.Advance(deltaTicks: deltaTicks, maxFrameTicks: maxFrameTicks, stepTicks: stepTicks);
 

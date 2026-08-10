@@ -20,23 +20,23 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 
 /// <summary>
 /// The SDF engine as a host-model <see cref="IRenderNode"/>: a generic multi-viewport SDF world compositor driven by
-/// COMPUTE, fully BACKEND-NEUTRAL (it depends only on the neutral <c>IGpuCompute*</c> seam, so the identical node runs
+/// compute, fully backend-neutral (it depends only on the neutral <c>IGpuCompute*</c> seam, so the identical node runs
 /// on whichever backend the host publishes). It resolves the shared device from <see cref="FrameContext.Host"/>,
 /// pulls each frame's scene + cameras + regions from an <see cref="ISdfFrameSource"/>, and drives the shared
 /// <see cref="SdfWorldEngine"/> core in its fire-and-forget mode (the host's frame pacing orders the frames).
 /// <para>
-/// Rendering is TWO-STAGE so the compositor is SOURCE-AGNOSTIC. <c>sdf-beam.comp</c> cone-marches the field per tile
+/// Rendering is two-stage so the compositor is source-agnostic. <c>sdf-beam.comp</c> cone-marches the field per tile
 /// to a conservative march-start depth; <c>sdf-world-views.comp</c> (Stage 1) renders each viewport's SDF camera
 /// into its own rect-sized <em>source</em> texture; <c>sdf-world-composite.comp</c> (Stage 2) places each source —
 /// an SDF view, or a child node's output bound into the same slot — into its screen region by a 1:1 copy.
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
-/// DIEGETIC SCREENS ride a separate, SHADING-ONLY seam: a program may declare up to 8 static screen surfaces (see
+/// Diegetic screens ride a separate, shading-only seam: a program may declare up to 8 static screen surfaces (see
 /// <see cref="SdfProgramBuilder"/>'s screen-surface <c>ScreenSlab</c> overload), and this node polls the
 /// <c>screenSources</c> constructor argument each frame to bind (or unbind) each one's sampled image — unlike a
-/// child, this never adds or replaces a viewport; it only changes how one shape's LIT face shades. A screen's
-/// world-space sampling FRAME is normally set once at program build; a screen riding a dynamic transform instead
+/// child, this never adds or replaces a viewport; it only changes how one shape's lit face shades. A screen's
+/// world-space sampling frame is normally set once at program build; a screen riding a dynamic transform instead
 /// supplies a <c>screenSurfaceTransforms</c> provider, polled every frame right after <c>screenLights</c>, so its
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
@@ -127,9 +127,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <param name="children">An optional map from viewport slot to a child <see cref="IRenderNode"/> that supplies that slot's surface instead of an SDF camera. Each child is produced every frame at its slot's pixel rect, its same-device storage image is bound straight into the source-agnostic compositor's <c>sources[]</c> slot, and the SDF render skips that slot. The child must produce a <em>compute source</em> (a same-device storage image left in the general layout).</param>
     /// <param name="screenSources">An optional map from a program-declared <see cref="SdfScreenSurface.ScreenIndex"/>
     /// to a provider of that screen's current same-device storage-image view (General layout, shader-readable),
-    /// called once per produced frame AFTER children have produced — a provider may close over a hosted child (its
-    /// slot's produced <see cref="Surface.ImageViewHandle"/>) or over ANY other GPU image a host owns directly, e.g.
-    /// an emulator's NATIVE framebuffer image, unresampled (not one of this node's <paramref name="children"/>, whose
+    /// called once per produced frame after children have produced — a provider may close over a hosted child (its
+    /// slot's produced <see cref="Surface.ImageViewHandle"/>) or over any other GPU image a host owns directly, e.g.
+    /// an emulator's native framebuffer image, unresampled (not one of this node's <paramref name="children"/>, whose
     /// surfaces are pane-extent-resampled — the screen seam samples the source itself, so no separate resample is
     /// needed or wanted). A provider returning 0 leaves the slot unbound this frame, which falls back to the
     /// flat/procedural screen material. See <see cref="SdfWorldEngine.SetScreenSource"/>.</param>
@@ -137,30 +137,30 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// a provider of the colored light that screen emits into the room this frame (typically its framebuffer's average
     /// color). Polled right after <paramref name="screenSources"/>; see <see cref="SdfWorldEngine.SetScreenLight"/>.</param>
     /// <param name="screenSurfaceTransforms">An optional map, parallel to <paramref name="screenSources"/>, from a
-    /// screen index to a provider of that screen's world-space sampling frame THIS FRAME — for a screen slab riding a
+    /// screen index to a provider of that screen's world-space sampling frame this frame — for a screen slab riding a
     /// dynamic transform (e.g. a slab riding a moving rig), whose sampling frame must move with the geometry every
     /// frame or it goes stale. A provider returning <see langword="null"/> leaves the program-declared (or
     /// program-declared) frame untouched this frame — a screen on static geometry simply omits its entry, or a provider
     /// may return null on frames where nothing moved to skip the write. Polled right after <paramref name="screenLights"/>;
     /// see <see cref="SdfWorldEngine.SetScreenSurface"/>.</param>
-    /// <param name="dynamicTransformCapacity">An optional FLOOR on the engine's dynamic-transform slot capacity. The
+    /// <param name="dynamicTransformCapacity">An optional floor on the engine's dynamic-transform slot capacity. The
     /// engine always provisions at least the first frame's transform count; a host whose moving-entity population
     /// grows over the run (hundreds of animated instances appearing later) passes its peak here so the buffer is
     /// sized once — the capacity is otherwise frozen at construction and later frames' excess transforms are
     /// dropped.</param>
-    /// <param name="programWordCapacity">An optional FLOOR on the program buffer's packed-word capacity (see
+    /// <param name="programWordCapacity">An optional floor on the program buffer's packed-word capacity (see
     /// <see cref="SdfWorldEngineOptions"/>): a frame source that hot-swaps programs (<see cref="SdfFrame.ProgramChanged"/>)
     /// declares its envelope here instead of relying on every future program staying within the first frame's size.</param>
-    /// <param name="instanceCapacity">An optional FLOOR on the instance count the per-tile mask buffer is sized for —
+    /// <param name="instanceCapacity">An optional floor on the instance count the per-tile mask buffer is sized for —
     /// the hot-swap counterpart of <paramref name="programWordCapacity"/> for instanced programs.</param>
-    /// <param name="viewportCapacity">An optional FLOOR on the compositor's viewport capacity — the envelope for a
+    /// <param name="viewportCapacity">An optional floor on the compositor's viewport capacity — the envelope for a
     /// frame source whose per-frame view count grows past the first frame's (a split-screen host whose players join
     /// later). The engine composites each frame's actual view count up to the envelope; 0 keeps the pre-existing
     /// freeze-at-first-frame behavior.</param>
     /// <param name="timingEnabled">The resolved <c>host.timing</c> toggle (per-pass GPU-ms timestamps), or
     /// <see langword="null"/> for the disarmed default. The engine always receives the
     /// timing seam and arms live off <see cref="GpuTimingControl.Shared"/> (arm it live via the demo's gpu.timing
-    /// switch / Puck.World's world.timing verb, or the run-doc <c>host.timing</c> field) — but SEEDS that shared
+    /// switch / Puck.World's world.timing verb, or the run-doc <c>host.timing</c> field) — but seeds that shared
     /// control at construction (the lowest precedence tier: a programmatic arm or the run-doc composition seed outrank
     /// it).</param>
     /// <param name="rayQueryEnabled">The <c>PUCK_RAY_QUERY</c> toggle (permit/deny the ray-query path), or
@@ -174,7 +174,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <see cref="SdfWorldEngine.DebugLabel"/>); a nested view engine passes <c>view:&lt;name&gt;</c> so a capture
     /// distinguishes it. Defaults to the engine's own default (<c>world</c>) when omitted. Presentation-only.</param>
     /// <param name="brickPoolVoxelCapacity">The carve-bake brick pool's voxel capacity (see
-    /// <see cref="SdfWorldEngineOptions.BrickPoolVoxelCapacity"/>), FROZEN at construction. Defaults to
+    /// <see cref="SdfWorldEngineOptions.BrickPoolVoxelCapacity"/>), frozen at construction. Defaults to
     /// <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); pass 0 for a host whose scene never bakes
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -225,16 +225,16 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
 
-    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle: the constructor argument when given, else the
-    /// environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc for why nothing consumes this
-    /// yet.</summary>
+    /// <summary>Gets a value indicating whether the resolved <c>PUCK_RAY_QUERY</c> toggle is enabled: the constructor
+    /// argument when given, else the environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc
+    /// for why nothing consumes this yet.</summary>
     public bool RayQueryEnabled => (m_rayQueryEnabled ?? RayQueryEnabledFromEnvironment());
 
-    /// <summary>The RGBA pixels read back the first time this node captured (its <c>capturePath</c> was set);
+    /// <summary>Gets the RGBA pixels read back the first time this node captured (its <c>capturePath</c> was set);
     /// empty until then. Lets a parity gate diff two backends' renders without re-reading the GPU.</summary>
     public ReadOnlyMemory<byte> CapturedPixels => m_capturedPixels;
 
-    /// <summary>Reads the LAST produced frame's composited output back to CPU pixels (tightly packed RGBA8, row-major),
+    /// <summary>Reads the last produced frame's composited output back to CPU pixels (tightly packed RGBA8, row-major),
     /// or an empty span before the engine exists. This is the streaming counterpart of the one-shot <c>--capture</c> /
     /// <see cref="RequestCapture"/> readbacks: the recording tap calls it each frame it captures, because the live
     /// present path hands GPU surfaces whose image handle the neutral <c>Surface</c> does not expose for readback. The
@@ -259,7 +259,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <inheritdoc/>
     public string? PendingCapturePath => m_debugCapturePath;
 
-    /// <summary>Arms a one-shot debug capture: the NEXT produced frame is read back and written to
+    /// <summary>Arms a one-shot debug capture: the next produced frame is read back and written to
     /// <paramref name="path"/> — the runtime sibling of the <c>--capture</c> startup flag (the debug-page verb).</summary>
     /// <param name="path">The PNG path to write (the caller creates the directory).</param>
     public void RequestCapture(string path) {
@@ -310,7 +310,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         return (m_engine?.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frame) ?? false);
     }
 
-    /// <summary>Reads the MOST RECENT produced frame's per-frame instance-grid rebuild CPU cost through the live engine
+    /// <summary>Reads the most recent produced frame's per-frame instance-grid rebuild CPU cost through the live engine
     /// (a passthrough of <see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>) — the CPU-bound counterpart
     /// to <see cref="TryReadPassTimings"/>'s GPU pass timings. <see langword="null"/> before the engine is built or
     /// when the live program's instance grid is invariant (no per-frame rebuild).</summary>
@@ -332,10 +332,10 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         return true;
     }
-    /// <summary>The render-pass labels a <see cref="TryReadPassTimings"/> read fills, in order — a passthrough of
+    /// <summary>Gets the render-pass labels a <see cref="TryReadPassTimings"/> read fills, in order — a passthrough of
     /// <see cref="SdfWorldEngine.PassTimingLabels"/> so a consumer holding only this node names no engine type.</summary>
     public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
-    /// <summary>The pass count a <see cref="TryReadPassTimings"/> read reports — a passthrough of
+    /// <summary>Gets the pass count a <see cref="TryReadPassTimings"/> read reports — a passthrough of
     /// <see cref="SdfWorldEngine.PassTimingCount"/> (the width a caller sizes its span to).</summary>
     public static int PassTimingCount => SdfWorldEngine.PassTimingCount;
     /// <inheritdoc/>
@@ -578,7 +578,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         // One cohesive compute-services bundle instead of resolving each granular factory; the granular interfaces
         // are still registered for a node that needs only one of them. Forwarded unchanged from the composition
-        // root's SdfViewGpuServices (unit 6b's constructor-chain round) rather than re-resolved here.
+        // root's SdfViewGpuServices rather than re-resolved here.
         m_gpu ??= m_services.Gpu;
         m_deviceContext = gpuDevice;
 

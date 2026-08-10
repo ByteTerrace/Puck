@@ -54,6 +54,30 @@ internal static class EbmlWriter {
         );
     }
 
+    /// <summary>Writes a size as a variable-length integer of an exact width, so a placeholder written while the
+    /// value is unknown can be overwritten in place once it is known without shifting any following byte.</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="size">The non-negative content size.</param>
+    /// <param name="length">The variable-length integer width in bytes, from one to eight.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is outside one to eight, or
+    /// <paramref name="size"/> does not fit that width.</exception>
+    public static void WriteSizeFixed(Stream stream, long size, int length) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: length, other: 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: length, other: 8);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: size);
+
+        var capacity = ((1L << (7 * length)) - 1L);
+
+        // The all-ones value of the width is the reserved unknown-size pattern, so the usable maximum is one below it.
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: size, other: capacity);
+
+        Span<byte> buffer = stackalloc byte[8];
+        var marker = (1L << (7 * length));
+
+        BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: (marker | size));
+        stream.Write(buffer: buffer[(8 - length)..]);
+    }
+
     /// <summary>Writes the eight-byte reserved unknown-size marker (for a live, unbounded master element).</summary>
     /// <param name="stream">The destination stream.</param>
     public static void WriteUnknownSize(Stream stream) {

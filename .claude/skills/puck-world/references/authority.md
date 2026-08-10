@@ -3,10 +3,7 @@
 ONE server-side table authorizes every write: `WorldGrants`
 (`src/Puck.World.Server/WorldGrants.cs`). Protocol vocabulary:
 `src/Puck.World.Data/Protocol/WorldGrant.cs`, `WorldPrincipal.cs`,
-`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. Read
-`docs/capability-channels-STATE.md` FIRST for current rulings and open
-work — it must be updated in the SAME COMMIT as any landing that changes its
-truth.
+`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels campaign that designed this model was retired 2026-08-10 and its rulings moved into the code above — read the CODE for current rulings, and `docs/campaign.md` for what remains as work.
 
 ## Contents
 
@@ -64,9 +61,7 @@ truth.
   arguments). `chat.whisper` is the real cross-document whisper verb (source id
   derived from the acting player's own identity, submitted through the same
   `WorldOwnedWorlds.Submit`/`Decide` pair `identity.deliver`'s dev harness
-  exercised). See `docs/capability-channels-STATE.md`'s dated entries for the
-  full writeup, including the companion widening that lets `Decide`'s text arm
-  land in a bounded, evicting KEYED row (not just a slot). `world.grants` echoes the
+  exercised). A companion widening lets `Decide`'s text arm land in a bounded, evicting KEYED row, not just a slot. `world.grants` echoes the
   document-authored rows in their own `[world.grants.document: …]` group so the
   skip is not a disappearance. `World` (`world`) is the sixth kind: THE WORLD'S OWN
   AUTHORED PROGRAM — a `rules` effect, or a kit's `generate` effect. It holds no

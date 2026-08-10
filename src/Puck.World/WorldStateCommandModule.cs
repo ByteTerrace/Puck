@@ -7,27 +7,26 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>state</c> section's FINE-GRAIN verb surface — the dev reflection of the genre-neutral game-state document
-/// protocol (score, rounds, inventory, flags), molded over stdin through the SAME <see cref="WorldMutation"/>
+/// The <c>state</c> section's fine-grain verb surface — the dev reflection of the genre-neutral game-state document
+/// protocol (score, rounds, inventory, flags), molded over stdin through the same <see cref="WorldMutation"/>
 /// messages the editor drives. The whole-row pair (a row's name, kind, envelope, capacity, and cells) lives in the
 /// general <see cref="WorldRowCommandModule"/> as <c>world.row.set</c>/<c>world.row.remove state ...</c> — a cell
-/// write is a FINER grain than a row upsert, not sugar for one, which is why it stays here:
+/// write is a finer grain than a row upsert, not sugar for one, which is why it stays here:
 /// <c>world.state.cell.set</c> writes one cell of an already-declared row without re-authoring its shape,
-/// DISPATCHING on the row's own declared kind (a numeric/bool token, or a raw-tail string for an already-live
+/// dispatching on the row's own declared kind (a numeric/bool token, or a raw-tail string for an already-live
 /// text-kind row); <c>world.state.cell.remove</c> removes one, <c>world.generate</c> redraws a draw site, and
-/// <c>world.state</c> reads all three grains back (every row, one row with its cells, one cell alone). The former
-/// world.table.* module is retired with the
-/// separate table concept it named — a slot IS a row with one cell keyed <see cref="WorldStateRow.SlotKey"/>, so a
-/// second verb family over the same rows was a second name for one thing. Every write verb routes
-/// <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick boundary, the stdin barrier serializes a
-/// following read); <c>world.state</c> is an <see cref="CommandRouting.Immediate"/> read of the live section.
+/// <c>world.state</c> reads all three grains back (every row, one row with its cells, one cell alone). A slot is a
+/// row with one cell keyed <see cref="WorldStateRow.SlotKey"/>, so there is no separate verb family for it. Every
+/// write verb routes <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick boundary, the stdin
+/// barrier serializes a following read); <c>world.state</c> is an <see cref="CommandRouting.Immediate"/> read of the
+/// live section.
 /// </summary>
 /// <remarks>Every mutation here carries the identity its ingress door stamped (see
-/// <see cref="WorldPrincipalMapping"/>) — Console for a typed line. <see cref="WorldServer"/> checks it TWICE: the
+/// <see cref="WorldPrincipalMapping"/>) — Console for a typed line. <see cref="WorldServer"/> checks it twice: the
 /// standard <see cref="WorldCapability.Mutate"/> hold over <see cref="WorldSection.State"/> every mutation kind
-/// requires, PLUS a second, row-scoped <see cref="WorldCapability.Edit"/> hold over the CONCRETE
-/// <c>state:&lt;name&gt;</c> subject the row names (or the wildcard) — the "concrete rows" ruling, and the SAME
-/// subject whichever grain the write uses. An Edit row may additionally carry a verb mask
+/// requires, plus a second, row-scoped <see cref="WorldCapability.Edit"/> hold over the concrete
+/// <c>state:&lt;name&gt;</c> subject the row names (or the wildcard), the same subject whichever grain the write
+/// uses. An Edit row may additionally carry a verb mask
 /// (<c>world.grant … edit state:&lt;name&gt; verbs:UpsertStateCell,RemoveStateCell</c>), which admits the per-cell
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
@@ -138,8 +137,8 @@ internal sealed class WorldStateCommandModule(WorldServer server, IServerLink li
         return string.Join(separator: Environment.NewLine, values: lines);
     }
 
-    // One row's own line PLUS every cell it holds — the grain world.table used to own, now the same verb's
-    // one-argument form, because there is one substrate and no shape that hides from it.
+    // One row's own line PLUS every cell it holds — the verb's one-argument form, because there is one substrate and
+    // no shape that hides from it.
     private CommandResult DescribeOneRow(string name) {
         if (FindRow(name: name) is not { } row) {
             return CommandResult.Error(output: $"[world.state {name}: no such row]");

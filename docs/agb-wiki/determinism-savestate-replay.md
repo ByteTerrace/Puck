@@ -40,20 +40,38 @@ behavior and deterministic content, not a private field layout.
 
 ## Rewind
 
-The demo's `AgbTimeTravel` stores periodic full snapshots and intermediate
-XOR/RLE deltas in a fixed-capacity ring. Rewind reconstructs the requested image
-and restores the active machine without rebooting it. The `agb.rewind` and
-`agb.rewind.status` console verbs expose this behavior.
-
-Delta generation is pure comparison over immutable snapshot bytes. It may run
-off-thread only when no result can feed back into the emulation timeline.
+`MachineTimeTravel<TInput>` (`src/Puck.Hosting/MachineTimeTravel.cs`) is the
+shared, machine-neutral rewind layer both GamingBrick cores drive through
+`ITimeTravelMachineCore<TInput>` — it is not AGB-specific or Demo-specific.
+It stores periodic full keyframes and, for the frames between two keyframes,
+only the `(input, cycle-budget, host-accumulator)` that produced each one, in
+a fixed-capacity segment ring; a rewind restores the nearest keyframe and
+deterministically replays the intervening inputs, landing bit-exact by
+construction. There is no XOR/RLE delta encode: the type's own remarks call
+that dead cost, since a full-state delta stream would spend CPU and
+allocation on bytes a keyframe-plus-replay restore never reads.
+`QueuedMachineHost`/`QueuedMachineWorker` expose the layer as
+`ITimeTravelMachine` (`SetRewindEnabled`/`RewindBy`), but no console verb
+currently wires rewind to a booted screen machine. The quarantined
+`experimental/Puck.Demo/AgbDebug/AgbDebugCommandModule.cs` (out of the
+build) carries a comment naming an aspirational `TimeTravelCommandModule`
+that was never built; its own live verbs are `agb.snap`/`agb.restore`
+(in-memory savestate slots, a coarser mechanism than the ring) and
+`agb.light`/`agb.poke` — none of them rewind.
 
 ## Runahead
 
-Runahead uses a persistent forked machine to simulate predicted input several
-frames ahead while the real machine remains authoritative for state and audio.
-The `agb.runahead` verb configures the distance. A prediction change rebuilds or
-restores the lookahead from authoritative state before advancing again.
+`MachineTimeTravel<TInput>` also owns runahead: one persistent lookahead
+fork, rented from the core's instance pool rather than forked per input
+change, is kept a configured number of native frames ahead of the
+authoritative machine on predicted (currently-held) input, capped at
+`MaxRunaheadFrames` (10). The host presents the lookahead's framebuffer while
+the real machine stays the tick-locked authority and the only audio source.
+The layer re-advances the lookahead by the authority's own native-frame delta
+each submission rather than a fixed per-call step, so the lead holds exactly
+N under a mismatched host/native cadence or under fast-forward. As with
+rewind, no console verb exposes this outside the quarantined demo debug
+scene's own `runahead <n|off>` command (out of the build).
 
 Two-instance runahead is preferred over repeatedly saving and loading the active
 machine because it isolates speculative state and matches the fleet execution

@@ -3,10 +3,10 @@ using Puck.Abstractions.Presentation;
 namespace Puck.World;
 
 /// <summary>
-/// The world's EFFECTIVE host-section values after the CLI window/backend flags override the world-doc defaults — the
-/// direct twin of <see cref="WorldStorageSettings"/> for the presentation host-section. Resolved ONCE at boot by
+/// The world's effective host-section values after the CLI window/backend flags override the world-doc defaults — the
+/// direct twin of <see cref="WorldStorageSettings"/> for the presentation host-section. Resolved once at boot by
 /// <see cref="Resolve"/> (a pure static) and registered as a singleton the <c>Program</c> registrations and the
-/// <c>world.host</c> read verb consume. Backend resolution is the one place authority differs by SOURCE: a CLI
+/// <c>world.host</c> read verb consume. Backend resolution is the one place authority differs by source: a CLI
 /// <c>--backend directx</c> the OS cannot satisfy is an operator assertion (<see cref="BackendUnsatisfiable"/> → the
 /// caller hard-exits, preserving World's current behavior), while a document <c>backend</c> preference the OS cannot
 /// satisfy is an author preference (<see cref="BackendDowngraded"/> → hosts on Vulkan with a loud line), because a
@@ -29,7 +29,7 @@ namespace Puck.World;
 /// <param name="ExitAfterSeconds">The effective auto-exit seconds (<c>0</c> runs until the window is closed).</param>
 /// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
 /// <param name="Timing">Whether GPU per-pass timing boots armed.</param>
-/// <param name="Genlock">The external-clock election policy (SHAPE-only), or <see langword="null"/> for automatic election.</param>
+/// <param name="Genlock">The external-clock election policy (shape-only validation; the registry interprets the id), or <see langword="null"/> for automatic election.</param>
 /// <param name="Listen">The effective TCP listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
 /// loopback-only.</param>
 internal sealed record WorldHostSettings(

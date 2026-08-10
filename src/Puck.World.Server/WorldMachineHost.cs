@@ -7,8 +7,8 @@ namespace Puck.World.Server;
 /// assigned, the engine that hosts it, the stepped-frame count, and the boot fault (a declared machine whose content
 /// file was missing, an unresolved engine, rejected options), if any. Carries no GPU-facing fields (no image-view
 /// handle, no light) — those are presentation reads over <see cref="WorldMachineHost.Handle"/>/
-/// <see cref="WorldMachineHost.Light"/>, which <c>Puck.World.WorldScreenBinder</c> (a pure reader as of the
-/// authoritative-machines campaign) composes into the same console line.</summary>
+/// <see cref="WorldMachineHost.Light"/>, which <c>Puck.World.WorldScreenBinder</c> (a pure reader) composes into the
+/// same console line.</summary>
 /// <param name="Assigned">Whether a machine is booted on the screen.</param>
 /// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
 /// <param name="FramesStepped">How many frames the machine has stepped since it booted.</param>
@@ -23,22 +23,20 @@ public readonly record struct WorldMachineState(bool Assigned, string? Engine, l
     long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault);
 
 /// <summary>
-/// Owns every declared screen's live MACHINE — the authoritative-machines campaign's inversion (owner ruling,
-/// 2026-08-03): booting, stepping, cable-linking, memory-peeking, and reconfiguring a deterministic
-/// <see cref="IScreenMachine"/> are ALL server-side now, so ROM state IS sim state and a headless boot's cabinets run
-/// exactly like a windowed one's. Camera/capture/window-capture/jumbotron-view/test-pattern screen sources are
-/// deliberately OUTSIDE this type's concern — they stay genuinely presentation, composed by
-/// <c>Puck.World.WorldScreenBinder</c>, which now reads THIS type's machine outputs (framebuffer handle, light,
-/// audio) as a pure reader instead of owning any machine state itself. Screen index IS machine identity for
-/// screen-hosted machines, matching the pre-existing document convention (<c>docs</c>'s "screens are
-/// position-addressed").
+/// Owns every declared screen's live machine: booting, stepping, cable-linking, memory-peeking, and reconfiguring a
+/// deterministic <see cref="IScreenMachine"/> are all server-side, so ROM state is sim state and a headless boot's
+/// cabinets run exactly like a windowed one's. Camera/capture/window-capture/jumbotron-view/test-pattern screen
+/// sources are deliberately outside this type's concern — they stay genuinely presentation, composed by
+/// <c>Puck.World.WorldScreenBinder</c>, which reads this type's machine outputs (framebuffer handle, light, audio)
+/// as a pure reader, not an owner of machine state. Screen index is machine identity for screen-hosted machines,
+/// matching the document convention (<c>docs</c>'s "screens are position-addressed").
 /// </summary>
 /// <remarks>Single-threaded, like every other simulation type here: constructed once at boot (or replay
 /// rehydration), then only ever touched from <see cref="WorldServer.Step"/>'s tick thread (<see cref="Advance"/>) or
 /// a synchronously-applied <see cref="WorldServer"/> screen-op apply (<see cref="TryInsert"/> and friends), so no
 /// lock guards this state. Holds native machine resources (an <see cref="IScreenMachine"/> may own emulator-core
 /// memory) — <see cref="Dispose"/> tears every booted machine and live link down; the composition root registers
-/// this type as its OWN DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
+/// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
 public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     private readonly WorldExtensionRegistry<IScreenMachineEngine> m_engines;
@@ -96,10 +94,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// do not fire.</summary>
     public Action<int, bool>? MachineLifecycleTap { get; set; }
 
-    /// <summary>Gets a value indicating whether ANY booted machine has ever had a step/segment actually submitted to it — set the instant
+    /// <summary>Gets a value indicating whether any booted machine has ever had a step/segment actually submitted to it — set the instant
     /// <see cref="Advance"/> steps a machine (individually or through a live cable link), never cleared. The
     /// boot-anchored replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads (mirroring
-    /// <c>WorldAddonRuntime.AnyEverPumped</c>'s identical shape): offline replay reconstructs a machine's BOOT
+    /// <c>WorldAddonRuntime.AnyEverPumped</c>'s identical shape): offline replay reconstructs a machine's boot
     /// image, never its accumulated core state once real ticks have run it.</summary>
     public bool AnyEverPumped { get; private set; }
 
@@ -224,10 +222,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         return (Ok: true, Message: "");
     }
 
-    /// <summary>The CAS signature <see cref="TryBootMachine"/> records when it could not READ the content file at
+    /// <summary>The CAS signature <see cref="TryBootMachine"/> records when it could not read the content file at
     /// all (missing, unreadable) — distinct from any real <c>sha256-64/…</c> hash so it can never collide with one.
-    /// A recorded op pinning this sentinel demands the SAME absence on replay; a file that has since appeared (or
-    /// become readable) refuses BY NAME, exactly like a changed hash does.</summary>
+    /// A recorded op pinning this sentinel demands the same absence on replay; a file that has since appeared (or
+    /// become readable) refuses by name, exactly like a changed hash does.</summary>
     public const string ContentAbsentSignature = "absent";
 
     /// <summary>Boots (or live-swaps) a machine onto a declared screen from a content file path. Any existing machine
@@ -237,15 +235,15 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// <param name="contentPath">The content file (a cartridge ROM) to boot.</param>
     /// <param name="engineId">The screen-machine engine id, or <see langword="null"/> for the sole-registered default.</param>
     /// <param name="options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    /// <param name="expectedContentHash">REPLAY ONLY: the CAS pin (a real <c>sha256-64</c> hash, or
+    /// <param name="expectedContentHash">Replay only: the CAS pin (a real <c>sha256-64</c> hash, or
     /// <see cref="ContentAbsentSignature"/>) a recorded tape entry carries. When set, a fresh resolution of
-    /// <paramref name="contentPath"/> that disagrees with it refuses BY NAME (<c>ScreenOpContentMismatch</c>) before
+    /// <paramref name="contentPath"/> that disagrees with it refuses by name (<c>ScreenOpContentMismatch</c>) before
     /// anything else applies — the negative control a moved/edited/appeared/vanished ROM exercises.
-    /// <see langword="null"/> (the default) is the LIVE path.</param>
+    /// <see langword="null"/> (the default) is the live path.</param>
     /// <returns>Whether the insert succeeded, a message describing the outcome, and the content signature actually
     /// observed (a real hash, <see cref="ContentAbsentSignature"/>, or <see langword="null"/> when content
     /// resolution was never attempted — an unresolved engine, which is not a file-state risk) — a live caller pins
-    /// this onto the replay tape REGARDLESS of <c>Ok</c>, so a failed insert reproduces (or refuses by name) rather
+    /// this onto the replay tape regardless of <c>Ok</c>, so a failed insert reproduces (or refuses by name) rather
     /// than silently retrying unpinned.</returns>
     public (bool Ok, string Message, string? ContentHash) TryInsert(int index, string contentPath, string? engineId, string? options, string? expectedContentHash = null) {
         if (m_disposed) {
@@ -360,17 +358,17 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     }
 
     /// <summary>Points the screen's magazine selector at <paramref name="entry"/>. When that entry is a
-    /// <see cref="WorldScreenSource.Machine"/> row, boots it through the SAME <see cref="TryBootMachine"/> sequence
+    /// <see cref="WorldScreenSource.Machine"/> row, boots it through the same <see cref="TryBootMachine"/> sequence
     /// <see cref="TryInsert"/> uses — CAS-pinned identically, since a magazine entry's document-declared path is not
     /// immune to on-disk drift either; for any other entry kind the selector still moves (so the pointer always
     /// tracks) but nothing boots here — a non-machine entry is presentation's own concern
     /// (<c>Puck.World.WorldScreenBinder</c> observes the moved selector and applies its camera/capture/view source
-    /// itself; see the campaign's <c>STATE.md</c>). Fails for an undeclared screen, a screen with no magazine, an
+    /// itself). Fails for an undeclared screen, a screen with no magazine, an
     /// out-of-range entry, or — for a machine entry — whatever <see cref="TryBootMachine"/> refuses for; a failed
     /// boot always reports <c>Ok: false</c>, never a disguised success.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="entry">The 0-based magazine entry to select.</param>
-    /// <param name="expectedContentHash">REPLAY ONLY: the CAS pin a recorded tape entry carries, threaded to
+    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded tape entry carries, threaded to
     /// <see cref="TryBootMachine"/> when <paramref name="entry"/> resolves to a Machine row. Ignored for any other
     /// entry kind (nothing there reads a file). <see langword="null"/> for the live path.</param>
     /// <returns>Whether the selection (and, for a machine entry, the boot) succeeded, a message, and — for a machine
@@ -466,8 +464,8 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     public string? LinkOf(int index) => (m_slots.TryGetValue(key: index, value: out var slot) ? slot.LinkName : null);
 
     /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens. Every member
-    /// must be a declared screen carrying a machine from the SAME engine, and that engine must implement
-    /// <c>IMachineLinkingEngine</c>; a set that cannot be linked is recorded DORMANT with a reason (never a throw), so
+    /// must be a declared screen carrying a machine from the same engine, and that engine must implement
+    /// <c>IMachineLinkingEngine</c>; a set that cannot be linked is recorded dormant with a reason (never a throw), so
     /// a later insert can re-establish it. Fails outright only for an undeclared screen, a member named twice, a member
     /// already in another link, or fewer than two members.</summary>
     /// <param name="name">The link's stable name.</param>
@@ -566,12 +564,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         return string.Join(separator: "; ", values: m_links.Values.Select(selector: DescribeLink));
     }
 
-    /// <summary>Reconciles the DECLARED cable links to a mutated <c>links</c> section — two-phase, atomic per call:
-    /// every stale-or-member-changed declared link tears down FIRST, in full, before anything is (re-)established.
+    /// <summary>Reconciles the declared cable links to a mutated <c>links</c> section — two-phase, atomic per call:
+    /// every stale-or-member-changed declared link tears down first, in full, before anything is (re-)established.
     /// Tearing down every stale/changed row before establishing anything means a member a changed link is
-    /// RECLAIMING is always free by the time that link is (re-)established, so a plain re-shape (an ordinary,
+    /// reclaiming is always free by the time that link is (re-)established, so a plain re-shape (an ordinary,
     /// non-conflicting move) always succeeds; two declared links that genuinely both claim the same screen within
-    /// the SAME reconcile is a real document error and fails loudly (see below) rather than resolving unpredictably
+    /// the same reconcile is a real document error and fails loudly (see below) rather than resolving unpredictably
     /// by document order.</summary>
     /// <param name="links">The mutated declared link rows (the live definition's links).</param>
     public void ReconcileLinks(IReadOnlyList<WorldScreenLink> links) {
@@ -627,10 +625,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
     /// <summary>Reconciles the host's machine slots to a mutated screen list — the live-application half of an
     /// <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called from <see cref="WorldServer"/>'s own Install
-    /// path when the definition changes. REMOVALS are reconciled first: a slot whose index is no longer declared has
-    /// its machine disposed and its entry dropped — the CALLER is responsible for the engagement-side admin cleanup
+    /// path when the definition changes. Removals are reconciled first: a slot whose index is no longer declared has
+    /// its machine disposed and its entry dropped — the caller is responsible for the engagement-side admin cleanup
     /// (<see cref="WorldEngagement.DisengageScreen"/>) over the returned indices, since this type holds no grant-table
-    /// reference by design. Then, for a declared index whose source CHANGED, machine boots/ejects; a non-machine
+    /// reference by design. Then, for a declared index whose source changed, machine boots/ejects; a non-machine
     /// source change is a no-op here (presentation applies it).</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
     /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DisengageScreen"/>.</returns>
@@ -712,13 +710,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     }
 
     /// <summary>Advances every booted machine by one host-owned fixed simulation step, fed by
-    /// <paramref name="pads"/> — <see cref="WorldEngagement.BuildPadSnapshot"/>'s result, read DIRECTLY in-process
+    /// <paramref name="pads"/> — <see cref="WorldEngagement.BuildPadSnapshot"/>'s result, read directly in-process
     /// (no client/wire round-trip; see <see cref="WorldServer.Step"/>'s call site, right after
-    /// <see cref="WorldEngagement.FoldTick"/>). A live cable link steps as ONE unit with its members' merged pads in
+    /// <see cref="WorldEngagement.FoldTick"/>). A live cable link steps as one unit with its members' merged pads in
     /// cable order; its member slots are then skipped below. The exact-rational T-cycle bridge (a machine's own
-    /// internal tick-to-cycle conversion) is preserved verbatim: <paramref name="stepTicks"/> is forwarded exactly as
-    /// the pre-inversion presentation-side <c>WorldScreenBinder.AdvanceMachines</c> forwarded it — cart RTC still
-    /// derives from this tick budget, NEVER wall clock.</summary>
+    /// internal tick-to-cycle conversion) is preserved verbatim: <paramref name="stepTicks"/> is forwarded to the
+    /// machine exactly as received — cart RTC still derives from this tick budget, never wall clock.</summary>
     /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
     /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
     public void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads) {

@@ -1,16 +1,49 @@
 namespace Puck.Platform.Windows.Recording;
 
-// Assembles the Matroska `av1C` (AV1CodecConfigurationRecord) CodecPrivate from the sequence-header OBU the AV1 MFT
-// emits in its first keyframe temporal unit. The four fixed config bytes are filled by bit-parsing the sequence header
-// (AV1 spec 5.5); the sequence-header OBU itself is appended as the record's configOBUs. Parsing walks far enough into
-// color_config() to read the bit-depth/monochrome/subsampling fields the record carries.
-internal static class Av1ConfigRecord {
+// Reads the AV1 bitstream the MFT emits. Two things come out of the same OBU walk: the Matroska `av1C`
+// (AV1CodecConfigurationRecord) CodecPrivate, assembled from the sequence-header OBU in the first keyframe temporal
+// unit; and whether a temporal unit is a random-access point, read from the frame header's own frame_type. The four
+// fixed config bytes are filled by bit-parsing the sequence header (AV1 spec 5.5); the sequence-header OBU itself is
+// appended as the record's configOBUs. Parsing walks far enough into color_config() to read the
+// bit-depth/monochrome/subsampling fields the record carries.
+internal static class Av1Bitstream {
+    private const int ObuFrame = 6;
+    private const int ObuFrameHeader = 3;
     private const int ObuSequenceHeader = 1;
+
+    /// <summary>Reads whether a temporal unit starts a random access point, from the bitstream rather than from an
+    /// encoder-reported flag: a frame header whose <c>frame_type</c> is <c>KEY_FRAME</c> and which is not merely
+    /// re-showing an already-decoded frame.</summary>
+    /// <param name="temporalUnit">The temporal unit (a run of size-delimited OBUs).</param>
+    /// <returns><see langword="true"/> for a key frame, <see langword="false"/> for a non-key frame, and
+    /// <see langword="null"/> when the unit carries no frame header this walk can read — the caller then has nothing
+    /// to override its encoder's own report with.</returns>
+    public static bool? TryReadIsKeyFrame(ReadOnlySpan<byte> temporalUnit) {
+        var index = 0;
+
+        while (TryReadObu(temporalUnit: temporalUnit, index: ref index, obuType: out var obuType, payloadOffset: out var payloadOffset, payloadLength: out var payloadLength)) {
+            if (((obuType != ObuFrame) && (obuType != ObuFrameHeader)) || (payloadLength <= 0)) {
+                continue;
+            }
+
+            // uncompressed_header() opens with show_existing_frame f(1) then frame_type f(2). A unit that only re-shows
+            // an already-decoded frame starts nothing, whatever the frame it points at was.
+            var first = temporalUnit[payloadOffset];
+
+            if ((first & 0x80) != 0) {
+                return false;
+            }
+
+            return (((first >> 5) & 0x03) == 0);
+        }
+
+        return null;
+    }
 
     /// <summary>Finds the sequence-header OBU inside an AV1 temporal unit and builds <c>av1C</c> from it.</summary>
     /// <param name="temporalUnit">The keyframe temporal unit (a run of size-delimited OBUs).</param>
     /// <returns>The AV1CodecConfigurationRecord bytes, or empty when no sequence header is present.</returns>
-    public static byte[] Build(ReadOnlySpan<byte> temporalUnit) {
+    public static byte[] BuildConfigRecord(ReadOnlySpan<byte> temporalUnit) {
         if (!TryFindSequenceHeaderObu(temporalUnit: temporalUnit, obu: out var sequenceHeaderObu, payload: out var payload)) {
             return [];
         }
@@ -40,43 +73,64 @@ internal static class Av1ConfigRecord {
     private static bool TryFindSequenceHeaderObu(ReadOnlySpan<byte> temporalUnit, out byte[] obu, out byte[] payload) {
         var index = 0;
 
-        while (index < temporalUnit.Length) {
-            var headerByte = temporalUnit[index];
-            var obuType = (headerByte >> 3) & 0xF;
-            var extensionFlag = (headerByte >> 2) & 0x1;
-            var hasSizeField = (headerByte >> 1) & 0x1;
-            var headerLength = (1 + extensionFlag);
-            var cursor = (index + headerLength);
-            int payloadLength;
+        while (true) {
+            var start = index;
 
-            if (hasSizeField == 1) {
-                if (!TryReadLeb128(data: temporalUnit, offset: ref cursor, value: out var size)) {
-                    break;
-                }
-
-                payloadLength = (int)size;
-            } else {
-                payloadLength = (temporalUnit.Length - cursor);
-            }
-
-            if ((cursor + payloadLength) > temporalUnit.Length) {
+            if (!TryReadObu(temporalUnit: temporalUnit, index: ref index, obuType: out var obuType, payloadOffset: out var payloadOffset, payloadLength: out var payloadLength)) {
                 break;
             }
 
             if (obuType == ObuSequenceHeader) {
-                obu = temporalUnit.Slice(start: index, length: ((cursor - index) + payloadLength)).ToArray();
-                payload = temporalUnit.Slice(start: cursor, length: payloadLength).ToArray();
+                obu = temporalUnit.Slice(start: start, length: (index - start)).ToArray();
+                payload = temporalUnit.Slice(start: payloadOffset, length: payloadLength).ToArray();
 
                 return true;
             }
-
-            index = (cursor + payloadLength);
         }
 
         obu = [];
         payload = [];
 
         return false;
+    }
+
+    // Reads one OBU at index and advances index past it. Returns false at the end of the unit or on a header the walk
+    // cannot trust (a truncated size or a payload running past the buffer) — a malformed tail stops the walk rather
+    // than being guessed at.
+    private static bool TryReadObu(ReadOnlySpan<byte> temporalUnit, ref int index, out int obuType, out int payloadOffset, out int payloadLength) {
+        obuType = 0;
+        payloadOffset = 0;
+        payloadLength = 0;
+
+        if (index >= temporalUnit.Length) {
+            return false;
+        }
+
+        var headerByte = temporalUnit[index];
+        var extensionFlag = ((headerByte >> 2) & 0x1);
+        var hasSizeField = ((headerByte >> 1) & 0x1);
+        var cursor = (index + (1 + extensionFlag));
+
+        obuType = ((headerByte >> 3) & 0xF);
+
+        if (hasSizeField == 1) {
+            if (!TryReadLeb128(data: temporalUnit, offset: ref cursor, value: out var size)) {
+                return false;
+            }
+
+            payloadLength = (int)size;
+        } else {
+            payloadLength = (temporalUnit.Length - cursor);
+        }
+
+        if ((payloadLength < 0) || ((cursor + payloadLength) > temporalUnit.Length)) {
+            return false;
+        }
+
+        payloadOffset = cursor;
+        index = (cursor + payloadLength);
+
+        return true;
     }
     private static bool TryReadLeb128(ReadOnlySpan<byte> data, ref int offset, out ulong value) {
         value = 0;

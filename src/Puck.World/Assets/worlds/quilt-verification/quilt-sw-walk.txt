@@ -1,0 +1,19 @@
+# Quilt border-crossing evidence — quilt-sw's two doors, both directions out of SW.
+# Run: dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/quilt-sw.world.json --exit-after-seconds 5 --state-dir <fresh-tmp-dir> < this-file
+# See quilt-nw-walk.txt's header for the readback-verb explanation (same pattern here).
+#
+# Player 1 walks door-to-nw (forward = world -Z, value +1). Expected arrival ~ (-12.00, 0.02, -0.41) yaw=180.
+# Player 2 walks door-to-se (strafe = world +X). Expected arrival ~ (0.41, 0.02, 12.00) yaw=90.
+world.wait 5
+wire.errors reset
+player.where 1
+player.pose -12 0 2 0 0 0 1
+player.press forward 1 1 1
+world.wait 90
+wire.errors reset
+player.join 2
+player.identity cobalt 2
+player.pose -2 0 12 0 0 0 2
+player.press strafe 1 1 2
+world.wait 90
+wire.errors

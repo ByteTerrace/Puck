@@ -1,4 +1,6 @@
 using Puck.Commands;
+using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -7,9 +9,9 @@ namespace Puck.World;
 /// The World-side per-seat <see cref="IInputBindings"/> the <see cref="InputRouter"/> resolves through. It holds one
 /// <see cref="PagedInputBindings"/> per local seat, each compiled from that
 /// seat's composed document (engine default ⊕ world overlays ⊕ the seat's profile bindings ⊕ its live session
-/// rebinds). Composition and compilation happen only on a CHANGE (a profile selection, a rebind, an overlay mutation)
-/// — never per frame; the per-signal resolve path stays the existing paged lookups. A seat's runtime MODE is NOT a
-/// layer: every group (play, editor) is always compiled in, and the seat's ACTIVE group derives as
+/// rebinds). Composition and compilation happen only on a change (a profile selection, a rebind, an overlay mutation)
+/// — never per frame; the per-signal resolve path stays the existing paged lookups. A seat's runtime mode is not a
+/// layer: every group (play, editor) is always compiled in, and the seat's active group derives as
 /// <c>first matching context row's group (document order) ?? the seat's requested group (<see cref="SetActiveGroup"/>
 /// — the mode) ?? the profile's default group</c>, applied as a pointer-level switch on the compiled profile. Context
 /// rows are the composed document's <c>contexts</c> section keyed on the published per-seat family states
@@ -42,19 +44,26 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     private readonly string[][] m_contextStates;
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
     private readonly string?[] m_requestedGroups;
-    private IReadOnlyList<WorldBindingOverlay> m_overlays;
-    // The exact channel row list Channels was compiled from — the second half of SyncDefinition's change test, so a
-    // channels-only mutation (which leaves the overlay list reference-equal) still re-derives the table.
-    private IReadOnlyList<WorldChannel> m_channelSource;
+    // Per-seat: a seat's binding vocabulary composes from whichever document currently frames it
+    // (WorldInstanceHost.ResolveRoutedDefinition's own routed lookup — the same per-seat source
+    // WorldCameraOrbitDrag already reads for the pitch clamp), never one world shared by every seat. Every seat
+    // starts seeded from the boot definition; SyncSeat re-points one seat's own entries the instant its resolved
+    // definition changes reference.
+    private readonly IReadOnlyList<WorldBindingOverlay>[] m_overlays;
+    // The exact channel row list each seat's m_channels entry was compiled from — the second half of SyncSeat's
+    // per-seat change test, so a channels-only mutation (which leaves the overlay list reference-equal) still
+    // re-derives that seat's table.
+    private readonly IReadOnlyList<WorldChannel>[] m_channelSource;
+    private readonly WorldChannelTable[] m_channels;
 
     /// <summary>The number of local seats this router resolves for.</summary>
     public const int SeatCount = WorldPopulation.LocalSeatCount;
 
-    /// <summary>The channel vocabulary these seats' bindings resolve against — the BOOT instance's live table,
-    /// re-derived by <see cref="SyncDefinition"/> whenever an applied mutation swaps the definition, so a seat is
-    /// never linted against a channel set the world has since changed. The one table the seat-side vocabulary
-    /// callers read; there is deliberately no process-global alternative to reach for.</summary>
-    public WorldChannelTable Channels { get; private set; }
+    /// <summary>The channel vocabulary seat <paramref name="slot"/>'s bindings resolve against — that seat's own
+    /// currently-routed document's live table (see <see cref="SyncSeat"/>), so a crossed seat is linted against the
+    /// destination's channels, never always the boot world's. An out-of-range slot reads slot 0's table.</summary>
+    /// <param name="slot">The 0-based local roster slot.</param>
+    public WorldChannelTable Channels(int slot) => m_channels[(((uint)slot < SeatCount) ? slot : 0)];
 
     /// <summary>Initializes a new instance over the engine-default document and the boot world definition. Every
     /// seat starts compiled from the composed base (default ⊕ overlays); profile and session layers are null.</summary>
@@ -70,17 +79,32 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
 
         m_seatFeel = seatFeel;
         m_engineDefault = engineDefault;
-        m_overlays = (definition.BindingOverlays ?? []);
-        m_channelSource = definition.Channels;
-        Channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_profileBindings = new BindingProfileDocument?[SeatCount];
         m_sessionRebinds = new BindingProfileDocument?[SeatCount];
         m_contextStates = new string[SeatCount][];
         m_seatContexts = new IReadOnlyList<BindingContextDefinition>[SeatCount];
         m_requestedGroups = new string?[SeatCount];
+        m_overlays = new IReadOnlyList<WorldBindingOverlay>[SeatCount];
+        m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
+        m_channels = new WorldChannelTable[SeatCount];
+
+        // Every seat is boot-routed until it first crosses (WorldSeatInstanceRouter's own boot-seeded default), so
+        // every seat seeds from the SAME boot overlays/channels here — SyncSeat is what lets them diverge later.
+        var bootOverlays = (definition.BindingOverlays ?? []);
+        var bootChannels = definition.Channels;
+        var bootTable = WorldChannelTable.Compile(channels: bootChannels);
+
+        for (var slot = 0; (slot < SeatCount); slot++) {
+            m_overlays[slot] = bootOverlays;
+            m_channelSource[slot] = bootChannels;
+            m_channels[slot] = bootTable;
+        }
 
         var seedDocument = ComposeSeat(slot: 0);
-        var seedBase = BindingProfile.Compile(document: seedDocument);
+        var seedBase = BindingProfile.Compile(
+            document: seedDocument,
+            channelCommandName: channel => RoutedChannelCommandName(channels: bootTable, channel: channel)
+        );
 
         m_seats = new PagedInputBindings[SeatCount];
 
@@ -127,7 +151,7 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     }
 
     /// <summary>Delivers everything a selected profile carries to a seat — its binding layer and its control feel —
-    /// and recomposes that seat. Called by the roster on a profile selection / join / live identity switch. ONE door
+    /// and recomposes that seat. Called by the roster on a profile selection / join / live identity switch. One door
     /// for the whole profile rather than one per layer: a seat is handed a coherent set at a single moment, and a
     /// layer added later cannot be delivered at some call sites and forgotten at others.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
@@ -156,9 +180,62 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         RecomposeSeat(slot: slot);
     }
 
-    /// <summary>Sets a seat's REQUESTED page group — the runtime mode switch (<c>editor.enter</c>/<c>exit</c>) — and
+    /// <summary>Checks a prospective live session layer against the seat's actual current composition and routed
+    /// channel table without installing it. Stale route-local rows in older layers receive the same surgical filtering
+    /// <see cref="RecomposeSeat"/> applies, while a structural or surviving vocabulary error refuses the candidate.
+    /// This is the truthful preflight for <c>player.bind</c>: compiling against only the boot default could reject a
+    /// group supplied by the destination overlay, or accept a candidate the destination composition cannot reload.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="rebinds">The prospective complete session-rebind layer.</param>
+    /// <param name="reason">The first refusal reason, or an empty string on success.</param>
+    /// <returns>Whether installing <paramref name="rebinds"/> can recompose the seat at its current route.</returns>
+    public bool TryValidateSessionRebind(int slot, BindingProfileDocument rebinds, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: rebinds);
+
+        if ((uint)slot >= SeatCount) {
+            reason = $"seat slot {slot} is outside 0..{(SeatCount - 1)}";
+
+            return false;
+        }
+
+        try {
+            var channels = m_channels[slot];
+            var document = WorldBindingComposer.Compose(BaseLayers(
+                overlays: m_overlays[slot],
+                profile: m_profileBindings[slot],
+                session: rebinds
+            ));
+
+            document = SkipUnregisteredPages(document: document, channels: channels, label: null);
+
+            var errors = new List<string>();
+
+            WorldAffordances.Validate(document: document, channels: channels, errors: errors);
+
+            if (errors.Count > 0) {
+                reason = errors[0];
+
+                return false;
+            }
+
+            _ = BindingProfile.Compile(
+                document: document,
+                channelCommandName: channel => RoutedChannelCommandName(channels: channels, channel: channel)
+            );
+        } catch (ArgumentException exception) {
+            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
+    /// <summary>Sets a seat's requested page group — the runtime mode switch (<c>editor.enter</c>/<c>exit</c>) — and
     /// re-derives the active group. The request is the middle step of the derivation (context row → requested group →
-    /// profile default), so a currently-matching context row keeps the seat's ACTIVE group derived from the row while
+    /// profile default), so a currently-matching context row keeps the seat's active group derived from the row while
     /// the request is remembered (and reported as shadowed by <see cref="DescribeContextDerivation"/>); it applies the
     /// moment no row matches. The apply is a pointer-level switch on the seat's already-compiled profile: no recompose,
     /// no document churn, and the seat's press latches, held chord, and armed command chords survive (see
@@ -260,7 +337,7 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     public BindingPageView PageView(int slot) =>
         m_seats[(((uint)slot < SeatCount) ? slot : 0)].ViewFor(slot: slot);
 
-    /// <summary>The wheel the seat's ACTIVE page presents, or <see langword="null"/> when no wheel is held open —
+    /// <summary>The wheel the seat's active page presents, or <see langword="null"/> when no wheel is held open —
     /// the radial presenter's one open/closed read (see <see cref="PagedInputBindings.WheelFor"/>).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <returns>The active wheel view, or <see langword="null"/> (always <see langword="null"/> for an out-of-range
@@ -273,101 +350,123 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     public BindingProfileDocument? SessionRebind(int slot) => (((uint)slot < SeatCount) ? m_sessionRebinds[slot] : null);
 
     /// <summary>The document the seat currently resolves through — the full composed stack (engine default ⊕ overlays ⊕
-    /// profile ⊕ session), with the SAME unregistered-page skip <see cref="RecomposeSeat"/> applies (silent here —
-    /// this read never narrates; the recompose that already ran, or the boot sweep, already did) so the
-    /// <c>player.bindings</c> echo never claims a dead page the seat cannot actually resolve.</summary>
+    /// profile ⊕ session), with the same unregistered-command/unavailable-channel skip <see cref="RecomposeSeat"/>
+    /// applies (silent here — this read never narrates; the recompose that already ran, or the boot sweep, already
+    /// did) so the <c>player.bindings</c> echo never claims a dead page or a channel this seat's routed world cannot
+    /// carry.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <returns>The composed document, or the composed base for an out-of-range slot.</returns>
-    public BindingProfileDocument ComposedDocument(int slot) => SkipUnregisteredPages(document: (((uint)slot < SeatCount) ? ComposeSeat(slot: slot) : ComposeBase()), label: null);
+    public BindingProfileDocument ComposedDocument(int slot) {
+        var channelSlot = (((uint)slot < SeatCount) ? slot : 0);
 
-    /// <summary>Reflects a changed definition (an applied bindings or <c>channels</c> mutation),
-    /// re-deriving <see cref="Channels"/> and recomposing every seat. A definition whose overlay list AND channel
-    /// list are both reference-equal to the held ones (the common per-step case) short-circuits, so the post-step
-    /// call this feeds costs two comparisons on an unchanged tick. Both halves are tested because a channel a seat
-    /// binds and the channel table that declares it are one document's two faces — refreshing one without the other
-    /// is how a seat comes to be linted against a vocabulary the world no longer has.</summary>
-    /// <param name="definition">The server's live world definition.</param>
+        return SkipUnregisteredPages(document: (((uint)slot < SeatCount) ? ComposeSeat(slot: slot) : ComposeBase()), channels: m_channels[channelSlot], label: null);
+    }
+
+    /// <summary>Reflects the boot world's own control feel floor — never binding vocabulary, see
+    /// <see cref="SyncSeat"/> for that half. A <c>world.row.set playerDefaults.seatLook</c> changes neither an
+    /// overlay list nor a channel table, so it needs its own call regardless of whether any seat's routed
+    /// definition actually changed this tick; every seat still sitting at the world's floor picks the new policy up
+    /// on its next drag, a seat carrying its own profile's feel is untouched.</summary>
+    /// <param name="definition">The boot server's live world definition.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public void SyncDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // The world's own control feel re-points BEFORE the overlay/channel early-return below: a
-        // world.row.set playerDefaults.seatLook changes neither the overlay list nor the channel rows, so it would
-        // otherwise be skipped entirely and a live feel edit would never reach a seat. Every seat still sitting at the
-        // world's floor picks the new policy up on its next drag; a seat carrying its own profile's feel is
-        // untouched, which is the whole point of the split.
         m_seatFeel.SetWorldLook(worldLook: definition.PlayerDefaults.SeatLook);
+    }
+
+    /// <summary>Reflects seat <paramref name="slot"/>'s currently routed definition: a seat's binding pages, wheels,
+    /// and channel vocabulary compose from whichever world its <see cref="WorldSeatInstanceRouter"/> route currently
+    /// frames it from, never a single world every seat shares. The caller resolves that document once (see
+    /// <see cref="WorldInstanceHost.ResolveRoutedDefinition"/>, the same source <see cref="WorldCameraOrbitDrag"/>
+    /// already reads for the pitch clamp) and hands it here — this type carries no instance-registry reference of its
+    /// own. A definition whose overlay list and channel list are both reference-equal to the ones this seat last
+    /// synced against (the common per-tick case, and the case for every other seat on a tick where only one seat
+    /// crossed) short-circuits, so polling every seat every tick costs
+    /// two comparisons per seat on an unchanged one. Both halves are tested because a channel a seat binds and the
+    /// channel table that declares it are one document's two faces — refreshing one without the other is how a seat
+    /// comes to be linted against a vocabulary the world no longer has.</summary>
+    /// <param name="slot">The 0-based local roster slot.</param>
+    /// <param name="definition">The document seat <paramref name="slot"/> is currently routed to present from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public void SyncSeat(int slot, WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if ((uint)slot >= SeatCount) {
+            return;
+        }
 
         var overlays = definition.BindingOverlays;
         var channels = definition.Channels;
 
-        if (ReferenceEquals(objA: overlays, objB: m_overlays) && ReferenceEquals(objA: channels, objB: m_channelSource)) {
+        if (ReferenceEquals(objA: overlays, objB: m_overlays[slot]) && ReferenceEquals(objA: channels, objB: m_channelSource[slot])) {
             return;
         }
 
-        m_overlays = (overlays ?? []);
-        m_channelSource = channels;
-        Channels = WorldChannelTable.Compile(channels: channels);
-
-        for (var slot = 0; (slot < SeatCount); slot++) {
-            RecomposeSeat(slot: slot);
-        }
+        m_overlays[slot] = (overlays ?? []);
+        m_channelSource[slot] = channels;
+        m_channels[slot] = WorldChannelTable.Compile(channels: channels);
+        RecomposeSeat(slot: slot);
     }
 
     /// <summary>Runs the affordance-vocabulary check over every seat's composed document and prints one loud line per
-    /// finding — the composition root's post-build sweep covering the layers that composed BEFORE the vocabulary
+    /// finding — the composition root's post-build sweep covering the layers that composed before the vocabulary
     /// existed (the engine default and the world's boot overlays compile at construction, pre-container). Findings do
     /// not un-bind anything: the boot mapping already resolved, and a dead entry resolves to nothing at dispatch — the
-    /// sweep exists so that silence is loud instead. Runs the SAME unregistered-page skip <see cref="RecomposeSeat"/>
-    /// applies first (one narration line per page, e.g. the whole <c>editor</c>/<c>sculpt</c> groups on a boot shape
-    /// that never registered them), then reports whatever vocabulary findings remain in the filtered document per
-    /// entry — a genuine bindability or value-kind mistake still gets its full detail.</summary>
+    /// sweep exists so that silence is loud instead. Runs the same unregistered-command/unavailable-channel skip
+    /// <see cref="RecomposeSeat"/> applies first (one narration line per page/row, e.g. the whole <c>editor</c>/
+    /// <c>sculpt</c> groups on a boot shape that never registered them), then reports whatever vocabulary findings
+    /// remain in the filtered document per entry — a genuine bindability or value-kind mistake still
+    /// gets its full detail. Every seat is swept individually (never deduplicated by "no profile/session layer")
+    /// because <see cref="SyncSeat"/> can leave two such seats composed against different worlds the instant they
+    /// route differently — this runs once, at boot, before any seat has crossed, so the cost of always sweeping four
+    /// seats is negligible either way.</summary>
     public void ValidateAffordancesLoudly() {
         var errors = new List<string>();
-        var sweptBase = false;
 
         for (var slot = 0; (slot < SeatCount); slot++) {
-            // A seat with no profile/session layer composes to the same base document as every other such seat —
-            // sweep that document once and attribute it to the base rather than four times to four seats.
-            var isBase = ((m_profileBindings[slot] is null) && (m_sessionRebinds[slot] is null));
-
-            if (isBase && sweptBase) {
-                continue;
-            }
-
-            var label = (isBase ? "composed base" : $"seat {(slot + 1)}");
-            var document = SkipUnregisteredPages(document: ComposeSeat(slot: slot), label: label);
+            var label = $"seat {(slot + 1)}";
+            var document = SkipUnregisteredPages(document: ComposeSeat(slot: slot), channels: m_channels[slot], label: label);
 
             errors.Clear();
-            WorldAffordances.Validate(document: document, channels: Channels, errors: errors);
+            WorldAffordances.Validate(document: document, channels: m_channels[slot], errors: errors);
 
             foreach (var error in errors) {
                 Console.Error.WriteLine(value: $"[player.bindings] {label}: {error}");
             }
-
-            sweptBase |= isBase;
         }
     }
 
     private void RecomposeSeat(int slot) {
         var label = $"seat {(slot + 1)}";
-        // Drop any page (or bare-command row) naming a command outside THIS composition's registered vocabulary —
-        // the engine-default document always compiles in the editor/sculpt groups, but a headless boot never
-        // registers EditorCommandModule, so those pages are unreachable by construction, not a per-seat mistake. One
-        // narration line per skipped page, keyed on the registration FACT (WorldAffordances.IsCommandRegistered),
-        // never a headless boolean — a mixed page (e.g. the play group's base page, which folds editor.enter beside
-        // its movement rows) keeps its registered entries and loses only the unregistered ones.
-        var document = SkipUnregisteredPages(document: ComposeSeat(slot: slot), label: label);
+        // Drop any page (or bare-command/channel row) naming a command outside this composition's registered
+        // vocabulary, or a channel this seat's currently routed table cannot carry — the engine-default document
+        // always compiles in the editor/sculpt groups, but a headless boot never registers EditorCommandModule, so
+        // those pages are unreachable by construction; a channel row goes stale the same way the moment a seat
+        // crosses into a world that never declared it. One narration line per skipped page/row, keyed on the
+        // registration fact (WorldAffordances.IsCommandRegistered) or the channel-table lookup — a mixed page (e.g.
+        // the play group's base page, which folds editor.enter beside its movement rows) keeps its registered and
+        // compatible entries and loses only the ones this composition cannot carry. Compatibility includes the
+        // destination's shape: a non-default scale valid for an analog channel becomes unavailable when a different
+        // world declares the same name as binary, just as surely as when that world omits the name entirely.
+        var document = SkipUnregisteredPages(document: ComposeSeat(slot: slot), channels: m_channels[slot], label: label);
 
         // Compile the seat's composed document and hot-swap it. Whatever vocabulary trouble survives the skip above
-        // (a bindability or value-kind mistake — a REAL authoring error, not a registration gap) still rejects the
-        // whole recompose loudly, keeping the seat on its prior mapping rather than taking the input path down.
-        if (RejectedByVocabulary(document: document, channels: Channels, label: label)) {
+        // (a bindability or value-kind mismatch — a genuine authoring error, never a crossing gap) still rejects the
+        // whole recompose loudly, keeping the seat on its prior mapping rather than taking the input path down. This
+        // seat's own channel table — the routed document's, per SyncSeat — never the boot table, so a rebind valid
+        // in the world this seat currently presents from is never rejected against a different world's vocabulary.
+        if (RejectedByVocabulary(document: document, channels: m_channels[slot], label: label)) {
             return;
         }
 
         try {
-            m_seats[slot].Reload(profile: BindingProfile.Compile(document: document));
+            var channels = m_channels[slot];
+
+            m_seats[slot].Reload(profile: BindingProfile.Compile(
+                document: document,
+                channelCommandName: channel => RoutedChannelCommandName(channels: channels, channel: channel)
+            ));
         } catch (ArgumentException exception) {
             Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected ({exception.Message.ReplaceLineEndings(replacementText: " ")}); keeping the prior mapping.");
 
@@ -403,14 +502,13 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         return (Family: null, State: null, Group: null);
     }
 
-    // The vocabulary half of the recompose gate: print every finding and keep the prior mapping when the composed
-    // document references commands the registry does not carry (or sends them the wrong value kind). Skipped (returns
-    // false) until the composition root installs the vocabulary.
+    // The STRUCTURAL half of the recompose gate, run on whatever survives the skip above: print every finding and
+    // keep the prior mapping when the composed document references a command the registry does not carry or sends one
+    // the wrong value kind. Route-dependent channel findings are handled row-locally by the skip above: retaining an
+    // older compiled ordinal map after SyncSeat has already installed a new channel table would pair input with the
+    // wrong destination. WorldAffordances itself skips only the unavailable command-registry half before install;
+    // channel and context admission remain unconditional.
     private static bool RejectedByVocabulary(BindingProfileDocument document, WorldChannelTable channels, string label) {
-        if (!WorldAffordances.Installed) {
-            return false;
-        }
-
         var errors = new List<string>();
 
         WorldAffordances.Validate(document: document, channels: channels, errors: errors);
@@ -426,25 +524,23 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         return true;
     }
 
-    // Drops every page (or bare-command row) naming a command outside the registered vocabulary, narrating ONE line
-    // per skipped row rather than one per offending entry — the composer half of the gate, run BEFORE the
-    // still-standing RejectedByVocabulary/ArgumentException gates above so a genuine mistake (bindability, value
-    // kind) in what SURVIVES the skip still rejects loudly. A no-op (returns document unchanged) until the
-    // composition root installs the vocabulary, matching RejectedByVocabulary's own guard. Building a new list only
-    // when a row actually changes keeps the common (nothing unregistered) recompose allocation-free. A null label
-    // filters SILENTLY — ComposedDocument's read-back reads the seat's own recompose (or the boot sweep) already
-    // narrated the same finding; echoing it again on every read would trade one flood for another.
-    private static BindingProfileDocument SkipUnregisteredPages(BindingProfileDocument document, string? label) {
-        if (!WorldAffordances.Installed) {
-            return document;
-        }
-
+    // Drops every page (or bare-command/channel row) naming a command outside the registered vocabulary, or a
+    // channel CHANNELS cannot carry, narrating ONE line per skipped row rather than one per offending entry — the
+    // composer half of the gate, run BEFORE the still-standing RejectedByVocabulary/ArgumentException gates above so
+    // a genuine mistake (bindability or value kind) in what SURVIVES the skip still rejects loudly. Before the
+    // command vocabulary is installed, IsCommandRegistered admits every command while the per-world channel half
+    // continues to filter normally — the same independent-lookup contract WorldAffordances.Validate exposes. Building
+    // a new list only when a row actually changes keeps the common (nothing unregistered/unavailable) recompose
+    // allocation-free. A
+    // null label filters SILENTLY — ComposedDocument's read-back reads the seat's own recompose (or the boot sweep)
+    // already narrated the same finding; echoing it again on every read would trade one flood for another.
+    private static BindingProfileDocument SkipUnregisteredPages(BindingProfileDocument document, WorldChannelTable channels, string? label) {
         var rows = document.Chords;
         List<BindingChordDefinition>? rewritten = null;
 
         for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
             var row = rows[rowIndex];
-            var filtered = SkipUnregisteredEntries(row: row, label: label);
+            var filtered = SkipUnregisteredEntries(row: row, channels: channels, label: label);
 
             if (ReferenceEquals(objA: filtered, objB: row)) {
                 rewritten?.Add(item: row);
@@ -578,67 +674,143 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         });
     }
 
-    // One row's half of the skip: a PAGE keeps its registered entries and loses only the unregistered ones (a mixed
-    // page — the play group's base page folds editor.enter beside its movement rows — narrates once and survives with
-    // its gameplay bindings intact); a bare-COMMAND row has no smaller unit to keep, so an unregistered one drops
-    // whole. Returns the row UNCHANGED (by reference — the ReferenceEquals check above skips the allocation) when
-    // nothing in it is unregistered, a rewritten row when some but not all of a page's entries are, or null when the
-    // whole row is dropped. A channel destination (page entry or bare command) never names a command at all, so it is
-    // never a candidate here — that half of the vocabulary is checked by RejectedByVocabulary, unconditionally, on
-    // whatever survives.
-    private static BindingChordDefinition? SkipUnregisteredEntries(BindingChordDefinition row, string? label) {
+    // One row's half of the skip: a PAGE keeps its registered/resolvable entries and loses only the ones this
+    // composition cannot carry (a mixed page — the play group's base page folds editor.enter beside its movement
+    // rows — narrates once per finding and survives with the rest intact); a bare-COMMAND/CHANNEL row has no smaller
+    // unit to keep, so an unregistered command or an unresolved channel drops it whole. Returns the row UNCHANGED
+    // (by reference — the ReferenceEquals check above skips the allocation) when nothing in it is unregistered or
+    // unavailable, or a rewritten row when any page entry is dropped. A page itself remains even when filtering
+    // empties it: it may be the group's required resting page, and deleting that structural row would reject the
+    // recompose and preserve a prior world's ordinal map. A CHANNEL destination is unavailable when its name is
+    // absent OR its authored scale is incompatible with the destination shape. Both are route-dependent facts, so
+    // neither may preserve a prior world's compiled ordinal map.
+    private static BindingChordDefinition? SkipUnregisteredEntries(BindingChordDefinition row, WorldChannelTable channels, string? label) {
         if (row.Page is { } page) {
             var entries = page.Entries;
             List<BindingPageEntryDefinition>? kept = null;
-            var droppedCount = 0;
+            var droppedCommandCount = 0;
+            List<string>? droppedChannelFindings = null;
 
             for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
                 var entry = entries[entryIndex];
+                var unregisteredCommand = (!string.IsNullOrEmpty(value: entry.Command) && !WorldAffordances.IsCommandRegistered(command: entry.Command));
+                var channelFinding = string.Empty;
+                var unavailableChannel = ((entry.Channel is { } channelRef) &&
+                    TryDescribeUnavailableChannel(channels: channels, reference: channelRef, scale: entry.Scale, finding: out channelFinding));
 
-                if (!string.IsNullOrEmpty(value: entry.Command) && !WorldAffordances.IsCommandRegistered(command: entry.Command)) {
-                    droppedCount++;
-                    kept ??= [.. entries.Take(count: entryIndex)];
+                if (!unregisteredCommand && !unavailableChannel) {
+                    kept?.Add(item: entry);
 
                     continue;
                 }
 
-                kept?.Add(item: entry);
+                kept ??= [.. entries.Take(count: entryIndex)];
+
+                if (unavailableChannel) {
+                    (droppedChannelFindings ??= []).Add(item: channelFinding);
+                } else {
+                    droppedCommandCount++;
+                }
             }
 
-            if (droppedCount == 0) {
+            if ((droppedCommandCount == 0) && (droppedChannelFindings is null)) {
                 return row;
             }
 
             if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedCount} unregistered command{((droppedCount == 1) ? "" : "s")} — its commands are not registered in this composition.");
+                if (droppedCommandCount > 0) {
+                    Console.Error.WriteLine(value: $"[player.bindings] {label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedCommandCount} unregistered command{((droppedCommandCount == 1) ? "" : "s")} — its commands are not registered in this composition.");
+                }
+
+                if (droppedChannelFindings is not null) {
+                    Console.Error.WriteLine(value: $"[player.bindings] {label}: page \"{page.Id}\" (group \"{row.Group}\") skipped {droppedChannelFindings.Count} unavailable channel binding{((droppedChannelFindings.Count == 1) ? "" : "s")} ({string.Join(separator: "; ", values: droppedChannelFindings)}).");
+                }
             }
 
-            return (((kept?.Count ?? 0) > 0) ? (row with { Page = (page with { Entries = kept! }) }) : null);
+            return (row with { Page = (page with { Entries = kept! }) });
         }
 
-        if ((row.Command is { } command) && !string.IsNullOrEmpty(value: command.Command) && !WorldAffordances.IsCommandRegistered(command: command.Command)) {
-            if (label is not null) {
-                Console.Error.WriteLine(value: $"[player.bindings] {label}: chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") skipped — its command is not registered in this composition.");
+        if (row.Command is { } command) {
+            if (command.Channel is { } chordChannel) {
+                if (!TryDescribeUnavailableChannel(channels: channels, reference: chordChannel, scale: command.Scale, finding: out var channelFinding)) {
+                    return row;
+                }
+
+                if (label is not null) {
+                    Console.Error.WriteLine(value: $"[player.bindings] {label}: chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") skipped — its channel binding is unavailable ({channelFinding}).");
+                }
+
+                return null;
             }
 
-            return null;
+            if (!string.IsNullOrEmpty(value: command.Command) && !WorldAffordances.IsCommandRegistered(command: command.Command)) {
+                if (label is not null) {
+                    Console.Error.WriteLine(value: $"[player.bindings] {label}: chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") skipped — its command is not registered in this composition.");
+                }
+
+                return null;
+            }
         }
 
         return row;
     }
+
+    // A channel reference's declared name for a skip narration, quoted — the local twin of ChannelRef.Describe()
+    // (internal to Puck.Commands, unreachable from this assembly).
+    private static string DescribeChannel(ChannelRef reference) => ((reference is ChannelRef.Name name) ? $"\"{name.Value}\"" : "(reference)");
+
+    // Route-local channel compatibility. Existence and shape belong to the destination world, so a stored profile or
+    // session row can be valid where it was authored and unavailable where the seat travels next. Such a row is
+    // filtered from the composed view, never deleted from its layer, and can therefore return when the seat travels
+    // back. The live player.bind probe prevents a newly-authored incompatible row from entering in the first place.
+    private static bool TryDescribeUnavailableChannel(WorldChannelTable channels, ChannelRef reference, float? scale, out string finding) {
+        var description = DescribeChannel(reference: reference);
+
+        if (!channels.TryGetOrdinal(reference: reference, ordinal: out var ordinal)) {
+            finding = $"{description} is not declared in this composition";
+
+            return true;
+        }
+
+        if ((scale is { } authoredScale) && (authoredScale != 1f) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)) {
+            finding = $"{description} resolves to a binary channel but carries scale {authoredScale} instead of +1";
+
+            return true;
+        }
+
+        finding = string.Empty;
+
+        return false;
+    }
     private BindingProfileDocument ComposeSeat(int slot) {
-        return WorldBindingComposer.Compose(BaseLayers(profile: m_profileBindings[slot], session: m_sessionRebinds[slot]));
+        return WorldBindingComposer.Compose(BaseLayers(overlays: m_overlays[slot], profile: m_profileBindings[slot], session: m_sessionRebinds[slot]));
     }
+
+    // Runtime lowering for an AUTHORED channel name. The name is resolved only while this seat's composed profile is
+    // built, against this seat's currently routed table; the resulting command lives in the fixed ordinal vocabulary
+    // PlayerCommandModule registers in full. A late-mounted or remote world therefore needs no command-registry
+    // mutation, while a malformed/undeclared name still refuses loudly at the same composition boundary.
+    private static string RoutedChannelCommandName(WorldChannelTable channels, ChannelRef channel) {
+        if ((channel is ChannelRef.Name name) && channels.TryGetOrdinal(name: name.Value, ordinal: out var ordinal)) {
+            return PlayerCommandModule.RoutedChannelCommandName(ordinal: ordinal);
+        }
+
+        var description = ((channel is ChannelRef.Name unresolved) ? $"name:{unresolved.Value}" : channel.GetType().Name);
+
+        throw new ArgumentException(message: $"Channel {description} resolves no declared channel.", paramName: nameof(channel));
+    }
+    // The out-of-range-slot defensive fallback (ComposedDocument's own guard) — slot 0's own routed overlays stand
+    // in since there is no "the" world overlay list any more (each seat carries its own, per SyncSeat).
     private BindingProfileDocument ComposeBase() {
-        return WorldBindingComposer.Compose(BaseLayers(profile: null, session: null));
+        return WorldBindingComposer.Compose(BaseLayers(overlays: m_overlays[0], profile: null, session: null));
     }
-    private BindingProfileDocument?[] BaseLayers(BindingProfileDocument? profile, BindingProfileDocument? session) {
-        var layers = new BindingProfileDocument?[(m_overlays.Count + 3)];
+    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, BindingProfileDocument? profile, BindingProfileDocument? session) {
+        var layers = new BindingProfileDocument?[(overlays.Count + 3)];
         var index = 0;
 
         layers[index++] = m_engineDefault;
 
-        foreach (var overlay in m_overlays) {
+        foreach (var overlay in overlays) {
             layers[index++] = overlay.Document;
         }
 

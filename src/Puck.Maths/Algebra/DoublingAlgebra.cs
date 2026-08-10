@@ -62,12 +62,8 @@ public interface IConjugationRing<TSelf>
 /// inner conjugation. This is one of several equivalent doubling conventions; it is the one whose floor-two instance
 /// reproduces the house Hamilton quaternion component-for-component under the identification
 /// <c>(w, x, y, z) ↦ ((w, x), (y, z))</c> — <c>Left.Left = w</c>, <c>Left.Right = x</c>, <c>Right.Left = y</c>,
-/// <c>Right.Right = z</c> — verified against that oracle rather than adopted on faith, in
-/// <c>algebra.doubling-floor1-matches-fixed-complex</c>, <c>algebra.doubling-floor2-matches-fixed-quaternion</c> and
-/// <c>algebra.doubling-floor2-commutator-witness</c>, with <c>algebra.doubling-floor3-octonion-norm-vs-oracle</c>
-/// carrying the same discipline one floor up. The mixed operand orders (<c>d·a</c> and <c>b·c̄</c>, not <c>a·d</c> and
-/// <c>c̄·b</c>) are load-bearing once
-/// the inner floor stops commuting.
+/// <c>Right.Right = z</c>. The mixed operand orders (<c>d·a</c> and <c>b·c̄</c>, not <c>a·d</c> and <c>c̄·b</c>) are
+/// load-bearing once the inner floor stops commuting.
 /// </para>
 /// <para>
 /// <b>The price ladder.</b> Each floor buys reach by spending an algebraic law, and this type measures the price
@@ -91,7 +87,7 @@ public interface IConjugationRing<TSelf>
 /// only up to the carrier's rounding, exactly as for the hand-written planar and quaternion types; over an exact
 /// integer or rational carrier they hold bit-exactly. The construction never assumes the arithmetic is associative
 /// under bitwise equality. For the closed <see cref="FixedScalarRing"/>-leaf towers <see cref="Multiply"/> and
-/// <see cref="Norm"/> DELEGATE to the hand-written types where one exists: the complex floor routes through
+/// <see cref="Norm"/> delegate to the hand-written types where one exists: the complex floor routes through
 /// <see cref="FixedComplex"/> and the quaternion floor through <see cref="FixedQuaternion"/> (reaching their operators by
 /// bit-cast or an explicit coordinate map), so the two are bit-identical <em>by construction</em> across the full raw
 /// range, not by a maintained parallel kernel. The octonion floor has no hand-written oracle, so it keeps its own fused

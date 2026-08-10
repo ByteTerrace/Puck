@@ -3,11 +3,10 @@ using System.Numerics;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The grid-lock overlay's shared VALUE (grid-locking §4/§8, the <c>SdfDebugMode</c> facade precedent) — the thin
-/// data the visualization channel uploads, computed once from an editor's session-only snap state. An editor computes
-/// it and the frame source receives the fields as primitives (never naming this type, to stay under its coupling
-/// ceiling). Reads authoring state only — never the deterministic simulation. The editors that computed it left the
-/// build on 2026-08-02, so this type has NO producer and NO consumer today.
+/// The grid-lock overlay's shared value — the thin data the visualization channel uploads, computed once from an
+/// editor's session-only snap state. An editor computes it and the frame source receives the fields as primitives
+/// (never naming this type, to stay under its coupling ceiling). Reads authoring state only, never the deterministic
+/// simulation. This type currently has no producer or consumer.
 /// </summary>
 /// <param name="Flags">Overlay flags: bit0 = draw the world floor grid, bit1 = draw the object grid.</param>
 /// <param name="WorldPitch">The world floor grid's per-axis lattice pitch (X/Z).</param>
@@ -25,8 +24,8 @@ public readonly record struct GridOverlayState(
     Vector2 ObjectPitch,
     float ObjectPatchRadius
 ) {
-    /// <summary>No overlay — the all-zero upload a frame outside an editor (or with the grid hidden) sends,
-    /// byte-identical to before the channel existed.</summary>
+    /// <summary>Gets the no-overlay value — the all-zero upload a frame outside an editor (or with the grid hidden)
+    /// sends, byte-identical to before the channel existed.</summary>
     public static GridOverlayState None =>
         new(Flags: 0u, WorldPitch: Vector2.Zero, FloorY: 0f, ObjectOrigin: Vector3.Zero, ObjectFrame: Quaternion.Identity, ObjectPitch: Vector2.Zero, ObjectPatchRadius: 0f);
 }

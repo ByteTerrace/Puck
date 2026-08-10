@@ -13,7 +13,7 @@ namespace Puck.World;
 /// the platform's Media Foundation encoder ladder + WASAPI audio sources against real hardware, opening only what this
 /// machine can encode and capture, and arms the render tap. Every verb is Immediate (no simulation effect) and echoes
 /// honestly: the negotiated codec, frames captured/dropped, audio track count and drops, bytes, and the output path;
-/// declines are loud. A SEPARATE module to keep each class under its analyzer ceilings.
+/// declines are loud. A separate module keeps each class under its analyzer ceilings.
 /// </summary>
 /// <remarks>The live windowed present path hands GPU surfaces, so the capture tap reads each captured frame back to CPU
 /// pixels through the SDF engine before encoding — a synchronous GPU readback per captured frame on the render thread.

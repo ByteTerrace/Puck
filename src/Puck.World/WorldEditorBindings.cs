@@ -302,8 +302,8 @@ internal static class WorldEditorBindings {
     }
 
     /// <summary>Builds the editor and sculpt groups' wheels (folded into the engine-default document's
-    /// <c>wheels</c> beside <see cref="WorldDefaultBindings"/>' play wheel). One ring each: the mode's deliberate
-    /// acts, its Exit/Done sector carrying the same act the retired Tab press row used to fire directly.</summary>
+    /// <c>wheels</c> beside <see cref="WorldDefaultBindings"/>' play wheel). One ring each, holding the mode's
+    /// deliberate acts; each ring's Exit/Done sector fires the mode's own exit command.</summary>
     /// <returns>The two wheels, editor first.</returns>
     public static BindingWheelDefinition[] Wheels() => [
         new BindingWheelDefinition(
@@ -370,10 +370,9 @@ internal static class WorldEditorBindings {
 
     // A press-edge entry carrying a CONSTANT value in place of the source's own — the step/direction-twin fold: a
     // WithWireArgs verb sees an EMPTY WireArgs on a bound dispatch and reads this constant off context.Value
-    // instead (see EditorCommandModule.TryDirection's doctrine comment). This is how a .next/.prev/.up/.down/
-    // .grow/.shrink twin retired in this wave keeps its chord without a sibling command: the surviving verb stays
-    // Bindable, and the binding row that used to name the twin now names the verb with the twin's direction baked
-    // into Value.
+    // instead (see EditorCommandModule.TryDirection's doctrine comment). This lets a .next/.prev/.up/.down/.grow/
+    // .shrink direction bind to a single verb with the direction baked into Value, rather than needing a sibling
+    // command per direction.
     private static BindingPageEntryDefinition PressValue(string source, string command, CommandValue value, string label, string icon) => new(
         Source: source,
         Command: command,

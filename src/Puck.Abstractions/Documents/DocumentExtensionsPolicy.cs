@@ -3,19 +3,22 @@ using System.Text.Json;
 namespace Puck.Abstractions.Documents;
 
 /// <summary>
-/// The one round-trip regime a versioned document root's <c>Extensions</c> bag follows. The world document
-/// (<c>puck.world.def.v1</c>) — including an owned identity, which is a <c>WorldDefinition</c> instance in its own
-/// right — captures unknown top-level members into a settable <c>IDictionary&lt;string, JsonElement&gt;?</c> via
-/// <c>[JsonExtensionData]</c>, and validates the captured keys through <see cref="ValidateKeys"/>: "survives
-/// deserialization" and "passes validation" mean the same thing. A reserved-prefix key ('$' schema-like keys, '_'
-/// comments) is an intentional escape hatch and always allowed; anything else at the top level is an authoring
-/// mistake (most often a mis-cased or mistyped section name) and is reported rather than silently absorbed.
-/// <para>Nothing INTERPRETS a captured value — no dispatch path reads <c>Extensions</c> to drive behavior, and nothing
-/// should. The keys are not inert, though: an unprefixed one now fails validation, so the bag's CONTENT decides whether
-/// the document loads at all. This regime applies to document ROOTS only; other document families under
+/// The one round-trip regime a versioned document root's <c>Extensions</c> bag follows: unknown top-level members
+/// are captured into a settable <c>IDictionary&lt;string, JsonElement&gt;?</c> via <c>[JsonExtensionData]</c> and
+/// validated through <see cref="ValidateKeys"/>.
+/// </summary>
+/// <remarks>
+/// The world document (<c>puck.world.def.v1</c>) — including an owned identity, which is a <c>WorldDefinition</c>
+/// instance in its own right — follows this regime; "survives deserialization" and "passes validation" mean the
+/// same thing. A reserved-prefix key ('$' schema-like keys, '_' comments) is an intentional escape hatch and always
+/// allowed; anything else at the top level is an authoring mistake (most often a mis-cased or mistyped section name)
+/// and is reported rather than silently absorbed.
+/// <para>Nothing interprets a captured value — no dispatch path reads <c>Extensions</c> to drive behavior, and nothing
+/// should. The keys are not inert, though: an unprefixed one now fails validation, so the bag's content decides whether
+/// the document loads at all. This regime applies to document roots only; other document families under
 /// <c>Puck.Forge</c> and <c>Puck.Recording</c> carry their own <c>[JsonExtensionData]</c> bags and validate them
 /// through <c>DocumentCanonicalizer.ValidateExtensions</c> instead.</para>
-/// </summary>
+/// </remarks>
 public static class DocumentExtensionsPolicy {
     /// <summary>True when <paramref name="key"/> is a reserved escape hatch ('$' or '_' prefixed) rather than an
     /// authoring mistake.</summary>

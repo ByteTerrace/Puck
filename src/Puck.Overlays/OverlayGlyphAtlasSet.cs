@@ -4,12 +4,12 @@ using Puck.Text;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The font-atlas seam every overlay glyph consumer shares — the console panel, the binding bar, and the editor
-/// HUD: loads the pre-baked MTSDF mono atlas (<see cref="MonoFont"/>), the uniform-grid console/terminal voice
-/// <see cref="OverlayGlyphSdfPack"/> requires, from a caller-supplied assets root. Loads a prepacked atlas and
-/// degrades LOUDLY if absent (<see cref="IsAvailable"/> is <see langword="false"/>, one clear message to
-/// <see cref="Console.Error"/>), never a raster fallback. The caller owns any runtime fallback atlas, supplied
-/// through the <c>monoFallback</c> constructor seam.
+/// Loads the font atlases overlay glyph consumers share — the console panel, the binding bar, and the editor HUD —
+/// from a caller-supplied assets root, including the pre-baked MTSDF mono atlas (<see cref="MonoFont"/>) that
+/// <see cref="OverlayGlyphSdfPack"/> requires for its uniform-grid console/terminal glyphs. When the pre-baked atlas
+/// is absent, availability degrades to <see langword="false"/> with one message to <see cref="Console.Error"/>
+/// rather than falling back to a raster font; the caller supplies its own runtime fallback atlas through the
+/// <c>monoFallback</c> constructor parameter.
 /// </summary>
 /// <remarks>
 /// Each property loads once, lazily, on first access; results — including <see langword="null"/> — are cached so
@@ -17,7 +17,7 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphAtlasSet {
     // The bake packs EVERY font's glyphs into this one image (the one-GPU-texture law); each atlas JSON is a view of
-    // it. KEEP IN SYNC with COMBINED_PNG_NAME in tools/font-atlas/bake.py (the combined atlas image name).
+    // it. KEEP IN SYNC with COMBINED_PNG_NAME in experimental/tools/font-atlas/bake.py (the combined atlas image name).
     private const string CombinedImageName = "puck-fonts-mtsdf.png";
     // The mono voice's layout view (the overlay pack's source) and the prepacked overlay artifact written beside it.
     private const string MonoFontName = "jetbrains-mono-regular";
@@ -30,7 +30,7 @@ public sealed class OverlayGlyphAtlasSet {
     /// <summary>Initializes a new instance of the <see cref="OverlayGlyphAtlasSet"/> class over a pre-baked
     /// font-atlas assets root.</summary>
     /// <param name="fontsDirectory">The directory holding the combined MTSDF PNG and each face's layout JSON — the
-    /// output of the font-atlas bake pipeline (<c>tools/font-atlas</c>).</param>
+    /// output of the font-atlas bake pipeline (<c>experimental/tools/font-atlas</c>).</param>
     /// <param name="monoFallback">Invoked at most once, only when the pre-baked mono atlas is absent, to supply a
     /// caller-owned fallback atlas (e.g. a runtime GDI+ build); <see langword="null"/> (the default) means no
     /// fallback is available — a missing pre-baked atlas then leaves <see cref="MonoFont"/> <see langword="null"/>.</param>
@@ -45,23 +45,22 @@ public sealed class OverlayGlyphAtlasSet {
         m_monoFont = new Lazy<FontAtlas?>(valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)), isThreadSafe: true);
     }
 
-    /// <summary>Whether the mono atlas resolved (pre-baked or fallback) — the cheap availability probe a
-    /// coupling-ceilinged caller uses to decide whether to compose a glyph consumer, without naming
-    /// <see cref="FontAtlas"/>.</summary>
+    /// <summary>Gets a value indicating whether the mono atlas resolved, from either the pre-baked file or the
+    /// constructor-supplied fallback.</summary>
     public bool IsAvailable => (m_monoFont.Value is not null);
 
-    /// <summary>The console/terminal voice: the committed uniform-grid MTSDF mono atlas, the constructor-supplied
-    /// fallback when the pre-baked file is absent, or <see langword="null"/> when neither resolves.</summary>
+    /// <summary>Gets the console/terminal mono atlas: the committed uniform-grid MTSDF atlas, the
+    /// constructor-supplied fallback when the pre-baked file is absent, or <see langword="null"/> when neither
+    /// resolves.</summary>
     public FontAtlas? MonoFont => m_monoFont.Value;
 
     /// <summary>
-    /// Loads the overlay glyph pack through the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>):
-    /// a warm start reads the ~1.4 MiB finished pack and NEVER decodes the ~79 MiB combined PNG (the combined MTSDF
-    /// decode held ≥150 MiB transient to retain 1.4 MiB, so the prepacked path is mandatory); a cold or rebaked
-    /// start builds the pack from <see cref="MonoFont"/> once and persists it, keyed by the SHA-256 of the source
-    /// PNG + mono layout JSON bytes. Returns <see langword="null"/> exactly when
-    /// <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable atlas), preserving the loud-degradation
-    /// contract.
+    /// Loads the overlay glyph pack from the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>) when
+    /// possible: a warm start reads the ~1.4 MiB finished pack instead of decoding the ~79 MiB combined PNG, whose
+    /// full MTSDF decode holds upward of 150 MiB transient to produce that 1.4 MiB pack. A cold or rebaked start
+    /// builds the pack from <see cref="MonoFont"/> once, persists it, and keys it by the SHA-256 of the source PNG
+    /// and mono layout JSON bytes. Returns <see langword="null"/> exactly when
+    /// <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable atlas).
     /// </summary>
     /// <remarks>A cold SDF bake is dramatically slower and far heavier than loading the prepacked artifact; warm
     /// startup uses the committed pack, and the loaded pack is bit-identical to the built one.</remarks>

@@ -8,17 +8,17 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12. Creates a root signature and PSO tailored
+/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12, creating a root signature and PSO tailored
 /// for the SDF renderer: POSITION-only (R32G32_FLOAT) vertex input, a descriptor table with N SRV slots and
 /// an optional UAV slot, root constants for push data, and a static linear-clamp sampler at <c>s0</c>.
-/// <para>
+/// </summary>
+/// <remarks>
 /// Root signature layout (always the same slot ordering):
 /// <list type="bullet">
 /// <item>Parameter 0: descriptor table (SRVs t0..tN-1, optional UAV u0) — omitted when both counts are zero</item>
 /// <item>Parameter 0 or 1: root constants (b0) — omitted when no push-constant binding is supplied</item>
 /// </list>
-/// </para>
-/// </summary>
+/// </remarks>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
     private const byte ColorWriteEnableAll = 15;

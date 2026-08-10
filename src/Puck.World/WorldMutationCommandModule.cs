@@ -130,7 +130,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var fullPath = Path.GetFullPath(path: path);
 
-                if (!WorldDefinitionFileSource.TryLoad(path: fullPath, definition: out var loaded, contentHash: out var contentHash, reason: out var reason)) {
+                // The console-side validate (ApplyRebuild revalidates the SAME candidate again at the tick boundary
+                // below) — both reuse server.Neighbours, the ONE live-session resolver this repository wires (a
+                // document SWAP, not a per-mutation check; see WorldServer.Neighbours' own remarks).
+                if (!WorldDefinitionFileSource.TryLoad(path: fullPath, definition: out var loaded, contentHash: out var contentHash, reason: out var reason, neighbours: server.ResolveRebuildNeighbours(path: fullPath))) {
                     return CommandResult.Error(output: $"[world.load: {reason}]");
                 }
 
@@ -145,7 +148,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             handler: (context, _) => {
                 var path = definitionSource.SourcePath;
 
-                if (!WorldDefinitionFileSource.TryLoad(path: path, definition: out var loaded, contentHash: out var contentHash, reason: out var reason)) {
+                // See world.load's own remarks: reuses server.Neighbours, the one live-session resolver.
+                if (!WorldDefinitionFileSource.TryLoad(path: path, definition: out var loaded, contentHash: out var contentHash, reason: out var reason, neighbours: server.ResolveRebuildNeighbours(path: path))) {
                     return CommandResult.Error(output: $"[world.reload: {reason}]");
                 }
 
@@ -204,8 +208,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.status",
-            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, schema, row counts, correction/wander/audio policy (including the mixer's half-radius curve sample), the waterline (or none), a cheap session-drift hint, and dirty = journal length. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
-            handler: (_, _) => {
+            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, schema, row counts, the simulation rate, correction/wander/audio policy (including the mixer's half-radius curve sample), the waterline (or none), a cheap session-drift hint, and dirty = journal length. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: $"[world.status: unrecognized '{args[0]}' — expected no arguments]");
+                }
+
                 var definition = server.Definition;
                 var source = definitionSource.SourcePath;
                 var dirty = server.JournalLength;
@@ -217,14 +225,18 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var water = ((definition.Water is { } medium) ? medium.Level.ToString(format: "0.###", provider: CultureInfo.InvariantCulture) : "none");
 
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.status: source {source} schema {definition.Schema} kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} water {water} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty} undoable {dirty}]"));
+                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.status: source {source} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} water {water} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty} undoable {dirty}]"));
             }
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.references",
             description: "Reads the references section back: each row's name -> document, or 'none' when the section is absent or declares zero rows. Authored data only — a row asserts nothing about the named document's existence or shape; resolving it is a future consumer's job, not this verb's.",
-            handler: (_, _) => {
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: $"[world.references: unrecognized '{args[0]}' — expected no arguments]");
+                }
+
                 var rows = server.Definition.References;
 
                 if (rows is not { Count: > 0 }) {
@@ -234,6 +246,26 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var formatted = string.Join(separator: " ", values: rows.Select(selector: row => $"{row.Name} -> {row.Document}"));
 
                 return new CommandResult(Output: $"[world.references: {formatted}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.admission",
+            description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can ever verify). The DOCUMENT half of the admission decision — world.peers echoes the RUNTIME half (which connections verified under which identity).",
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: $"[world.admission: unrecognized '{args[0]}' — expected no arguments]");
+                }
+
+                var rows = server.Definition.Admission;
+
+                if (rows is not { Count: > 0 }) {
+                    return new CommandResult(Output: "[world.admission: none — no remote peer can ever verify]");
+                }
+
+                var formatted = string.Join(separator: " | ", values: rows.Select(selector: row => $"{row.Mode.ToString().ToLowerInvariant()} domain:{row.Domain} subject:{(row.Subject ?? "(none)")} alg:{row.Algorithm} grants:{row.Grants.Count}"));
+
+                return new CommandResult(Output: $"[world.admission: {formatted}]");
             }
         );
     }

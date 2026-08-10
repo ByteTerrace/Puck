@@ -76,7 +76,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         return new PrimeField64(modulus: modulus);
     }
-    /// <summary>Gets whether a value passes the Baillie–Pomerance–Selfridge–Wagstaff probable-prime test.</summary>
+    /// <summary>Returns a value indicating whether <paramref name="value"/> passes the Baillie–Pomerance–Selfridge–Wagstaff probable-prime test.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> passes both rounds; otherwise <see langword="false"/>.</returns>
     /// <remarks>
@@ -107,7 +107,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// </remarks>
     public static bool IsBaillieProbablePrime(ulong value) =>
         (IsStrongProbablePrime(value: value, witness: 2UL) && IsStrongLucasProbablePrime(value: value));
-    /// <summary>Gets whether a value is prime, deciding the question exactly for every <see cref="ulong"/>.</summary>
+    /// <summary>Returns a value indicating whether <paramref name="value"/> is prime, deciding the question exactly for every <see cref="ulong"/>.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
@@ -162,7 +162,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         return true;
     }
-    /// <summary>Gets whether a value passes the strong Lucas probable-prime test with Selfridge's Method A parameters.</summary>
+    /// <summary>Returns a value indicating whether <paramref name="value"/> passes the strong Lucas probable-prime test with Selfridge's Method A parameters.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is a strong Lucas probable prime; otherwise <see langword="false"/>.</returns>
     /// <remarks>
@@ -287,7 +287,7 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         return false;
     }
-    /// <summary>Gets whether a value passes one strong-probable-prime round to a given witness base.</summary>
+    /// <summary>Returns a value indicating whether <paramref name="value"/> passes one strong-probable-prime round to <paramref name="witness"/>.</summary>
     /// <param name="value">The value to test.</param>
     /// <param name="witness">The witness base, reduced modulo <paramref name="value"/> before the round; a base that reduces to zero carries no evidence and passes.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is a strong probable prime to <paramref name="witness"/>; otherwise <see langword="false"/>.</returns>

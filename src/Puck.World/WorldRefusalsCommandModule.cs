@@ -3,13 +3,12 @@ using Puck.Commands;
 
 namespace Puck.World;
 
-/// <summary>The refusal-catalog read-back verb — the read-back docs/capability-channels-STATE.md's "How we work"
-/// section requires beside any new decision surface, instantiated here for the refusal vocabulary itself: the STATE
-/// doc's own "THE GAP" is that nothing enumerates what the engine refuses, so a coverage battery can never assert
-/// "every refusal this door can produce has been exercised". <c>world.refusals</c> is that enumeration, sourced
-/// entirely from <see cref="RefusalCatalog"/> (reflection over <see cref="RefusalAttribute"/>-tagged enum members) —
-/// never a hand-kept list. A SEPARATE module (no constructor dependency at all): the catalog is compiled-in data, not
-/// live server state, so this module needs nothing <see cref="Program"/>'s composition root would have to wire.</summary>
+/// <summary>The refusal-catalog read-back verb: nothing else enumerates what the engine refuses, so a coverage
+/// battery can never assert that every refusal a door can produce has been exercised. <c>world.refusals</c> is that
+/// enumeration, sourced entirely from <see cref="RefusalCatalog"/> (reflection over <see cref="RefusalAttribute"/>-tagged
+/// enum members) — never a hand-kept list. A separate module with no constructor dependency: the catalog is
+/// compiled-in data, not live server state, so this module needs nothing <see cref="Program"/>'s composition root
+/// would have to wire.</summary>
 internal sealed class WorldRefusalsCommandModule : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {

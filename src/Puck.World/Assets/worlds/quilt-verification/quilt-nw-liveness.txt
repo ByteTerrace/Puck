@@ -1,0 +1,41 @@
+# Quilt border-crossing evidence — liveness follow-up for door-to-ne (NW -> NE).
+# Run: dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/quilt-nw.world.json --exit-after-seconds 6 --state-dir <fresh-tmp-dir> < this-file
+#
+# Answers the specific question quilt-nw-walk.txt's table alone cannot: is the landed body a
+# live, still-simulating entity in the destination instance, or a stalled/frozen one whose
+# arrival coordinate just happens to read back the same value forever? `player.press` has NO
+# instance-qualified form (it only ever addresses the boot roster's own seat table — confirmed
+# by reading PlayerCommandModule.PressHandler, which never calls TryStripInstanceToken, unlike
+# where/pose/fly/join/leave/stop), so it cannot be used to probe or drive a seat after it has
+# left the boot instance. This script instead uses the two verbs that DO carry an instance token:
+# `player.where <slot> instance:<name>` to read, and `player.fly ... <slot> instance:<name>` to drive.
+# The destination instance name (6~global2~ne) is the one this exact script reproducibly gets from
+# a fresh boot of quilt-nw.world.json with no prior identity state — confirmed stable across five
+# separate runs during this lane's own testing; a differently-provisioned state dir could in
+# principle mint a different generation/site tag, in which case this script's instance: lines
+# will refuse by name naming the running instances (see world.instance.list) rather than
+# silently targeting the wrong one.
+#
+# Measured on this lane's own run (Puck.World, quilt-nw.world.json, fresh --state-dir):
+#   world.transfer echo (arrival, same tick as the crossing):        x=0.41  (matches quilt-nw-walk.txt's table)
+#   player.where 1 instance:6~global2~ne (immediately after):        x=0.16  -- CHANGED: the body decelerated
+#     under the kit's velocity-response curve after the press's 1s hold already expired before the
+#     crossing fired; this is coasting-to-rest, not a stall — it is a real, different number.
+#   player.where 1 instance:6~global2~ne (60 ticks later, no input): x=0.16  -- held at rest (zero velocity
+#     under no held input is the CORRECT settled state for a grounded body, not evidence of a stall).
+#   player.fly 0 1 0 0 0 0 1 1 instance:6~global2~ne (drives it):    accepted, echoed
+#   player.where 1 instance:6~global2~ne (90 ticks after the fly):   x=6.10  -- moved +5.94 units under the
+#     instance-qualified drive verb: unambiguous proof the destination instance is live-ticking, not stalled.
+world.wait 5
+wire.errors reset
+player.where 1
+player.pose -2 0 -12 0 0 0 1
+player.press strafe 1 1 1
+world.wait 90
+player.where 1 instance:6~global2~ne
+world.wait 60
+player.where 1 instance:6~global2~ne
+player.fly 0 1 0 0 0 0 1 1 instance:6~global2~ne
+world.wait 90
+player.where 1 instance:6~global2~ne
+wire.errors

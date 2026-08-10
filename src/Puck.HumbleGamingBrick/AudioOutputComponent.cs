@@ -56,8 +56,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     private int m_sampleRate;
     private int m_writeFrame;
 
-    /// <summary>Creates the output stage wired to the APU whose channel outputs it mixes and the speed unit that tells
-    /// it how wide a CPU T-cycle is. Output starts disabled; the host opts in through <see cref="Configure"/>.</summary>
+    /// <summary>Initializes a new instance of the <see cref="AudioOutputComponent"/> class, wired to the APU whose
+    /// channel outputs it mixes and the speed unit that tells it how wide a CPU T-cycle is. Output starts disabled;
+    /// the host opts in through <see cref="Configure"/>.</summary>
     /// <param name="apu">The audio processing unit, read for the channel outputs and the NR50/NR51/NR52 mix registers.</param>
     /// <param name="key1">The Color speed-switch unit, read for the current speed.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>

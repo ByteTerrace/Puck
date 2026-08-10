@@ -278,10 +278,24 @@ CALLER-supplied `minPitch`/`maxPitch` — the caller passes the LIVE
 next drag.
 
 `WorldCameraOrbitDrag` (`src/Puck.World/WorldCameraOrbitDrag.cs`), an
-`IWorldPointerConsumer`, turns a drag into `Nudge` calls: it reads
-`m_client.Definition.playerDefaults.seatLook ?? WorldSeatLook.Default` FRESH ON EVERY
-EVENT (never cached), so a live `world.row.set playerDefaults.seatLook` mutation is
-picked up immediately. Both halves of its answer come from `WorldPointer` —
+`IWorldPointerConsumer`, turns a drag into `Nudge` calls. Rig structure (the
+pitch clamp) is resolved FRESH ON EVERY EVENT (never cached) through
+`WorldInstanceHost.ResolveRoutedDefinition(slot).PlayerDefaults.SeatLook` — the
+world the seat's LIVE route (`WorldSeatInstanceRouter`) currently frames it
+from, the boot document for a boot-anchored seat, same as always — so a live
+`world.row.set playerDefaults.seatLook` mutation on whichever world is
+currently in force is picked up on the very next event, and a traveling seat
+clamps against its destination's own authored range, never the world it
+departed. `world.view.orbit`'s echo (`WorldViewCommandModule.DescribeOrbit`)
+reads the identical `ResolveRoutedDefinition` call — one source, never
+re-derived — so the echo can never show a structure the drag itself did not
+actually clamp against. A carried orbit additionally RECLAMPS the instant the
+route itself changes: the constructor subscribes to
+`WorldSeatInstanceRouter.LocationChanged` (raised only when `Publish` actually
+changes the seat's presenting instance) and re-runs `Nudge` with a zero delta
+against the new structure, so a pitch legal at the world just left snaps
+legal for the world just entered at the crossing itself, not on the seat's
+next drag. Both halves of the ordinary drag answer come from `WorldPointer` —
 arming is that seat's live held-button state, the drag distance is that
 seat's DRAINED motion — so it tracks no held state of its own. When the drag
 is not armed (or `Arming.None` disables it) it still drains the motion and

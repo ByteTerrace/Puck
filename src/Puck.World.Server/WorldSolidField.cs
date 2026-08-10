@@ -8,35 +8,35 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The SDF-backed <see cref="IContactField"/> — the second provider behind the same seam the analytic
-/// <see cref="WorldColliderSet"/> answers. It compiles solid screens as AXIS-ALIGNED boxes and solid placements as
+/// <see cref="WorldColliderSet"/> answers. It compiles solid screens as axis-aligned boxes and solid placements as
 /// their emitted creation primitives
-/// into ONE <see cref="SdfProgram"/> and reads it through a fixed-point
+/// into one <see cref="SdfProgram"/> and reads it through a fixed-point
 /// <see cref="SdfFieldEvaluator"/>, so
-/// the contact surface a body solves against IS the rendered geometry — smooth-union blends are solid where they are
+/// the contact surface a body solves against is the rendered geometry — smooth-union blends are solid where they are
 /// drawn. A solid screen's contact box is axis-aligned because the renderer only ever <c>Translate</c>s a screen
 /// slab — a screen's right/up is a UV frame only, never a geometry rotation (see
 /// <see cref="SdfProgramBuilder"/>'s <c>ScreenSlab</c> overload doc) — and the editor picker agrees (see
 /// <c>Puck.World.Client.WorldEditorPicker</c>'s own comment on the same box — this project cannot hold a
 /// <c>cref</c> to it: <c>Puck.World.Server</c> is structurally unable to reference <c>Puck.World</c>). Orienting a screen's contact
-/// volume for real is a THREE-surface arc — render, contact, and picker must all rotate together — and none of the
+/// volume for real is a three-surface arc — render, contact, and picker must all rotate together — and none of the
 /// three does today. "Up" is world <c>+Y</c> unless the world authors
 /// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
 /// planetoid, an inverted ceiling, or the inside of a sphere are all walkable); without that requirement a vertical
 /// face pushes a body but never grounds it, so a flat-up world's walls stay walls.
 /// </summary>
 /// <remarks>
-/// <para>IMMUTABLE and per-revision: it holds no per-body state, so one instance is shared by reference across all 128
+/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across all 128
 /// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
 /// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c> (no unmanaged handle), so a replaced
 /// instance needs no disposal.</para>
 /// <para>The "which op can be solid" ceiling is <see cref="SdfFieldEvaluator"/>'s warp-free excluded-op set:
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
-/// reason, so <see cref="WorldServer"/> turns an unsupported solid into a LOUD apply-time rejection instead of a
+/// reason, so <see cref="WorldServer"/> turns an unsupported solid into a loud apply-time rejection instead of a
 /// constructor throw at install time.</para>
 /// <para>Only collider-bearing kits are solved. Under <see cref="WorldContactRequirement.GradientDerivedUp"/> each
 /// iteration spends six samples on the body-root up gradient (the central-difference probe); a flat-up world spends
 /// zero there (the constant <c>+Y</c> short-circuits before the evaluator). A
-/// capsule then spends at most 1,033 samples on its NON-EMBEDDED worst case: two endpoint distances, a 512-sample
+/// capsule then spends at most 1,033 samples on its non-embedded worst case: two endpoint distances, a 512-sample
 /// forward trace, a 512-sample reverse trace, one midpoint distance, and a six-sample midpoint gradient (the march no
 /// longer takes a gradient tap on the trace hits themselves — see <see cref="Puck.SdfVm.Queries.RayHit.Normal"/>'s
 /// remarks). Sphere and box volumes spend at most seven samples each. Therefore the <see cref="WorldCollider.MaxVolumes"/>
@@ -45,42 +45,42 @@ namespace Puck.World.Server;
 /// The shipped single-capsule rows carry 1,039-sample iteration and 4,156-sample step ceilings
 /// gradient-up (1,033 / 4,132 flat-up). A penetrating-but-degenerate endpoint sphere (<c>0 &lt;= distance &lt;
 /// minimum</c>, gradient tap unmeasurable) still costs seven samples (the confirming <c>TryDistance</c> plus the failed
-/// <c>TryFieldGradient</c>) and PUSHES via the bare-position fallback rather than no-op, so the capsule ceiling is
+/// <c>TryFieldGradient</c>) and pushes via the bare-position fallback rather than no-op, so the capsule ceiling is
 /// unchanged: the worst case remains two clean-miss endpoint spheres plus the full core sweep (<c>2 + 512 + 512 + 1 +
 /// 6</c>), and the degenerate-fallback path never exceeds it — two degenerate endpoint spheres cost fourteen samples
 /// total and skip the core resolve entirely.</para>
-/// <para>EMBEDDED-ITERATION COST (the opposing-face straddle fix — see <see cref="ResolveCapsule"/>,
+/// <para><b>Embedded-iteration cost</b> (the opposing-face straddle fix — see <see cref="ResolveCapsule"/>,
 /// <see cref="TrialResolveSphere"/>, and <see cref="ExtractCapsule"/>): <see cref="ResolveCapsule"/> classifies
-/// BEFORE any COMMITTED push, but preserves the pre-hardening sequential (Gauss-Seidel) numerics bit-exactly on
-/// every non-embedded tick via DEFER-COMMIT rather than sampling both centers from one shared snapshot. The lower
+/// before any committed push, but preserves the pre-hardening sequential (Gauss-Seidel) numerics bit-exactly on
+/// every non-embedded tick via defer-commit rather than sampling both centers from one shared snapshot. The lower
 /// center is sampled first (one bare <c>TryDistance</c> — identical to the pre-hardening hot path's first tap). If
 /// it samples embedded (<c>distance &lt; 0</c> — unreachable by ordinary locomotion alone, a 24-unit/s max fall
 /// speed at 240 Hz penetrating at most 0.1 per tick against a 0.35 radius, but reachable by a live geometry mutation
 /// that rebuilds and swaps the field under a standing body, or a kit collider swap, not only a non-swept teleport),
-/// the upper center is PEEKED (one more bare <c>TryDistance</c>, no push attempted) and the whole capsule extracts
+/// the upper center is peeked (one more bare <c>TryDistance</c>, no push attempted) and the whole capsule extracts
 /// via <see cref="ExtractCapsule"/> — 2 samples total, +0 if the peek also finds upper embedded (direction is
 /// <c>up</c> unconditionally, magnitude reads both already-known depths, no further field query), +7 if the peek
 /// finds upper clean (a confirming <c>TryDistance</c> at the midpoint, then, only if that confirms, a six-tap
-/// <c>TryFieldGradient</c> for direction) — 2 or 9 total, exactly as before. If the lower center is NOT embedded,
-/// its ordinary push is computed as a TRIAL by <see cref="TrialResolveSphere"/> — the identical arithmetic
+/// <c>TryFieldGradient</c> for direction) — 2 or 9 total, exactly as before. If the lower center is not embedded,
+/// its ordinary push is computed as a trial by <see cref="TrialResolveSphere"/> — the identical arithmetic
 /// <see cref="ApplyPush"/>/<see cref="ApplyDegeneratePush"/> would run (same gradient tap, only on confirmed
-/// penetration, up to the existing seven-sample per-sphere ceiling) — but NOT committed to
-/// position/velocity/grounded yet. The upper center is then sampled EXACTLY ONCE, at the position the trial would
+/// penetration, up to the existing seven-sample per-sphere ceiling) — but not committed to
+/// position/velocity/grounded yet. The upper center is then sampled exactly once, at the position the trial would
 /// produce if committed (one bare <c>TryDistance</c> — the identical second tap the pre-hardening hot path already
 /// paid, just gating a commit-or-discard decision instead of being unconditional). If that sample is embedded, the
 /// trial is discarded in full (no position push, no velocity edit, no grounded latch ever lands) and the whole
-/// capsule extracts via <see cref="ExtractCapsule"/> from the CURRENT, unpushed centers, reusing both already-taken
+/// capsule extracts via <see cref="ExtractCapsule"/> from the current, unpushed centers, reusing both already-taken
 /// samples — no third field query. This is the most expensive embedded shape: up to 7 (the lower's own discarded
 /// ordinary ceiling) + 1 (the upper's classify sample) + 7 (the one-sided extraction — bothEmbedded is impossible
-/// here, since lower is confirmed NOT embedded) = 15, or as low as 1 + 1 + 7 = 9 when the lower's trial was a clean
-/// miss. If the upper's sample is NOT embedded, the lower's trial COMMITS (position/velocity/grounded now update for
+/// here, since lower is confirmed not embedded) = 15, or as low as 1 + 1 + 7 = 9 when the lower's trial was a clean
+/// miss. If the upper's sample is not embedded, the lower's trial commits (position/velocity/grounded now update for
 /// real) and the upper's own ordinary resolve reuses that same sample (no third query there either) — this is the
 /// non-embedded hot path, and its total cost — two distance samples, gradient taps only on confirmed per-sphere
-/// penetration — and its OUTPUT are bit-identical to the pre-hardening path, because the trial computes the exact
+/// penetration — and its output are bit-identical to the pre-hardening path, because the trial computes the exact
 /// same formula the direct-apply path always did before either commits or discards. The 1,033-sample capsule
 /// ceiling (and the 16,534 / 66,136 totals it feeds) therefore still hold exactly as documented; nothing about this
 /// restructure touches the non-embedded worst case at all. A standalone sphere or box volume follows the same
-/// single-sample-then-optional-seven-sample shape at its OWN center (see <see cref="ResolveSphere"/>,
+/// single-sample-then-optional-seven-sample shape at its own center (see <see cref="ResolveSphere"/>,
 /// <see cref="ResolveBox"/>), so their seven-sample ceiling is likewise unchanged.</para>
 /// </remarks>
 public sealed class WorldSolidField : IContactField {
@@ -116,7 +116,7 @@ public sealed class WorldSolidField : IContactField {
     /// <inheritdoc/>
     public WorldContactCensus Census { get; }
 
-    /// <summary>Re-wraps this field's ALREADY-COMPILED program with fresh solver scalars, reusing the wrapped
+    /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
     /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array). A
     /// <c>SetCollision</c> edit touches only the collision tuning row, never the geometry the program bakes (screens and
     /// placements), so a slope/skin/probe/iteration tweak reuses the program instead of
@@ -138,7 +138,7 @@ public sealed class WorldSolidField : IContactField {
     public bool LineOfSight(in FixedVector3 from, in FixedVector3 to) =>
         m_evaluator.LineOfSight(from: FixedPosition.FromLocal(local: from), to: FixedPosition.FromLocal(local: to));
 
-    /// <summary>Builds the SDF contact field from a definition WITHOUT installing it, or reports the offending op by name.</summary>
+    /// <summary>Builds the SDF contact field from a definition without installing it, or reports the offending op by name.</summary>
     /// <param name="definition">The world definition supplying the collision tuning and solid rows.</param>
     /// <param name="built">The built field on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
@@ -175,21 +175,24 @@ public sealed class WorldSolidField : IContactField {
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-            var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
-
-            CreationStampLattice.ForEachInstance(
-                origin: placement.Position,
-                rotation: rotation,
+            // The one transform conversion boundary: the program is encoded single-precision, but every placement
+            // transform reaching it is derived in fixed point first (yaw via integer SinCos, origins via the fixed
+            // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
+            // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
+            var fixedRotation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0))));
+            CreationStampLattice.ForEachFixedInstance(
+                origin: FixedVector3.FromVector3(value: placement.Position),
+                rotation: fixedRotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => {
-                    CreationStampEmitter.Emit(
+                    CreationStampEmitter.EmitFixed(
                         builder: builder,
                         document: creation.Document,
-                        transform: new CreationStampTransform(
+                        transform: new FixedCreationStampTransform(
                             Origin: instance.Origin,
-                            Rotation: rotation,
-                            Scale: placement.Scale,
+                            Rotation: fixedRotation,
+                            Scale: FixedQ4816.FromDouble(value: placement.Scale),
                             ReflectionNormal: instance.ReflectionNormal
                         ),
                         materialFor: _ => material,
@@ -223,7 +226,7 @@ public sealed class WorldSolidField : IContactField {
     }
 
     /// <summary>Reads the field at a point the way the solver does — the <c>world.collision.probe</c> diagnostic. The
-    /// gradient uses the SAME authored probe step the resolver walks, so the printed direction is exactly the surface
+    /// gradient uses the same authored probe step the resolver walks, so the printed direction is exactly the surface
     /// normal a contact push reads. It is the body UP axis only under
     /// <see cref="WorldContactRequirement.GradientDerivedUp"/>; a flat-up world's bodies integrate against constant
     /// <c>+Y</c> regardless of what this prints.</summary>
@@ -257,13 +260,12 @@ public sealed class WorldSolidField : IContactField {
             }
 
             var pushed = false;
-            // ONE extraction authority per BODY per iteration: a FromCreation collider compiles up to
-            // WorldCollider.MaxVolumes (16) sphere/box volumes, and each used to extract along its own gradient
-            // against the SAME shared position — an N-way tug-of-war. The first embedded volume this iteration
-            // claims extraction (sets this true); every volume visited after it — even if it is itself embedded —
-            // skips its own extraction and runs only its ordinary non-embedded handling this pass. A skipped
-            // volume is not lost: the next iteration re-classifies it against wherever the claiming volume's
-            // extraction moved the body, and picks it up once it is the one that still needs to move.
+            // One extraction authority per body per iteration: a FromCreation collider compiles up to
+            // WorldCollider.MaxVolumes (16) sphere/box volumes, all sharing one position, so extracting more than
+            // one per iteration would tug-of-war. The first embedded volume this iteration claims extraction; every
+            // volume visited after it skips its own extraction and runs only ordinary non-embedded handling this
+            // pass. A skipped volume is re-classified next iteration against wherever the claiming volume moved
+            // the body.
             var extracted = false;
 
             foreach (var volume in volumes) {
@@ -335,29 +337,21 @@ public sealed class WorldSolidField : IContactField {
         return false;
     }
 
-    // Depenetrate one sphere volume from the field: sample the distance at its center (the COMMON cost — one
+    // Depenetrate one sphere volume from the field: sample the distance at its center (the common cost — one
     // TryDistance), and only on actual penetration take the gradient tap for the push direction. Grounds the body
     // when the surface normal's alignment with the body up clears the compiled walkable-slope threshold.
     //
-    // distance < 0 means the CENTER ITSELF sits strictly inside geometry — a DEEP-EMBED instance of the
-    // opposing-face straddle class (see class remarks), not a full discriminator for it: an OPPOSING SHALLOW
-    // penetration — a slab roughly 0.26-0.74 of the capsule's core length thick, crossing the waist so BOTH centers
-    // still sample distance >= 0 — still two-cycles under ordinary per-sphere resolution and this check does not see
-    // it (detectable only by comparing the two contact normals; deliberately NOT handled here — ledgered with the
-    // campaign, not this wave). Ordinary locomotion's worst-case fall penetration (24-unit/s max fall / 240 Hz = 0.1
-    // per tick) never closes a 0.35 radius to zero, so the deep-embed case is unreachable by falling alone — but IS
-    // reachable by a live geometry mutation that rebuilds and swaps the field under a standing body, or a kit
-    // collider swap, not only a non-swept teleport. A STANDALONE sphere volume (allowEmbedExtraction: true)
-    // extracts itself along its own gradient below, claiming the iteration's one extraction authority (see the
-    // Resolve loop) if nothing already has. A capsule's embed CLASSIFICATION never routes through this method —
-    // ResolveCapsule samples both centers directly so it can decide before any push commits (see its remarks); this
-    // method's embed branch (allowEmbedExtraction: false) exists only as a defensive report path and is never
-    // actually reachable from ResolveCapsule's calls into it, since those only ever run once a center is already
-    // confirmed clean.
+    // distance < 0 means the center itself sits strictly inside geometry — reachable not just by a non-swept
+    // teleport but by a live geometry mutation that rebuilds and swaps the field under a standing body, or a kit
+    // collider swap; ordinary locomotion's worst-case fall penetration never closes a 0.35 radius to zero. A
+    // standalone sphere volume (allowEmbedExtraction: true) extracts itself along its own gradient, claiming the
+    // iteration's one extraction authority if nothing already has. A capsule's embed classification never routes
+    // through this method — ResolveCapsule samples both centers directly so it can decide before any push commits —
+    // so this method's embed branch (allowEmbedExtraction: false) is reachable only defensively.
     //
-    // JUDGMENT CALL (extraction vs. the obstruction witness): the embed branch below never touches lastNormal — it
-    // returns through ApplyExtractionPush, not ApplyPush — so a body EJECTED from embedded geometry never reports a
-    // wall obstruction; only the ordinary confirmed-penetration branch's ApplyPush call (below) can record one.
+    // The embed branch below never touches lastNormal — it returns through ApplyExtractionPush, not ApplyPush — so
+    // a body ejected from embedded geometry never reports a wall obstruction; only the ordinary confirmed-
+    // penetration branch's ApplyPush call can record one.
     private bool ResolveSphere(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 center, FixedQ4816 radius, FixedVector3 up, ref bool grounded, bool allowEmbedExtraction, out FixedQ4816 distance, ref bool extracted, ref FixedVector3 lastNormal, FixedQ4816? presampledDistance = null) {
         var coord = FixedPosition.FromLocal(local: center);
 
@@ -408,15 +402,11 @@ public sealed class WorldSolidField : IContactField {
     // ApplyPush does, never fabricating a normal for a degenerate push.
     private readonly record struct SphereResolveTrial(bool Pushed, FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
 
-    // Computes the WOULD-BE ordinary push for a sphere center ALREADY CONFIRMED not embedded (distance >= 0,
-    // sampled by the caller) WITHOUT applying it to position/velocity/grounded — the DEFER-COMMIT half of
-    // ResolveCapsule's classify-before-any-COMMITTED-push restructure (see its remarks): the caller samples the
-    // OTHER center at the position this trial's PositionDelta would produce if committed, and only actually commits
-    // (CommitSpherePush) once that second sample proves clean, which is what keeps the ordinary path's numerics
-    // bit-identical to the pre-hardening direct-apply shape on every tick where nothing ends up embedded. The
-    // arithmetic below is intentionally a byte-for-byte mirror of ApplyPush/ApplyDegeneratePush — same branches,
-    // same formulas, same gradient-only-on-penetration cost — so a committed trial reproduces exactly what the
-    // direct-apply path would have done; a change to either of those two methods must be mirrored here too.
+    // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
+    // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
+    // position this trial's PositionDelta would produce if committed, and only actually commits (CommitSpherePush)
+    // once that second sample proves clean. The arithmetic below is a byte-for-byte mirror of
+    // ApplyPush/ApplyDegeneratePush — a change to either of those two methods must be mirrored here too.
     private SphereResolveTrial TrialResolveSphere(FixedVector3 center, in FixedVector3 velocity, FixedQ4816 radius, FixedVector3 up, FixedQ4816 distance) {
         var minimum = (radius + m_skin);
 
@@ -459,30 +449,23 @@ public sealed class WorldSolidField : IContactField {
         }
     }
 
-    // Resolve one capsule volume: DEFER-COMMIT — classify before any push COMMITS, without changing the ordinary
-    // (non-embedded) path's numerics. The earlier shape ran the lower sphere's ORDINARY resolve — push + velocity
-    // clamp + grounded latch, applied for real — before it knew whether the upper was embedded, so a one-sided
-    // embed could commit an ordinary push AND then run an extraction in the opposite direction in the same pass,
-    // with grounded latched dishonestly (defect 2). Sampling both centers from one shared pre-push snapshot would
-    // fix that too, but changes the ordinary path's trajectory on every tick where both centers are simultaneously
-    // in ordinary contact (Jacobi instead of the pre-hardening sequential/Gauss-Seidel scheme) — rejected, because
-    // the fix does not require it.
+    // Resolve one capsule volume: classify both centers as embedded or not BEFORE any push commits, without
+    // changing the ordinary (non-embedded) path's sequential (Gauss-Seidel) numerics. Sampling both centers from one
+    // shared pre-push snapshot would also classify correctly, but would change the ordinary path's trajectory on
+    // every tick where both centers are simultaneously in ordinary contact (Jacobi instead of sequential), so it is
+    // not used here.
     //
-    // Lower is sampled first (one bare TryDistance — identical to the pre-hardening hot path's first tap). If it is
-    // embedded (see ResolveSphere's remarks on the opposing-face straddle class), upper is PEEKED (one more bare
-    // TryDistance, no push attempted) purely to tell a two-sided straddle from a one-sided embed, and the whole
-    // capsule extracts via ExtractCapsule — unchanged from before.
+    // Lower is sampled first (one bare TryDistance). If it is embedded, upper is peeked (one more bare TryDistance,
+    // no push attempted) purely to tell a two-sided straddle from a one-sided embed, and the whole capsule extracts
+    // via ExtractCapsule.
     //
-    // If lower is NOT embedded, its ordinary push is computed as a TRIAL (TrialResolveSphere) — not committed yet.
-    // Upper is then sampled EXACTLY ONCE, at the position the trial WOULD produce if committed — the identical
-    // second tap the pre-hardening hot path already paid, now gating a decision instead of being unconditional. If
-    // that sample is embedded, the trial is discarded WHOLESALE (no position push, no velocity edit, no grounded
-    // latch ever lands) and the capsule extracts via ExtractCapsule from the CURRENT, unpushed centers, reusing both
-    // already-taken samples — classification before any COMMITTED push, which is what defect 2 actually demands,
-    // without touching the ordinary path's cost or numerics. If upper's sample is clean, the trial COMMITS for
-    // real and upper's own ordinary resolve reuses that same sample (ResolveSphere's presampledDistance parameter)
-    // — bit-identical to the pre-hardening sequential path, because the trial's arithmetic IS that path's arithmetic,
-    // just deferred by one branch.
+    // If lower is not embedded, its ordinary push is computed as a trial (TrialResolveSphere) but not committed.
+    // Upper is then sampled exactly once, at the position the trial would produce if committed. If that sample is
+    // embedded, the trial is discarded wholesale (no position push, no velocity edit, no grounded latch) and the
+    // capsule extracts via ExtractCapsule from the current, unpushed centers, reusing both already-taken samples. If
+    // upper's sample is clean, the trial commits for real and upper's own ordinary resolve reuses that same sample
+    // (ResolveSphere's presampledDistance parameter) — bit-identical to the sequential path, since the trial's
+    // arithmetic is that path's arithmetic, just deferred by one branch.
     private bool ResolveCapsule(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal) {
         var lowerCenter = (position + orientation.Rotate(vector: volume.Center));
@@ -701,55 +684,41 @@ public sealed class WorldSolidField : IContactField {
         return true;
     }
 
-    // CAPSULE EXTRACTION — the opposing-face straddle escape (see ResolveSphere/ResolveCapsule's remarks): a
-    // capsule can land with both spheres inside one solid, straddling its Y-midplane — not only via a non-swept
-    // teleport, but any live geometry mutation that rebuilds and swaps the field under a standing body, or a kit
-    // collider swap. Per-sphere resolution IS the bug there — the lower center pushes toward the nearer floor face,
-    // the upper toward the roof, against ONE shared position, net ~zero, a stable fixed point (a transient
-    // intermediate up-push even latches `grounded` dishonestly). ONE authority replaces both: push the WHOLE capsule
-    // ONE way — the tug-of-war dies because only one direction ever decides this iteration, and only one volume ever
-    // claims that authority per body per iteration (see the Resolve loop).
+    // Capsule extraction — the opposing-face straddle escape: a capsule can land with both spheres inside one
+    // solid, straddling its Y-midplane, not only via a non-swept teleport but any live geometry mutation that
+    // rebuilds and swaps the field under a standing body, or a kit collider swap. Per-sphere resolution is the
+    // failure mode there: the lower center pushes toward the nearer floor face, the upper toward the roof, against
+    // one shared position, netting to a stable fixed point (a transient intermediate push can even latch `grounded`
+    // dishonestly). One authority replaces both: push the whole capsule one way, and only one volume claims that
+    // authority per body per iteration (see the Resolve loop).
     //
-    // MAGNITUDE keys to EMBED DEPTH, not midpoint clearance: the max, over whichever center(s) sample embedded, of
-    // that center's OWN already-sampled |distance| + (radius + skin) — never the midpoint's clearance to whatever
-    // surface happens to be nearest it. Keying to midpoint clearance instead throws the body harder the CLEARER the
-    // midpoint reads, which is backwards (a clear midpoint between two embedded centers means a shallow straddle,
-    // not a deep one) and admits a period-2 limit cycle: overshoot past the surface on one push, and the next
-    // iteration's midpoint clearance is now large on the opposite side, so it overshoots back. Keying to the
-    // embedded center's own measured depth bounds the push at the actual embed and cannot construct that cycle. A
-    // two-sided straddle takes the max of both centers' depths and needs no further field query at all; a one-sided
-    // embed still needs a direction (below), which is the only case that samples the midpoint.
+    // Magnitude keys to embed depth, not midpoint clearance: the max, over whichever center(s) sample embedded, of
+    // that center's own already-sampled |distance| + (radius + skin) — never the midpoint's clearance to whatever
+    // surface happens to be nearest it. Keying to midpoint clearance is backwards (a clear midpoint between two
+    // embedded centers means a shallow straddle, not a deep one) and admits a period-2 limit cycle: overshoot past
+    // the surface on one push, then overshoot back the next iteration. Keying to the embedded center's own measured
+    // depth bounds the push at the actual embed and cannot construct that cycle. A two-sided straddle takes the max
+    // of both centers' depths with no further field query; a one-sided embed still needs a direction (below), which
+    // is the only case that samples the midpoint.
     //
     // The position push clamps approach velocity along the extraction direction exactly like an ordinary contact
-    // push (ApplyPush) — we displaced along that direction, so canceling velocity into it is honest — but NEVER
-    // grounds: extraction is honest displacement, never a resolved contact. Once no center samples inside geometry,
-    // the SAME Resolve call's next iteration finds the ordinary per-sphere/core path clean and settles the body
+    // push, but never grounds: extraction is honest displacement, never a resolved contact. Once no center samples
+    // inside geometry, the next iteration finds the ordinary per-sphere/core path clean and settles the body
     // honestly on the exterior surface it exited through.
     //
-    // DIRECTION — bothEmbedded forces `up` rather than trusting the midpoint's OWN gradient (measured, not the
-    // originally-drafted design): the capsule's sphere-center midpoint does not generally coincide with the
-    // straddled solid's own symmetry plane — this repo's authored arcade cabinet spans core Y [0.0947, 1.7053]
-    // (true symmetry at Y 0.9) against a capsule whose center-to-center midpoint sits at root+0.85, 0.05 below that
-    // line — so the midpoint gradient there still reads "down" even though the upper sphere has already crossed
-    // into the roof-favoring half. Trusting it re-creates the tug-of-war one level up: the body tunnels DOWNWARD
-    // through the floor instead of extracting to the roof (confirmed by running the fix against the exact reported
-    // repro before this override existed). A genuine two-sided straddle is exactly the case ApplyDegeneratePush's
-    // "at rest" philosophy already covers for a symmetric point with no trustworthy measured direction — `up` is
-    // authored, never zero, and matches gradient-derived-up worlds too since `up` here is the SAME per-iteration
-    // value TryUp resolved, not a hardcoded world axis. A one-sided embed (only one center inside geometry) keeps
-    // the originally-drafted midpoint-gradient direction, which has no opposing-authority conflict to mis-resolve —
-    // gated behind a confirming TryDistance at the midpoint so a program with no geometry to answer never pays for a
-    // gradient tap that is guaranteed to fail.
+    // Direction: a two-sided straddle forces `up` rather than trusting the midpoint's own gradient, because the
+    // capsule's sphere-center midpoint does not generally coincide with the straddled solid's own symmetry plane —
+    // a midpoint on the lower side of an off-center straddle can still read a gradient pointing further down even
+    // though the upper sphere has already crossed into the upper half, which would tunnel the body downward through
+    // the floor instead of extracting it upward. `up` is authored, never zero, and is the same per-iteration value
+    // TryUp resolved, so it matches gradient-derived-up worlds too. A one-sided embed keeps the midpoint-gradient
+    // direction instead, since it has no opposing-authority conflict to mis-resolve, gated behind a confirming
+    // TryDistance so a program with no geometry to answer never pays for a gradient tap guaranteed to fail.
     //
-    // ACCEPTED, LEDGERED RESIDUALS of the flat-up bias (not solved here — this is the line short of a general
-    // depenetration solver, which belongs to the campaign lead, not this wave): a two-sided straddle under a
-    // CEILING (the solid is above, not below) still forces `up`, extracting the body UPWARD THROUGH the overhead
-    // structure rather than back down into the room it stands in — `up` is a floor-biased heuristic proven against
-    // one authored configuration (a solid straddled from below), not a general "which side is thinner" decision. A
-    // pitched capsule (a free-model 6DOF pose, not the upright standing case this was proven against) breaks the
-    // framing entirely: `up` is the per-iteration TryUp value, not necessarily anywhere near either sphere's own
-    // local axis once the capsule is not Y-aligned, so "two-sided straddle" stops meaning "split across a
-    // Y-midplane" for such a body. Revisit if a shipped world authors a ceiling straddle or a pitched-capsule embed.
+    // Known residual: this is a floor-biased heuristic. A two-sided straddle under a ceiling still forces `up`,
+    // extracting the body through the overhead structure rather than back down into the room, and a pitched capsule
+    // (not Y-aligned) breaks the "split across a Y-midplane" framing entirely, since `up` need not align with
+    // either sphere's own local axis.
     private bool ExtractCapsule(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 lowerCenter, FixedVector3 upperCenter,
         FixedQ4816 lowerDistance, FixedQ4816 upperDistance, bool lowerEmbedded, bool upperEmbedded, FixedQ4816 radius, FixedVector3 up) {
         var bothEmbedded = (lowerEmbedded && upperEmbedded);
@@ -784,14 +753,11 @@ public sealed class WorldSolidField : IContactField {
 
     // A degenerate gradient after confirmed penetration means the sample point is mirror-symmetric in the field —
     // no measured surface normal exists. Eject by bare position push along reverse-of-motion (the de-tunneling
-    // direction), or up for a body at rest; touch NOTHING else: the direction is not a measured normal, so clamping
-    // velocity along it would fabricate physics, and it must never ground a body. DEFENSIVE — no shipped world's
-    // geometry reaches it; verified by argument, not battery. That claim depends on every call site being gated to a
-    // CONFIRMED, non-interior penetration (0 <= distance < minimum) before the gradient tap that can degenerate:
-    // ResolveSphere and ResolveBox always were; ResolveCore's swept-core midpoint was NOT until its embed guard
-    // (distance < 0, see ResolveCore's remarks) intercepted the interior case first — before that guard, an
-    // interior swept-core sample could reach this same degenerate-gradient path with no argument covering it. With
-    // the guard in place, all three call sites share the identical non-interior gate and the claim holds uniformly.
+    // direction), or up for a body at rest; touch nothing else: the direction is not a measured normal, so clamping
+    // velocity along it would fabricate physics, and it must never ground a body. Defensive — no shipped world's
+    // geometry reaches it. The claim depends on every call site gating this to a confirmed, non-interior
+    // penetration (0 <= distance < minimum) before the gradient tap that can degenerate; all three call sites
+    // (ResolveSphere, ResolveBox, ResolveCore) share that gate.
     private void ApplyDegeneratePush(ref FixedVector3 position, in FixedVector3 velocity, FixedQ4816 penetration, FixedVector3 up) {
         var direction = (-velocity).Normalize();
 
@@ -803,15 +769,12 @@ public sealed class WorldSolidField : IContactField {
     }
 
     // Extraction push for a single embedded center (distance < 0, already confirmed by the caller's TryDistance —
-    // this method pays only the direction gradient tap). Direction = the center's own gradient; degenerate (no
-    // measured normal) falls back to `up` directly — never zero, and never -velocity like ApplyDegeneratePush: an
-    // embedded center's stored velocity carries no reliable de-tunneling direction, only `up` is authored as the
-    // always-safe default. Clamps approach velocity along the extraction direction exactly like an ordinary contact
-    // push (ApplyPush) — we displaced along that direction, so canceling velocity into it is honest — but NEVER
-    // grounds: extraction is honest displacement, never a resolved contact. Callers own the iteration's one
-    // extraction authority (see the Resolve loop); this method does not itself check or set it. Takes no lastNormal
-    // parameter by design — an extraction rescuing a body from embedded geometry must never record as an
-    // obstruction (a body ejected from inside a wall did not just get blocked by it).
+    // this method pays only the direction gradient tap). Direction is the center's own gradient; a degenerate
+    // (unmeasured) gradient falls back to `up` directly, never to -velocity like ApplyDegeneratePush, since an
+    // embedded center's stored velocity carries no reliable de-tunneling direction. Clamps approach velocity along
+    // the extraction direction like an ordinary contact push, but never grounds. Callers own the iteration's one
+    // extraction authority; this method does not check or set it. Takes no lastNormal parameter by design: a body
+    // ejected from inside a wall did not just get blocked by it.
     private void ApplyExtractionPush(ref FixedVector3 position, ref FixedVector3 velocity, FixedPosition coord, FixedQ4816 magnitude, FixedVector3 up) {
         var direction = m_evaluator.TryFieldGradient(position: coord, epsilon: m_gradientProbe, gradient: out var gradient) ? gradient : up;
 

@@ -11,13 +11,13 @@ namespace Puck.HumbleGamingBrick.Post;
 /// every tick; on the first mismatch the localizer switches to the fine tool, walking the snapshot's section table
 /// (<see cref="SnapshotImage.Sections"/>) to name the first diverging component and byte offset, with a short hex
 /// window of both sides — turning "somewhere diverged" into "the SystemMemory component, byte 32776".
-/// </summary>
-/// <remarks>
+/// <para>
 /// Self-check mode (no second ROM, no perturbation) boots two machines from the same ROM and asserts they never
-/// diverge — the core's own claim to determinism, the same claim <see cref="DeterminismStage"/> makes at coarser
-/// (whole-snapshot, frame-boundary) granularity. Supplying a second ROM path, or a perturbation frame, intentionally
-/// diverges machine B — which exercises the localizer itself: it must name the right component at the right frame.
-/// </remarks>
+/// diverge, the same claim <see cref="DeterminismStage"/> makes at coarser (whole-snapshot, frame-boundary)
+/// granularity. Supplying a second ROM path, or a perturbation frame, intentionally diverges machine B, exercising
+/// the localizer itself.
+/// </para>
+/// </summary>
 internal static class HashDivergenceProbe {
     // One dot-accurate frame is 154 scanlines of 456 CPU T-cycles at normal speed (PostMachine.TCyclesPerFrame = their
     // product). The fine mode compares at each scanline boundary; the coarse mode at each frame boundary.
@@ -34,7 +34,7 @@ internal static class HashDivergenceProbe {
 
     /// <summary>
     /// Runs the lockstep self-check (or, with <paramref name="romBPath"/> / <paramref name="perturbAtFrame"/>, the
-    /// deliberate-divergence proof). Prints progress and the divergence report to stdout — the tool discipline. A
+    /// deliberate-divergence proof). Prints progress and the divergence report to stdout. A
     /// <see langword="null"/> <paramref name="romAPath"/> falls back to the built-in synthetic cartridge, so the
     /// self-check runs anywhere with no ROM corpus.
     /// </summary>

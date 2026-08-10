@@ -28,7 +28,7 @@ internal enum ShiftOp : byte {
 internal enum Condition : byte { NotZero = 0, Zero = 1, NoCarry = 2, Carry = 3 }
 
 /// <summary>
-/// A table-driven SM83 (the brick's CPU) assembler that emits the FULL instruction set from the chip's regular encoding
+/// A table-driven SM83 (the brick's CPU) assembler that emits the full instruction set from the chip's regular encoding
 /// rather than a hand-picked opcode list: the register/ALU grid, the CB block, and the branch family are generated from
 /// operand enums (<see cref="Reg8"/>, <see cref="Reg16"/>, <see cref="StackPair"/>, <see cref="AluOp"/>,
 /// <see cref="ShiftOp"/>, <see cref="Condition"/>), so a future author reaches any instruction without editing this
@@ -102,8 +102,8 @@ internal sealed class Sm83Emitter {
         m_code.Add(item: (byte)(((byte)op * 8) + (byte)register));
     }
 
-    /// <summary>bit n, r — sets the zero flag to the COMPLEMENT of bit <paramref name="bit"/> of <paramref name="register"/>
-    /// (Z = 1 when the bit is 0, i.e. when an active-low joypad line reads as PRESSED).</summary>
+    /// <summary>bit n, r — sets the zero flag to the complement of bit <paramref name="bit"/> of <paramref name="register"/>
+    /// (Z = 1 when the bit is 0, i.e. when an active-low joypad line reads as pressed).</summary>
     public void TestBit(int bit, Reg8 register) => EmitBitOp(baseOpcode: 0x40, bit: bit, register: register);
     /// <summary>res n, r — clear bit <paramref name="bit"/> of an 8-bit register (or <c>(hl)</c>).</summary>
     public void ResetBit(int bit, Reg8 register) => EmitBitOp(baseOpcode: 0x80, bit: bit, register: register);
@@ -117,7 +117,7 @@ internal sealed class Sm83Emitter {
     /// while LY &lt; 144).</summary>
     public void JumpRelative(Condition condition, int label) { m_code.Add(item: (byte)(0x20 + ((byte)condition * 8))); EmitRelativeFixup(label: label); }
 
-    /// <summary>jp label — unconditional ABSOLUTE jump (3 bytes). Use for a long back-edge a relative <c>jr</c> cannot
+    /// <summary>jp label — unconditional absolute jump (3 bytes). Use for a long back-edge a relative <c>jr</c> cannot
     /// reach (over ±127 bytes); requires the routine's load address passed to <see cref="ToArray"/> so the label resolves
     /// to a real 16-bit address rather than a signed offset.</summary>
     public void JumpAbsolute(int label) => EmitAbsolute(opcode: 0xC3, label: label);
@@ -126,17 +126,17 @@ internal sealed class Sm83Emitter {
     /// <summary>jp (hl) — jump to the address in HL (a computed jump for dispatch tables).</summary>
     public void JumpToHl() => m_code.Add(item: 0xE9);
 
-    /// <summary>jp nn — unconditional absolute jump to a target KNOWN at build time (no label fixup), e.g. a fixed
+    /// <summary>jp nn — unconditional absolute jump to a target known at build time (no label fixup), e.g. a fixed
     /// hardware address. Distinguished from <see cref="JumpAbsolute(int)"/> by the parameter name: pass
     /// <c>address:</c> for a literal target, <c>label:</c> for a fixup-resolved one.</summary>
     public void JumpAbsolute(ushort address) => EmitImmediate16(opcode: 0xC3, value: address);
 
-    /// <summary>call label — push the return address and jump to the ABSOLUTE address of <paramref name="label"/> (3
+    /// <summary>call label — push the return address and jump to the absolute address of <paramref name="label"/> (3
     /// bytes); requires the routine's load address passed to <see cref="ToArray"/>, exactly like <see cref="JumpAbsolute(int)"/>.</summary>
     public void Call(int label) => EmitAbsolute(opcode: 0xCD, label: label);
     /// <summary>call cc, label — conditional absolute call.</summary>
     public void Call(Condition condition, int label) => EmitAbsolute(opcode: (byte)(0xC4 + ((byte)condition * 8)), label: label);
-    /// <summary>call nn — push the return address and call a target KNOWN at build time (no label fixup), e.g. the
+    /// <summary>call nn — push the return address and call a target known at build time (no label fixup), e.g. the
     /// HRAM OAM-DMA trampoline at <c>0xFF80</c>. Distinguished from <see cref="Call(int)"/> by the parameter name:
     /// pass <c>address:</c> for a literal target, <c>label:</c> for a fixup-resolved one.</summary>
     public void Call(ushort address) => EmitImmediate16(opcode: 0xCD, value: address);
@@ -241,7 +241,7 @@ internal sealed class Sm83Emitter {
     public int Length => m_code.Count;
 
     /// <summary>Resolves the fixups and returns the finished machine code. <paramref name="baseAddress"/> is the address
-    /// the routine will be LOADED at (0 for a position-independent routine); absolute jumps add it to the label offset.</summary>
+    /// the routine will be loaded at (0 for a position-independent routine); absolute jumps add it to the label offset.</summary>
     public byte[] ToArray(ushort baseAddress = 0) {
         foreach (var (patchOffset, label) in m_relativeFixups) {
             if (!m_labelOffsets.TryGetValue(key: label, value: out var target)) {

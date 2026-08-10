@@ -5,12 +5,12 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The per-seat sculpt WORKBENCH — the client-local context a <see cref="SculptModel"/> edits inside. The live
+/// The per-seat sculpt workbench — the client-local context a <see cref="SculptModel"/> edits inside. The live
 /// preview is a composed pending placement: <see cref="ComposeCreations"/>/<see cref="ComposePlacements"/> overlay a
-/// synthetic creation row (the model's document, timeline frames stripped — the preview shows the LIVE pose) and a
-/// synthetic placement at the workbench origin onto the delivered rows, so the preview renders through the SAME
-/// <see cref="WorldPlacementStamper"/>/<see cref="CreationGeometry"/> path a committed stamp uses — what you sculpt IS
-/// what stamps, byte-for-byte. Nothing here crosses the wire: commit is the verb layer's ONE <c>UpsertCreation</c>.
+/// synthetic creation row (the model's document, timeline frames stripped — the preview shows the live pose) and a
+/// synthetic placement at the workbench origin onto the delivered rows, so the preview renders through the same
+/// <see cref="WorldPlacementStamper"/>/<see cref="CreationGeometry"/> path a committed stamp uses — what you sculpt is
+/// what stamps, byte-for-byte. Nothing here crosses the wire: commit is the verb layer's one <c>UpsertCreation</c>.
 /// </summary>
 /// <remarks>Capacity: entry pre-verifies the composed candidate against the probed render envelope, matching the
 /// ghost-spawn check, and the apply-time measure charges every stamp at worst case — so a preview that entered under budget
@@ -55,7 +55,7 @@ internal sealed class WorldWorkbench {
     /// <param name="client">The delivered-definition view the preview composes over.</param>
     /// <param name="envelope">The render-capacity oracle entry pre-verifies against.</param>
     /// <param name="drag">The drag channel whose pending ghosts join the entry candidate (both client-local
-    /// overlays must fit the envelope TOGETHER — see the remarks).</param>
+    /// overlays must fit the envelope together — see the remarks).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public WorldWorkbench(WorldClient client, WorldRenderEnvelope envelope, WorldEditorDrag drag) {
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -88,7 +88,7 @@ internal sealed class WorldWorkbench {
     /// <param name="slot">The 0-based seat slot.</param>
     public Vector3 Origin(int slot) => m_benches[SlotOrFirst(slot: slot)].Origin;
 
-    /// <summary>The creation ROW id the bench authors toward (the commit's mutation address).</summary>
+    /// <summary>The creation row id the bench authors toward (the commit's mutation address).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public string RowId(int slot) => m_benches[SlotOrFirst(slot: slot)].RowId;
 
@@ -97,7 +97,7 @@ internal sealed class WorldWorkbench {
     /// <param name="slot">The 0-based seat slot.</param>
     public Vector3? Pivot(int slot) => (IsActive(slot: slot) ? (m_benches[slot].Origin + s_pivotLift) : null);
 
-    /// <summary>How many edits sit past the last ACCEPTED commit/load (the HUD's "uncommitted" narration; 0 = clean).
+    /// <summary>How many edits sit past the last accepted commit/load (the HUD's "uncommitted" narration; 0 = clean).
     /// A submitted-but-unaccepted commit still counts here — the work is not clean until the server applies it.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public int UncommittedEdits(int slot) {
@@ -188,7 +188,7 @@ internal sealed class WorldWorkbench {
         return true;
     }
 
-    /// <summary>Records that a commit was SUBMITTED for the seat's bench. The clean flip is deferred to the server's
+    /// <summary>Records that a commit was submitted for the seat's bench. The clean flip is deferred to the server's
     /// accept — a delivered creation row carrying <paramref name="hash"/> (see <see cref="Tick"/>) — so a rejected
     /// apply leaves the work counted as uncommitted rather than falsely clean.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
@@ -260,7 +260,7 @@ internal sealed class WorldWorkbench {
     }
 
     /// <summary>Routes one frame of latched stick motion into the seat's model in the camera's planar frame (the
-    /// editor session calls this from its workbench camera branch): the move stick drives the sculpt TARGET (shape
+    /// editor session calls this from its workbench camera branch): the move stick drives the sculpt target (shape
     /// or chain goal), the shoulder verticals lift/sink it.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="planarRight">The camera's planar right axis.</param>
@@ -371,7 +371,7 @@ internal sealed class WorldWorkbench {
     }
 
     /// <summary>Composes a candidate definition with every active bench's preview rows — the drag channel's ghost
-    /// pre-checks ride this (property-injected there), so both client-local overlays fit the envelope TOGETHER.</summary>
+    /// pre-checks ride this (property-injected there), so both client-local overlays fit the envelope together.</summary>
     /// <param name="candidate">The candidate definition (already carrying the caller's own new row).</param>
     public WorldDefinition ComposeCandidate(WorldDefinition candidate) {
         return (candidate with {

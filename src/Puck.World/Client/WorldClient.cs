@@ -12,14 +12,21 @@ namespace Puck.World.Client;
 /// entity view (previous/current pose per entity, colors, archetypes, per-entity correction easers), submits each
 /// joined seat's device intent over the server link every tick, and resolves the per-frame render poses the frame
 /// source and the SDF anchor consumers read (position <c>Lerp</c> + orientation shortest-path nlerp at the frame's
-/// interpolation alpha, plus the eased correction offset). Poses flow IN via snapshots only; intents, commands, and
-/// session requests flow OUT over the link.
+/// interpolation alpha, plus the eased correction offset). Poses flow in via snapshots only; intents, commands, and
+/// session requests flow out over the link.
 /// </summary>
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
 internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly PlayerRoster m_roster;
     private readonly IServerLink m_link;
+    // The traveler-follow router (stage 1) — every seat submission below resolves its own current presenting
+    // location through it: boot-bound (the ordinary default) or away, in a running WorldInstanceHost instance.
+    // Presentation-side only, same as WorldPerceptionAnchor's own anchor table.
+    private readonly WorldSeatInstanceRouter m_seatRouter;
+    // De-dups the away-claimed-seat stderr narration (see SubmitAwaySeatIntents) so a seat that stays claimed while
+    // away does not spam one line per tick — cleared the moment that seat is no longer both claimed and away.
+    private readonly bool[] m_awayClaimWarned = new bool[PlayerRoster.MaxSlots];
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
     private WorldSessionLeverSink? m_levers;
@@ -56,7 +63,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly WorldCompositionState m_composition;
 
     /// <summary>The entity-view capacity — single-sourced from <see cref="WorldPopulationLimits.CapacityCeiling"/>
-    /// (the F3 reconciliation, 2026-08-06) so the validator's admitted population.capacity and this client's fixed
+    /// so the validator's admitted population.capacity and this client's fixed
     /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
     /// into a latent out-of-bounds throw here.</summary>
     public const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
@@ -68,15 +75,19 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="definition">The boot world definition — the initial live definition the frame source reads.</param>
     /// <param name="composition">The shared live composition-override store (also read by the frame source's composer);
     /// <see cref="DeliverComposition"/> applies accepted overrides into it.</param>
+    /// <param name="seatRouter">The traveler-follow router (stage 1) — <see cref="SubmitSeatIntents"/> and
+    /// <see cref="SubmitAwaySeatIntents"/> both resolve a seat's current presenting location through it.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldClient(PlayerRoster roster, IServerLink link, WorldDefinition definition, WorldCompositionState composition) {
+    public WorldClient(PlayerRoster roster, IServerLink link, WorldDefinition definition, WorldCompositionState composition, WorldSeatInstanceRouter seatRouter) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: link);
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: composition);
+        ArgumentNullException.ThrowIfNull(argument: seatRouter);
 
         m_roster = roster;
         m_link = link;
+        m_seatRouter = seatRouter;
         m_definition = definition;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(registers: definition.TargetRegisters, channelCount: m_channels.ChannelCount);
@@ -109,11 +120,11 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <see cref="WorldSceneEmitter"/> folds into its own when it lays out its revision vector.</summary>
     public const int RevisionComponentCount = 3;
 
-    /// <summary>Writes this client's program-rebuild watch counters SIDE BY SIDE, never added together: the seat-metadata
+    /// <summary>Writes this client's program-rebuild watch counters side by side, never added together: the seat-metadata
     /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, and the
     /// definition-delivery revision.
     /// <para>
-    /// THE SERVER TERM IS NOT MONOTONIC — it is ASSIGNED from <c>snapshot.Revision</c>, so it can move DOWN. A sum of
+    /// The server term is not monotonic — it is assigned from <c>snapshot.Revision</c>, so it can move down. A sum of
     /// these three would therefore stall on a real change whenever the server revision fell by exactly as much as
     /// another term rose, holding a stale program with nothing to report it. Keeping them apart lets the composition
     /// host's componentwise compare see each one move on its own (see <see cref="ISdfSceneEmitter.WriteRevision"/>).
@@ -133,14 +144,14 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_active[index];
 
-    /// <summary>The entity's resolved LOOK row index from the latest snapshot — the frame source's appearance selector
-    /// (PRESENTATION-ONLY).</summary>
+    /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
+    /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public byte LookIndex(int index) => m_look[index];
 
-    /// <summary>The LOOK ROW an entity wears: the delivered look table indexed by <see cref="LookIndex"/>, or the
+    /// <summary>The look row an entity wears: the delivered look table indexed by <see cref="LookIndex"/>, or the
     /// implicit single catalog look when the world authors no <c>looks</c> section, and for an index the delivered
-    /// table cannot cover. The scene emitter and the part resolver read appearance through this ONE resolve, so a
+    /// table cannot cover. The scene emitter and the part resolver read appearance through this one resolve, so a
     /// stamped part and the body it hangs off can never disagree about which row they are wearing.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
@@ -156,12 +167,12 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
     }
 
-    /// <summary>The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer — the frame source
+    /// <summary>The placement row this entity inhabits, or <see langword="null"/> for a seat/peer — the frame source
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public string? PlacementId(int index) => m_placementId[index];
 
-    /// <summary>Resolves the active entity index a placement's FIRST inhabited body occupies (the audio anchor / stamp
+    /// <summary>Resolves the active entity index a placement's first inhabited body occupies (the audio anchor / stamp
     /// pose lookup), or <see langword="false"/> when no active entity inhabits it.</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="index">The resolved 0-based entity index.</param>
@@ -242,28 +253,38 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <see cref="IntentSource.Live"/> — off-Live the devices are inert and the server-side source fills the gaps.
     /// The submission's acting identity is <see cref="PlayerRoster.PrincipalOf"/> — the slot's own
     /// <see cref="WorldPrincipal.Seat"/> ordinarily, or whatever identity a <see cref="PlayerRoster.TryClaimSlot"/> call
-    /// overrode it to (e.g. a replay device's) — so a claimed slot's submission is checked under ITS OWN principal, never
-    /// silently promoted to the seat's. The submission's TARGET is <see cref="PlayerRoster.DriveTarget"/> — the slot
-    /// itself for an ordinary UNCLAIMED seat, or a claimed slot's principal's own granted body (or
+    /// overrode it to (e.g. a replay device's) — so a claimed slot's submission is checked under its own principal, never
+    /// silently promoted to the seat's. The submission's target is <see cref="PlayerRoster.DriveTarget"/> — the slot
+    /// itself for an ordinary unclaimed seat, or a claimed slot's principal's own granted body (or
     /// <see cref="PlayerRoster.NoBody"/> when the claimant has never named one) — so a claimed slot's roster index
-    /// NEVER decides which body moves, not even as a fallback: the server's Drive check on
+    /// never decides which body moves, not even as a fallback: the server's Drive check on
     /// <see cref="IntentSubmission.Principal"/> against <see cref="IntentSubmission.EntityIndex"/> is what actually
     /// decides whether the submission moves anything, and it never sees the slot at all for a claim that resolved no
     /// body.
-    /// <para>Every live slot's target is resolved FIRST, in one pass, before anything is sent. An unclaimed seat whose
-    /// held intent is empty and held channels are all zero is background plumbing: when a DIFFERENT,
-    /// CLAIMED slot's grant-resolved target names that exact body this tick, the empty submission yields and only the
+    /// <para>Every live slot's target is resolved first, in one pass, before anything is sent. An unclaimed seat whose
+    /// held intent is empty and held channels are all zero is background plumbing: when a different,
+    /// claimed slot's grant-resolved target names that exact body this tick, the empty submission yields and only the
     /// claimed submission is sent. An input-producing unclaimed seat is a co-driver, not background plumbing, so both
     /// submissions go out. The server's existing per-body contention reporter then makes that different-principal
     /// collision loud and attributed, exactly as it does when two claimed slots resolve to one body; no winner is
     /// selected here.</para></summary>
     /// <param name="tick">The tick the submissions are for.</param>
+    /// <remarks><b>Traveler-follow stage 1.</b> Scoped to boot-bound seats only — a seat
+    /// <see cref="WorldSeatInstanceRouter"/> currently routes away is skipped here entirely (its device intent
+    /// submits instead through <see cref="SubmitAwaySeatIntents"/>, called from
+    /// <see cref="WorldInstanceHost.StepInstancesBesideBoot"/> at that instance's own next-tick coordinate). The rest
+    /// of this method — target resolution, the co-driver/background-plumbing yield, the submission itself — is
+    /// unchanged: a boot-bound seat's own path is exactly what it was before this router existed.</remarks>
     public void SubmitSeatIntents(ulong tick) {
         Span<bool> live = stackalloc bool[PlayerRoster.MaxSlots];
         Span<int> targets = stackalloc int[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
+                continue;
+            }
+
+            if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
 
@@ -297,14 +318,68 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         }
     }
 
-    /// <summary>The camera-relative move composition — THE determinism seam <c>WorldMotionModel</c>'s
+    /// <summary>Submits every seat <see cref="WorldSeatInstanceRouter"/> currently routes to
+    /// <paramref name="instanceName"/> — <see cref="WorldInstanceHost.StepInstancesBesideBoot"/>'s own door, called
+    /// immediately before that instance's <c>Server.Step</c>, at that instance's own next-tick coordinate. Mirrors
+    /// <see cref="SubmitSeatIntents"/>'s boot-bound path with two deliberate stage-1 narrowings: the entity index is
+    /// always the router's own <see cref="SeatLocation.InstanceSlot"/> (never a claim-resolved target — a claimed
+    /// seat away from boot is refused below, since claim resolution reads boot's own grant table, which a
+    /// cross-instance claim has no way to honor yet), and the submitted intent is the seat's raw held intent (never
+    /// <see cref="ComposeMoveFrame"/>'s camera-relative rotation, which reads this client's own boot-scoped render
+    /// arrays — an away body's pose lives in the destination's own mirror instead, a widening left to the render
+    /// follow-on that actually reads it). Every world kit that stays on the default heading frame (tank controls) is
+    /// unaffected either way.</summary>
+    /// <param name="instanceName">The instance about to step.</param>
+    /// <param name="tick">The tick the submissions are for — that instance's own next tick.</param>
+    /// <param name="link">That instance's own transport (<see cref="WorldInstanceHost.TryGetLink"/>).</param>
+    public void SubmitAwaySeatIntents(string instanceName, ulong tick, IServerLink link) {
+        ArgumentNullException.ThrowIfNull(argument: link);
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
+                continue;
+            }
+
+            var location = m_seatRouter.Location(slot: slot);
+
+            if (!string.Equals(a: location.InstanceName, b: instanceName, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            // V1 RESTRICTION: a claimed (co-drive) seat away from boot is refused, not silently wrong — claim
+            // resolution (PlayerRoster.DriveTarget) reads BOOT's own grant table over the boot loopback view, which
+            // has no way to answer for a body that is not even in boot's population any more. Narrated once per
+            // (slot, instance) rather than every tick.
+            if (m_roster.IsClaimed(slot: slot)) {
+                if (!m_awayClaimWarned[slot]) {
+                    m_awayClaimWarned[slot] = true;
+
+                    Console.Error.WriteLine(value: $"[world.view: seat {(slot + 1)} is claimed (co-drive) and away in '{instanceName}' — cross-instance claim resolution is a stage-1 residue; its submission is refused until it returns to boot or is reclaimed there]");
+                }
+
+                continue;
+            }
+
+            m_awayClaimWarned[slot] = false;
+
+            link.SubmitIntent(submission: new IntentSubmission(
+                Tick: tick,
+                EntityIndex: location.InstanceSlot,
+                Intent: seat.HeldIntent(),
+                Principal: m_roster.PrincipalOf(slot: slot),
+                HeldChannels: seat.HeldChannels
+            ));
+        }
+    }
+
+    /// <summary>The camera-relative move composition — the determinism seam <c>WorldMotionModel</c>'s
     /// <c>MoveFrame</c> remarks (both arms) promise: when the world's seat kit (<see cref="WorldDefinition.DefaultSeatKit"/>) opts into
     /// <see cref="MotionMoveFrame.World"/>, rotates the raw analog <c>MoveForward</c>/<c>MoveStrafe</c> pair by the
-    /// seat's CURRENTLY RENDERED camera yaw before it ever reaches the wire — the sim itself only ever reads an
+    /// seat's currently rendered camera yaw before it ever reaches the wire — the sim itself only ever reads an
     /// already-world-frame vector, never a camera pose. The camera yaw used is <paramref name="bodyIndex"/>'s own
     /// last-resolved render facing: the default seat rig (<c>WorldViewDefaults.SeatRig</c>) has no independent
     /// player-driven orbit, so "the camera's yaw" and "the body's own yaw" are the same one-tick-behind quantity a
-    /// chase camera always reads (this tick's press can only be reflected in NEXT tick's facing/camera, exactly like
+    /// chase camera always reads (this tick's press can only be reflected in next tick's facing/camera, exactly like
     /// any chase cam lagging its subject by one frame). A no-op for every kit that stays on the default
     /// <see cref="MotionMoveFrame.Heading"/> frame (tank controls) — every world that never opts in submits the raw
     /// pair unchanged, byte-identical to before this composition existed.</summary>

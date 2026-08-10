@@ -28,14 +28,14 @@ internal static class InfraredRom {
     // dwarfs the ~1-instruction lock-step skew the furthest-behind interleave can leave, so the transmitted bit is
     // always stable before the receiver samples it.
     private const byte SettleCount = 0x20;
-    // CYCLE-MATCHING IS LOAD-BEARING, not cosmetic: the furthest-behind interleave keeps both machines' CLOCKS synced,
-    // but it says nothing about where in a routine either one currently stands — that phase relationship is set by each
-    // side's OWN per-iteration T-cycle cost. Receive's tail (store, publish progress, compare) costs 44T more per bit
-    // than Transmit's bare loop-back, so an untouched Transmit would run faster and drift into the NEXT bit before its
-    // slower receiver finishes sampling the current one — corrupting every bit after the first. These 11 NOPs (44T)
-    // in Transmit's loop pad it to the IDENTICAL 608T per-bit cost Receive's loop carries (settle=508T + 100T tail vs.
-    // settle=508T + 56T tail + 44T padding), so the write-to-sample phase offset established at bit 0 (a few tens of
-    // cycles from the two sides' differing one-time setup) stays constant, not accumulating, across every bit.
+    // Cycle-matching is load-bearing, not cosmetic: the furthest-behind interleave keeps both machines' clocks
+    // synced, but says nothing about where in a routine either one currently stands — that phase relationship is set
+    // by each side's own per-iteration T-cycle cost. Receive's tail (store, publish progress, compare) costs 44T more
+    // per bit than Transmit's bare loop-back, so an untouched Transmit would run faster and drift into the next bit
+    // before its slower receiver finishes sampling the current one — corrupting every bit after the first. These 11
+    // NOPs (44T) pad Transmit's loop to the identical 608T per-bit cost Receive's loop carries (settle=508T + 100T
+    // tail vs. settle=508T + 56T tail + 44T padding), so the write-to-sample phase offset established at bit 0 stays
+    // constant, not accumulating, across every bit.
     private const int TransmitPaddingNopCount = 11;
 
     /// <summary>The work-RAM address of the first received bit (one <c>0</c>/<c>1</c> byte per pattern bit, ascending).</summary>

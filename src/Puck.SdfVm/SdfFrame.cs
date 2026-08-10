@@ -17,14 +17,23 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// clamped Catmull-Rom bicubic reconstruction; values between blend continuously. Ignored by the native exact-copy
     /// path. Presentation-only, quantized to one byte in Stage 2's push constants.</summary>
     public float UpscaleSharpness { get; init; }
+    /// <summary>The off-axis (asymmetric) frustum's tangent-space center offset — <c>(0, 0)</c> (the default) is the
+    /// ordinary symmetric camera every view used before this member existed, byte-identical: the shader adds it as a
+    /// trailing term (see sdf-world.hlsli's <c>cameraRayDirection</c>), and adding exactly zero changes no rounding.
+    /// A non-zero value shears the frustum so a fixed rectangular aperture (a border-window face) maps 1:1 to the
+    /// render regardless of where the camera's own eye sits relative to that aperture — see
+    /// <see cref="Puck.SdfVm.Views.SdfAsymmetricFrustum"/>, the one producer of a non-zero offset. Rides the packed
+    /// render-scale row's two always-zero spare lanes (KEEP IN SYNC with <c>SdfWorldEngine.PackViewports</c> and
+    /// sdf-world.hlsli's <c>ViewportData.renderScale</c>) — no row growth.</summary>
+    public Vector2 AsymmetricFrustumOffset { get; init; }
 }
 
 /// <summary>One moving entity's rigid transform for a frame: a world position and an orientation. The renderer uploads
 /// these into the per-frame dynamic-transform buffer the <c>SdfOp.TransformDynamic</c> opcode indexes by slot, so an
 /// entity moves without rebuilding the scene program. The slot is the entity's index in <see cref="SdfFrame.DynamicTransforms"/>.
 /// <para><paramref name="CastsSoftShadow"/> (default <see langword="true"/> = casts) rides the packed position row's spare
-/// <c>.w</c> lane (see <c>SdfWorldEngine.PackDynamicTransforms</c>): <see langword="false"/> means THIS dynamic instance is
-/// SKIPPED by the soft-shadow march only — the camera/AO marches are unaffected, so a suppressed avatar still renders and
+/// <c>.w</c> lane (see <c>SdfWorldEngine.PackDynamicTransforms</c>): <see langword="false"/> means this dynamic instance is
+/// skipped by the soft-shadow march only — the camera/AO marches are unaffected, so a suppressed avatar still renders and
 /// self-occludes, it just stops casting/receiving through the sun-shadow enumeration. Per-frame data (avatars move every
 /// frame); flipping it never rebuilds the program. Default casts is byte-identical to every prior frame's zero-pad upload.</para></summary>
 public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, bool CastsSoftShadow = true);
@@ -48,13 +57,34 @@ public sealed record SdfFrame(
     /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
     /// untouched.</summary>
     public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
-    /// <summary>A per-frame scale on the world path's AMBIENT term (default 1 = unchanged). Below 1 dims the room so
+    /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
     public float AmbientScale { get; init; } = 1f;
-    /// <summary>A per-frame scale on the world path's SUN (directional) term (default 1 = unchanged). Pairs with
+    /// <summary>A per-frame scale on the world path's sun (directional) term (default 1 = unchanged). Pairs with
     /// <see cref="AmbientScale"/> to darken the room for the overworld mood.</summary>
     public float SunScale { get; init; } = 1f;
-    /// <summary>The SLICE debug view's plane selector: 0 (the default) = camera-locked (the plane through the world
+    /// <summary>The scene's directional sun, as a unit vector pointing from the surface toward the light. Rides the
+    /// screen-light buffer's sun rows, so a day/night cycle is a per-frame value rather than a shader rebuild.</summary>
+    /// <remarks>The default is the exact float32 triple the shaders pinned as <c>SdfSunDirection</c> before the sun
+    /// became per-frame data, so a frame that never sets it renders bit-identically to the pinned era. The area-light
+    /// shadow estimator needs a frame, not just a direction; the engine derives the two tangents from this vector in
+    /// double precision and rounds once (<c>SdfWorldEngine.PackSunFrame</c>) — which reproduces the pinned tangent and
+    /// bitangent literals exactly, where a float32 <see cref="Vector3.Normalize"/> lands one ulp off in the
+    /// bitangent's Z. Derive it any other way and the default sun stops being a no-op.</remarks>
+    public Vector3 SunDirection { get; init; } = new(x: 0.51343602f, y: 0.79349202f, z: 0.32673201f);
+    /// <summary>The sun's linear RGB color (default white). Multiplies the directional term, so a sunset is a warm
+    /// color here rather than a second code path.</summary>
+    public Vector3 SunColor { get; init; } = Vector3.One;
+    /// <summary>The sun's diffuse weight — the shaders' pinned <c>SunWeight</c> as per-frame data.</summary>
+    public float SunWeight { get; init; } = 0.85f;
+    /// <summary>The ambient term's linear RGB color (default white).</summary>
+    public Vector3 AmbientColor { get; init; } = Vector3.One;
+    /// <summary>The ambient term's constant floor — the shaders' pinned <c>AmbientBase</c> as per-frame data.</summary>
+    public float AmbientBase { get; init; } = 0.25f;
+    /// <summary>The ambient term's hemisphere gradient, scaling surface normal Y (sky above, darker below) — the
+    /// shaders' pinned <c>AmbientHemisphere</c> as per-frame data.</summary>
+    public float AmbientHemisphere { get; init; } = 0.25f;
+    /// <summary>The slice debug view's plane selector: 0 (the default) = camera-locked (the plane through the world
     /// origin with normal = camera forward), 1/2/3 = a world-axis-aligned plane (X/Y/Z normal) at
     /// <see cref="DebugSliceOffset"/> along that axis. Rides the screen-light buffer's environment entry's two spare
     /// lanes (KEEP IN SYNC with sdf-world.hlsli's <c>sdfScreenLights</c> env decode and
@@ -71,14 +101,13 @@ public sealed record SdfFrame(
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
     /// it uploads 0 and shades with analytic normals.</summary>
     public bool UseFiniteDifferenceNormals { get; init; }
-    /// <summary>Disables the soft-shadow GRID CULL (default <see langword="false"/> = the cull is ON). With the cull ON
+    /// <summary>Disables the soft-shadow grid cull (default <see langword="false"/> = the cull is on). With the cull on
     /// the world lit path gathers each lit pixel's shadow-ray grid neighborhood and marches only those instances —
     /// bit-identical to the flat all-instances shadow but far cheaper on spread scenes. Setting this <see langword="true"/> forces
-    /// the flat all-instances march: the ground-truth reference for the cull, and the A/B lever's OFF state (the
-    /// <c>sdf.shadowcull</c> verb). The <c>world-shadow-cull</c> gate that compared the two left the build on
-    /// 2026-08-02, so cull-equals-flat is now checked only by flipping the verb. Rides the screen-light buffer's grid-object-params row's
-    /// reserved <c>.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's
-    /// <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays ON.</summary>
+    /// the flat all-instances march: the ground-truth reference for the cull, and the A/B lever's off state (the
+    /// <c>sdf.shadowcull</c> verb) — cull-equals-flat parity is checked by flipping the verb. Rides the screen-light
+    /// buffer's grid-object-params row's reserved <c>.w</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c>
+    /// and sdf-world.hlsli's <c>worldShadowCullEnabled</c>); an unset frame uploads 0 and the cull stays on.</summary>
     public bool DisableShadowCull { get; init; }
     /// <summary>The grid-lock overlay flags (bit0 = draw the world floor grid, bit1 = draw the object grid). Rides
     /// the screen-light buffer's grid rows 9..12 (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and
@@ -97,39 +126,39 @@ public sealed record SdfFrame(
     public Vector2 GridObjectPitch { get; init; }
     /// <summary>The object grid's finite-patch radius (reference-local units); 0 disables the object grid.</summary>
     public float GridObjectPatchRadius { get; init; }
-    /// <summary>Engine-bench lever: skips the whole soft-shadow sun march (the sun goes UNSHADOWED; the ambient term is
-    /// untouched, so shadowed regions read brighter). Default <see langword="false"/> = shadows ON. Isolates the single
+    /// <summary>Engine-bench lever: skips the whole soft-shadow sun march (the sun goes unshadowed; the ambient term is
+    /// untouched, so shadowed regions read brighter). Default <see langword="false"/> = shadows on. Isolates the single
     /// most expensive shading term for the <c>sdf.soft-shadows</c> bench toggle. Rides the bench-params screen-light
     /// row's <c>.x</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's
-    /// <c>worldSoftShadowsDisabled</c>); an unset frame uploads 0 and shadows stay ON.</summary>
+    /// <c>worldSoftShadowsDisabled</c>); an unset frame uploads 0 and shadows stay on.</summary>
     public bool DisableSoftShadows { get; init; }
     /// <summary>Engine-bench lever: skips <c>calcAO</c>'s normal-ladder ambient occlusion (occlusion is forced to 1, so
-    /// creases read brighter). Default <see langword="false"/> = AO ON. Isolates the AO map() evals per lit pixel for
+    /// creases read brighter). Default <see langword="false"/> = AO on. Isolates the AO map() evals per lit pixel for
     /// the <c>sdf.ao</c> bench toggle. Rides the bench-params screen-light row's <c>.y</c> lane (KEEP IN SYNC with
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldAoDisabled</c>); an unset frame uploads 0
-    /// and AO stays ON.</summary>
+    /// and AO stays on.</summary>
     public bool DisableAmbientOcclusion { get; init; }
-    /// <summary>Engine-bench lever: scales the soft-shadow reach (both the <c>sdfShadowGather</c> cull cone AND the
-    /// march ceiling — ONE shared length, or the cull set would be unsound for the ray) for the <c>sdf.shadow-distance</c>
+    /// <summary>Engine-bench lever: scales the soft-shadow reach (both the <c>sdfShadowGather</c> cull cone and the
+    /// march ceiling — one shared length, or the cull set would be unsound for the ray) for the <c>sdf.shadow-distance</c>
     /// bench toggle. <c>0</c> (the default) means the full 1.0 reach — an unset frame uploads 0 and behavior is
     /// unchanged; set 0.5/0.25 to shorten far shadows. Rides the bench-params screen-light row's <c>.z</c> lane (KEEP IN
     /// SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldShadowDistanceScale</c>).</summary>
     public float ShadowDistanceScale { get; init; }
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic CRTs stop spilling colored light
-    /// into the room). Default <see langword="false"/> = screen lights ON. Directly measures the lit CRTs' cost for the
+    /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit CRTs' cost for the
     /// <c>sdf.screen-lights</c> bench toggle. Rides the bench-params screen-light row's <c>.w</c> lane (KEEP IN SYNC with
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldScreenLightsDisabled</c>); an unset frame
-    /// uploads 0 and screen lights stay ON.</summary>
+    /// uploads 0 and screen lights stay on.</summary>
     public bool DisableScreenLights { get; init; }
-    /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march SKIPS Subtraction-family
+    /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips Subtraction-family
     /// carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the carve cavities stop
     /// letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow re-march on dense-carve
-    /// scenes to O(few). Default <see langword="false"/> = OFF (the full occluder set, byte-identical): shadows still
-    /// evaluate every carve. Conservative when ON — a skipped carve can only make the field MORE solid, so shadows go
-    /// darker, never light-leak. The <c>sdf.shadow-proxy</c> bench toggle. Rides a DEDICATED shadow-proxy screen-light
+    /// scenes to O(few). Default <see langword="false"/> = off (the full occluder set, byte-identical): shadows still
+    /// evaluate every carve. Conservative when on — a skipped carve can only make the field more solid, so shadows go
+    /// darker, never light-leak. The <c>sdf.shadow-proxy</c> bench toggle. Rides a dedicated shadow-proxy screen-light
     /// row's <c>.x</c> lane (SdfBenchParams's four lanes are full — KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c>
     /// and sdf-world.hlsli's <c>worldShadowProxyEnabled</c> / <c>SdfShadowProxyParams</c>); an unset frame uploads 0 and
-    /// the proxy stays OFF.</summary>
+    /// the proxy stays off.</summary>
     public bool EnableShadowProxy { get; init; }
     /// <summary>Uses the already-computed camera-tile instance mask for soft-shadow rays instead of running the
     /// correctness-complete per-pixel shadow-grid gather. This is an explicit performance approximation for dense
@@ -149,34 +178,32 @@ public sealed record SdfFrame(
     /// the quality path. Rides the shadow-proxy params row's reserved <c>.w</c> lane (KEEP IN SYNC with
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldUseFastAmbientOcclusion</c>).</summary>
     public bool UseFastAmbientOcclusion { get; init; }
-    /// <summary>A/B lever for the F1 beam-published per-tile FAR BOUND (perf plan Phase 5.1). Default
-    /// <see langword="false"/> keeps the far bound ACTIVE — the shipped behavior: the fine march exits at
+    /// <summary>A/B lever for the beam-published per-tile far bound. Default
+    /// <see langword="false"/> keeps the far bound active — the shipped behavior: the fine march exits at
     /// <c>traveled &gt;= farBound</c> (plane 3), where the tile's cone provably cannot produce any footprint-accepted hit
-    /// through MaxDistance, so the pixel is OUTPUT-IDENTICAL to a full march but pays fewer steps. Set
-    /// <see langword="true"/> to push the far bound out of reach so the march runs to MaxDistance exactly as pre-F1 —
-    /// the paired-run "off" side. Rides a DEDICATED far-field screen-light row's <c>.x</c> lane (KEEP IN SYNC with
+    /// through MaxDistance, so the pixel is output-identical to a full march but pays fewer steps. Set
+    /// <see langword="true"/> to push the far bound out of reach so the march runs to MaxDistance exactly as without
+    /// it — the paired-run "off" side. Rides a dedicated far-field screen-light row's <c>.x</c> lane (KEEP IN SYNC with
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldFarBoundDisabled</c> / <c>SdfFarFieldParams</c>);
-    /// an unset frame uploads 0 and the far bound stays ON.</summary>
+    /// an unset frame uploads 0 and the far bound stays on.</summary>
     public bool DisableFarBound { get; init; }
-    /// <summary>A/B lever for the SHADOW LIGHT-SIDE ESCAPE EXIT. Default <see langword="false"/> keeps the exit
-    /// ACTIVE — the shipped behavior: each of <c>areaShadowVisibility</c>'s binary rays stops the moment its
+    /// <summary>A/B lever for the shadow light-side escape exit. Default <see langword="false"/> keeps the exit
+    /// active — the shipped behavior: each of <c>areaShadowVisibility</c>'s binary rays stops the moment its
     /// de-scaled clearance exceeds the remaining reach, at which point the field's along-ray 1-Lipschitz bound proves
     /// no occluder can lie ahead. Set <see langword="true"/> to run the full shadow step budget/reach — the paired-run
     /// "off" side.</summary>
     /// <remarks>
-    /// The exit is now BIT-IDENTICAL, not march-path. Under the retired closest-approach parabola the estimator had a
-    /// continuum of outputs and could undershoot past the exit point, so skipping the remainder could brighten a
-    /// pixel; a binary visibility test has two outputs and the Lipschitz bound rules the occluded one out exactly.
-    /// Flipping this lever must therefore not move a single pixel. Rides the far-field row's <c>.y</c> lane (KEEP IN
-    /// SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldShadowEscapeExitDisabled</c> /
-    /// <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the exit stays ON.
+    /// The exit is bit-identical, not march-path: a binary visibility test has two outputs and the Lipschitz bound
+    /// rules the occluded one out exactly, so flipping this lever must not move a single pixel. Rides the far-field
+    /// row's <c>.y</c> lane (KEEP IN SYNC with <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's
+    /// <c>worldShadowEscapeExitDisabled</c> / <c>SdfFarFieldParams</c>); an unset frame uploads 0 and the exit stays on.
     /// </remarks>
     public bool DisableShadowEscapeExit { get; init; }
-    /// <summary>The area-light shadow estimator's SAMPLE INDEX: which point of the digital net every pixel draws this
+    /// <summary>The area-light shadow estimator's sample index: which point of the digital net every pixel draws this
     /// frame.</summary>
     /// <remarks>
     /// <para>
-    /// This MUST be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and NEVER from
+    /// This must be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and never from
     /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas. The sampler
     /// is stateless and seekable precisely so that a replay at tick N draws the identical set of sun-disc directions;
     /// sourcing this from a wall-clock quantity throws that away and makes the shadows a per-run quantity.
@@ -187,8 +214,8 @@ public sealed record SdfFrame(
     /// </para>
     /// </remarks>
     public uint SampleIndex { get; init; }
-    /// <summary>A/B lever (and kill switch) for TEMPORAL ACCUMULATION of the area-light shadow estimator. Default
-    /// <see langword="false"/> keeps accumulation ON — the shipped behavior: each frame's
+    /// <summary>A/B lever (and kill switch) for temporal accumulation of the area-light shadow estimator. Default
+    /// <see langword="false"/> keeps accumulation on — the shipped behavior: each frame's
     /// <c>ShadowSamplesPerPixel</c>-sample estimate is folded into the reprojected previous value by an integer moving
     /// average, which is what turns a three-level stochastic estimate into a smooth penumbra. Set
     /// <see langword="true"/> to shade the raw per-frame estimate with no history read and no history write.</summary>
@@ -197,15 +224,15 @@ public sealed record SdfFrame(
     /// to be a pure function of its own inputs rather than of the frames before it. It is not a quality tier.
     /// </remarks>
     public bool DisableShadowAccumulation { get; init; }
-    /// <summary>Enables the CADENCE GATE (perf plan Phase 6.1): a presentation-only frame-graph optimization where a
-    /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame SKIPS the
+    /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
+    /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the
     /// mask/beam/cull-args/views compute passes and re-composites from the retained views output — pixel-identical to a
-    /// full re-render of the same inputs, at a fraction of the GPU cost. Built on change SIGNATURES (the packed
+    /// full re-render of the same inputs, at a fraction of the GPU cost. Built on change signatures (the packed
     /// per-frame byte spans the skipped passes consume, plus a program/decal revision), never wall-clock heuristics, so
     /// a camera ease — any input change at all — re-renders. The engine additionally forces a render whenever a live
     /// screen source is bound or a carve bake is in progress (their content changes without touching a packed span).
-    /// Default <see langword="false"/> = the gate is OFF and every frame renders fully — BYTE-IDENTICAL to a build
-    /// without the gate (the owner owes the shipped-default pick, matching render-scale/present-rate precedent).
-    /// Presentation-only: never involves simulation state, and a skipped frame's simulation is unaffected.</summary>
+    /// Default <see langword="false"/> = the gate is off and every frame renders fully — byte-identical to a build
+    /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
+    /// unaffected.</summary>
     public bool EnableCadenceGate { get; init; }
 }

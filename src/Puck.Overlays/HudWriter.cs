@@ -2,20 +2,20 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The authored-HUD writer: renders <see cref="HudStore"/>'s structural snapshot in four separate calls —
-/// <see cref="EmitUnder"/>, <see cref="EmitReplace"/>, <see cref="EmitOver"/> (the WORLD-scope bands, one per band,
+/// <see cref="EmitUnder"/>, <see cref="EmitReplace"/>, <see cref="EmitOver"/> (the world-scope bands, one per band,
 /// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the five first-party writers' base slot)
-/// and <see cref="EmitSeatPanels"/> (the PLAYER-scope per-seat panels, unbanded — see its own remarks). Each call
-/// resolves every bound element's LIVE value through <see cref="IHudBindingResolver"/> at emission time
+/// and <see cref="EmitSeatPanels"/> (the player-scope per-seat panels, unbanded — see its own remarks). Each call
+/// resolves every bound element's live value through <see cref="IHudBindingResolver"/> at emission time
 /// (presentation float; resolved fresh every produced frame, never cached across frames) and draws rect/text/gauge
-/// elements CONFINED to their owning panel's rect via <see cref="OverlayFrameBuilder.BeginClip"/>, the same
+/// elements confined to their owning panel's rect via <see cref="OverlayFrameBuilder.BeginClip"/>, the same
 /// clip-scope contract <see cref="EditorHudWriter"/> uses.
 /// </summary>
 public sealed class HudWriter {
-    /// <summary>The glyph-word ceiling ONE text element's run is clipped to — <c>WorldHudCapacity.TextWordCost</c>'s
+    /// <summary>The glyph-word ceiling one text element's run is clipped to — <c>WorldHudCapacity.TextWordCost</c>'s
     /// render-side twin, and the per-element term <see cref="OverlayChannelLeases"/> multiplies into the Hud
     /// reservation. Enforced at <see cref="OverlayFrameBuilder.WriteText"/>'s own <c>maxChars</c> clamp, so the
     /// reservation arithmetic describes what the writer can actually emit: a template resolving many long
-    /// <c>state</c> cells (each up to <c>WorldStateCapacity.MaxTextValueLength</c>) clips as this writer's OWN
+    /// <c>state</c> cells (each up to <c>WorldStateCapacity.MaxTextValueLength</c>) clips as this writer's own
     /// attributed refusal instead of eating the shared channel budget and dropping other elements' records.</summary>
     public const int TextRunChars = 64;
 
@@ -49,7 +49,7 @@ public sealed class HudWriter {
     }
 
     /// <summary>Whether at least one live panel declares <see cref="OverlayHudBand.Replace"/> this frame — the
-    /// banded pipeline's base-slot decision (the caller checks this BEFORE running the five first-party writers).</summary>
+    /// banded pipeline's base-slot decision (the caller checks this before running the five first-party writers).</summary>
     public bool HasReplace {
         get {
             if (!m_hasFrame) {
@@ -68,22 +68,22 @@ public sealed class HudWriter {
         }
     }
 
-    /// <summary>Emits every UNDER-band panel, in document order.</summary>
+    /// <summary>Emits every under-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Under);
 
-    /// <summary>Emits every REPLACE-band panel, in document order — the base slot when <see cref="HasReplace"/>.</summary>
+    /// <summary>Emits every replace-band panel, in document order — the base slot when <see cref="HasReplace"/>.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitReplace(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Replace);
 
-    /// <summary>Emits every OVER-band panel, in document order.</summary>
+    /// <summary>Emits every over-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitOver(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Over);
 
-    /// <summary>Emits every PLAYER-scope (per-seat) panel — the EditorHud per-seat precedent: each panel is CONFINED
+    /// <summary>Emits every player-scope (per-seat) panel — the EditorHud per-seat precedent: each panel is confined
     /// to its owning seat's viewport via one <see cref="OverlayFrameBuilder.BeginClip"/> scope (clip scopes do not
-    /// nest, so this does NOT also open the world-scope panel's own per-panel clip), with the panel positioned
-    /// LOCAL to that viewport rather than the whole screen. Bands are not meaningful for a seat panel (it has no
+    /// nest, so this does not also open the world-scope panel's own per-panel clip), with the panel positioned
+    /// local to that viewport rather than the whole screen. Bands are not meaningful for a seat panel (it has no
     /// base slot to take over), so this runs once, outside the under/base/over sequence.</summary>
     /// <param name="builder">The frame builder.</param>
     /// <exception cref="InvalidOperationException">The published frame carries more seat panels than

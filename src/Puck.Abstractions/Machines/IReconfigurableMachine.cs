@@ -1,7 +1,7 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// Optional live-reconfiguration capability for an <see cref="IScreenMachine"/> — retargeting a RUNNING machine across
+/// Optional live-reconfiguration capability for an <see cref="IScreenMachine"/> — retargeting a running machine across
 /// the engine's own options vocabulary with no reboot and no lost progress, mirroring <see cref="IAudioMachine"/>'s and
 /// <see cref="IQueuedScreenMachine"/>'s optional-capability precedent. The world never names a concrete hardware model:
 /// it forwards the same opaque options string the engine parsed at <see cref="IScreenMachineEngine.Create"/>, so the
@@ -15,7 +15,7 @@ namespace Puck.Abstractions.Machines;
 /// </para>
 /// </summary>
 public interface IReconfigurableMachine {
-    /// <summary>Gets the machine's CURRENT options string — the engine-vocabulary spelling of what it is running now
+    /// <summary>Gets the machine's current options string — the engine-vocabulary spelling of what it is running now
     /// (e.g. <c>dmg</c> after a live swap from <c>cgb</c>), the value <c>world.save</c> folds back into the screen row's
     /// options and the <c>screen.options</c> query echoes.</summary>
     string Options { get; }

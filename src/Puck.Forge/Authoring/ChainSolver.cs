@@ -17,10 +17,7 @@ public static class ChainSolver {
     private const float Epsilon = 0.0001f;
 
     /// <summary>Solves a two-bone (three-joint) limb by the law of cosines: root and the two bone lengths are fixed,
-    /// the goal is the desired tip position, and the pole biases which way the elbow/knee bends. Out-of-reach goals
-    /// (closer than <c>|lenA-lenB|</c> or farther than <c>lenA+lenB</c>) fall back to a straight chain aimed at the
-    /// goal direction rather than producing a NaN; a goal at (or extremely near) the root falls back to
-    /// <paramref name="restDirection"/> so the limb holds a sane pose instead of collapsing to a point.</summary>
+    /// the goal is the desired tip position, and the pole biases which way the elbow/knee bends.</summary>
     /// <param name="root">The chain's fixed root joint.</param>
     /// <param name="goal">The desired tip position.</param>
     /// <param name="lenA">The root→mid bone length (must be positive).</param>
@@ -28,6 +25,10 @@ public static class ChainSolver {
     /// <param name="pole">A world-space point the bend leans toward (e.g. a knee/elbow-forward hint).</param>
     /// <param name="restDirection">The unit direction the chain holds when the goal is degenerate (≈ the root).</param>
     /// <returns>The solved mid and tip joint positions.</returns>
+    /// <remarks>Out-of-reach goals (closer than <c>|lenA-lenB|</c> or farther than <c>lenA+lenB</c>) fall back to a
+    /// straight chain aimed at the goal direction rather than producing a NaN; a goal at (or extremely near) the
+    /// root falls back to <paramref name="restDirection"/> so the limb holds a sane pose instead of collapsing to a
+    /// point.</remarks>
     public static (Vector3 Mid, Vector3 Tip) SolveLimb(Vector3 root, Vector3 goal, float lenA, float lenB, Vector3 pole, Vector3 restDirection) {
         // Floor each bone off zero before solving. A limb whose root bone has zero length (two shapes stacked at one
         // point) would otherwise divide by 2*lenA*distance = 0 in the law of cosines and normalize a zero-length
@@ -95,18 +96,19 @@ public static class ChainSolver {
     }
 
     /// <summary>Solves an N-link spine/tail by a single-pass root→tip drag: each link's direction blends the
-    /// PREVIOUS link's direction toward the instantaneous direction to the goal, weighted by that link's stiffness
+    /// previous link's direction toward the instantaneous direction to the goal, weighted by that link's stiffness
     /// (0 = keeps the previous direction verbatim — a floppy, lagging tip; 1 = points straight at the goal — a stiff
-    /// link). Closed-form per link (no relaxation iteration), so it costs exactly <c>lengths.Length</c> steps.</summary>
+    /// link).</summary>
     /// <param name="root">The chain's fixed root joint.</param>
     /// <param name="goal">The desired tip position (the last joint does not necessarily reach it — see
     /// <paramref name="stiffness"/>).</param>
     /// <param name="lengths">Each link's bone length, root→tip order.</param>
     /// <param name="stiffness">Each link's blend weight toward the goal direction, root→tip order (same length as
     /// <paramref name="lengths"/>); values are clamped to [0, 1].</param>
-    /// <param name="destination">Receives the solved joint positions AFTER the root, root→tip order (length =
-    /// <paramref name="lengths"/>.Length) — CALLER-owned scratch, so a repeated solve (a held goal/pole drag) never
+    /// <param name="destination">Receives the solved joint positions after the root, root→tip order (length =
+    /// <paramref name="lengths"/>.Length) — caller-owned scratch, so a repeated solve (a held goal/pole drag) never
     /// allocates a fresh array per call.</param>
+    /// <remarks>Closed-form per link (no relaxation iteration), so it costs exactly <c>lengths.Length</c> steps.</remarks>
     public static void SolveSpine(Vector3 root, Vector3 goal, ReadOnlySpan<float> lengths, ReadOnlySpan<float> stiffness, Span<Vector3> destination) {
         var joint = root;
         var previousDirection = Vector3.UnitY;

@@ -3,20 +3,20 @@ using Puck.Maths;
 namespace Puck.World.Qr;
 
 /// <summary>
-/// The QR spec's Reed–Solomon parameters, bound to <see cref="ReedSolomon"/> — the field ISO/IEC 18004 Annex A names
-/// and the generator polynomials every supported version+level block plan can ask for. The generators are built ONCE at
-/// type load for each degree in 1..<see cref="MaxEccCodewordsPerBlock"/>, so encoding allocates only the block's own
-/// error-correction codewords: no per-call polynomial construction, no cache, no lock.
+/// The QR spec's Reed–Solomon parameters, bound to <see cref="ReedSolomon"/> — the field ISO/IEC 18004 Annex A
+/// names and the generator polynomials every supported version+level block plan can ask for. The generators are
+/// built once at type load for each degree in 1..<see cref="MaxEccCodewordsPerBlock"/>, so encoding allocates only
+/// the block's own error-correction codewords: no per-call polynomial construction, no cache, no lock.
 /// </summary>
 /// <remarks>
-/// The field is <c>GF(256)</c> under <c>t⁸ + t⁴ + t³ + t² + 1</c> (<c>0x11D</c>) with the generator element <c>α = 2</c>
-/// and the root run starting at <c>α⁰</c>. It is deliberately NOT <see cref="BinaryFields.Degree8"/>, whose modulus is
-/// <c>t⁸ + t⁴ + t³ + t + 1</c> (<c>0x11B</c>): both are degree-8 pentanomials and both are irreducible, but they are
-/// different fields and a code computed in one does not decode in the other. The catalog carries the canonical
-/// minimum-weight modulus at each accelerated width, which is a statement about the width rather than about any
-/// standard, so this one is named where the standard that chose it is cited rather than added to the catalog as a
-/// second degree-8 entry. Naming a field costs nothing — <see cref="BinaryField{T}"/> precomputes nothing — so there is
-/// no saving to chase by hoisting it.
+/// The field is <c>GF(256)</c> under <c>t⁸ + t⁴ + t³ + t² + 1</c> (<c>0x11D</c>) with the generator element
+/// <c>α = 2</c> and the root run starting at <c>α⁰</c>. It is deliberately not <see cref="BinaryFields.Degree8"/>,
+/// whose modulus is <c>t⁸ + t⁴ + t³ + t + 1</c> (<c>0x11B</c>): both are degree-8 pentanomials and both are
+/// irreducible, but they are different fields, and a code computed in one does not decode in the other. The catalog
+/// carries the canonical minimum-weight modulus at each accelerated width, a statement about the width rather than
+/// about any standard, so this modulus is named here, where the standard that chose it is cited, rather than added
+/// to the catalog as a second degree-8 entry. Naming a field costs nothing — <see cref="BinaryField{T}"/> precomputes
+/// nothing — so there is no saving to chase by hoisting it.
 /// </remarks>
 public static class QrReedSolomon {
     /// <summary>The largest EC codeword count any version 1..10 block plan asks for (version 9, level L) — the highest

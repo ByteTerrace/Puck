@@ -3,10 +3,28 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
 using System.Xml.Linq;
 using Puck.Abstractions.Documents;
 
 namespace Puck.World;
+
+/// <summary>Implemented by a hand-written <see cref="JsonConverter{T}"/> that reads/writes its CLR type as a JSON
+/// string — one <see cref="JsonSchemaExporter"/> cannot otherwise introspect (see <see cref="WorldSchema"/>'s own
+/// remarks), so it never emits a <c>type</c> or <c>enum</c> constraint for it. A converter opts into a constraint by
+/// implementing this interface, which is how <see cref="WorldSchema"/> discovers the vocabulary mechanically —
+/// asking <see cref="JsonSerializerOptions.GetConverter(Type)"/> for the resolved converter and querying it — rather
+/// than a generator-side type→token map that would drift the moment a new closed-vocabulary converter is added
+/// without a matching generator edit.</summary>
+public interface IJsonSchemaStringConverter {
+    /// <summary>Every token this converter's <c>Read</c> accepts, spelled exactly as its own parser matches them
+    /// (case rules included — the converter's parse acceptance, not merely what its <c>Write</c> happens to emit,
+    /// since the two can differ: a member a <c>Write</c> switch's fallback arm could produce but <c>Read</c> never
+    /// accepts must not appear here). <see langword="null"/> for a converter that accepts free-form string content
+    /// with no fixed vocabulary (its own validation applies beyond the schema's <c>"type":"string"</c>) — the
+    /// schema then gets a <c>type</c> constraint alone, no <c>enum</c>.</summary>
+    IReadOnlyList<string>? SchemaTokens { get; }
+}
 
 /// <summary>
 /// Generates the JSON Schema for <c>puck.world.def.v1</c> (<see cref="WorldDefinition"/>) directly from the live
@@ -19,9 +37,11 @@ namespace Puck.World;
 /// <see cref="System.Text.Json.Serialization.JsonDerivedTypeAttribute"/>, and a named-value <c>enum</c> for every
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
 /// own: curated hover text pulled from the assembly's XML documentation (<c>Puck.World.Data.xml</c> beside
-/// it), the document ROOT's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
+/// it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
+/// introspect and that opts in via <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyStringVocabulary"/>),
+/// the document root's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
 /// round-trip bag, which admits any <c>$</c>/<c>_</c>-prefixed key (<see cref="DocumentExtensionsPolicy"/>) and so
-/// cannot be a flat <c>additionalProperties: false</c> — and the multi-file SPLIT: a small root plus one file per
+/// cannot be a flat <c>additionalProperties: false</c> — and the multi-file split: a small root plus one file per
 /// top-level document section under <c>schema/</c>, with every subschema that appears more than once hoisted into
 /// <c>schema/common.schema.json</c> under <c>$defs</c> so a person can open <c>kits.schema.json</c> and read the
 /// schema for the <c>kits</c> section without wading through the other 43.
@@ -74,6 +94,16 @@ public static class WorldSchema {
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
     public static SplitSchema Export() {
         var (merged, typesByNode) = ExportMergedWithTypes();
+
+        // The exporter's OWN shortcut for an optional property whose schema Transform would otherwise see as the
+        // fully permissive `true` (a custom-converted member — see IJsonSchemaStringConverter's remarks): when such
+        // a property ALSO carries a declared default (null or not), the exporter emits `{"default": <value>}`
+        // directly and never invokes TransformSchemaNode for that one property at all — description, "type", and
+        // "enum" alike never get a chance to attach. RestoreSkippedPropertyAnnotations finds every such orphaned
+        // node (recognizable as a "properties" entry Transform never touched — typesByNode never gained an entry
+        // for it) and applies the SAME annotation Transform would have, via reflection against the owning CLR type
+        // (already known from typesByNode) since there is no JsonSchemaExporterContext left to ask.
+        RestoreSkippedPropertyAnnotations(node: merged, index: s_xmlDocIndex.Value, typesByNode: typesByNode);
 
         var pathIndex = new Dictionary<string, JsonNode>(comparer: StringComparer.Ordinal);
 
@@ -200,7 +230,7 @@ public static class WorldSchema {
     /// exactly what the un-split generator itself would emit for the same model. Every section <c>$ref</c> is
     /// substituted with its content. A shared-shape <c>$ref</c> follows <see cref="SplitSchema.DefAnchors"/>: a def
     /// the exporter itself recognized as repeated (its anchor is non-null) gets exactly one physical copy, at the
-    /// document-absolute position its anchor names, with every OTHER reference — including a recursive shape's own
+    /// document-absolute position its anchor names, with every other reference — including a recursive shape's own
     /// self-reference — repointed at that position by plain JSON pointer, precisely how the un-split generator's own
     /// TypeInfo cache already expresses it; a def with no anchor (an independently-regenerated polymorphic union
     /// arm, e.g. <c>ActionPredicate.CompareState</c>, which the exporter's cache never catches) is fully duplicated
@@ -223,7 +253,8 @@ public static class WorldSchema {
     }
 
     // Runs once per exported node, bottom-up (children before parents). Attaches a description resolved from the
-    // assembly's XML documentation, and — at the document root only — the Extensions bag's reserved-prefix carve-out.
+    // assembly's XML documentation, teaches a custom-token-converted node its own "type"/"enum" (see
+    // ApplyStringVocabulary), and — at the document root only — the Extensions bag's reserved-prefix carve-out.
     private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
         if ((node is JsonObject alreadyRef) && alreadyRef.ContainsKey(propertyName: "$ref")) {
             // Already deduplicated to an earlier occurrence (a recursive or a structurally repeated type, e.g.
@@ -240,6 +271,8 @@ public static class WorldSchema {
         }
 
         typesByNode[obj] = context.TypeInfo.Type;
+
+        ApplyStringVocabulary(obj: obj, propertyType: context.TypeInfo.Type);
 
         if (description is not null) {
             Prepend(obj: obj, propertyName: "description", value: description);
@@ -305,18 +338,149 @@ public static class WorldSchema {
     // union's own arm) — the node's OWN type <summary>.
     private static string? ResolveDescription(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement> index) {
         if (context.PropertyInfo is { AttributeProvider: MemberInfo member }) {
-            if (TryGetSummary(index: index, memberDocId: MemberDocId(member: member), text: out var ownSummary)) {
-                return ownSummary;
-            }
-
-            if (TryGetParam(index: index, parameterName: member.Name, typeDocId: TypeDocId(type: member.DeclaringType!), text: out var paramSummary)) {
-                return paramSummary;
-            }
-
-            return null;
+            return ResolveDescriptionForMember(member: member, index: index);
         }
 
         return TryGetSummary(index: index, memberDocId: TypeDocId(type: context.TypeInfo.Type), text: out var typeSummary) ? typeSummary : null;
+    }
+
+    // The property-branch half of ResolveDescription's own resolution order, factored out so
+    // RestoreSkippedPropertyAnnotations — which has a reflected MemberInfo but no JsonSchemaExporterContext, since
+    // the exporter never called back for the node it is fixing up — can resolve a description the SAME way.
+    private static string? ResolveDescriptionForMember(MemberInfo member, IReadOnlyDictionary<string, XElement> index) {
+        if (TryGetSummary(index: index, memberDocId: MemberDocId(member: member), text: out var ownSummary)) {
+            return ownSummary;
+        }
+
+        return TryGetParam(index: index, parameterName: member.Name, typeDocId: TypeDocId(type: member.DeclaringType!), text: out var paramSummary)
+            ? paramSummary
+            : null;
+    }
+
+    // DEFECT: the exporter emits no "type"/"enum" for a member whose JsonConverter it cannot introspect (a fully
+    // custom JsonConverter<T> — the schema shows the fully permissive `true`, promoted to `{}` by AsObjectNode),
+    // which means the generated schema admits a document the loader refuses (e.g. "durability":"fresh" — a string
+    // the loader's own WorldDestinationDurabilityJsonConverter would reject, but an unconstrained schema accepts).
+    // Fixed here by asking the RESOLVED converter (via JsonSerializerOptions.GetConverter, the same resolution the
+    // loader itself uses — closed generics, [JsonConverter] attributes, and the context's own Converters array all
+    // resolve through one call) whether it opts into IJsonSchemaStringConverter; a converter that does not is a
+    // converter this generator has no mechanical way to describe (an object shape, a number, an open grammar like
+    // GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the exporter produced
+    // it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
+    // permissive `{}` AsObjectNode just promoted.
+    private static void ApplyStringVocabulary(JsonObject obj, Type propertyType) {
+        if (obj.ContainsKey(propertyName: "type") || obj.ContainsKey(propertyName: "enum") || obj.ContainsKey(propertyName: "anyOf")) {
+            return;
+        }
+
+        if (!TryGetStringVocabulary(propertyType: propertyType, tokens: out var tokens)) {
+            return;
+        }
+
+        var nullable = (Nullable.GetUnderlyingType(propertyType) is not null);
+
+        obj["type"] = (nullable ? new JsonArray("string", "null") : "string");
+
+        if (tokens is { Count: > 0 }) {
+            var enumArray = new JsonArray();
+
+            foreach (var token in tokens) {
+                enumArray.Add(item: token);
+            }
+
+            if (nullable) {
+                enumArray.Add(item: null);
+            }
+
+            obj["enum"] = enumArray;
+        }
+    }
+
+    // Resolves propertyType's OWN registered converter — unwrapping Nullable<T> first, since a value type's
+    // nullable annotation is a distinct CLR type (System.Nullable<T>) the Converters array never names directly —
+    // and reports its IJsonSchemaStringConverter opt-in, if any. The single mechanical lookup DEFECT 1 asks for:
+    // never a generator-side map from CLR type to token list, so a new closed-vocabulary converter needs only the
+    // interface, not a matching edit here.
+    private static bool TryGetStringVocabulary(Type propertyType, out IReadOnlyList<string>? tokens) {
+        var effectiveType = (Nullable.GetUnderlyingType(propertyType) ?? propertyType);
+        JsonConverter? converter;
+
+        try {
+            converter = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+        } catch (NotSupportedException) {
+            tokens = null;
+
+            return false;
+        }
+
+        if (converter is not IJsonSchemaStringConverter vocabulary) {
+            tokens = null;
+
+            return false;
+        }
+
+        tokens = vocabulary.SchemaTokens;
+
+        return true;
+    }
+
+    // Walks the RAW merged schema (before $ref expansion/hoisting — a description/type/enum fix-up never changes
+    // tree SHAPE, only annotates existing leaf objects in place) looking for the exporter's own default-skip gap
+    // (see Export's remarks): a "properties" entry whose value Transform never touched, recognizable because
+    // typesByNode carries no entry for it (Transform unconditionally records one for every node it visits, even a
+    // node with no resolvable description). Every other node in typesByNode was already fully annotated by
+    // Transform itself and is left alone.
+    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+        if (node is JsonObject obj) {
+            if (typesByNode.TryGetValue(key: obj, value: out var ownerType) && (obj["properties"] is JsonObject propertiesObject)) {
+                foreach (var (jsonName, propertyValue) in propertiesObject) {
+                    if ((propertyValue is JsonObject propertyObject) && !ContainsRefKey(obj: propertyObject) && !typesByNode.ContainsKey(key: propertyObject)) {
+                        RestoreSkippedProperty(propertyObject: propertyObject, ownerType: ownerType, jsonName: jsonName, index: index, typesByNode: typesByNode);
+                    }
+                }
+            }
+
+            foreach (var (_, child) in obj) {
+                if (child is not null) {
+                    RestoreSkippedPropertyAnnotations(node: child, index: index, typesByNode: typesByNode);
+                }
+            }
+        } else if (node is JsonArray arr) {
+            foreach (var child in arr) {
+                if (child is not null) {
+                    RestoreSkippedPropertyAnnotations(node: child, index: index, typesByNode: typesByNode);
+                }
+            }
+        }
+    }
+
+    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+        var property = FindPropertyByJsonName(ownerType: ownerType, jsonName: jsonName);
+
+        if (property is null) {
+            return;
+        }
+
+        typesByNode[propertyObject] = property.PropertyType;
+
+        ApplyStringVocabulary(obj: propertyObject, propertyType: property.PropertyType);
+
+        if ((index is not null) && (ResolveDescriptionForMember(member: property, index: index) is { } description)) {
+            Prepend(obj: propertyObject, propertyName: "description", value: description);
+        }
+    }
+
+    // The SAME PropertyNamingPolicy (CamelCase) WorldJsonContext itself is configured with — matched by comparing
+    // EVERY public instance property's own camelCased name, never assuming the JSON name lowercases its first
+    // character alone (a policy change would silently break an assumption like that; this asks the policy itself).
+    private static PropertyInfo? FindPropertyByJsonName(Type ownerType, string jsonName) {
+        foreach (var property in ownerType.GetProperties(bindingAttr: (BindingFlags.Public | BindingFlags.Instance))) {
+            if (string.Equals(a: JsonNamingPolicy.CamelCase.ConvertName(name: property.Name), b: jsonName, comparisonType: StringComparison.Ordinal)) {
+                return property;
+            }
+        }
+
+        return null;
     }
 
     private static string MemberDocId(MemberInfo member) =>

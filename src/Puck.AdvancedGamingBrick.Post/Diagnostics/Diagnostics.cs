@@ -26,7 +26,7 @@ internal static partial class Diagnostics {
     public static bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
 
-        // --oracle: run the self-authored cycle-oracle probe battery (survey #1) — measured vs documented per probe.
+        // --oracle: run the self-authored cycle-oracle probe battery — measured vs documented per probe.
         if (Array.IndexOf(array: args, value: "--oracle") >= 0) {
             exitCode = OracleProbes.RunOracle(args: args);
 

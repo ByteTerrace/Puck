@@ -1,4 +1,6 @@
 using System.Numerics;
+
+using Puck.Maths;
 using Puck.Text;
 
 namespace Puck.SdfVm;
@@ -8,31 +10,31 @@ public sealed class SdfProgramBuilder {
     // KEEP IN SYNC with SDF_SCREEN_MATERIAL in Assets/Shaders/Sdf/sdf-vm.hlsli.
     /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
     public const int ScreenMaterialId = 65535;
-    /// <summary>The instance CEILING — the most instances one program may declare. The world renderer's per-tile
-    /// mask is a DERIVED ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 512 words per tile (16384/32). Everything downstream DERIVES from the LIVE program's instance count — the
+    /// <summary>The instance ceiling — the most instances one program may declare. The world renderer's per-tile
+    /// mask is a derived ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
+    /// it at 512 words per tile (16384/32). Everything downstream derives from the live program's instance count — the
     /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
-    /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring FEWER instances than this cap packs
+    /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring fewer instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
     /// constant tracks it. The ceiling's static cost is the per-tile mask buffer. KEEP IN SYNC with SDF_MAX_INSTANCES in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxInstances = 16384;
     /// <summary>The most screen surfaces one program may declare (matches <see cref="SdfWorldEngine.MaxScreenSurfaces"/>
-    /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract SEPARATE from the
+    /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
     /// viewport capacity <see cref="SdfWorldEngine.MaxViewports"/>). Capped at 32 by the single-<c>uint</c>
     /// <c>screenMask</c> the engine pushes per frame.</summary>
     public const int MaxScreenSurfaces = 32;
     /// <summary>The deepest a <see cref="PushField"/>/<see cref="PopField"/> scope may nest. Depth 1 covers every case
     /// that exists today — creator groups cannot nest and a chamfer wedge is depth 1 — enforced by a validator rule and
-    /// NOT part of the packed word layout, so raising it never re-gates the stream. But it is NOT a one-line bump: the
-    /// interpreter holds the parent accumulator in ONE non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> SCALAR
+    /// not part of the packed word layout, so raising it never re-gates the stream. But it is not a one-line bump: the
+    /// interpreter holds the parent accumulator in one non-indexed <c>(savedFieldDistance, savedFieldMaterial)</c> scalar
     /// pair in <c>mapCore</c> (Assets/Shaders/Sdf/sdf-vm.hlsli), and the <c>SDF_MAX_FIELD_SCOPE_DEPTH</c> there is
-    /// DOCUMENTATION ONLY — no shader expression reads it. Raising this depth means converting that save pair into an
-    /// indexed ARRAY and giving PUSH/POP real push/pop-by-depth stack semantics in the shader FIRST, then bumping the
+    /// documentation only — no shader expression reads it. Raising this depth means converting that save pair into an
+    /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
     /// <summary>The largest <see cref="RepeatPolar"/> sector count this builder accepts: 2^24, the largest integer a
-    /// 32-bit float represents EXACTLY. <c>RepeatPolar</c> bakes the sector count into the packed program as a float
+    /// 32-bit float represents exactly. <c>RepeatPolar</c> bakes the sector count into the packed program as a float
     /// (Data0.z) and the shader's per-sector material recolor re-derives the sector index from it via float wrap
     /// arithmetic (<c>sector - count*floor(sector/count)</c>); past this bound the int-to-float conversion of the
     /// count itself is inexact, so the shader's wrapped max can diverge from this builder's exact-integer
@@ -133,11 +135,11 @@ public sealed class SdfProgramBuilder {
     }
     /// <summary>Opens a material-authoring scope (see <see cref="SdfMaterialScope"/>): while open, any positional
     /// material recolor from <see cref="WallpaperFold"/>/<see cref="RepeatPolar"/> is clamped so it can only ever
-    /// reach a material THIS scope itself added (via <see cref="AddMaterial"/>) — never a material an outer scope, or
+    /// reach a material this scope itself added (via <see cref="AddMaterial"/>) — never a material an outer scope, or
     /// a different emitter sharing this builder, added. Dispose the returned scope (a <see langword="using"/> block)
     /// to close it; scopes nest strictly LIFO, and the innermost open scope is the one every positional stride
     /// resolves against. Opening no scope at all (the default for every caller that existed before this mechanism)
-    /// leaves every positional recolor exactly as unclamped as before — this call is the ONLY thing that changes
+    /// leaves every positional recolor exactly as unclamped as before — this call is the only thing that changes
     /// emission behavior.</summary>
     /// <returns>The opened scope — dispose it to close.</returns>
     public SdfMaterialScope BeginMaterialScope() {
@@ -163,10 +165,10 @@ public sealed class SdfProgramBuilder {
 
         m_materialScopes.RemoveAt(index: (m_materialScopes.Count - 1));
     }
-    /// <summary>Opens a STATIC per-object instance: every instruction until the matching <see cref="EndInstance"/>
+    /// <summary>Opens a static per-object instance: every instruction until the matching <see cref="EndInstance"/>
     /// belongs to it, and the world renderer's tile-cull beam prepass tests <paramref name="boundCenter"/>/
     /// <paramref name="boundRadius"/> (a world-space bounding sphere) per tile, evaluating the instance's instruction
-    /// slice only for tiles the sphere may cover. Instructions declared OUTSIDE any instance are the WORLD set:
+    /// slice only for tiles the sphere may cover. Instructions declared outside any instance are the world set:
     /// always evaluated, unmasked (floors/walls/unbounded shapes).</summary>
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
     /// <param name="boundRadius">The instance's world-space bounding-sphere radius.</param>
@@ -179,7 +181,7 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
-    /// <summary>Declares a STATIC per-object instance with balanced begin/end handling around <paramref name="emit"/>.
+    /// <summary>Declares a static per-object instance with balanced begin/end handling around <paramref name="emit"/>.
     /// If <paramref name="emit"/> throws, the builder is left with the instance open and partial state — discard it
     /// (no builder path rolls back on a throw).</summary>
     /// <param name="boundCenter">The instance's world-space bounding-sphere center.</param>
@@ -194,7 +196,7 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
-    /// <summary>Opens a DYNAMIC per-object instance: like <see cref="BeginInstance"/>, but the bound center resolves
+    /// <summary>Opens a dynamic per-object instance: like <see cref="BeginInstance"/>, but the bound center resolves
     /// on the GPU each frame as (dynamic-transform <paramref name="slot"/>'s position + <paramref name="boundOffset"/>)
     /// — no quaternion rotate, the entity's orientation is folded into the host-baked <paramref name="boundRadius"/>
     /// (as the per-shape/segment bounds gate already does). Pairs with a <see cref="SdfOp.TransformDynamic"/> the
@@ -202,7 +204,7 @@ public sealed class SdfProgramBuilder {
     /// <param name="slot">The dynamic-transform slot index (0-based) this instance's bound tracks.</param>
     /// <param name="boundOffset">The bound's pre-dynamic offset (added to the slot's per-frame position).</param>
     /// <param name="boundRadius">The instance's bounding-sphere radius (post-dynamic geometry folded in).</param>
-    /// <param name="active">Whether the instance participates in the tile-cull scan. Pass <see langword="false"/> to PARK a
+    /// <param name="active">Whether the instance participates in the tile-cull scan. Pass <see langword="false"/> to park a
     /// reserved-pool slot that carries no live content this rebuild (the classic "hidden below the floor" placeholder):
     /// the slot still exists (so the pool's live emission always fits the once-sized buffers), but the beam prepass skips
     /// its per-tile sphere test with a single branch (<see cref="SdfInstanceRange.Active"/>), so a parked slot costs
@@ -217,7 +219,7 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
-    /// <summary>Declares a DYNAMIC per-object instance with balanced begin/end handling around <paramref name="emit"/>.
+    /// <summary>Declares a dynamic per-object instance with balanced begin/end handling around <paramref name="emit"/>.
     /// If <paramref name="emit"/> throws, the builder is left with the instance open and partial state — discard it
     /// (no builder path rolls back on a throw).</summary>
     /// <param name="slot">The dynamic-transform slot index (0-based) this instance's bound tracks.</param>
@@ -357,6 +359,26 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Rotate
         );
     }
+    /// <summary>Rotates subsequent point evaluation by a quaternion normalized in the deterministic fixed-point
+    /// domain.</summary>
+    /// <param name="rotation">The local-space rotation.</param>
+    /// <returns>This builder.</returns>
+    /// <remarks>This overload is the simulation-safe encoding boundary. It performs every derived operation,
+    /// including normalization, before converting the four finished components to the program's single-precision
+    /// storage format. The conversion itself is exactly rounded and does not feed a platform math routine.</remarks>
+    public SdfProgramBuilder Rotate(FixedQuaternion rotation) {
+        var unit = rotation.Normalize().ToQuaternion();
+
+        return Transform(
+            data0: new Vector4(
+                w: unit.W,
+                x: unit.X,
+                y: unit.Y,
+                z: unit.Z
+            ),
+            op: SdfOp.Rotate
+        );
+    }
     /// <summary>Scales subsequent point evaluation and applies the conservative minimum-axis distance correction.</summary>
     /// <param name="scale">The local-space scale. Components are converted to positive nonzero magnitudes.</param>
     /// <returns>This builder.</returns>
@@ -405,7 +427,7 @@ public sealed class SdfProgramBuilder {
         );
     }
     /// <summary>Twists space about the local Y axis: the XZ plane rotates by <paramref name="rate"/> · y radians.
-    /// NOT an isometry — keep rates moderate so the march stays stable.</summary>
+    /// Not an isometry — keep rates moderate so the march stays stable.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
     public SdfProgramBuilder TwistY(float rate) {
@@ -413,9 +435,9 @@ public sealed class SdfProgramBuilder {
         return FiniteScalarTransform(op: SdfOp.TwistY, value: rate, paramName: nameof(rate), subject: "A twist rate");
     }
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells. A translation along
-    /// <c>log(radius)</c> becomes a uniform SCALING in Cartesian space, so the prototype shape(s) that follow repeat
-    /// outward and inward as scaled copies from a handful of instructions. Folds ONLY the radial coordinate (no polar
-    /// pinching); an optional per-shell Z-spin gives the Droste spiral at no cost. NOT an isometry — the r/density
+    /// <c>log(radius)</c> becomes a uniform scaling in Cartesian space, so the prototype shape(s) that follow repeat
+    /// outward and inward as scaled copies from a handful of instructions. Folds only the radial coordinate (no polar
+    /// pinching); an optional per-shell Z-spin gives the Droste spiral at no cost. Not an isometry — the r/density
     /// correction rides the runtime <c>distanceScale</c> and <c>AnalyzeLipschitz</c> bakes a conservative step clamp, so
     /// the over-relaxed march stays hole-free. Like <see cref="Repeat"/>, the prototype content should stay within one
     /// shell cell (radii within a factor of <paramref name="shellRatio"/>) so no shell boundary overshoots.</summary>
@@ -448,18 +470,18 @@ public sealed class SdfProgramBuilder {
     /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
     /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
     /// rotation), and optionally recolors by a hashed material variant — scattering the prototype that follows into a
-    /// jittered field from a single instruction. Both the displacement and the tumble are ISOMETRIES, so the field stays
+    /// jittered field from a single instruction. Both the displacement and the tumble are isometries, so the field stays
     /// distance-preserving (only the jitter half-amplitude joins <c>AnalyzeLipschitz</c>). The per-cell hash is
-    /// INTEGER-ONLY (canonical PCG3D keyed on the two's-complement cell index xored with <paramref name="seed"/>), so
-    /// cell decisions are bit-identical across both GPU backends. jitter/tumble/materialVariants each default to an EXACT
+    /// integer-only (canonical PCG3D keyed on the two's-complement cell index xored with <paramref name="seed"/>), so
+    /// cell decisions are bit-identical across both GPU backends. jitter/tumble/materialVariants each default to an exact
     /// identity, so an unused op leaves the point byte-identical. Like <see cref="Repeat"/>, keep the prototype clear of
     /// the cell boundary: the caller must ensure jitter/2 + prototype radius ≤ min(spacing)/2 (this builder validates
     /// only the half it can see — that the displacement alone cannot cross a boundary; the prototype is emitted later,
     /// so its radius is unknown here). Containment is not sufficient: even with
-    /// the in-cell rule satisfied, the single-cell <c>round()</c> fold can pick the WRONG copy near a cell wall — a
+    /// the in-cell rule satisfied, the single-cell <c>round()</c> fold can pick the wrong copy near a cell wall — a
     /// copy jittered toward the boundary is nearer to the adjacent cell's query points than that cell's own copy — so
-    /// the field OVERestimates at cell boundaries (visible seams, grazing-angle hole risk). The in-cell rule keeps the
-    /// SURFACE watertight inside each cell; the boundary field stays merely conservative-looking-but-overestimating, so
+    /// the field overestimates at cell boundaries (visible seams, grazing-angle hole risk). The in-cell rule keeps the
+    /// surface watertight inside each cell; the boundary field stays merely conservative-looking-but-overestimating, so
     /// keep jitter conservative relative to spacing. KEEP IN SYNC with SDF_OP_CELL_JITTER in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="spacing">The per-axis cell spacing in world units (clamped to ≥ 0.001 per axis).</param>
@@ -469,9 +491,9 @@ public sealed class SdfProgramBuilder {
     /// (clamped to [0,1]).</param>
     /// <param name="materialVariants">The number of hashed material rows (0 = geometric only): a hit in a cell adds a
     /// hashed 0..variants-1 to its shape's material id.</param>
-    /// <param name="flavor">How the per-cell POSITION offset is distributed (the SDF_NOISE_* Blend lane, header.z):
+    /// <param name="flavor">How the per-cell position offset is distributed (the SDF_NOISE_* Blend lane, header.z):
     /// <see cref="SdfNoiseFlavor.White"/> (default, byte-identical to pre-flavor programs), <see cref="SdfNoiseFlavor.Blue"/>,
-    /// or <see cref="SdfNoiseFlavor.Gaussian"/>. Reshapes ONLY the displacement — tumble and material variant are
+    /// or <see cref="SdfNoiseFlavor.Gaussian"/>. Reshapes only the displacement — tumble and material variant are
     /// unaffected, and every flavor shares White's <c>±jitter/2</c> offset bound (no Lipschitz change). KEEP IN SYNC with
     /// SDF_NOISE_* and the SDF_OP_CELL_JITTER flavor branch in Assets/Shaders/Sdf/sdf-vm.hlsli.</param>
     /// <exception cref="ArgumentException"><paramref name="materialVariants"/> is negative, or half of
@@ -530,15 +552,15 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
-    /// <summary>Angular DOMAIN-REPEAT fold: folds the plane perpendicular to <paramref name="axis"/> into
-    /// <paramref name="count"/> equal sectors, so the prototype that follows repeats ROTATIONALLY around the axis —
+    /// <summary>Angular domain-repeat fold: folds the plane perpendicular to <paramref name="axis"/> into
+    /// <paramref name="count"/> equal sectors, so the prototype that follows repeats rotationally around the axis —
     /// gears, wheels, columns of a rotunda, clock ticks, flower petals — from a single instruction (the rotational
     /// sibling of the linear <see cref="Repeat"/> and the lattice <see cref="WallpaperFold"/>). The fold rotates the
     /// point into the base sector and, when <paramref name="mirror"/> is set, reflects each sector across its bisector
-    /// for kaleidoscope symmetry: BOTH are ISOMETRIES, so the field stays 1-Lipschitz (factor 1, NO step clamp — like
+    /// for kaleidoscope symmetry: both are isometries, so the field stays 1-Lipschitz (factor 1, no step clamp — like
     /// <see cref="Repeat"/>) and no cull bound changes. Like <see cref="Repeat"/>, keep the prototype clear of the
     /// sector walls (the two radial half-planes through the axis) — content that overspills a wall is clipped by the
-    /// neighbouring sector. The sector angle and its reciprocals are HOST-BAKED. KEEP IN SYNC with SDF_OP_REPEAT_POLAR
+    /// neighbouring sector. The sector angle and its reciprocals are host-baked. KEEP IN SYNC with SDF_OP_REPEAT_POLAR
     /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="count">The number of sectors around the axis (clamped to ≥ 1; 1 = a single full-circle no-op).</param>
     /// <param name="axis">The rotation axis — the fold acts in the plane perpendicular to it (default
@@ -608,9 +630,9 @@ public sealed class SdfProgramBuilder {
     public SdfProgramBuilder BendY(float rate) {
         return FiniteScalarTransform(op: SdfOp.BendY, value: rate, paramName: nameof(rate), subject: "A bend rate");
     }
-    /// <summary>Rotates the YZ plane by <paramref name="rate"/> · y radians. The three bends are DISTINCT ops, not a
+    /// <summary>Rotates the YZ plane by <paramref name="rate"/> · y radians. The three bends are distinct ops, not a
     /// symmetric family: <see cref="BendX"/> keys on x and rotates XY, <see cref="BendY"/> keys on y and rotates XY, and
-    /// this one keys on y and rotates YZ. Each keys on a coordinate INSIDE the plane it rotates, which is what gives the
+    /// this one keys on y and rotates YZ. Each keys on a coordinate inside the plane it rotates, which is what gives the
     /// bends their <c>1 + rate·ρ</c> Lipschitz factor (see <c>SdfProgram.BendOperatorNorm</c>) rather than
     /// <see cref="TwistY"/>'s smaller one.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
@@ -636,7 +658,7 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Elongate
         );
     }
-    /// <summary>Shells the ENTIRE field accumulated so far into a hollow skin of the given thickness — a FIELD op:
+    /// <summary>Shells the entire field accumulated so far into a hollow skin of the given thickness — a field op:
     /// order it after everything it should shell.</summary>
     /// <param name="thickness">The shell half-thickness.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="thickness"/> is not finite and non-negative.</exception>
@@ -648,11 +670,11 @@ public sealed class SdfProgramBuilder {
 
         return ScalarTransform(op: SdfOp.Onion, value: thickness);
     }
-    /// <summary>Adds a bounded sinusoidal DISPLACEMENT to the field accumulated so far — surface relief (bumps,
+    /// <summary>Adds a bounded sinusoidal displacement to the field accumulated so far — surface relief (bumps,
     /// corrugation, a rippled skin) evaluated at the current point: the SDF-native answer to height/parallax mapping,
-    /// where the relief is REAL geometry (it shadows and self-occludes). A FIELD op (like <see cref="Onion"/>/
+    /// where the relief is real geometry (it shadows and self-occludes). A field op (like <see cref="Onion"/>/
     /// <see cref="Dilate"/>): order it after the shapes it should displace. The separable <c>sin·sin·sin</c> basis is
-    /// deterministic across both backends. NOT 1-Lipschitz — the relief's gradient reaches <c>amplitude·‖frequency‖</c>,
+    /// deterministic across both backends. Not 1-Lipschitz — the relief's gradient reaches <c>amplitude·‖frequency‖</c>,
     /// so the field can overestimate true distance by up to <c>1 + amplitude·‖frequency‖</c> and <c>AnalyzeLipschitz</c>
     /// bakes that as a conservative step clamp; keep <c>amplitude·‖frequency‖</c> moderate (a large product clamps the
     /// march to tiny steps). KEEP IN SYNC with SDF_OP_DISPLACE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -675,10 +697,10 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Displace
         );
     }
-    /// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field BEFORE the shapes evaluate — organic
-    /// bulging / wobble / terrain. A POINT op (like the fold ops): order it before the shapes it should warp. Each axis
-    /// is driven by the NEXT axis's coordinate, so the warp is non-separable; the basis is deterministic across both
-    /// backends. NOT an isometry — the metric stretches by up to <c>1 + amplitude·‖frequency‖</c>, so
+    /// <summary>Warps the sample point by a bounded, cross-coupled sinusoidal field before the shapes evaluate — organic
+    /// bulging / wobble / terrain. A point op (like the fold ops): order it before the shapes it should warp. Each axis
+    /// is driven by the next axis's coordinate, so the warp is non-separable; the basis is deterministic across both
+    /// backends. Not an isometry — the metric stretches by up to <c>1 + amplitude·‖frequency‖</c>, so
     /// <c>AnalyzeLipschitz</c> bakes a conservative step clamp (and folds the point's max travel into a downstream
     /// twist/bend's reach); keep <c>amplitude·‖frequency‖</c> moderate. KEEP IN SYNC with SDF_OP_DOMAIN_WARP in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -699,15 +721,15 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.DomainWarp
         );
     }
-    /// <summary>Opens a SCOPED field accumulator (<see cref="SdfOp.PushField"/>): every accumulator-reading op emitted
+    /// <summary>Opens a scoped field accumulator (<see cref="SdfOp.PushField"/>): every accumulator-reading op emitted
     /// until the matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/
-    /// <see cref="Dilate"/>/<see cref="Displace"/> field ops — acts on THIS scope's shapes alone, not on everything
+    /// <see cref="Dilate"/>/<see cref="Displace"/> field ops — acts on this scope's shapes alone, not on everything
     /// emitted before it. Pair it with <see cref="PopField"/> to compose the scope back into the parent field; the
-    /// <paramref name="compose"/> blend + <paramref name="smooth"/> given here are baked onto the POP instruction (a
-    /// Union compose keeps the scope FAR-NEUTRAL, so a scoped instance stays cullable and segment-eligible; an
+    /// <paramref name="compose"/> blend + <paramref name="smooth"/> given here are baked onto the pop instruction (a
+    /// Union compose keeps the scope far-neutral, so a scoped instance stays cullable and segment-eligible; an
     /// intersection-family compose composes the scope globally, unmaskable). The scope must contain at least one shape,
     /// nest no deeper than <see cref="MaxFieldScopeDepth"/>, and close (via <see cref="PopField"/>) before
-    /// <see cref="Build"/> or an enclosing <see cref="EndInstance"/>. A scope touches only the FIELD, not the point, so
+    /// <see cref="Build"/> or an enclosing <see cref="EndInstance"/>. A scope touches only the field, not the point, so
     /// per-shape cull bounds inside it stay sound and <see cref="ResetPoint"/> works as usual. KEEP IN SYNC with
     /// SDF_OP_PUSH_FIELD in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="compose">How the closed scope's field composes back into the parent (default <see cref="SdfBlendOp.Union"/>).</param>
@@ -779,9 +801,9 @@ public sealed class SdfProgramBuilder {
 
         return this;
     }
-    /// <summary>Inflates the ENTIRE field accumulated so far by a radius (rounds and fattens everything before it) —
-    /// a FIELD op: order it after everything it should inflate.</summary>
-    /// <param name="radius">The inflation radius. A NEGATIVE radius is legal and erodes instead — the decoder is a
+    /// <summary>Inflates the entire field accumulated so far by a radius (rounds and fattens everything before it) —
+    /// a field op: order it after everything it should inflate.</summary>
+    /// <param name="radius">The inflation radius. A negative radius is legal and erodes instead — the decoder is a
     /// plain <c>d -= radius</c>, exact and 1-Lipschitz in both directions.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is not finite.</exception>
     public SdfProgramBuilder Dilate(float radius) {
@@ -790,14 +812,14 @@ public sealed class SdfProgramBuilder {
         // SdfProgram's cull margin already folds MathF.Abs of this lane.
         return FiniteScalarTransform(op: SdfOp.Dilate, value: radius, paramName: nameof(radius), subject: "A dilation radius");
     }
-    /// <summary>Infinite DOMAIN-REPEAT fold: tiles space into cells of <paramref name="spacing"/> with a single-cell
+    /// <summary>Infinite domain-repeat fold: tiles space into cells of <paramref name="spacing"/> with a single-cell
     /// <c>round()</c> fold, so the prototype that follows repeats on the lattice. The returned distance is the current
     /// cell's copy only, so the fold is exact only for
-    /// an ON-CENTER prototype contained within half-<paramref name="spacing"/> per axis. An off-center or oversized
-    /// prototype creases the field at the cell walls with an OVERestimate (the nearest surface lives in a neighbouring
+    /// an on-center prototype contained within half-<paramref name="spacing"/> per axis. An off-center or oversized
+    /// prototype creases the field at the cell walls with an overestimate (the nearest surface lives in a neighbouring
     /// cell the fold never consults) — an overestimate can hole the march, and neither the Lipschitz step clamp nor the
     /// over-relaxation step-back catches it (they bound the field's rate, not a boundary discontinuity). The builder
-    /// CANNOT validate this (the prototype is emitted later and its post-fold translation matters as much as its
+    /// cannot validate this (the prototype is emitted later and its post-fold translation matters as much as its
     /// radius) — the caller owns the rule, exactly like <see cref="CellJitter"/>'s in-cell rule. A 3^k neighbour-cell
     /// check would remove the constraint but is judged not worth the interpreter cost at current usage. KEEP IN SYNC
     /// with SDF_OP_REPEAT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
@@ -824,8 +846,8 @@ public sealed class SdfProgramBuilder {
             op: SdfOp.Repeat
         );
     }
-    /// <summary>Bounded DOMAIN-REPEAT fold: <see cref="Repeat"/> with the cell index clamped to ±<paramref name="limit"/>
-    /// per axis. Carries <see cref="Repeat"/>'s EXACTNESS CONTRACT unchanged: exact only for an on-center prototype
+    /// <summary>Bounded domain-repeat fold: <see cref="Repeat"/> with the cell index clamped to ±<paramref name="limit"/>
+    /// per axis. Carries <see cref="Repeat"/>'s exactness contract unchanged: exact only for an on-center prototype
     /// within half-<paramref name="spacing"/> per axis; off-center/oversized prototypes crease the field at interior
     /// cell walls with a march-holing OVERestimate (see <see cref="Repeat"/> — the caller owns the rule; the builder
     /// cannot see the prototype).</summary>
@@ -862,7 +884,7 @@ public sealed class SdfProgramBuilder {
     /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
     /// isometry, so distances are preserved; like <see cref="Repeat"/>, content must stay clear of cell boundaries
     /// (and of the rotation seams of P2/CMM/P4*) unless a mirror of the group protects that edge.</summary>
-    /// <param name="group">The wallpaper group. P4/P4M/P4G and the hex groups (P3 and up) require a SQUARE cell —
+    /// <param name="group">The wallpaper group. P4/P4M/P4G and the hex groups (P3 and up) require a square cell —
     /// quarter-turns and the equilateral hex lattice are only isometries there (hex pitch = <paramref name="cell"/>.X).</param>
     /// <param name="cell">The lattice cell extents in the fold plane.</param>
     /// <param name="limit">The repeat-cell limit per plane axis (RepeatLimited semantics; axial indices for hex).</param>
@@ -958,16 +980,16 @@ public sealed class SdfProgramBuilder {
     public SdfProgramBuilder SymmetryZ() {
         return SymmetryPlane(normal: Vector3.UnitZ);
     }
-    /// <summary>Reflection fold across an ARBITRARY plane — the general-normal superset of <see cref="SymmetryX"/>/
+    /// <summary>Reflection fold across an arbitrary plane — the general-normal superset of <see cref="SymmetryX"/>/
     /// <see cref="SymmetryY"/>/<see cref="SymmetryZ"/>: everything on the plane's negative side (<c>dot(p, normal) +
     /// offset &lt; 0</c>) is mirrored onto its positive side, so one authored half repeats mirror-imaged (a kaleidoscope
-    /// leaf, a bilateral body, the reflect atom of a KIFS fold). A reflection is an ISOMETRY, so the field stays
-    /// 1-Lipschitz (factor 1, NO step clamp) and no cull bound changes. Like the axis symmetries, keep authored content
+    /// leaf, a bilateral body, the reflect atom of a KIFS fold). A reflection is an isometry, so the field stays
+    /// 1-Lipschitz (factor 1, no step clamp) and no cull bound changes. Like the axis symmetries, keep authored content
     /// on the plane's positive (kept) side. The normal is normalized host-side. KEEP IN SYNC with SDF_OP_SYMMETRY_PLANE
     /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="normal">The plane normal (normalized here; the positive side, toward the normal, is the kept half).</param>
     /// <param name="offset">The plane's constant term: the mirror plane is <c>dot(p, normal) + offset = 0</c>, so it
-    /// sits at signed distance <c>-offset</c> along the normal. A POSITIVE offset therefore moves the plane AGAINST the
+    /// sits at signed distance <c>-offset</c> along the normal. A positive offset therefore moves the plane against the
     /// normal. 0 puts it through the local origin.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="normal"/> is not finite or has zero length, or
     /// <paramref name="offset"/> is not finite.</exception>
@@ -1013,10 +1035,10 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A vesica (lens): the intersection of two spheres of radius <paramref name="radius"/> whose centers are
-    /// 2·<paramref name="halfSeparation"/> apart, revolved into a 3D lens pointed along ±Y (a disc of radius
+    /// <summary>Adds a vesica (lens) — the intersection of two spheres of radius <paramref name="radius"/> whose centers are
+    /// 2·<paramref name="halfSeparation"/> apart — revolved into a 3D lens pointed along ±Y (a disc of radius
     /// radius−halfSeparation in XZ). <paramref name="halfSeparation"/> is clamped below <paramref name="radius"/> so
-    /// the tip half-height √(r²−d²) is real; it is HOST-BAKED (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
+    /// the tip half-height √(r²−d²) is real; it is host-baked (skips the per-eval sqrt) — KEEP IN SYNC with sdfVesica
     /// in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="radius">The two generating spheres' radius.</param>
     /// <param name="halfSeparation">Half the distance between their centres (clamped below <paramref name="radius"/>).</param>
@@ -1059,7 +1081,7 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A rounded rectangle (exact rounded-box 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// <summary>Adds a rounded rectangle (exact rounded-box 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// rounded slab/plaque, <see cref="SdfLift.Revolve"/> a rounded disc/puck. Exact and 1-Lipschitz. KEEP IN SYNC
     /// with sdfRoundedRect in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="halfWidth">Half-width of the rectangle (its local X half-extent).</param>
@@ -1103,9 +1125,9 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A regular convex <paramref name="sides"/>-gon (the exact star-polygon SDF with the m = 2 regular-polygon case) lifted to
+    /// <summary>Adds a regular convex <paramref name="sides"/>-gon (the exact star-polygon SDF with the m = 2 regular-polygon case) lifted to
     /// a 3D solid — <see cref="SdfLift.Extrude"/> gives a prism (a nut, a column, a gem), <see cref="SdfLift.Revolve"/>
-    /// a lathe of the polygon's profile. The half-sector π/n is HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
+    /// a lathe of the polygon's profile. The half-sector π/n is host-baked. Exact and 1-Lipschitz. KEEP IN SYNC with
     /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="sides">The side count n (clamped to ≥ 3).</param>
     /// <param name="radius">The circumradius (centre to a vertex).</param>
@@ -1145,9 +1167,9 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>An <paramref name="points"/>-pointed star (the exact star-polygon SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
+    /// <summary>Adds an <paramref name="points"/>-pointed star (the exact star-polygon SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/>
     /// gives a star prism (a badge, a gem), <see cref="SdfLift.Revolve"/> a spiked lathe. The baked constants
-    /// (π/n and ecs = (cos(π/m), sin(π/m))) are HOST-BAKED. Exact and 1-Lipschitz. KEEP IN SYNC with
+    /// (π/n and ecs = (cos(π/m), sin(π/m))) are host-baked. Exact and 1-Lipschitz. KEEP IN SYNC with
     /// sdfPolyStar/sdfStar2D in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="points">The point count n (clamped to ≥ 2).</param>
     /// <param name="radius">The outer radius (centre to a point tip).</param>
@@ -1193,7 +1215,7 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>An isosceles trapezoid (exact isosceles-trapezoid 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
+    /// <summary>Adds an isosceles trapezoid (exact isosceles-trapezoid 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Extrude"/> gives a
     /// keystone/wedge prism, <see cref="SdfLift.Revolve"/> a frustum/lampshade/cup. Exact and 1-Lipschitz. KEEP IN
     /// SYNC with sdfTrapezoidSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="bottomHalfWidth">Half-width of the bottom edge (at local −Y).</param>
@@ -1237,8 +1259,8 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>An ellipse (the exact ellipse 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
-    /// an exact SPHEROID (which, unlike the approximate <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float)"/> #6,
+    /// <summary>Adds an ellipse (the exact ellipse 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
+    /// an exact spheroid (which, unlike the approximate <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float)"/> #6,
     /// earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
     /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="semiX">The semi-axis along local X.</param>
@@ -1287,16 +1309,16 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A single glyph cell sampled from a bound font atlas (see <see cref="SdfWorldEngine.SetGlyphAtlas"/>) as
-    /// a DISTANCE-level field — text as real world geometry (marchable, liftable, blendable, and with
-    /// <see cref="SdfBlendOp.Subtraction"/> ENGRAVABLE into any surface). The glyph is the atlas letter where the atlas
+    /// <summary>Adds a single glyph cell sampled from a bound font atlas (see <see cref="SdfWorldEngine.SetGlyphAtlas"/>) as
+    /// a distance-level field — text as real world geometry (marchable, liftable, blendable, and with
+    /// <see cref="SdfBlendOp.Subtraction"/> engravable into any surface). The glyph is the atlas letter where the atlas
     /// is bound (the world-lit render) and the conservative extruded cell box everywhere else. Most callers use
     /// <see cref="Text(FontAtlas, string, Vector3, Vector3, Vector3, float, int, SdfBlendOp, float, float)"/>, which
     /// bakes these arguments from a laid-out string; this primitive is the one-cell seam.
-    /// <para>The cell must map with UNIFORM scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
+    /// <para>The cell must map with uniform scale — <paramref name="halfWidth"/>/<paramref name="halfHeight"/>
     /// proportional to the atlas cell's texel width/height — for the field to stay 1-Lipschitz (factor 1, no step
     /// clamp); a stretched cell is the caller's risk, exactly as <see cref="Repeat"/>'s in-cell rule is. The atlas UVs
-    /// are unorm2x16-packed HOST-SIDE into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
+    /// are unorm2x16-packed host-side into two lanes so the ISA-wide <paramref name="smooth"/> radius keeps its lane
     /// (KEEP IN SYNC with SDF_SHAPE_GLYPH / sdfGlyphUnpackUv in Assets/Shaders/Sdf/sdf-vm.hlsli).</para></summary>
     /// <param name="uvBottomLeft">The atlas UV (in <c>[0, 1]²</c>) at the cell's local <c>(-halfWidth, -halfHeight)</c> corner.</param>
     /// <param name="uvTopRight">The atlas UV at the cell's local <c>(+halfWidth, +halfHeight)</c> corner.</param>
@@ -1342,7 +1364,7 @@ public sealed class SdfProgramBuilder {
     /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
     /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
     /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained
-    /// <see cref="ResetPoint"/> + transform + <see cref="Glyph"/> SEGMENT, so a whole string is a multi-segment run the
+    /// <see cref="ResetPoint"/> + transform + <see cref="Glyph"/> segment, so a whole string is a multi-segment run the
     /// caller wraps in one <see cref="BeginInstance"/>/<see cref="EndInstance"/> with a bound covering the block. The
     /// atlas must be uploaded to the engine (<see cref="SdfWorldEngine.SetGlyphAtlas"/>) for the letters to resolve;
     /// unbound, each cell renders as its conservative box.</summary>
@@ -1447,11 +1469,11 @@ public sealed class SdfProgramBuilder {
     /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
     /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
     public const int MaxSampledRegionDim = 1023;
-    /// <summary>A SAMPLED distance-field brick (<see cref="SdfShapeType.SampledRegion"/>): the settled-carve UNION field,
+    /// <summary>Adds a sampled distance-field brick (<see cref="SdfShapeType.SampledRegion"/>) — the settled-carve union field,
     /// pre-baked into a <paramref name="dimX"/>x<paramref name="dimY"/>x<paramref name="dimZ"/> cubic-voxel lattice at
     /// <paramref name="brickWordOffset"/> in the engine's <c>sdfBrickPool</c> buffer, sampled O(1) by manual trilinear
-    /// interpolation and composed as ONE ordinary <see cref="SdfBlendOp.Subtraction"/> instance. The distance channel is
-    /// pre-scaled c/λ (λ folded in at bake time, so this op applies NO step clamp), and <paramref name="boundaryFloor"/>
+    /// interpolation and composed as one ordinary <see cref="SdfBlendOp.Subtraction"/> instance. The distance channel is
+    /// pre-scaled c/λ (λ folded in at bake time, so this op applies no step clamp), and <paramref name="boundaryFloor"/>
     /// (= margin/λ, host-baked) is the outside-box lower-bound offset. Where the pool is not bound the shape falls back to
     /// the conservative union hull (SDF_FAR_DISTANCE — the subtraction never bites), so a brick program renders uncarved
     /// but never holes. The lane packing (Data0 = boxMin.xyz + cellSize; Data1 = smooth + packedDims + brickWordOffset +
@@ -1743,13 +1765,13 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A screen slab whose LIT face samples a bound screen source (see
+    /// <summary>Adds a screen slab whose lit face samples a bound screen source (see
     /// <see cref="SdfWorldEngine.SetScreenSource"/>) instead of the flat screen material, when one is bound this
-    /// frame — a diegetic screen (an emulator's framebuffer, e.g.) on STATIC geometry. The slab's shape/distance field
+    /// frame — a diegetic screen (an emulator's framebuffer, e.g.) on static geometry. The slab's shape/distance field
     /// is identical to the plain overload (a rounded box); only shading differs. The world-space frame maps a hit
     /// point to the slab's <c>[0,1]²</c> UV: <paramref name="worldRight"/>/<paramref name="worldUp"/> must be unit and
     /// orthogonal to each other and to the slab's local Z (its front-face normal), and should match the rigid
-    /// transform (<see cref="Translate"/>/<see cref="Rotate"/>) already applied to the point when this shape is
+    /// transform (<see cref="Translate"/>/<see cref="Rotate(Quaternion)"/>) already applied to the point when this shape is
     /// declared — a mismatched frame sizes/rotates the sampled image wrong without affecting the geometry at all.</summary>
     /// <param name="halfExtents">The slab's local half-extents (as <see cref="ScreenSlab(Vector3, float, SdfBlendOp, float)"/>).</param>
     /// <param name="round">The corner-rounding radius.</param>
@@ -1817,8 +1839,8 @@ public sealed class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    /// <summary>A sampled <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>
-    /// overload that derives the screen's world-space right/up axes from the slab's static orientation.</summary>
+    /// <summary>Adds a <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>
+    /// screen slab that derives the screen's world-space right/up axes from the slab's static orientation.</summary>
     /// <param name="halfExtents">The slab's local half-extents.</param>
     /// <param name="round">The corner-rounding radius.</param>
     /// <param name="worldOrigin">The front face's world-space center.</param>

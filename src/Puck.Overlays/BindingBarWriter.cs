@@ -159,12 +159,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var hintCell = Math.Max(val1: 10, val2: (int)(pipHalf * 1.6f));
         var hintLineStep = (hintCell * 1.3f);
         var hintBaseY = (anchorY - (pipHalf * 2.2f));
-        // A DELIBERATE BEHAVIOR CHANGE, and the reason it is one: the hint tail used to be unbounded here, so a page
-        // with many command-chord rows lost its overflow SILENTLY at the shared record pool's boundary, by draw-order
-        // accident — whichever writer happened to run last paid for it. The cap replaces that accident with a pinned
-        // truncation the bar's own channel reports: the first MaxHintLines rows draw, the rest are refused at the
-        // bar's reservation and attributed to the bar. Boundedness is what makes the reservation meaningful; an
-        // unbounded writer cannot be carved by any scheme.
+        // Bounded and pinned: a page with many command-chord rows would otherwise lose its overflow silently at the
+        // shared record pool's boundary, by draw-order accident. The first MaxHintLines rows draw; the rest are
+        // refused at the bar's reservation and attributed to the bar — boundedness is what makes the reservation
+        // meaningful, since an unbounded writer cannot be carved by any scheme.
         var hintCount = Math.Min(val1: hints.Length, val2: MaxHintLines);
 
         if (hintCount < hints.Length) {

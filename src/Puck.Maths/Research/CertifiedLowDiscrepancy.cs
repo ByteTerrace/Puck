@@ -1,16 +1,17 @@
 namespace Puck.Maths;
 
 /// <summary>
-/// A low-discrepancy Kronecker–Weyl sequence certified by the continued fraction of its generator. The one-dimensional
+/// A low-discrepancy Kronecker–Weyl sequence certified by the continued fraction of its generator: the one-dimensional
 /// sequence <c>{n·α}</c> (<c>n = 1, 2, 3, …</c>) has a provably bounded star discrepancy exactly when <c>α</c> is badly
 /// approximable — when the partial quotients of its continued fraction are bounded — so the largest partial quotient over
 /// the eventually periodic expansion of a quadratic irrational (<see cref="ContinuedFraction"/>) is an exact integer
-/// certificate of how evenly the points cover the unit interval. By Hurwitz's theorem the golden ratio, whose all-ones
-/// expansion <c>[1; 1, 1, …]</c> gives the smallest possible certificate one, is the most irrational number and the optimal
-/// generator; the silver ratio <c>[2; 2, 2, …]</c> certifies at two, and every metallic mean <c>δₙ = [n; n, n, …]</c> at
-/// <c>n</c> — the same badly-approximable units that drive <see cref="MetallicQuasicrystal"/>.
+/// certificate of how evenly the points cover the unit interval.
 /// </summary>
 /// <remarks>
+/// By Hurwitz's theorem the golden ratio, whose all-ones expansion <c>[1; 1, 1, …]</c> gives the smallest possible
+/// certificate one, is the most irrational number and the optimal generator; the silver ratio <c>[2; 2, 2, …]</c>
+/// certifies at two, and every metallic mean <c>δₙ = [n; n, n, …]</c> at <c>n</c> — the same badly-approximable units
+/// that drive <see cref="MetallicQuasicrystal"/>.
 /// <see cref="FromQuadraticIrrational"/> reads the certificate straight from <see cref="ContinuedFraction.Expand"/> — the
 /// maximum partial quotient, in pure integer arithmetic with no approximate seam — and precomputes the generator's
 /// fractional part as a UQ0.64 multiplier. <see cref="Point"/> then maps an index to its point by the additive recurrence

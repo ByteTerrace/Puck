@@ -3,16 +3,16 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-C stage: the serial link cable between two generations of the SAME SM83 core — one instance per generation
+/// Tier-C stage: the serial link cable between two generations of the same SM83 core — one instance per generation
 /// pairing (Dmg↔Cgb, Dmg↔Agb, Cgb↔Agb; the carry-forward rule means the Agb costume is the SM83 core under its own
 /// capability gate, not a separate machine, so it links through this exact machinery too). One side boots as the
 /// <see cref="SerialLinkRom"/> exchange protocol's clock master, the other as its slave, and both are advanced
 /// together through a <see cref="SerialLinkSession"/> in per-frame budgets (the same shape a host engine drives).
 /// The master's eight internal-clock transfers must deliver both counting sequences intact — every sent byte lands
-/// in the peer's receive buffer, in order — with the correct register/interrupt outcomes on BOTH sides: each
+/// in the peer's receive buffer, in order — with the correct register/interrupt outcomes on both sides: each
 /// completed transfer raises the serial interrupt request (observed, counted, and acknowledged by the ROM itself),
 /// SC's transfer bit reads back clear, and both completion markers land. The whole linked scenario then runs a
-/// SECOND time from fresh machines with the identical budget schedule and must reproduce byte-identical final
+/// second time from fresh machines with the identical budget schedule and must reproduce byte-identical final
 /// snapshots on both machines — the replay-identical proof that the link (and its pair-stepping interleave) adds no
 /// nondeterminism to this generation pairing.
 /// </summary>

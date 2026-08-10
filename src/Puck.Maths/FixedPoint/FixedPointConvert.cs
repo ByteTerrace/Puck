@@ -48,11 +48,12 @@ internal static class FixedPointConvert {
         return false;
     }
 
-    /// <summary>Whether <typeparamref name="TOther"/> is a BCL integer this helper converts without a decimal.</summary>
+    /// <summary>Determines whether <typeparamref name="TOther"/> is a BCL integer this helper converts without a
+    /// decimal.</summary>
     /// <typeparam name="TOther">The type to test.</typeparam>
     /// <returns>Whether the type is one of the recognized integers.</returns>
     /// <remarks>The TO side needs the same test: handing an integer target its value through
-    /// <see cref="decimal"/> would let decimal's own conversion — which SATURATES even in truncating mode, because
+    /// <see cref="decimal"/> would let decimal's own conversion — which saturates even in truncating mode, because
     /// decimal is not a fixed-width binary type — decide a range question that belongs to the target.</remarks>
     internal static bool IsKnownBclInteger<TOther>()
         where TOther : INumberBase<TOther> =>
@@ -64,7 +65,8 @@ internal static class FixedPointConvert {
         (typeof(TOther) == typeof(Int128)) || (typeof(TOther) == typeof(UInt128)) ||
         (typeof(TOther) == typeof(char)) || (typeof(TOther) == typeof(BigInteger)));
 
-    /// <summary>Whether <typeparamref name="TOther"/> is a BCL numeric the carriers' conversion hooks recognize.</summary>
+    /// <summary>Determines whether <typeparamref name="TOther"/> is a BCL numeric the carriers' conversion hooks
+    /// recognize.</summary>
     /// <typeparam name="TOther">The type to test.</typeparam>
     /// <returns>Whether the type is a recognized integer, <see cref="decimal"/>, or <see cref="Half"/>.</returns>
     /// <remarks>The hooks route everything this admits through <see cref="decimal"/>, so a type it rejects is one the
@@ -104,6 +106,47 @@ internal static class FixedPointConvert {
         return false;
     }
 
+    /// <summary>Scales a <see cref="decimal"/> to a fixed-point raw at an arbitrary fraction bit count, exactly and
+    /// without a range clamp, using <see cref="BigInteger"/> for the wide intermediate.</summary>
+    /// <param name="value">The value to scale.</param>
+    /// <param name="fractionBitCount">The target carrier's fraction bit count. Unlike <see cref="ScaleDecimal"/>,
+    /// there is no upper bound on this parameter: the worst case (a scale-zero, ninety-six-bit mantissa scaled by a
+    /// forty-eight-bit shift) needs up to a hundred and forty-four bits, past what <see cref="UInt128"/> can hold
+    /// exactly, so this overload trades <see cref="UInt128"/>'s allocation-free width for
+    /// <see cref="BigInteger"/>'s unbounded one. Reach for <see cref="ScaleDecimal"/> instead whenever
+    /// <paramref name="fractionBitCount"/> is known to be at most thirty-one — its hot, allocation-free path is
+    /// exactly this same algorithm at that narrower width.</param>
+    /// <returns>One ties-to-even rounding of <c>value·2^fractionBitCount</c>, exactly — <see cref="BigInteger"/>
+    /// carries the full width, so nothing here can wrap the way a fixed-width intermediate would.</returns>
+    /// <remarks>This is the decimal boundary for a carrier whose fraction bit count exceeds
+    /// <see cref="ScaleDecimal"/>'s thirty-one-bit cap — <see cref="FixedQ1648"/> (forty-eight) and
+    /// <see cref="FixedQ3232"/> (thirty-two) today: past that cap <see cref="ScaleDecimal"/>'s <see cref="UInt128"/>
+    /// intermediate is not wide enough to stay exact, and reusing it anyway would silently wrap instead of throwing
+    /// — a correctness bug, not a documented policy. This overload is not on either Q48.16 carrier's hot path and is
+    /// not called by either of them.</remarks>
+    internal static BigInteger ScaleDecimalWide(decimal value, int fractionBitCount) {
+        Span<int> bits = stackalloc int[4];
+
+        _ = decimal.GetBits(d: value, destination: bits);
+
+        var mantissa = ((((BigInteger)(uint)bits[2]) << 64) |
+                        (((BigInteger)(uint)bits[1]) << 32) |
+                        ((BigInteger)(uint)bits[0]));
+        var numerator = (mantissa << fractionBitCount);
+        var denominator = BigInteger.Pow(value: 10, exponent: ((bits[3] >> 16) & 0xFF));
+        var quotient = BigInteger.DivRem(dividend: numerator, divisor: denominator, remainder: out var remainder);
+        var twiceRemainder = (remainder << 1);
+
+        if (
+            (twiceRemainder > denominator) ||
+            ((twiceRemainder == denominator) && !quotient.IsEven)
+        ) {
+            ++quotient;
+        }
+
+        return ((bits[3] < 0) ? -quotient : quotient);
+    }
+
     /// <summary>Scales a <see cref="decimal"/> to a fixed-point raw, exactly and without a range clamp.</summary>
     /// <param name="value">The value to scale.</param>
     /// <param name="fractionBitCount">The target carrier's fraction bit count. Must be at most <c>31</c>: the worst
@@ -116,7 +159,7 @@ internal static class FixedPointConvert {
     /// it by <c>2^fractionBitCount</c> keeps the numerator under <c>2^(96 + fractionBitCount)</c> and the denominator
     /// under <c>2⁹⁴</c>, so within the stated fraction-bit bound the whole division and its ties-to-even repair run in
     /// <see cref="UInt128"/> with nothing to overflow and nothing rounded twice. All three conversion modes rest on
-    /// this one rounding: a <c>decimal</c> multiply would rescale — and ROUND — first whenever the product needs more
+    /// this one rounding: a <c>decimal</c> multiply would rescale — and round — first whenever the product needs more
     /// than ninety-six mantissa bits, and a second rounding can then resolve a manufactured tie off the true value's
     /// side. The caller applies its own range policy: refusal, clamp, or width reduction.</remarks>
     internal static Int128 ScaleDecimal(decimal value, int fractionBitCount) {

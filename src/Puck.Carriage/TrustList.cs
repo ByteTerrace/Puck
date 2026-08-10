@@ -1,9 +1,11 @@
+using System.Security.Cryptography;
+
 namespace Puck.Carriage;
 
 /// <summary>Whether a trust list entry's key signs claims itself or vouches for others (docs/world-model.md, "Signed carriage").</summary>
 public enum CarriageTrustMode {
     /// <summary>
-    /// The pinned key signs claims directly and NO chain is walked beneath it — the entry pins one
+    /// The pinned key signs claims directly and no chain is walked beneath it — the entry pins one
     /// subject's own signing key, so a claim admitted this way arrives with zero bindings. This is how a
     /// world pins an individual (a friend, a known peer) without trusting the domain that minted them.
     /// It is not a way to shorten a domain's chain: a domain's claims always arrive under a
@@ -13,7 +15,7 @@ public enum CarriageTrustMode {
 
     /// <summary>
     /// The pinned key is a domain's root and vouches for an issuing key, which vouches for subjects — the
-    /// chain, ALWAYS exactly two bindings deep (docs/world-model.md: "A chain is at most two hops, because
+    /// chain, always exactly two bindings deep (docs/world-model.md: "A chain is at most two hops, because
     /// one cannot hold").
     /// </summary>
     Vouches,
@@ -23,16 +25,16 @@ public enum CarriageTrustMode {
 /// One trust list entry: a pinned id, the actual key bytes it names (needed for offline verification — a
 /// hash alone cannot verify a signature), whether it signs directly or vouches, and which slots it reaches.
 /// "Trusting a domain and pinning a key are one act" (docs/world-model.md) — a
-/// <see cref="CarriageTrustMode.Vouches"/> entry pins the domain's ROOT id, which is what makes the whole
+/// <see cref="CarriageTrustMode.Vouches"/> entry pins the domain's root id, which is what makes the whole
 /// chain beneath it trusted.
 /// </summary>
-/// <param name="PinnedId">The trusted key's id. For <see cref="CarriageTrustMode.Vouches"/> this MUST be a root id (<see cref="KeyId.IsRoot"/>); for <see cref="CarriageTrustMode.SignsDirectly"/> it MUST carry a subject, since only a subject key signs claims.</param>
+/// <param name="PinnedId">The trusted key's id. For <see cref="CarriageTrustMode.Vouches"/> this must be a root id (<see cref="KeyId.IsRoot"/>); for <see cref="CarriageTrustMode.SignsDirectly"/> it must carry a subject, since only a subject key signs claims.</param>
 /// <param name="PublicKeySubjectPublicKeyInfo">The pinned key's actual SPKI bytes, authored alongside the id (never fetched).</param>
 /// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
 /// <param name="Reach">
 /// The slot names claims admitted by this entry may reach (docs/world-model.md: a trust entry says "which
 /// slots it reaches"). Deny by default — an empty set admits a claim that reaches nothing, and there is
-/// deliberately NO wildcard, because a wildcard is how a scope silently widens when a game adds a slot.
+/// deliberately no wildcard, because a wildcard is how a scope silently widens when a game adds a slot.
 /// The verifier returns this set with an accepted claim (<see cref="CarriageVerifyResult.Reach"/>); it
 /// never enforces it, because enforcing reach is the receiving world's policy (invariant 5).
 /// </param>
@@ -49,10 +51,11 @@ public sealed record TrustListEntry(
 ) {
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
-    /// that the pinned algorithm is a known SIGNING algorithm (a sealing key can never admit a claim), and
-    /// that the id's shape matches <see cref="Mode"/>. <see cref="TrustList"/> calls this for every entry at
-    /// construction, so an unvalidated list cannot reach the verifier — without that, an entry whose key
-    /// bytes disagree with its pinned id would verify against the BYTES while the pin sat there decorative.
+    /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
+    /// the bytes actually import as a key on the curve that algorithm names, and that the id's shape matches
+    /// <see cref="Mode"/>. <see cref="TrustList"/> calls this for every entry at construction, so an unvalidated
+    /// list cannot reach the verifier — without that, an entry whose key bytes disagree with its pinned id would
+    /// verify against the bytes while the pin sat there decorative.
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void Validate() {
@@ -62,6 +65,28 @@ public sealed record TrustListEntry(
 
         if (!CarriageAlgorithms.IsKnown(algorithm: PinnedId.Algorithm) || (CarriageAlgorithms.Resolve(algorithm: PinnedId.Algorithm).Role != CarriageKeyRole.Signing)) {
             throw new ArgumentException(message: $"A trust list entry pins algorithm '{PinnedId.Algorithm}', which is not a carriage SIGNING algorithm — a trust entry can only pin a key that signs.");
+        }
+
+        // The two checks above only prove the bytes are self-consistent (they hash to the pinned id) and that the
+        // pinned name is a known signing algorithm — neither ever imports the bytes as an actual key. Malformed SPKI
+        // bytes (or a well-formed key on the wrong curve for the named algorithm) would otherwise pass this
+        // validation and fail only the first time a live connection tried to verify a signature against them — at
+        // every runtime connection attempt, forever, rather than once. Import it now, the same way
+        // CarriageVerifier.VerifySignature does at actual verification time, and require its curve to match — so a
+        // bad key refuses at validation (boot, for a world's admission section — WorldDefinitionValidator's
+        // ValidateAdmission runs this through TrustList's constructor), by name, never silently deferred.
+        var descriptor = CarriageAlgorithms.Resolve(algorithm: PinnedId.Algorithm);
+
+        using var ecdsa = ECDsa.Create();
+
+        try {
+            ecdsa.ImportSubjectPublicKeyInfo(source: PublicKeySubjectPublicKeyInfo.Span, bytesRead: out _);
+        } catch (CryptographicException exception) {
+            throw new ArgumentException(message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}", innerException: exception);
+        }
+
+        if (!CarriageCurves.Matches(key: ecdsa.ExportParameters(includePrivateParameters: false).Curve, expected: descriptor.Curve)) {
+            throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
         }
 
         if ((Mode == CarriageTrustMode.Vouches) && !PinnedId.IsRoot) {
@@ -82,16 +107,16 @@ public sealed record TrustListEntry(
 public sealed record TrustList {
     /// <summary>Builds and validates a trust list.</summary>
     /// <param name="entries">
-    /// The trusted entries. Each is validated, and no two may occupy the same LOOKUP SLOT — the same
+    /// The trusted entries. Each is validated, and no two may occupy the same lookup slot — the same
     /// <c>(domain, subject, mode)</c> triple — whether or not they pin the same key. An ambiguous list is a
     /// bug, not a preference order.
     /// <para>The rule is slot identity rather than key identity because that is what the lookups are keyed
     /// on: <see cref="FindVouchingRoot"/> and <see cref="FindDirectSigner"/> match on domain, subject and
-    /// mode and return the FIRST hit, so a second entry in one slot can never be reached and its reach and
+    /// mode and return the first hit, so a second entry in one slot can never be reached and its reach and
     /// maximum age can never govern — exactly the undefined-governance the refusal names. Admitting it
     /// under a key-identity rule would accept a list one of whose entries is silently inert.</para>
     /// <para>The cost is real and worth naming: pinning an old and a new key for one subject — a rotation
-    /// overlap — is therefore NOT expressible today. Supporting it means the lookup must try every entry in
+    /// overlap — is therefore not expressible today. Supporting it means the lookup must try every entry in
     /// the slot rather than the first, which is a verifier change, not a relaxation of this check.</para>
     /// </param>
     /// <param name="defaultMaximumAge">

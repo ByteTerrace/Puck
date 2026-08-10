@@ -20,7 +20,7 @@ internal static class FrameworkMemoryMap {
     public const ushort InputPressed = 0xC004;
     /// <summary>Last frame's held byte (the edge detector's memory).</summary>
     public const ushort InputPrevious = 0xC005;
-    /// <summary>The RAW hardware joypad read — real buttons even while a script overrides <see cref="InputHeld"/>.</summary>
+    /// <summary>The raw hardware joypad read — real buttons even while a script overrides <see cref="InputHeld"/>.</summary>
     public const ushort InputRaw = 0xC006;
 
     /// <summary>The low byte of the 16-bit LCG PRNG state.</summary>
@@ -84,10 +84,10 @@ internal static class FrameworkMemoryMap {
     /// <summary>Framework scratch (0xC0B4..0xC0EF), free for module-internal temporaries.</summary>
     public const ushort Scratch = 0xC0B4;
 
-    /// <summary>The 16-byte "victory share" source slot (0xC0F0..0xC0FF): the host SEEDS this cabinet's authored 128-bit
+    /// <summary>The 16-byte "victory share" source slot (0xC0F0..0xC0FF): the host seeds this cabinet's authored 128-bit
     /// meta victory share here at boot (a per-cabinet <see cref="Sm83Emitter"/>-invisible poke, like the mode-swap boot
     /// shim), and <see cref="VictoryModule"/> copies it verbatim into the top-16 SRAM win region on the game's win edge.
-    /// It is DELIBERATELY EXCLUDED from the boot work-RAM clear (the block-fill splits around it in
+    /// It is deliberately excluded from the boot work-RAM clear (the block-fill splits around it in
     /// <see cref="FrameworkKernel.EmitBootPrologue"/>) so the host's seed survives the game's boot; a game never reads or
     /// writes it (games own <see cref="GameRam"/> upward). A cabinet with no seeded share leaves it all-zero — the game
     /// then converges the region on zero, which the room XOR never mistakes for a real share group.</summary>

@@ -4,7 +4,7 @@ namespace Puck.Commands;
 /// An observation-only, fixed-capacity ring buffer of per-tick command activity — the console-addressable shape of
 /// the same raw material a tick already produces internally (per tick: what ran, what did the hash do — see
 /// <see cref="HashTrace"/>). Records, per tick: which commands dispatched (as short caller-formatted text — see
-/// <see cref="RecordCommand"/>) and an OPTIONAL state-hash bracket. Nothing here is read by simulation code and
+/// <see cref="RecordCommand"/>) and an optional state-hash bracket. Nothing here is read by simulation code and
 /// nothing it stores feeds a hash: recording a tick has zero effect on determinism.
 /// <para>
 /// Zero steady-state allocation: the ring array and every slot's fixed command list are allocated once, at
@@ -25,7 +25,7 @@ public sealed class TickTranscript {
 
     /// <summary>The maximum commands recorded per tick — see the type remarks. Provisioned for the 128-player
     /// vision's worst tick (every participant issuing a command the same tick, plus system margin); overflow past
-    /// this is COUNTED, never silently lost, so the bound only limits debug visibility, never correctness.</summary>
+    /// this is counted, never silently lost, so the bound only limits debug visibility, never correctness.</summary>
     public const int MaxCommandsPerTick = 160;
 
     private readonly TickTranscriptEntry m_pending = new();
@@ -86,7 +86,7 @@ public sealed class TickTranscript {
 
     /// <summary>Copies the most recently recorded ticks, oldest first, into a new list.</summary>
     /// <param name="count">The maximum number of ticks to return (clamped to <c>[0, Count]</c>).</param>
-    /// <returns>Up to <paramref name="count"/> entries, oldest first. Each entry is a LIVE ring slot — see
+    /// <returns>Up to <paramref name="count"/> entries, oldest first. Each entry is a live ring slot — see
     /// <see cref="TickTranscriptEntry"/>'s reuse warning.</returns>
     public IReadOnlyList<TickTranscriptEntry> LastEntries(int count) {
         var take = Math.Clamp(value: count, max: m_count, min: 0);

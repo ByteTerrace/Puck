@@ -68,13 +68,13 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     private const float TouchpadHeight = 1080f;
     private const float TriggerRange = 255f;
     private const byte TriggerThreshold = 8;
-    // DualSense gyro resolution is 1024 LSB per deg/s (DS_GYRO_RES_PER_DEG_S), but the per-device factory
-    // calibration sensitivity is ~64x that figure, so the bare 1024 value is NOT a usable uncalibrated scale —
-    // it reads ~64x too weak and yaw (which has no gravity reference) goes effectively dead. The uncalibrated
-    // fallback therefore uses 64x the bare nominal, replaced per-axis once feature report 0x05 is read.
+    // DualSense gyro resolution is 1024 LSB per deg/s (DS_GYRO_RES_PER_DEG_S), but the per-device factory calibration sensitivity is ~64x
+    // that figure, so the bare 1024 value is NOT a usable uncalibrated scale — it reads ~64x too weak and yaw
+    // (which has no gravity reference) goes effectively dead. The uncalibrated fallback therefore uses 64x the
+    // bare nominal, replaced per-axis once feature report 0x05 is read.
     private const float GyroRadiansPerSecondPerLsbFallback = ((64f * (MathF.PI / 180f)) / 1024f);
-    // DualSense accelerometer is 8192 LSB per g (DS_ACC_RES_PER_G); convert to g. The accel block follows the
-    // gyro block (gyro at common 15..20, accel at 21..26), then a 32-bit sensor timestamp at common 27..30.
+    // DualSense accelerometer is 8192 LSB per g (DS_ACC_RES_PER_G); convert to g. The accel block follows the gyro block (gyro at
+    // common 15..20, accel at 21..26), then a 32-bit sensor timestamp at common 27..30.
     private const int AccelerometerOffset = 21;
     private const float AccelerometerGPerLsb = (1f / 8192f);
     // The free-running motion-sensor timestamp: a 32-bit LE counter at common 27..30. The raw value is in thirds
@@ -241,7 +241,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     // applies only the sections whose valid_flag bits are set — which are disjoint — so always emitting the full
     // state keeps any one write (rumble, trigger, or LED) from clearing the others. USB is report 0x02 (common
     // block at offset 1); Bluetooth is report 0x31 (a 2-byte header, common block at offset 3, and a trailing
-    // little-endian CRC32 seeded with 0xA2). The USB path is byte-identical to before.
+    // little-endian CRC32 seeded with 0xA2).
     private ValueTask WriteOutputAsync(CancellationToken cancellationToken) {
         var buffer = m_outputBuffer;
         var bluetooth = (m_device.Transport == HidTransport.Bluetooth);

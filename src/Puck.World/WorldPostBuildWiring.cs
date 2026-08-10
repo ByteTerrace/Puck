@@ -10,22 +10,44 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The EVERY-SHAPE post-build wiring step: the affordance vocabulary install,
-/// the accepted-session-lever attachment, the outstanding-capture drain (see the end of
-/// <see cref="Install"/>), and the server's <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/
-/// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved OUT of the old presentation-only render-root
+/// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
+/// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
+/// attachment, the outstanding-capture drain (see the end of <see cref="Install"/>), and the server's
+/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/
+/// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
 /// factory so <c>wire.errors</c> stays honest headless (a deferred Simulation-routed refusal is counted regardless of
-/// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for BOTH boot shapes. The
-/// toast/HUD-structure/audio-CUE-listener-placement-lookup halves that only make sense with a renderer resolve their
-/// presentation services OPTIONALLY (<see cref="IServiceProvider.GetService"/>, never <c>GetRequiredService</c>) and
+/// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for both boot shapes. The
+/// toast/HUD-structure/audio-cue-listener-placement-lookup halves that only make sense with a renderer resolve their
+/// presentation services optionally (<see cref="IServiceProvider.GetService"/>, never <c>GetRequiredService</c>) and
 /// no-op when absent.
 /// </summary>
 internal static class WorldPostBuildWiring {
-    /// <summary>Installs the affordance vocabulary, attaches the session-lever sink, wires the server's echo/cue
-    /// taps, and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call
-    /// exactly once, after the container has built but before the host starts.</summary>
+    /// <summary>Installs the affordance vocabulary, re-validates the boot document's binding vocabulary now that the
+    /// vocabulary is real (see the remarks below), attaches the session-lever sink, wires the server's echo/cue taps,
+    /// and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call exactly
+    /// once, after the container has built but before the host starts.</summary>
+    /// <remarks>
+    /// Boot validation stops being vacuous here. <c>WorldDefinitionLoader.TryResolve</c> (in <c>Program.cs</c>) loads
+    /// and validates the boot document before the DI container exists — <c>WorldDefinitionValidator.Validate</c> runs
+    /// <c>BindingVocabularyHook.VocabularyCheck</c> over every binding overlay and the compiled-in engine-default
+    /// wheels/pages at that instant, but <see cref="WorldAffordances.Installed"/> is still <see langword="false"/>
+    /// then (it flips a few lines below, in this method — the first point on the boot path where a built
+    /// <see cref="CommandRegistry"/> exists), so the command half of that check is a documented no-op
+    /// (<see cref="WorldAffordances.Validate"/>'s own remarks: "Absent means the command half of validation is
+    /// skipped — structural validation still runs — never that it passed"). Nothing before that instant ever branches
+    /// on <c>WorldHostSettings.Headless</c>, so the gap is not a headless-only bug: every boot shape validates its own
+    /// wheel/page commits vacuously at load, and only happens to get away with it windowed because
+    /// <see cref="WorldBootComposition.AddWorldPresentation"/> composes a superset registry before anything asks again. Re-running
+    /// <see cref="WorldDefinitionValidator.TryValidate"/> on the SAME (already-loaded, already-resolved) boot
+    /// definition here — immediately after <see cref="WorldAffordances.Install"/> — makes the check genuine: an
+    /// unregistered wheel or page commit now refuses BOOT by name, identically in both shapes, instead of surfacing
+    /// only later at a <c>world.instance.start</c> crossing or a live <c>player.bind</c> recompose.
+    /// </remarks>
     /// <param name="services">The built root service provider.</param>
-    public static void Install(IServiceProvider services) {
+    /// <returns><see langword="true"/> when the boot may proceed; <see langword="false"/> when the re-validated boot
+    /// document refused (a reason is already printed to stderr) and the caller must fail the boot instead of calling
+    /// <c>IHost.RunAsync</c>.</returns>
+    public static bool Install(IServiceProvider services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
@@ -45,7 +67,67 @@ internal static class WorldPostBuildWiring {
         // Commands only: a channel table belongs to the document that declares it, so every caller supplies its own
         // (WorldSeatBindings holds the boot instance's; the document validator compiles the candidate's).
         WorldAffordances.Install(registry: consoleRegistry);
-        services.GetRequiredService<WorldSeatBindings>().ValidateAffordancesLoudly();
+
+        var seatBindings = services.GetRequiredService<WorldSeatBindings>();
+
+        seatBindings.ValidateAffordancesLoudly();
+
+        // THE CROSSING-PARITY BINDING SWAP: wired here rather than a presentation-only composition method because
+        // bindings/channels resolve on the console/peer input path in EVERY boot shape, headless included, and
+        // headless's WorldSimulation twin (HeadlessWorldSimulation) carries no per-tick seat-binding poll of its own
+        // — this event is the ONLY mechanism that reaches a headless seat's crossing. The instant
+        // WorldSeatInstanceRouter.Publish reports a seat's presenting INSTANCE actually
+        // changed (a crossing in or out — see that event's own remarks), recompose that ONE seat's binding pages,
+        // wheels, and channel vocabulary from its NEW route's own document (WorldInstanceHost.ResolveRoutedDefinition
+        // — the identical routed-definition lookup WorldCameraOrbitDrag already subscribes to this same event for,
+        // to reclamp the pitch instead). WorldSimulation's own per-tick SyncSeat loop (windowed only) would reach the
+        // SAME state one poll later in the ordinary case — this is the explicit, shape-independent edge, not a
+        // parallel mechanism.
+        var instances = services.GetRequiredService<WorldInstanceHost>();
+
+        services.GetRequiredService<WorldSeatInstanceRouter>().LocationChanged += slot =>
+            seatBindings.SyncSeat(slot: slot, definition: instances.ResolveRoutedDefinition(slot: slot));
+
+        // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at
+        // WorldDefinitionLoader.TryResolve, ran before WorldAffordances.Installed — its command half was a no-op in
+        // EVERY boot shape. This is the first point where re-running the SAME validator asks a real question, so an
+        // unregistered wheel/page commit fails the BOOT here (both shapes alike) rather than only a later crossing.
+        var worldSource = services.GetRequiredService<WorldDefinitionSource>();
+
+        // The border-margin proof's neighbour resolver, composed from every transport this boot can reach: a
+        // file-backed read beside the currently-loaded document (WorldFileNeighbourResolver — the ONLY resolver a
+        // local-only boot, no --storage-uri, ever has, which is exactly the quilt worlds' shape) tried first, then
+        // the cloud-backed WorldStorageNeighbourResolver when cloud storage is wired. The file resolver reads
+        // worldSource.SourcePath fresh on every call rather than capturing the boot directory once, so it keeps
+        // resolving correctly across a live world.load/reload that moves the tracked origin (see
+        // WorldDefinitionSource.SourcePath's own remarks). WorldCompositeNeighbourResolver.Compose returns null only
+        // when NEITHER transport is present, in which case an authored WorldPlacementPortal.MarginDepth refuses by
+        // name rather than passing unproven — unreachable, not this method's own choice.
+        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory);
+        var storageNeighbours = services.GetRequiredService<WorldStorageSyncHandle>().Neighbours;
+        var neighbours = WorldCompositeNeighbourResolver.Compose(fileNeighbours, storageNeighbours);
+
+        if (!WorldDefinitionValidator.TryValidate(definition: worldSource.Definition, reason: out var vocabularyReason, neighbours: neighbours)) {
+            Console.Error.WriteLine(value: $"[world] definition refused once its command vocabulary composed: {vocabularyReason}");
+
+            return false;
+        }
+
+        // The running server also carries the resolver, for the ONE live document-swap moment (world.load/reload/
+        // reset) that gets it — see WorldServer.Neighbours' own remarks on why nothing else does.
+        var server = services.GetRequiredService<WorldServer>();
+
+        server.Neighbours = neighbours;
+        server.RebuildNeighbours = candidatePath => WorldCompositeNeighbourResolver.Compose(
+            new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory),
+            storageNeighbours
+        );
+
+        // The BOOT authority's runtime border-margin resolver — unlike Neighbours (a load-time proof), this is
+        // consulted every tick a body stands inside a mapped portal facet's authored margin. Spawned authorities get
+        // their own instance-bound sibling in WorldInstanceHost.TryStart. CORE (both boot shapes): contact resolution
+        // needs it regardless of whether a window exists.
+        server.BorderMargin = services.GetRequiredService<IWorldBorderMarginSource>();
 
         // Seed the seats' context-family states off the boot census once, so a read-back that runs before the first
         // simulation tick reports the joined boot seats truthfully rather than the resolver's cold defaults (the
@@ -62,13 +144,16 @@ internal static class WorldPostBuildWiring {
         // headless contract.
         services.GetRequiredService<WorldClient>().AttachSessionLevers(levers: services.GetRequiredService<WorldSessionLeverSink>());
 
-        // The presentation-only halves of the echo fan-out — resolved ONCE, optionally, so the tap closure below
-        // never queries the container per-echo. All null together (headless) or all non-null together (presentation
-        // composed): AddWorldPresentation registers every one of them or none of them.
+        // The echo fan-out's halves — resolved ONCE so the tap closure below never queries the container per-echo.
+        // toasts/overlayFeed/consoleMirror are presentation-only (AddWorldPresentation registers all three or none,
+        // so they are null together headless); editorDrag/editorWorkbench are CORE (command-vocabulary parity moved
+        // the whole editor/sculpt surface into AddWorldAuthoritativeCore — see WorldBootComposition's remarks), so
+        // they are ALWAYS present now — a headless script can grab/drag or open a sculpt bench purely over the
+        // console, same as windowed.
         var toasts = services.GetService<OverlayToastStore>();
         var overlayFeed = services.GetService<WorldOverlayFeed>();
-        var editorDrag = services.GetService<WorldEditorDrag>();
-        var editorWorkbench = services.GetService<WorldWorkbench>();
+        var editorDrag = services.GetRequiredService<WorldEditorDrag>();
+        var editorWorkbench = services.GetRequiredService<WorldWorkbench>();
         var consoleMirror = services.GetService<WorldConsoleMirror>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
@@ -106,12 +191,13 @@ internal static class WorldPostBuildWiring {
 
             // A rejected mutation correlates back to the frozen released drag preview that submitted it: the
             // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the
-            // deadline. Presentation-only (there is no drag preview headless).
+            // deadline. CORE in every boot shape now (see the resolution above) — a headless drag preview is client-
+            // local state with nothing to render, but the correlation still keeps it honest.
             if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
-                editorDrag?.NoteRejected(mutation: rejectedMutation);
+                editorDrag.NoteRejected(mutation: rejectedMutation);
                 // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
                 // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
-                editorWorkbench?.NoteCommitRejected(mutation: rejectedMutation);
+                editorWorkbench.NoteCommitRejected(mutation: rejectedMutation);
             }
 
             // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token — capability
@@ -163,10 +249,7 @@ internal static class WorldPostBuildWiring {
         // row's authored face origin. CORE: Server.WorldMachineHost and WorldClient are both core-registered, so
         // this runs unconditionally in EVERY boot shape — a headless boot's screens boot (and step) real machines,
         // so this cue lane is presentation-only only in WHO fires it (the audio director's cue queue accumulates
-        // harmlessly with no device pump draining it headless, same as every other cue here). The memory-peek seam
-        // that used to be wired here (WorldServer.MachineMemoryPeek) is GONE: Server.WorldMachineHost implements
-        // IWorldMachineMemoryPeek directly and is reached through WorldServer.Machines, always present, no wiring
-        // needed.
+        // harmlessly with no device pump draining it headless, same as every other cue here).
         var audioCueClient = services.GetRequiredService<WorldClient>();
 
         services.GetRequiredService<WorldMachineHost>().MachineLifecycleTap = (index, faulted) => {
@@ -196,5 +279,7 @@ internal static class WorldPostBuildWiring {
                 }
             });
         }
+
+        return true;
     }
 }

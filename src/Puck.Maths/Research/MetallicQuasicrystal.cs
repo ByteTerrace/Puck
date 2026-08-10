@@ -172,7 +172,8 @@ public static class MetallicQuasicrystal {
 
         // The conjugate is c = ((2a + bn) − b·√d) / 2. The density-correct acceptance-window width simplifies to
         // wₙ = (δₙ + 1)/δₙ² = (n² − n + 2 − (n − 1)·√d)/2. Thus 0 ≤ c < wₙ is exactly two
-        // signs of small surds; unlike the former rationalized quotient, their products stay narrow for ordinary inputs.
+        // signs of small surds, whose products stay narrow for ordinary inputs — rationalizing the quotient instead
+        // would need wider ones.
         var conjugateRational = ((2 * a) + (b * wideN));
 
         if (SignSurd(rational: conjugateRational, coefficient: -b, radicand: radicand) < 0) { return false; }

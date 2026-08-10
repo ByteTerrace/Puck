@@ -2,12 +2,12 @@ using System.Numerics;
 
 namespace Puck.Input.Devices;
 
-/// <summary>
-/// A normalized snapshot of a controller for a single poll, independent of the physical device. Axes are
-/// normalized: sticks to the range -1..1 per component (deadzone applied), triggers to 0..1. <see cref="Gyro"/>
-/// is angular velocity in radians per second (zero on devices without a motion sensor), and
+/// <summary>A normalized snapshot of a controller for a single poll, independent of the physical device.</summary>
+/// <remarks>
+/// Axes are normalized: sticks to the range -1..1 per component (deadzone applied), triggers to 0..1.
+/// <see cref="Gyro"/> is angular velocity in radians per second (zero on devices without a motion sensor), and
 /// <see cref="Orientation"/> is the fused absolute pose (identity until a fusion step populates it).
-/// </summary>
+/// </remarks>
 /// <param name="Buttons">The set of digital buttons currently held.</param>
 /// <param name="LeftStick">The left analog stick, -1..1 per component.</param>
 /// <param name="RightStick">The right analog stick, -1..1 per component.</param>
@@ -36,7 +36,7 @@ public readonly record struct GamepadState(
     ulong ArrivalTicks = 0UL,
     ulong SequenceNumber = 0UL
 ) {
-    /// <summary>A neutral state: no buttons, centered sticks, released triggers, no motion, identity pose.</summary>
+    /// <summary>Gets a neutral state: no buttons, centered sticks, released triggers, no motion, identity pose.</summary>
     public static GamepadState Neutral => new(
         Buttons: GamepadButtons.None,
         Gyro: Vector3.Zero,

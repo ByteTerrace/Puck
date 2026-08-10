@@ -1,46 +1,53 @@
 {
-  "description": "The simulation-affecting participant input-hold policy. Every checked-in world authors the section explicitly; measured tick counts arrive on tick-stamped intent submissions and never read a clock here.",
+  "description": "The simulation-affecting participant input-hold policy, in its AUTHORED shape \u2014 every checked-in world authors the section explicitly, in SECONDS (ceilingSeconds/lowerAfterSeconds/ defaultSeconds, and each participant\u0027s own seconds). CompiledInputHold is the compiled simulation-tick form (WorldInputHoldSettings) Server.WorldInputHoldRuntime actually consumes \u2014 compiled lazily off THIS document\u0027s own SimulationRateHz rather than at parse, since a document\u0027s rate is just another sibling section with no parse-order guarantee ahead of this one (see SimulationRateHz\u0027s remarks). Measured tick counts arrive on tick-stamped intent submissions and never read a clock here.",
   "type": "object",
   "properties": {
-    "ceilingTicks": {
-      "description": "The maximum applied hold, in simulation ticks.",
-      "type": "integer"
+    "ceilingSeconds": {
+      "type": "number"
     },
-    "lowerAfterTicks": {
-      "description": "How many simulation ticks a lower target must remain unchanged before descent.",
-      "type": "integer"
+    "lowerAfterSeconds": {
+      "type": "number"
     },
-    "defaultTicks": {
-      "description": "The authored hold floor for participants without an override.",
-      "type": "integer"
+    "defaultSeconds": {
+      "type": "number"
     },
     "equalizeByDefault": {
-      "description": "Whether participants without an override share the maximum.",
       "type": "boolean"
     },
     "participants": {
-      "description": "Participant-specific floor and distribution overrides, keyed by body index.",
       "type": "array",
       "items": {
-        "description": "One participant-specific input-hold override. An omitted body uses the section defaults.",
-        "type": "object",
+        "description": "One participant-specific input-hold override, AUTHORED shape \u2014 see WorldInputHoldAuthoring. Mirrors WorldInputHoldParticipant field for field except Seconds in place of the compiled Ticks.",
+        "type": [
+          "object",
+          "null"
+        ],
         "properties": {
           "bodyIndex": {
-            "description": "The participant\u0027s 0-based population body index.",
             "type": "integer"
           },
-          "ticks": {
-            "description": "The authored hold floor, in simulation ticks.",
-            "type": "integer"
+          "seconds": {
+            "type": "number"
           },
           "equalized": {
-            "description": "Whether this participant contributes to and receives the shared maximum.",
             "type": "boolean"
           }
         },
+        "required": [
+          "bodyIndex",
+          "seconds",
+          "equalized"
+        ],
         "additionalProperties": false
       }
     }
   },
+  "required": [
+    "ceilingSeconds",
+    "lowerAfterSeconds",
+    "defaultSeconds",
+    "equalizeByDefault",
+    "participants"
+  ],
   "additionalProperties": false
 }

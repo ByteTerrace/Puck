@@ -16,7 +16,7 @@ namespace Puck.Overlays;
 /// <param name="EditorHud">The per-seat editor-HUD source, or <see langword="null"/>.</param>
 /// <param name="Gizmos">The per-seat editor-gizmo source (projected chips for geometry-less rows), or
 /// <see langword="null"/>.</param>
-/// <param name="Hud">The authored world-scope AND player-scope (per-seat) HUD structure source, or
+/// <param name="Hud">The authored world-scope and player-scope (per-seat) HUD structure source, or
 /// <see langword="null"/>.</param>
 /// <param name="HudBindings">The authored HUD's live binding resolver — required alongside <paramref name="Hud"/>
 /// for either scope to draw anything (a <see langword="null"/> pairing on either side draws nothing).</param>
@@ -36,10 +36,10 @@ public sealed record UnifiedOverlaySources(
 );
 
 /// <summary>
-/// The ONE screen-space overlay decorator: wraps any same-device inner producer whose surface exposes a sampleable
-/// image view, samples it in one fullscreen fragment pass, and draws every 2D surface on top from ONE storage
+/// The one screen-space overlay decorator: wraps any same-device inner producer whose surface exposes a sampleable
+/// image view, samples it in one fullscreen fragment pass, and draws every 2D surface on top from one storage
 /// buffer — the design-token slab and the shared glyph SDF pack as a static prefix, then this frame's packed
-/// records. SURFACES ARE WRITERS: the console panel, the per-seat binding bars, and the toast are each a small CPU
+/// records. Every surface is a writer: the console panel, the per-seat binding bars, and the toast are each a small CPU
 /// writer emitting the shared record vocabulary (panel chrome / rect / fixed-cell text run / icon chip) through
 /// <see cref="OverlayFrameBuilder"/>, so a future surface is a new writer, never a new node or shader.
 /// Backend-neutral: only neutral <c>IGpu*</c> services (<see cref="OverlayServices"/>), with bytecode selected by
@@ -157,7 +157,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <summary>Initializes a new instance of the <see cref="UnifiedOverlayNode"/> class.</summary>
     /// <param name="inner">The producer whose render the overlay is drawn over (its surface must be sampleable here).</param>
     /// <param name="sources">The per-surface read seams + the feed tick.</param>
-    /// <param name="glyphs">The ONE shared SDF glyph pack (per-glyph signed-distance cells).</param>
+    /// <param name="glyphs">The shared SDF glyph pack (per-glyph signed-distance cells).</param>
     /// <param name="services">The neutral GPU service bundle (same device as <paramref name="inner"/>).</param>
     /// <param name="vertexBytecode">The fullscreen vertex shader, in the host backend's bytecode format.</param>
     /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
@@ -497,11 +497,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // exceeding its own hard RESERVATION (OverlayFrameBuilder.Dropped) vs a writer refusing its own excess at a
     // self-declared cap (OverlayFrameBuilder.Refused, fed by NoteRefused and WriteText's maxChars clamp) — are
     // DIFFERENT FACTS and get DIFFERENT MESSAGES: a reservation overflow means the channel asked for more than its
-    // lease and lost it; an own-cap refusal means the writer authored a smaller limit and never asked at all. The
-    // landed bug conflated them into one "exceeded its own reservation" sentence that lied whenever the true cause
-    // was a self-declared cap (e.g. the binding bar's hint-line cap: refused content while nowhere near its
-    // reservation). Each cause narrates once per episode, independently, per channel — a channel can open one
-    // episode, both, or neither in a given frame.
+    // lease and lost it; an own-cap refusal means the writer authored a smaller limit and never asked at all (e.g.
+    // the binding bar's hint-line cap can refuse content while nowhere near its reservation). Each cause narrates
+    // once per episode, independently, per channel — a channel can open one episode, both, or neither in a given
+    // frame.
     private void NarrateOverflow() {
         if (!m_builder.HasOverflow) {
             Array.Clear(array: m_overflowEpisodeOpen);

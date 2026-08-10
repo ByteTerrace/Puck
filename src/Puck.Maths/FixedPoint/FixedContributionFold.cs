@@ -8,7 +8,7 @@ namespace Puck.Maths;
 /// supplied. A null radius means no pool; zero is a valid zero-width pool. A null threshold leaves the ranged value
 /// continuous; otherwise values at or above the threshold map to the maximum and values below it map to the minimum.
 /// <para>
-/// Contributions are accumulated in raw <see cref="long"/> sums and clamped ONCE after accumulation, never through a
+/// Contributions are accumulated in raw <see cref="long"/> sums and clamped once after accumulation, never through a
 /// saturating per-add. Saturating addition is commutative but not associative: near a boundary,
 /// <c>sat(sat(a + b) + c)</c> can differ from <c>sat(a + sat(b + c))</c>, making an unordered contribution set depend
 /// on iteration order. The two completed sums enter this member as raw Q48.16 units. Every addition and every pool

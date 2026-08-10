@@ -10,18 +10,16 @@ public enum WorldDocumentWriteKind : byte {
     Add,
 }
 
-/// <summary>The <see cref="WorldDocumentWriteKind"/> operations a <see cref="WorldGrant.WriteMask"/> row admits on the
-/// CROSS-DOCUMENT durable-state write-back channel — the mask <c>Server.WorldOwnedWorlds.Decide</c> checks a
-/// <see cref="WorldDocumentSubmission"/> against before an owning world applies a foreign document's operation to one
-/// of its own state rows. Legal only on a <see cref="WorldCapability.Mutate"/> row whose subject is a concrete
+/// <summary>The <see cref="WorldDocumentWriteKind"/> operations a <see cref="WorldGrant.WriteMask"/> row admits on
+/// the cross-document durable-state write-back channel — the mask <c>Server.WorldOwnedWorlds.Decide</c> checks a
+/// <see cref="WorldDocumentSubmission"/> against before an owning world applies a foreign document's operation to
+/// one of its own state rows. Legal only on a <see cref="WorldCapability.Mutate"/> row whose subject is a concrete
 /// <see cref="GrantSubjectKind.State"/>: that door speaks operations (replace vs. accumulate), never mutation kinds.
-/// <para><b>Deliberately NOT <see cref="MutationKindMask"/>.</b> The two masks share a bitset SHAPE and nothing else
-/// — this one's bit 0 is <see cref="WorldDocumentWriteKind.Set"/>, that one's bit 0 is <c>UpsertKit</c>. They were a
-/// single <c>ulong</c> field once, read under whichever vocabulary the carrying grant's subject kind implied;
-/// splitting them into two types is what makes the confusion a compile error instead of a silent mis-authorization.
-/// They no longer even share a WIDTH: this lane stays 64 bits because
-/// <see cref="WorldDocumentWriteKind"/> is a small closed vocabulary, while
-/// <see cref="MutationKindMask"/> outgrew 64 and widened. Neither width constrains the other.</para></summary>
+/// <para>Deliberately not <see cref="MutationKindMask"/>: the two masks share a bitset shape and nothing else — this
+/// one's bit 0 is <see cref="WorldDocumentWriteKind.Set"/>, that one's bit 0 is <c>UpsertKit</c>. They no longer
+/// even share a width: this lane stays 64 bits because <see cref="WorldDocumentWriteKind"/> is a small closed
+/// vocabulary, while <see cref="MutationKindMask"/> outgrew 64 and widened. Neither width constrains the
+/// other.</para></summary>
 /// <param name="Bits">The raw 64-bit lane, one bit per <see cref="WorldDocumentWriteKind"/> member.</param>
 public readonly record struct DocumentWriteMask(ulong Bits) {
     /// <summary>Gets the empty mask — admits no operation. The grant door refuses a row that would resolve to exactly
@@ -95,12 +93,12 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
     }
 }
 
-/// <summary>One tick-stamped foreign durable-state submission — the ONE door both a numeric operand and a text
+/// <summary>One tick-stamped foreign durable-state submission — the one door both a numeric operand and a text
 /// operand cross, submitter-agnostic. The door's contract (grants + <see cref="DocumentWriteMask"/>) never varies;
-/// only who submits does: today the sim itself, per-tick, for numeric <c>Counter</c>/<c>Timer</c> outputs
-/// (<c>Server.WorldServer.Step</c>); tomorrow a player-initiated text delivery (the whisper transport). Extending
-/// this ONE shape — rather than adding a sibling text-submission door — is deliberate: two admission doors drift,
-/// the predicate must stay one (see <c>Server.WorldOwnedWorlds.Decide</c>'s remarks).</summary>
+/// only who submits does — the sim itself, per-tick, for numeric <c>Counter</c>/<c>Timer</c> outputs
+/// (<c>Server.WorldServer.Step</c>), or a player-initiated text delivery. One shape rather than a sibling
+/// text-submission door keeps the admission predicate singular (see <c>Server.WorldOwnedWorlds.Decide</c>'s
+/// remarks).</summary>
 /// <param name="SourceDocumentId">The asking document.</param>
 /// <param name="OwnerDocumentId">The owning document.</param>
 /// <param name="Tick">The source tick.</param>
@@ -108,10 +106,10 @@ public readonly record struct DocumentWriteMask(ulong Bits) {
 /// <param name="Kind">The requested operation. A <see cref="Text"/> submission admits only
 /// <see cref="WorldDocumentWriteKind.Set"/> — <see cref="WorldDocumentWriteKind.Add"/> refuses by name at the door
 /// (no concatenation-by-stealth), regardless of what the recipient's write mask admits.</param>
-/// <param name="StorageKind">The durable slot's numeric representation. Ignored when <see cref="Text"/> is set — the
-/// SAME asymmetry <see cref="WorldStateCell"/>'s own <c>Value</c>/<c>Text</c> pair carries: a string cannot ride a
-/// numeric lane by any honest encoding, so a text submission carries its operand in the second field rather than
-/// reusing the first.</param>
+/// <param name="StorageKind">The durable slot's numeric representation. Ignored when <see cref="Text"/> is set —
+/// the same asymmetry <see cref="WorldStateCell"/>'s own <c>Value</c>/<c>Text</c> pair carries: a string cannot
+/// ride a numeric lane by any honest encoding, so a text submission carries its operand in the second field rather
+/// than reusing the first.</param>
 /// <param name="Value">The raw numeric operand. Ignored when <see cref="Text"/> is set.</param>
 /// <param name="Text">The text operand for a submission against a <see cref="CellKind.Text"/> slot row, or
 /// <see langword="null"/> for a numeric submission. Capped at the SAME

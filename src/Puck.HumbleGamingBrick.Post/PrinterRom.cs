@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// blaster" driver and a table of pre-built printer packets: the driver walks the table and, for each packet, shifts
 /// every byte out over the internal serial clock (reading and discarding the printer's replies), with a wide idle delay
 /// between packets so a snapshot/restore churn can land on a transfer-idle instant. The packets themselves — INIT, one
-/// uncompressed DATA band, one RLE-compressed DATA band encoding the SAME image, PRINT, then a run of STATUS polls — carry
+/// uncompressed DATA band, one RLE-compressed DATA band encoding the same image, PRINT, then a run of STATUS polls — carry
 /// correct 16-bit additive checksums computed here, so the SM83 side stays a fixed loop and the protocol lives in data.
 /// </summary>
 internal static class PrinterRom {
@@ -178,7 +178,7 @@ internal static class PrinterRom {
     /// <summary>Builds the 640-byte band the overflow probe repeats: the identity palette maps a decoded 2bpp dot to
     /// itself, so setting the first tile-row half's low plane to 0xFF/high plane to 0x00 decodes every dot in that half
     /// to shade 1, and the second half's low/high planes swapped decodes every dot to shade 2. Every overflow band
-    /// carries the SAME content, so the printer's circular-buffer wrap is checkable purely from the final image's
+    /// carries the same content, so the printer's circular-buffer wrap is checkable purely from the final image's
     /// segment count and alternating 1/2 parity — an independent model of <c>GamePrinterDevice.UnpackBand</c>'s
     /// policy, not a re-test of the tile decoder (already covered by <see cref="BuildBand"/>'s RLE round-trip check).</summary>
     /// <returns>The 640-byte band.</returns>

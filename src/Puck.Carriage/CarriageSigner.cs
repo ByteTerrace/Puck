@@ -9,18 +9,18 @@ namespace Puck.Carriage;
 /// </summary>
 public static class CarriageSigner {
     /// <summary>
-    /// Signs an envelope. <paramref name="signingAlgorithm"/> drives the ACTUAL cryptographic operation and
+    /// Signs an envelope. <paramref name="signingAlgorithm"/> drives the actual cryptographic operation and
     /// is independent of <paramref name="header"/>'s own <see cref="CarriageEnvelopeHeader.Algorithm"/>
     /// field — in honest minting code the two are always equal, but keeping them as separate parameters is
     /// what lets the harness construct the algorithm-confusion attack (an envelope that claims one
     /// algorithm while a different, correctly-pinned one actually produced the signature).
     /// </summary>
-    /// <param name="codec">The serialisation to sign under. The resulting signature only verifies against THIS codec's re-encoding.</param>
+    /// <param name="codec">The serialisation to sign under. The resulting signature only verifies against this codec's re-encoding.</param>
     /// <param name="header">The context header to sign. Its own <see cref="CarriageEnvelopeHeader.Algorithm"/> is written as-is, never derived from <paramref name="signingAlgorithm"/>.</param>
     /// <param name="payloadKind">Which shape <paramref name="payloadBytes"/> is.</param>
     /// <param name="payloadBytes">The already-encoded payload bytes.</param>
     /// <param name="signingKey">The private key that actually signs.</param>
-    /// <param name="signingAlgorithm">The REAL algorithm used for the cryptographic operation (must resolve to a <see cref="CarriageKeyRole.Signing"/> descriptor).</param>
+    /// <param name="signingAlgorithm">The algorithm actually used for the cryptographic operation (must resolve to a <see cref="CarriageKeyRole.Signing"/> descriptor).</param>
     /// <exception cref="ArgumentException"><paramref name="signingAlgorithm"/> does not resolve to a signing algorithm.</exception>
     public static SignedCarriageEnvelope Sign(
         ICarriageCodec codec,

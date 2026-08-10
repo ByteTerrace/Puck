@@ -3,7 +3,7 @@ namespace Puck.HumbleGamingBrick;
 /// <summary>
 /// The link-cable printer peripheral, modeled as a deterministic serial-cable peer — a device that sits where a second
 /// machine would on the <see cref="SerialLinkSession"/> seam without being one. It answers the bytes the console shifts
-/// out over its INTERNAL clock (<see cref="ISerialPeer.ShiftBit"/>): parse the packet protocol, accumulate DATA bands
+/// out over its internal clock (<see cref="ISerialPeer.ShiftBit"/>): parse the packet protocol, accumulate DATA bands
 /// into an image, and on a PRINT render the assembled band buffer and raise it to the host as a
 /// <see cref="GamePrintout"/> event. All of the printer's parsing state, the accumulated image, and the
 /// print-in-progress countdown are plain fields captured in a fixed order (<see cref="ISnapshotable"/>), so a snapshot
@@ -390,14 +390,12 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     // offset, MSB-first per the console's 2bpp tile format (byte pair = low then high bitplane). Reads the command
     // buffer without mutating it.
     //
-    // The buffer is circular: the write cursor wraps modulo the buffer length after each 8-row half, mirroring
-    // SameBoy's overflow policy ("gb->printer.image_offset %= sizeof(gb->printer.image);", Core/printer.c:49) but
-    // applied per half-band rather than once per full band — SameBoy's single top-of-band modulo does not stop a
-    // band's second half from writing past the array once the cursor is already within one half-band of the end, so a
-    // 13th full band silently overruns SameBoy's own fixed-size buffer too (its documented caveat: "incorrect usage is
-    // not correctly emulated"). Wrapping every 8*ImageWidth-byte half instead keeps the cursor (always a multiple of
-    // 8*ImageWidth, which divides the buffer length evenly: MaxImageHeight/8 is exact) strictly inside the buffer by
-    // construction, so 13+ valid bands overwrite the oldest rows in place rather than fault.
+    // The buffer is circular: the write cursor wraps modulo the buffer length after each 8-row half, not once per
+    // full band — a single top-of-band modulo would let a band's second half write past the array once the cursor is
+    // already within one half-band of the end, overrunning the fixed-size buffer past the 12th band. Wrapping every
+    // 8*ImageWidth-byte half instead keeps the cursor (always a multiple of 8*ImageWidth, which divides the buffer
+    // length evenly: MaxImageHeight/8 is exact) strictly inside the buffer by construction, so 13+ valid bands
+    // overwrite the oldest rows in place rather than fault.
     private void UnpackBand() {
         var position = 0;
 

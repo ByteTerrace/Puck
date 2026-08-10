@@ -56,7 +56,7 @@ internal enum AssignOutcome {
     /// <summary>The device moved onto an empty slot, creating a pending player (a profile must be chosen).</summary>
     CreatedPending,
 
-    /// <summary>The ACTING principal lacked Drive over the target body — refused loudly, nothing changed. Distinct
+    /// <summary>The acting principal lacked Drive over the target body — refused loudly, nothing changed. Distinct
     /// from <see cref="Ignored"/> (which means "no room") so a caller never reports "roster full" for a plain
     /// authority refusal.</summary>
     Denied,
@@ -67,11 +67,11 @@ internal enum ConfirmOutcome {
     /// <summary>The device could not be mapped (the roster was full) — nothing changed.</summary>
     Ignored,
 
-    /// <summary>The device was unmapped and this press mapped it onto a PENDING slot (a first press joins; a second
+    /// <summary>The device was unmapped and this press mapped it onto a pending slot (a first press joins; a second
     /// confirms) — a profile choice is owed.</summary>
     Joined,
 
-    /// <summary>The device was unmapped and this press SEATED it with an already-active player (the share-player-1
+    /// <summary>The device was unmapped and this press seated it with an already-active player (the share-player-1
     /// default) — no profile choice is owed, so it is not a pending join.</summary>
     Seated,
 
@@ -81,7 +81,7 @@ internal enum ConfirmOutcome {
     /// <summary>The device's participant was already active — a friendly no-op.</summary>
     AlreadyActive,
 
-    /// <summary>The ACTING principal lacked Drive over the target body — refused loudly by the server. The
+    /// <summary>The acting principal lacked Drive over the target body — refused loudly by the server. The
     /// participant stayed Pending; nothing changed.</summary>
     Denied,
 }
@@ -94,7 +94,7 @@ internal enum SetProfileOutcome {
     /// <summary>The profile is already in use by another active player.</summary>
     InUse,
 
-    /// <summary>The ACTING principal lacks Drive over the target slot's body — refused loudly by the server. Nothing
+    /// <summary>The acting principal lacks Drive over the target slot's body — refused loudly by the server. Nothing
     /// changed.</summary>
     Denied,
 
@@ -124,11 +124,10 @@ internal enum DevicePreselectionKind {
 }
 
 /// <summary>The outcome of a join attempt against a specific or auto-picked slot — three distinct failure shapes so
-/// a caller (and its verb's echo) never conflates "no room", "already occupied", and "the actor was refused" the
-/// way a bare <see langword="false"/>/<c>-1</c> used to (the QUIBBLE a "roster is full" echo on a plain denial was —
-/// see <see cref="PlayerRoster.JoinPending(int, ParticipantOrigin, WorldPrincipal)"/>).</summary>
+/// a caller (and its verb's echo) never conflates "no room", "already occupied", and "the actor was refused" (see
+/// <see cref="PlayerRoster.JoinPending(int, ParticipantOrigin, WorldPrincipal)"/>).</summary>
 internal enum JoinResult {
-    /// <summary>A SPECIFIC target slot was already occupied (or out of range). Nothing changed.</summary>
+    /// <summary>A specific target slot was already occupied (or out of range). Nothing changed.</summary>
     Occupied,
 
     /// <summary>A next-free request found no empty slot anywhere in the roster. Nothing changed.</summary>
@@ -184,7 +183,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
     /// <summary>The keyboard's device id — the one device the roster names by identity. A device id is a content-addressed
     /// <see cref="InputDeviceId"/>; the keyboard alone rides the <see langword="default"/> (all-zero) id, mapped to slot 0
-    /// from boot. Comparisons that MEAN "the keyboard" spell this rather than a bare <c>default</c>.</summary>
+    /// from boot. Comparisons that mean "the keyboard" spell this rather than a bare <c>default</c>.</summary>
     public static InputDeviceId KeyboardDevice => default;
 
     /// <inheritdoc/>
@@ -223,6 +222,11 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     // (world.players) resolve through in-process; a socket transport replaces the m_server reads with link queries.
     private readonly IServerLink m_link;
     private readonly WorldServer m_server;
+    // Installed by WorldInstanceHost once the process-wide instance registry exists. Before that composition-root
+    // handoff (and in server-only fixtures that never build a host), Leave keeps using m_link exactly as it always
+    // did. Once installed, every departure resolves the traveler's CURRENT instance before touching either server
+    // or roster state, so device-orphan and console leaves share the same body/roster/router transaction.
+    private Func<int, WorldPrincipal, bool>? m_leave;
     // The per-seat input resolver, pushed a seat's selected-profile binding layer whenever its identity settles so the
     // seat's composed mapping (default ⊕ overlays ⊕ profile ⊕ session) recompiles once, off the frame path.
     private readonly WorldSeatBindings m_seatBindings;
@@ -243,33 +247,31 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     // claimant never held Drive over in the first place. Cleared whenever the slot's claim itself changes (a fresh
     // claimant has driven nothing yet).
     private readonly int?[] m_slotDrivenBody = new int?[MaxSlots];
-    // The Drive handle DriveTarget last minted for a claimed slot, held across ticks — carrying it forward (rather
-    // than minting index 0 fresh every call) is what gives WorldHandleTable.TryResolve's generation check a real
-    // caller: a handle that is still valid (the table rebuilt from an unrelated write, but this index's designation
-    // did not change — see WorldHandleTable.EnsureFresh) resolves to the same body with no re-mint, and a handle a
-    // revoke or a re-sort actually invalidated resolves false HERE, at the only call site that ever checks it, rather
-    // than the property being proven only in isolation. Cleared alongside m_slotDrivenBody whenever the slot's claim
-    // itself changes (a fresh claimant starts with nothing cached).
+    // The Drive handle DriveTarget last minted for a claimed slot, held across ticks — carrying it forward
+    // (rather than minting index 0 fresh every call) is what gives WorldHandleTable.TryResolve's generation
+    // check a real caller: a handle that is still valid (the table rebuilt from an unrelated write, but this
+    // index's designation did not change — see WorldHandleTable.EnsureFresh) resolves to the same body with
+    // no re-mint, and a handle a revoke or a re-sort actually invalidated resolves false here, at the only
+    // call site that ever checks it. Cleared alongside m_slotDrivenBody whenever the slot's claim itself
+    // changes (a fresh claimant starts with nothing cached).
     private readonly WorldHandle?[] m_slotDriveHandle = new WorldHandle?[MaxSlots];
-    // The SUBJECT m_slotDriveHandle was minted against — the lease's own second belt (docs/capability-channels-plan.md's
-    // Phase 2 decisions), independent of WorldHandleTable's generation bookkeeping rather than trusting it: DriveTarget
-    // re-verifies a resolved subject against THIS remembered value every tick, and on disagreement it REFUSES — holds
-    // the remembered body and keeps the disagreeing cache as evidence — rather than falling through to a re-mint. The
-    // first written version fell through, and an adversarial probe proved that made the belt a structural no-op: a
-    // re-mint of index 0 resolves the same slot of the same table, so the belted and unbelted paths returned the
-    // identical value in every reachable state and a subject that slipped the generation check was adopted anyway, one
-    // line below the comment promising it would not be. Cleared alongside m_slotDriveHandle whenever the slot's claim
+    // The subject m_slotDriveHandle was minted against — independent of WorldHandleTable's generation
+    // bookkeeping rather than trusting it: DriveTarget re-verifies a resolved subject against this
+    // remembered value every tick, and on disagreement it refuses — holds the remembered body and keeps the
+    // disagreeing cache as evidence — rather than falling through to a re-mint. A re-mint of index 0
+    // resolves the same slot of the same table, so a naive fallthrough would let a subject that slipped the
+    // generation check be adopted anyway. Cleared alongside m_slotDriveHandle whenever the slot's claim
     // itself changes.
     private readonly GrantSubject?[] m_slotDriveSubject = new GrantSubject?[MaxSlots];
-    // The last subject this slot's belt ALARMED on — reporting state, deliberately separate from the belt's decision
-    // state above (the same verdict-vs-latch separation docs/capability-channels-plan.md's verdict section requires):
-    // the belt decides from m_slotDriveSubject alone, and this only throttles the loud line to once per distinct
-    // disagreement instead of once per tick while one persists. Cleared with the claim like the rest.
+    // The last subject this slot's belt alarmed on — reporting state, deliberately separate from the belt's
+    // decision state above: the belt decides from m_slotDriveSubject alone, and this only throttles the
+    // loud line to once per distinct disagreement instead of once per tick while one persists. Cleared with
+    // the claim like the rest.
     private readonly GrantSubject?[] m_slotDriveAlarm = new GrantSubject?[MaxSlots];
     private int m_revision;
 
     /// <summary>Initializes a new instance of the <see cref="PlayerRoster"/> class with the world definition's
-    /// EAGER seats already active (each boot seat mirrored to the server as a session join). Player 1 owns the
+    /// eager seats already active (each boot seat mirrored to the server as a session join). Player 1 owns the
     /// keyboard, uses the first authored profile, and is unconditionally eager regardless of the document — a
     /// session always needs a first player. Every other seat activates at boot only when
     /// <c>population.seatActivation</c> declares it <see cref="SeatActivationPolicy.Eager"/>; an
@@ -324,6 +326,18 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// frame source rebuilds the program (avatar colors + <c>Active</c> flags) and re-lays-out the viewports on change.</summary>
     public int Revision => m_revision;
 
+    /// <summary>Installs the process-local departure router that resolves a roster seat's current world instance.
+    /// Exactly one <see cref="WorldInstanceHost"/> owns this handoff; a second installation is a composition error.</summary>
+    internal void ConfigureLeave(Func<int, WorldPrincipal, bool> leave) {
+        ArgumentNullException.ThrowIfNull(argument: leave);
+
+        if (m_leave is not null) {
+            throw new InvalidOperationException(message: "the roster departure router is already configured");
+        }
+
+        m_leave = leave;
+    }
+
     /// <summary>The number of filled slots (pending or active; always at least player 1).</summary>
     public int Count {
         get {
@@ -364,9 +378,9 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// <param name="device">The device id.</param>
     public int? DeviceSlot(InputDeviceId device) => (m_deviceToSlot.TryGetValue(key: device, value: out var slot) ? slot : null);
 
-    /// <summary>Claims a roster slot for <paramref name="principal"/> to drive EXCLUSIVELY — input-routing/target-
+    /// <summary>Claims a roster slot for <paramref name="principal"/> to drive exclusively — input-routing/target-
     /// resolution bookkeeping only (mirrors <see cref="CommitSlot"/>: no <see cref="Participant"/> is created or
-    /// touched). Marks <paramref name="device"/> as PROGRAMMATICALLY claimed — never eligible for a device-driven
+    /// touched). Marks <paramref name="device"/> as programmatically claimed — never eligible for a device-driven
     /// roster-identity gesture (see <see cref="Confirm(InputDeviceId, WorldPrincipal)"/>/<see cref="CycleDevice"/>), the same exclusion
     /// a replay-playback device or a network peer stand-in wants, not something specific to any one caller — and, on
     /// success, overrides the slot's acting identity for <see cref="PrincipalOf"/> to report. Honors
@@ -449,50 +463,48 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
         return true;
     }
 
-    /// <summary>The entity index a slot's per-tick intent submission should target: the slot's OWN body for an
+    /// <summary>The entity index a slot's per-tick intent submission should target: the slot's own body for an
     /// ordinary (unclaimed) seat, or — for a slot a <see cref="TryClaimSlot"/> call claimed — whatever body the
-    /// claimant currently holds a <see cref="WorldCapability.Drive"/> grant over, resolved through the claimant's OWN
+    /// claimant currently holds a <see cref="WorldCapability.Drive"/> grant over, resolved through the claimant's own
     /// Drive <see cref="Server.WorldHandleTable"/> (<see cref="Server.WorldGrants.HandleTable"/>) rather than a raw
     /// grant-table lookup. <see cref="TryClaimSlot"/> itself accepts any <see cref="WorldPrincipal"/> — it is a
-    /// CALLER-DISCIPLINE fact, not an enforced one, that a claimant is
+    /// caller-discipline fact, not an enforced one, that a claimant is
     /// <see cref="PrincipalKind.Addon"/> or <see cref="PrincipalKind.Peer"/>; a
     /// caller that claimed a slot under <see cref="PrincipalKind.Console"/> or <see cref="PrincipalKind.Seat"/> would
-    /// not fail there — it would throw <see cref="ArgumentException"/> HERE, out of the <see cref="Server.WorldGrants.HandleTable"/>
+    /// not fail there — it would throw <see cref="ArgumentException"/> here, out of the <see cref="Server.WorldGrants.HandleTable"/>
     /// constructor, inside the per-tick submit loop, the first time this method resolved that slot. Handle 0 is the
-    /// LOWEST body the claimant holds Drive over — but the part that makes it a BODY is the grant table's own
+    /// lowest body the claimant holds Drive over — but the part that makes it a body is the grant table's own
     /// subject-shape rule (<c>IsLegitimateSubject</c>), which refuses an untrusted principal's <c>Drive</c> over the
     /// <see cref="GrantSubject.All"/> wildcard; <see cref="Server.WorldGrants.ProjectSubjects"/> additionally never
-    /// projects the wildcard into any handle table AT ALL, for any capability (docs/capability-channels-plan.md's
-    /// Open Decision 5), so index 0 could never resolve to "the whole domain" here even if a future trusted tier
-    /// admitted <c>drive all</c> for a claimant. The roster slot is an input-routing lane only; the grant table is what
-    /// says what it drives.
+    /// projects the wildcard into any handle table at all, for any capability, so index 0 could never resolve to
+    /// "the whole domain" here even if a future trusted tier admitted <c>drive all</c> for a claimant. The roster
+    /// slot is an input-routing lane only; the grant table is what says what it drives.
     /// <para>
-    /// The resolved HANDLE is cached across ticks (see <see cref="m_slotDriveHandle"/>), not merely the body index:
-    /// resolving the SAME handle every tick (rather than minting index 0 fresh every call) is what makes
+    /// The resolved handle is cached across ticks (see <see cref="m_slotDriveHandle"/>), not merely the body index:
+    /// resolving the same handle every tick (rather than minting index 0 fresh every call) is what makes
     /// <see cref="Server.WorldHandleTable.TryResolve"/>'s generation check load-bearing — the property that a stale
     /// handle resolves to nothing is now exercised at this, its only call site, instead of holding only in isolation.
     /// A cached handle that still resolves (nothing changed for this index — see
-    /// <c>Server.WorldHandleTable.EnsureFresh</c>, private) AND still names the SAME subject the lease locked in when it
+    /// <c>Server.WorldHandleTable.EnsureFresh</c>, private) and still names the same subject the lease locked in when it
     /// was minted (see <see cref="m_slotDriveSubject"/> — the second belt: an independent re-check that does not
     /// merely trust the generation bookkeeping) costs one dictionary-free resolve and no re-mint. A cached handle a
     /// revoke or a re-sort invalidated resolves as dead here and falls through to a fresh mint of index 0 below,
     /// which picks up whatever the claimant holds now (a re-grant, a different lowest body, or nothing). A cached
-    /// handle that RESOLVES but names a DIFFERENT subject than the lease locked in is neither: that is an invariant
-    /// violation in the table's own bookkeeping, and the belt REFUSES — alarms once per distinct disagreement, holds
+    /// handle that resolves but names a different subject than the lease locked in is neither: that is an invariant
+    /// violation in the table's own bookkeeping, and the belt refuses — alarms once per distinct disagreement, holds
     /// the remembered body, and keeps the disagreeing cache so it stands guard next tick — because falling through to
-    /// a re-mint of the same index would adopt the slipped subject anyway (the first version did exactly that, which
-    /// made the belt a proven no-op).
+    /// a re-mint of the same index would adopt the slipped subject anyway, making the belt a no-op.
     /// </para>
-    /// The resolved body is ALSO remembered across ticks by value (see <see cref="m_slotDrivenBody"/>) so a claim
-    /// that just had its ONLY Drive grant revoked still targets the body it was actually driving on its next
+    /// The resolved body is also remembered across ticks by value (see <see cref="m_slotDrivenBody"/>) so a claim
+    /// that just had its only Drive grant revoked still targets the body it was actually driving on its next
     /// submission — the server's denial then attributes loudly to the body that lost its grant rather than silently
     /// retargeting the slot, which the claimant may never have held Drive over at all.
     /// <b>A claim that has never once resolved a driven body</b> (e.g. a replay device that has not yet been granted
     /// any concrete <c>body:&lt;n&gt;</c> hold — a Drive handle table only ever projects Body subjects, and the
     /// Drive-shape rule never lets an untrusted principal hold the wildcard in the first place) drives
-    /// <see cref="NoBody"/>, NEVER the slot itself: the <c>?? slot</c> fallback is correct for the unclaimed case above
+    /// <see cref="NoBody"/>, never the slot itself: the <c>?? slot</c> fallback is correct for the unclaimed case above
     /// (an unclaimed slot's own occupant drives its own body) and wrong here (a claimant that never named a body has no
-    /// business inheriting whatever happens to sit in its input-routing lane — that IS the hijack this sentinel
+    /// business inheriting whatever happens to sit in its input-routing lane — that is the hijack this sentinel
     /// closes). <see cref="NoBody"/> resolves to no body server-side and is silently dropped before any Drive check
     /// runs, never denied against and never coincidentally driven.</summary>
     /// <param name="slot">The slot index (0-based).</param>
@@ -513,16 +525,14 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
                 return cachedSubject.Value;
             }
 
-            // A resolve that SUCCEEDED — the generation matched — yet names a different subject than the lease locked
-            // in is an INVARIANT VIOLATION in WorldHandleTable's bookkeeping, not a revocation (a revoke kills the
-            // generation and lands in the fall-through below). REFUSE: hold the remembered body — the server still
-            // gates every submission through Allows, so a lease whose grant genuinely died gets the loud server-side
-            // denial — and KEEP the disagreeing cache as evidence, so the belt stands guard again next tick instead of
-            // a cleared cache falling through to a fresh mint that would adopt the slipped subject anyway, one tick
-            // later. The first version of this belt fell through to that re-mint, which made it a structural no-op —
-            // an adversarial probe proved the belted and unbelted paths returned identical values in every reachable
-            // state. The alarm below is once per DISTINCT disagreement (reporting state, separate from the decision —
-            // see m_slotDriveAlarm), never once per tick.
+            // A resolve that succeeded — the generation matched — yet names a different subject than the
+            // lease locked in is an invariant violation in WorldHandleTable's bookkeeping, not a revocation
+            // (a revoke kills the generation and lands in the fall-through below). Refuse: hold the
+            // remembered body — the server still gates every submission through Allows, so a lease whose
+            // grant genuinely died gets the loud server-side denial — and keep the disagreeing cache as
+            // evidence, so the belt stands guard again next tick instead of falling through to a fresh mint
+            // that would adopt the slipped subject anyway. The alarm below is once per distinct disagreement
+            // (reporting state, separate from the decision — see m_slotDriveAlarm), never once per tick.
             if (m_slotDriveAlarm[slot] != cachedSubject) {
                 m_slotDriveAlarm[slot] = cachedSubject;
                 Console.Error.WriteLine(value: $"[roster: slot {slot} ({claimant.Describe()}) drive lease locked {(m_slotDriveSubject[slot]?.Describe() ?? "nothing")} but its handle now resolves {cachedSubject.Describe()} at the SAME generation — WorldHandleTable invariant violated; holding the leased body, not retargeting]");
@@ -561,14 +571,14 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
     /// <inheritdoc/>
     /// <remarks>The roster is the host's answer to <see cref="ICommandPrincipalResolver"/>: the snapshot mixer asks
-    /// this for every lane it assembles, so a claimed slot's bound input is stamped with the CLAIMANT's identity
+    /// this for every lane it assembles, so a claimed slot's bound input is stamped with the claimant's identity
     /// rather than the seat it displaced. This is the same answer <see cref="PrincipalOf"/> gives the write-boundary
     /// guards, mapped into the ingress layer's shape — one truth, two vocabularies.</remarks>
     CommandPrincipal ICommandPrincipalResolver.PrincipalOf(int slot) {
         return WorldPrincipalMapping.ToCommand(principal: PrincipalOf(slot: slot));
     }
 
-    /// <summary>Whether the slot is under an exclusive <see cref="TryClaimSlot"/> hold. A claimed slot's OWN protocol
+    /// <summary>Whether the slot is under an exclusive <see cref="TryClaimSlot"/> hold. A claimed slot's own protocol
     /// (its claimant's explicit commands) is its only legitimate driver — the guard a pushed/context-routed roster
     /// gesture (confirm, seat, cycle) checks before treating a claimed slot as an ordinary human target.</summary>
     /// <param name="slot">The slot index (0-based).</param>
@@ -624,13 +634,13 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     }
 
     /// <summary>Commits a probed slot as a local device-routing annotation, called from <c>InputRouter.Collect</c>
-    /// PRE-DISPATCH — before the handler this lane's signal will reach even runs, let alone joins anything.
-    /// Participant occupancy is deliberately untouched HERE: this call alone never creates simulation state, only a
-    /// device→slot routing entry. That is NOT the same claim as "routing-only, no persistent effect" — the entry
+    /// pre-dispatch — before the handler this lane's signal will reach even runs, let alone joins anything.
+    /// Participant occupancy is deliberately untouched here: this call alone never creates simulation state, only a
+    /// device→slot routing entry. That is not the same claim as "routing-only, no persistent effect" — the entry
     /// this writes is exactly what a downstream Device-origin join (e.g. <see cref="RouteMove(int, FixedVector2, WorldPrincipal)"/>'s or
     /// <see cref="AssignDevice"/>'s) is expected to make real, and <see cref="ResolveSlot"/> already counts it as
-    /// occupancy for every OTHER device the moment it lands. A join that reservation was written to enable can still
-    /// be DENIED after the fact (a narrowed grant on that exact body), and a denial that left this entry in place
+    /// occupancy for every other device the moment it lands. A join that reservation was written to enable can still
+    /// be denied after the fact (a narrowed grant on that exact body), and a denial that left this entry in place
     /// would strand the lane permanently — <see cref="JoinPending"/>'s own denial path is what rolls it back
     /// (<c>RollbackStaleReservation</c>), so this write's persistence is conditional on the join it feeds actually
     /// landing, never on this call alone.</summary>
@@ -684,9 +694,9 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// no separate device-facing door.</summary>
     /// <param name="slot">The logical player slot recorded in the command snapshot.</param>
     /// <param name="value">The already-quantized stick sample (+Y forward, +X strafe right).</param>
-    /// <param name="actingPrincipal">The principal ASKING — <c>context.ActingPrincipal()</c>, which already resolves
+    /// <param name="actingPrincipal">The principal asking — <c>context.ActingPrincipal()</c>, which already resolves
     /// through <see cref="PrincipalOf"/> for this same slot, so it is correct with no separate self-provisioning
-    /// branch. MANDATORY.</param>
+    /// branch. Mandatory.</param>
     public void RouteMove(int slot, FixedVector2 value, WorldPrincipal actingPrincipal) {
         if ((uint)slot >= MaxSlots) {
             return;
@@ -724,8 +734,8 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// alone; there is no separate device-facing door.</summary>
     /// <param name="slot">The logical player slot recorded in the command snapshot.</param>
     /// <param name="value">The already-quantized stick sample (+X turns right).</param>
-    /// <param name="actingPrincipal">The principal ASKING — see <see cref="RouteMove(int, FixedVector2, WorldPrincipal)"/>'s
-    /// identical remark. MANDATORY.</param>
+    /// <param name="actingPrincipal">The principal asking — see <see cref="RouteMove(int, FixedVector2, WorldPrincipal)"/>'s
+    /// identical remark. Mandatory.</param>
     public void RouteLook(int slot, FixedVector2 value, WorldPrincipal actingPrincipal) {
         if ((uint)slot >= MaxSlots) {
             return;
@@ -763,25 +773,25 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     }
 
     /// <summary>The self-provisioning acting principal for a device/boot-origin roster op on <paramref name="slot"/>:
-    /// a physical device (or the boot census) joining, leaving, confirming, or relocating onto ITS OWN slot
+    /// a physical device (or the boot census) joining, leaving, confirming, or relocating onto its own slot
     /// legitimately acts as that slot's own seat identity — there is no other principal to attribute a bare device
     /// signal to, and the checks below trivially pass by the very same default seed (<c>WorldGrants</c>'s
     /// constructor) that gives every seat Drive over its own body. Spelled as an explicit call at every device/boot
-    /// call site — NEVER a silently-applied default parameter value — so self-provisioning reads as a deliberate
+    /// call site — never a silently-applied default parameter value — so self-provisioning reads as a deliberate
     /// choice a reviewer can see, never an omitted actor. A console-typed verb
     /// (<c>player.join</c>/<c>leave</c>/<c>profile</c>/<c>confirm</c>/<c>assign</c>) passes
-    /// <c>context.ActingPrincipal()</c> instead, so a THIRD PARTY's action is checked under the real submitter,
+    /// <c>context.ActingPrincipal()</c> instead, so a third party's action is checked under the real submitter,
     /// never laundered into the target's own identity.</summary>
     /// <param name="slot">The slot index (0-based) the device/boot op targets.</param>
     private static WorldPrincipal SelfProvisioned(int slot) => WorldPrincipal.Seat(slot: slot);
 
-    /// <summary>Joins a specific slot (0-based) as a PENDING player (a candidate profile is chosen; the player must
-    /// confirm) — the scripted <c>player.join &lt;n&gt;</c> path. The server's verdict is checked BEFORE any local
+    /// <summary>Joins a specific slot (0-based) as a pending player (a candidate profile is chosen; the player must
+    /// confirm) — the scripted <c>player.join &lt;n&gt;</c> path. The server's verdict is checked before any local
     /// mutation: a denied join installs nothing.</summary>
     /// <param name="slot">The slot index (0-based) to join.</param>
     /// <param name="origin">Why the slot is being filled (script or device).</param>
-    /// <param name="actingPrincipal">The principal ASKING to join — <c>context.ActingPrincipal()</c> for a console
-    /// dispatch, or <see cref="SelfProvisioned"/> for a device gesture. MANDATORY and never defaulted: a caller must
+    /// <param name="actingPrincipal">The principal asking to join — <c>context.ActingPrincipal()</c> for a console
+    /// dispatch, or <see cref="SelfProvisioned"/> for a device gesture. Mandatory and never defaulted: a caller must
     /// say, explicitly, who is asking.</param>
     /// <returns><see cref="JoinResult.Occupied"/> if out of range or already joined, <see cref="JoinResult.Denied"/>
     /// if the server refused the actor, else <see cref="JoinResult.Ok"/>.</returns>
@@ -841,9 +851,9 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     }
     /// <summary>Joins the lowest free slot as a pending player.</summary>
     /// <param name="origin">Why the slot is being filled.</param>
-    /// <param name="actingPrincipal">Computes the principal ASKING to join FROM the slot <see cref="FirstFreeSlot"/>
+    /// <param name="actingPrincipal">Computes the principal asking to join from the slot <see cref="FirstFreeSlot"/>
     /// resolves (not known until then) — <c>SelfProvisioned</c> (the method group) for a device gesture, or a
-    /// constant-returning lambda over <c>context.ActingPrincipal()</c> for a console dispatch. MANDATORY.</param>
+    /// constant-returning lambda over <c>context.ActingPrincipal()</c> for a console dispatch. Mandatory.</param>
     /// <returns>The result, plus the joined slot index (0-based, valid only when the result is
     /// <see cref="JoinResult.Ok"/>).</returns>
     public (JoinResult Result, int Slot) JoinPendingNextFree(ParticipantOrigin origin, Func<int, WorldPrincipal> actingPrincipal) {
@@ -859,12 +869,12 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
         // which slot the actor was refused, rather than collapsing a denial into the same "-1" a full roster reports.
         return (Result: JoinPending(slot: slot, origin: origin, actingPrincipal: actingPrincipal(arg: slot)), Slot: slot);
     }
-    /// <summary>Joins a specific slot (0-based) directly ACTIVE on a chosen profile — the one-shot
-    /// <c>player.join &lt;profile&gt; &lt;n&gt;</c> path. The server's verdict is checked BEFORE any local mutation.</summary>
+    /// <summary>Joins a specific slot (0-based) directly active on a chosen profile — the one-shot
+    /// <c>player.join &lt;profile&gt; &lt;n&gt;</c> path. The server's verdict is checked before any local mutation.</summary>
     /// <param name="slot">The slot index (0-based) to join.</param>
     /// <param name="profile">The profile to seat on.</param>
     /// <param name="origin">Why the slot is being filled.</param>
-    /// <param name="actingPrincipal">The principal ASKING to join (see <see cref="JoinPending"/>). MANDATORY.</param>
+    /// <param name="actingPrincipal">The principal asking to join (see <see cref="JoinPending"/>). Mandatory.</param>
     /// <returns><see cref="JoinResult.Occupied"/> if out of range or already joined, <see cref="JoinResult.Denied"/>
     /// if the server refused the actor, else <see cref="JoinResult.Ok"/>.</returns>
     public JoinResult JoinActive(int slot, WorldIdentity profile, ParticipantOrigin origin, WorldPrincipal actingPrincipal) {
@@ -883,8 +893,8 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// <summary>Joins the lowest free slot directly active on a chosen profile.</summary>
     /// <param name="profile">The profile to seat on.</param>
     /// <param name="origin">Why the slot is being filled.</param>
-    /// <param name="actingPrincipal">Computes the principal ASKING to join from the resolved slot (see
-    /// <see cref="JoinPendingNextFree"/>). MANDATORY.</param>
+    /// <param name="actingPrincipal">Computes the principal asking to join from the resolved slot (see
+    /// <see cref="JoinPendingNextFree"/>). Mandatory.</param>
     /// <returns>The result, plus the joined slot index (valid only when the result is <see cref="JoinResult.Ok"/>).</returns>
     public (JoinResult Result, int Slot) JoinActiveNextFree(WorldIdentity profile, ParticipantOrigin origin, Func<int, WorldPrincipal> actingPrincipal) {
         var slot = FirstFreeSlot();
@@ -898,15 +908,19 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     }
     /// <summary>Removes a scripted or device player from the slot (0-based), unmapping any devices that owned it and
     /// mirroring the leave to the server (dropping the seat's body). Player 1 (slot 0) never leaves. The server's
-    /// verdict is checked BEFORE any local mutation: a denied leave changes nothing client-side.</summary>
+    /// verdict is checked before any local mutation: a denied leave changes nothing client-side.</summary>
     /// <param name="slot">The slot index (0-based) to free.</param>
-    /// <param name="actingPrincipal">The principal ASKING to leave — <c>context.ActingPrincipal()</c> for a console
-    /// dispatch, or <see cref="SelfProvisioned"/> for a device dropping itself. MANDATORY.</param>
+    /// <param name="actingPrincipal">The principal asking to leave — <c>context.ActingPrincipal()</c> for a console
+    /// dispatch, or <see cref="SelfProvisioned"/> for a device dropping itself. Mandatory.</param>
     /// <returns><see langword="true"/> if the slot was freed; <see langword="false"/> for slot 0, an out-of-range slot,
     /// an already-empty slot, or a server denial.</returns>
     public bool Leave(int slot, WorldPrincipal actingPrincipal) {
         if ((slot <= 0) || (slot >= MaxSlots) || (m_slots[slot] is null)) {
             return false;
+        }
+
+        if (m_leave is { } leave) {
+            return leave(arg1: slot, arg2: actingPrincipal);
         }
 
         // Checked BEFORE any local mutation below, and the reply is no longer discarded: a denial leaves the roster
@@ -929,15 +943,15 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
         return accepted;
     }
 
-    /// <summary>The client-visible SEAT-VACATED fact: the slot stops holding a participant, its claim and every
-    /// per-claim cache die with it, and the devices that were driving it are unmapped. Server-side teardown is NOT
+    /// <summary>The client-visible seat-vacated fact: the slot stops holding a participant, its claim and every
+    /// per-claim cache die with it, and the devices that were driving it are unmapped. Server-side teardown is not
     /// part of this — the caller has already decided (and performed) whatever the server half of the departure is,
     /// which is exactly why this is a fact rather than a verb.</summary>
-    /// <remarks>ONE fact, TWO producers. <see cref="Leave"/> emits it after the server accepts its
+    /// <remarks>One fact, two producers. <see cref="Leave"/> emits it after the server accepts its
     /// <see cref="SessionRequest.Leave"/> (park-with-grace, reap-on-empty and the never-leaves-slot-0 policy are all
     /// that method's own, and stay there). A same-process world transfer emits it after its departure becomes certain
     /// (<c>WorldInstanceHost.TryTransferMember</c>), whose server half is deliberately a non-parking, non-reaping
-    /// detach — so it must reach the roster HERE rather than acquire leave's teardown, and the roster must not carry a
+    /// detach — so it must reach the roster here rather than acquire leave's teardown, and the roster must not carry a
     /// transfer-shaped special case to notice it. Presentation state only: nothing here touches the simulation, and no
     /// value it writes ever flows back into a tick.</remarks>
     /// <param name="slot">The slot index (0-based).</param>
@@ -974,11 +988,11 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
         return true;
     }
 
-    /// <summary>The client-visible SEAT-OCCUPIED fact — <see cref="VacateSeat"/>'s mirror: the slot starts holding an
-    /// ACTIVE participant on <paramref name="profile"/>, and that identity's binding layer is pushed to the seat.
-    /// Emits NO session request, because the caller has already seated this body on the server; the ordinary
+    /// <summary>The client-visible seat-occupied fact — <see cref="VacateSeat"/>'s mirror: the slot starts holding an
+    /// active participant on <paramref name="profile"/>, and that identity's binding layer is pushed to the seat.
+    /// Emits no session request, because the caller has already seated this body on the server; the ordinary
     /// join/confirm path (<see cref="JoinPending"/>/<see cref="JoinActive"/>) is what asks the server first and then
-    /// installs. Its only producer today is the ARRIVAL half of a same-process world transfer landing back in the
+    /// installs. Its only producer today is the arrival half of a same-process world transfer landing back in the
     /// instance this client mirrors (<c>WorldInstanceHost.TryTransferMember</c>) — a traveler that already crossed,
     /// never a fresh joiner.</summary>
     /// <remarks><see cref="ParticipantOrigin.Script"/>, deliberately: an arrival is an explicit act, so the seat
@@ -1013,10 +1027,10 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// is first mapped by this press (a first press joins, a second confirms — always self-provisioned, see
     /// <see cref="ResolveDeviceSlot"/>); an already-active participant is a no-op.</summary>
     /// <param name="device">The device that pressed confirm.</param>
-    /// <param name="actingPrincipal">The principal ASKING to confirm — <c>context.ActingPrincipal()</c>. Only
-    /// consulted when the device already owns a PENDING participant (the confirm/Activate step below); a fresh
+    /// <param name="actingPrincipal">The principal asking to confirm — <c>context.ActingPrincipal()</c>. Only
+    /// consulted when the device already owns a pending participant (the confirm/Activate step below); a fresh
     /// device's own first-touch join always self-provisions regardless, since <see cref="ResolveDeviceSlot"/> never
-    /// reaches a THIRD party's slot. MANDATORY.</param>
+    /// reaches a third party's slot. Mandatory.</param>
     /// <returns>The confirm outcome and the affected slot (0-based; -1 when none).</returns>
     public (ConfirmOutcome Outcome, int Slot) Confirm(InputDeviceId device, WorldPrincipal actingPrincipal) {
         // A roster-identity gesture has no meaning for a device that claimed its slot PROGRAMMATICALLY rather than by
@@ -1044,8 +1058,8 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
     /// <summary>Confirms a pending participant by deterministic logical slot.</summary>
     /// <param name="slot">The logical player slot recorded in the command snapshot.</param>
-    /// <param name="actingPrincipal">The principal ASKING to confirm — <c>context.ActingPrincipal()</c> for a
-    /// console dispatch, or <see cref="SelfProvisioned"/> for a physical press. MANDATORY.</param>
+    /// <param name="actingPrincipal">The principal asking to confirm — <c>context.ActingPrincipal()</c> for a
+    /// console dispatch, or <see cref="SelfProvisioned"/> for a physical press. Mandatory.</param>
     /// <param name="device">The physical controller performing an explicit confirmation, or <see langword="null"/>
     /// for a slot-addressed script action. Only reconnect-stable controller identities are remembered.</param>
     /// <returns>The confirm outcome and affected slot.</returns>
@@ -1065,11 +1079,11 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
     /// <summary>Sets a specific profile on the slot's participant and makes it active (the <c>player.identity</c> verb):
     /// a live identity switch on an active player, or a choose-and-confirm on a pending one. The server's verdict is
-    /// checked BEFORE any local mutation.</summary>
+    /// checked before any local mutation.</summary>
     /// <param name="slot">The slot index (0-based).</param>
     /// <param name="profile">The profile to seat on.</param>
-    /// <param name="actingPrincipal">The principal ASKING to set the profile — <c>context.ActingPrincipal()</c> for a
-    /// console dispatch, or <see cref="SelfProvisioned"/> for a device/confirm gesture. MANDATORY.</param>
+    /// <param name="actingPrincipal">The principal asking to set the profile — <c>context.ActingPrincipal()</c> for a
+    /// console dispatch, or <see cref="SelfProvisioned"/> for a device/confirm gesture. Mandatory.</param>
     /// <returns>The set outcome.</returns>
     public SetProfileOutcome SetProfile(int slot, WorldIdentity profile, WorldPrincipal actingPrincipal) {
         if (m_slots[slot] is not { } participant) {
@@ -1136,9 +1150,9 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
         }
     }
 
-    /// <summary>The ONE picker entry point both the stick picker and the keyboard turn keys route through while a slot
-    /// is PENDING: it cycles the candidate profile by <paramref name="direction"/> and returns whether the slot was
-    /// pending (and thus consumed the input as a pick). An ACTIVE slot returns <see langword="false"/>, so the caller
+    /// <summary>The one picker entry point both the stick picker and the keyboard turn keys route through while a slot
+    /// is pending: it cycles the candidate profile by <paramref name="direction"/> and returns whether the slot was
+    /// pending (and thus consumed the input as a pick). An active slot returns <see langword="false"/>, so the caller
     /// drives locomotion instead — the roster, not the input surface, owns the pending-vs-locomotion decision. A
     /// direction of 0 (a non-turn axis pressed while pending) is consumed with no cycle: the other axes stay inert
     /// during a pick.</summary>
@@ -1158,19 +1172,19 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     }
 
     /// <summary>Cycles a device to the next slot (wrapping player 1→2→3→4→1) — the pad-Start gesture. An unmapped
-    /// device is joined instead. A slot under an exclusive <see cref="TryClaimSlot"/> hold is SKIPPED rather than
+    /// device is joined instead. A slot under an exclusive <see cref="TryClaimSlot"/> hold is skipped rather than
     /// halting the ring: <see cref="AssignDevice"/> refuses a claimed target outright, so stepping past it (rather
     /// than stopping on the first claimed neighbor) is what keeps the gesture usable on a table where some slot is
     /// claimed (the editor, a replay device) — the ring lands back on the device's own slot (a no-op) only when every
-    /// OTHER slot is claimed.</summary>
+    /// other slot is claimed.</summary>
     /// <param name="device">The device to cycle.</param>
-    /// <param name="actingPrincipal">The principal ASKING to cycle — <c>context.ActingPrincipal()</c>, the caller's
-    /// ingress-stamped identity, consumed here and NEVER reconstructed: for an already-bound device this is that
+    /// <param name="actingPrincipal">The principal asking to cycle — <c>context.ActingPrincipal()</c>, the caller's
+    /// ingress-stamped identity, consumed here and never reconstructed: for an already-bound device this is that
     /// device's own source-seat stamp (relocation authorizes as the source — see
     /// <see cref="AssignDevice(InputDeviceId, int, WorldPrincipal)"/>'s remarks); for a wholly unbound device this
     /// call never reaches <see cref="AssignDevice(InputDeviceId, int, WorldPrincipal)"/> at all (the first-touch
     /// branch below routes through <see cref="ResolveDeviceSlot"/> instead, which self-provisions internally).
-    /// MANDATORY.</param>
+    /// Mandatory.</param>
     /// <returns>The reassignment outcome and the resulting slot (0-based; -1 when none).</returns>
     public (AssignOutcome Outcome, int Slot) CycleDevice(InputDeviceId device, WorldPrincipal actingPrincipal) {
         // Same exclusion as Confirm(InputDeviceId) above: cycling reassigns device-to-slot routing, which must never
@@ -1216,48 +1230,44 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     /// occupied slot it joins that team; onto an empty slot it creates a pending player; onto its own slot it is a
     /// no-op. An emptied device-origin source slot dissolves. A target slot under an exclusive
     /// <see cref="TryClaimSlot"/> hold refuses the move outright (see <see cref="IsClaimed"/>) — a human device must
-    /// never end up sharing, or silently acting through, a claimant's identity. PROVISIONAL until accepted: the
-    /// source mapping is not released, and the target mapping is not written, until EVERY affected body's
+    /// never end up sharing, or silently acting through, a claimant's identity. Provisional until accepted: the
+    /// source mapping is not released, and the target mapping is not written, until every affected body's
     /// authorization clears — see the remarks below for what each one asks.</summary>
     /// <remarks><b>Why the source needs its own check.</b> Relocating an already-bound device off a slot that would
-    /// then have zero devices left ORPHANS its participant, which <see cref="DissolveIfOrphanedDevice"/> then
-    /// dissolves via <see cref="Leave"/> — a real mutation on a body the moving actor may hold NO authority over at
-    /// all. The previous shape authorized only the TARGET before mutating and then dissolved the source under a
-    /// fabricated <c>SelfProvisioned(sourceSlot)</c> — a principal that trivially passes its own default Drive seed
-    /// regardless of who the REAL actor is, so a principal holding Drive over only the destination body could delete
-    /// an unrelated source body it never held any grant over. Both bodies are now authorized under the SAME
-    /// <paramref name="actingPrincipal"/>, BEFORE either is touched.</remarks>
+    /// then have zero devices left orphans its participant, which <see cref="DissolveIfOrphanedDevice"/> then
+    /// dissolves via <see cref="Leave"/> — a real mutation on a body the moving actor may hold no authority over if
+    /// only the target were authorized. Both bodies are authorized under the same
+    /// <paramref name="actingPrincipal"/>, before either is touched.</remarks>
     /// <param name="device">The device to move.</param>
     /// <param name="targetSlot">The destination slot (0-based).</param>
-    /// <param name="actingPrincipal">The principal ASKING to move this device — the caller's ingress-stamped identity
+    /// <param name="actingPrincipal">The principal asking to move this device — the caller's ingress-stamped identity
     /// (<c>context.ActingPrincipal()</c>), consumed here, never constructed: Console for a console
-    /// <c>player.assign</c> dispatch (an operator command that can name any device), or the SOURCE seat's own
-    /// stamped principal for a physical claim/cycle relocation of an ALREADY-BOUND device — a device relocating
+    /// <c>player.assign</c> dispatch (an operator command that can name any device), or the source seat's own
+    /// stamped principal for a physical claim/cycle relocation of an already-bound device — a device relocating
     /// itself is self-service, not a third party's action, so the source's own identity is what authorizes it
-    /// (checked against both the source and target bodies below). An UNBOUND device (no current mapping at all —
-    /// the bootstrap case) has no source seat to speak of and self-provisions as the TARGET instead, computed
+    /// (checked against both the source and target bodies below). An unbound device (no current mapping at all —
+    /// the bootstrap case) has no source seat to speak of and self-provisions as the target instead, computed
     /// internally via <see cref="SelfProvisioned"/> regardless of what <paramref name="actingPrincipal"/> carries,
-    /// because the caller's ingress stamp for a brand-new device's first press reflects whatever slot the ARRIVAL
+    /// because the caller's ingress stamp for a brand-new device's first press reflects whatever slot the arrival
     /// policy proposed for an unrelated purpose (<see cref="ResolveSlot"/>), not this gesture's own explicit
-    /// target. MANDATORY.</param>
+    /// target. Mandatory.</param>
     /// <returns>The reassignment outcome.</returns>
     public AssignOutcome AssignDevice(InputDeviceId device, int targetSlot, WorldPrincipal actingPrincipal) {
         if ((uint)targetSlot >= MaxSlots) {
             return AssignOutcome.Ignored;
         }
 
-        // THE primitive Confirm(InputDeviceId) and CycleDevice funnel a resolved reassignment into, and the one
-        // player.claim/player.assign call directly — so the programmatic-device exclusion belongs HERE, not
-        // duplicated (and possibly missed) at every caller: a device that claimed its slot via TryClaimSlot (the
-        // editor, a replay device, a test harness) never moves itself — or anything else — via the ordinary
-        // device-reassignment gesture surface. The mirror image matters just as much and was missing: nothing may
-        // move INTO a slot TryClaimSlot claimed either, or an ordinary human device ends up sharing the slot — and,
-        // through PrincipalOf, silently submitting under the claimant's identity. ResolveSlot's and
-        // ResolveDeviceSlot's own slot-keyed checks already prevent that on the ARRIVAL door (an unmapped device
-        // never gets offered a claimed slot); CycleDevice's and Confirm's own m_programmaticDevices exclusions are
-        // DEVICE-keyed and only stop the claimed device itself from moving — they never stopped a DIFFERENT,
-        // ordinary human device from moving INTO the slot a claim owns. This is the one door those checks do not
-        // reach, so it has to be gated here.
+        // The primitive Confirm(InputDeviceId) and CycleDevice funnel a resolved reassignment into, and the
+        // one player.claim/player.assign call directly — so the programmatic-device exclusion belongs here,
+        // not duplicated at every caller: a device that claimed its slot via TryClaimSlot (the editor, a
+        // replay device, a test harness) never moves itself — or anything else — via the ordinary
+        // device-reassignment gesture surface. Nothing may move into a slot TryClaimSlot claimed either, or
+        // an ordinary human device ends up sharing the slot and, through PrincipalOf, silently submitting
+        // under the claimant's identity. ResolveSlot's and ResolveDeviceSlot's own slot-keyed checks already
+        // prevent that on the arrival door (an unmapped device never gets offered a claimed slot);
+        // CycleDevice's and Confirm's own m_programmaticDevices exclusions are device-keyed and only stop
+        // the claimed device itself from moving — never a different, ordinary human device moving into the
+        // slot a claim owns. This is the one door those checks do not reach, so it has to be gated here.
         if (m_programmaticDevices.Contains(item: device)) {
             return AssignOutcome.DeviceClaimed;
         }
@@ -1597,9 +1607,9 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     private bool Fill(int slot, WorldIdentity profile, ParticipantState state, ParticipantOrigin origin, WorldPrincipal actingPrincipal) {
         var accepted = false;
 
-        // The completion fires INLINE (loopback drains its ordered domain synchronously before SubmitSession
-        // returns), so the local mutation below still runs before Fill returns — but it now runs from INSIDE the
-        // completion, gated on the reply it received, rather than after a discarded synchronous return.
+        // The completion fires inline (loopback drains its ordered domain synchronously before SubmitSession
+        // returns), so the local mutation below runs from inside the completion, gated on the reply it
+        // received, before Fill returns.
         m_link.SubmitSession(request: new SessionRequest.Join(Principal: actingPrincipal, Slot: slot, IdentityName: profile.Name, WireProtocolKey: WorldProtocol.WireProtocolKey), completion: reply => {
             if (!reply.Accepted) {
                 Console.Error.WriteLine(value: $"[player.join denied: {reply.Reason}]");

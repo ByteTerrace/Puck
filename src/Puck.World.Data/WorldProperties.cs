@@ -9,21 +9,17 @@ namespace Puck.World;
 /// authors, never a case this engine branches on.
 /// </summary>
 /// <remarks>
-/// <para><b>A property is BACKED by a keyed <c>int</c> state row of the same name.</b> The <c>state</c> section is
-/// already the substrate's ONE per-carrier tag storage (see <c>WorldRules.cs</c>'s <c>$argmax:</c>/<c>$argmin:</c>
-/// remarks — "author a keyed row whose cell keys ARE body indices"), so a property does not invent a second storage
-/// kind: registering <c>hot</c> here requires a declared <c>state</c> row named <c>hot</c>, kind <c>int</c>, KEYED
+/// <para>A property is backed by a keyed <c>int</c> state row of the same name. The <c>state</c> section is
+/// already the substrate's one per-carrier tag storage (see <c>WorldRules.cs</c>'s <c>$argmax:</c>/<c>$argmin:</c>
+/// remarks — "author a keyed row whose cell keys are body indices"), so a property does not invent a second storage
+/// kind: registering <c>hot</c> here requires a declared <c>state</c> row named <c>hot</c>, kind <c>int</c>, keyed
 /// (<see cref="WorldStateRow.IsKeyed"/>) — its cells are the carriers (0-based body indices, spelled as plain
 /// integers) that presently carry the tag, with a nonzero value meaning "on". Reading, writing, journaling, undoing,
-/// and echoing a carrier's tag are therefore the ORDINARY <c>state</c> substrate (<c>world.state.cell.set</c>/
+/// and echoing a carrier's tag are therefore the ordinary <c>state</c> substrate (<c>world.state.cell.set</c>/
 /// <c>.remove</c>, <c>world.state</c>) — nothing new to build there.</para>
-/// <para><b>Why a registry at all, if the storage is just a state row.</b> Any keyed <c>int</c> row could serve as an
-/// interaction operand without this section — the registry's job is REFUSING AN UNKNOWN OR TYPO'D NAME by name, at
-/// the type, rather than letting a stray spelling silently compile into a co-occurrence gate over a row that happens
-/// to exist for an unrelated reason (or, if it doesn't exist yet, a rule that never fires with no refusal anywhere —
-/// the "next accepted-and-inert defect" this section exists to close). See
-/// <see cref="WorldInteraction"/>/<c>WorldRuleCompiler.CompileAllInteractions</c>, which validate an interaction's
-/// <c>left</c>/<c>right</c> property reference against THIS list, never against the state section directly.</para>
+/// <para><see cref="WorldInteraction"/>/<c>WorldRuleCompiler.CompileAllInteractions</c> validates an interaction's
+/// <c>left</c>/<c>right</c> property reference against this list — refusing an unknown or typo'd name by name, at
+/// the type — rather than against the state section directly.</para>
 /// </remarks>
 /// <param name="Names">The declared property vocabulary — unique, non-empty, each naming a declared keyed
 /// <c>int</c> state row of the same name.</param>

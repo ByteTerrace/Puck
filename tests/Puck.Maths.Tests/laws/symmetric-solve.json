@@ -1,0 +1,503 @@
+[
+  {
+    "Id": "symmetric-solve.solve2-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 (internal) — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TrySolveSymmetric2 — the exact BigInteger Cramer's-rule solve, with no intermediate rounding, no wrapping, and no power-of-two preconditioning of any kind: every entry is read at its own raw magnitude, so a defect in the subject's shift selection or bit budget cannot also appear in the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the shared-shift cancellation that makes Solve's ratio scale-invariant is exact only when the shift is non-negative (a lossless left shift) for every group operand — true whenever every operand's own magnitude is already STRICTLY BELOW 2^62 (the 2×2 target-plus-one; AT 2^62 exactly the leading bit already sits one past the target, so the shift is -1, not zero), which the fold guarantees on every draw. Outside that band an operand's own magnitude already reaches the target, forcing a lossy rounding right-shift before any cancellation, so the ratio is only approximately preserved and exact agreement is not claimed there; a MUTATION PROBE against this law found the discrepancy directly (a full-range sweep without the fold produced a real, small, rounding-driven mismatch at one random draw) before the fold was added",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 (internal) — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band — the primary exercise of the six-term triple-product determinant's bit budget (k ≤ 41)",
+        "Against": "Oracles.TrySolveSymmetric3 — the exact BigInteger Cramer's-rule solve (adf − ae² − b²f + 2bce − c²d and its adjugate cofactors), with no intermediate rounding, no wrapping, and no power-of-two preconditioning of any kind: every entry is read at its own raw magnitude, so a defect in the subject's shift target (for example reusing FixedVectorMath.DirectionShift's bit 45) or its widening cannot also appear in the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same as symmetric-solve.solve2-vs-oracle's second leg — the fold (magnitude at most roughly 2^31, strictly below the 3×3 family's target-plus-one of 2^41) keeps the shared preconditioning shift non-negative, hence lossless, on every draw, so exact agreement is provable; the large-magnitude corner where a lossy downshift introduces bounded rounding is covered by symmetric-solve.solve3-extreme-magnitude-agrees and symmetric-solve.invert-large-magnitude-envelope-refuses instead. 31 bits of moderate-band magnitude is still ample headroom to exercise the six-term determinant's own overflow safety, since the wrong-bit-45 mutation (see the discrimination record) reaches well past Int128 even at this fold",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve2-vs-bareiss",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric2 (internal) — the refuse/succeed outcome and both solved components, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryBareissSolveSymmetric2 — fraction-free (Bareiss) Gaussian elimination with partial pivoting in BigInteger: it row-reduces the augmented matrix directly and never expands a determinant or names a cofactor, so it shares no formula with either the subject's adjugate path or with Oracles.TrySolveSymmetric2's own adjugate transcription. It catches a determinant or numerator sign/transcription error shared by those two 2x2 adjugate paths. The concrete C13 mutation is 3x3 evidence and belongs to symmetric-solve.solve3-vs-bareiss; it is deliberately not attributed to this law",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same fold and shared-shift argument as symmetric-solve.solve2-vs-oracle's second leg — shares the SymmetricSolve2 domain key with solve2-vs-oracle and solve2-residual-within-envelope deliberately, so all three statements sweep bit-identical operands over the same lossless-shift envelope",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-vs-bareiss",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 (internal) — the refuse/succeed outcome and every solved component, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryBareissSolveSymmetric3 — fraction-free (Bareiss) Gaussian elimination with partial pivoting in BigInteger, sharing no cofactor (C11..C33), adjugate, or expanded-determinant formula with the subject or with Oracles.TrySolveSymmetric3's own adjugate transcription. This is the primary defence against a shared sign error in any one of the six cofactors, which solve3-vs-oracle and the residual envelope cannot reliably catch. The concrete C13 witness is K=[[-3,-3,-3],[-3,-3,-2],[-3,-2,-3]], rhs=(-1,-2,1): a shared C13 flip returns the wrong vector (1,2,-3) while both older checks pass — the third symmetric-solve validation's Finding 2",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same fold and shared-shift argument as symmetric-solve.solve3-vs-oracle's second leg — shares the SymmetricSolve3 domain key with solve3-vs-oracle and solve3-residual-within-envelope deliberately",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert2-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 (internal) — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryInvertSymmetric2 — the exact BigInteger adjugate-over-determinant, with no intermediate rounding, no wrapping, and no preconditioning of any kind",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: Invert (unlike Solve) has no right-hand side to supply the missing homogeneity degree, so its raw ratio carries a leftover 2^(−S) that Invert folds into its own fraction-bit request and REFUSES rather than answers when that would go negative — a corner reached only at entries whose magnitude approaches the long carrier's top bits. The fold here keeps the internal shift S comfortably positive so this agreement claim never crosses that corner; symmetric-solve.invert-large-magnitude-envelope-refuses is the dedicated law that exercises the corner itself",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert3-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 (internal) — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryInvertSymmetric3 — the exact BigInteger adjugate-over-determinant, with no intermediate rounding, no wrapping, and no preconditioning of any kind",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same as symmetric-solve.invert2-vs-oracle — the fold keeps the internal shift comfortably positive so this claim never crosses Invert's large-magnitude refusal corner; symmetric-solve.invert-large-magnitude-envelope-refuses covers that corner directly",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert2-vs-bareiss",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 (internal) — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryBareissInvertSymmetric2 — fraction-free (Bareiss) Gaussian elimination on [K | I] with partial pivoting in BigInteger, sharing no formula with the subject's adjugate path or with Oracles.TryInvertSymmetric2's own adjugate transcription. Added for the same reason as solve2-vs-bareiss: Invert returns the cofactors themselves (scaled by 1/det), so a shared cofactor sign error is at least as invisible to the adjugate oracle here as it is to Solve's",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same as symmetric-solve.invert2-vs-oracle's second leg — shares the SymmetricInvert2 domain key with invert2-vs-oracle and invert2-residual-within-envelope deliberately",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert3-vs-bareiss",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric3 (internal) — the refuse/succeed outcome and all six distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Against": "Oracles.TryBareissInvertSymmetric3 — fraction-free (Bareiss) Gaussian elimination on [K | I] with partial pivoting in BigInteger, sharing no cofactor (C11..C33), adjugate, or expanded-determinant formula with the subject or with Oracles.TryInvertSymmetric3's own adjugate transcription. The Invert sibling of solve3-vs-bareiss's defence against a shared cofactor sign error",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: same as symmetric-solve.invert3-vs-oracle's second leg — shares the SymmetricInvert3 domain key with invert3-vs-oracle and invert3-residual-within-envelope deliberately",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-extreme-magnitude-agrees",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TrySolveSymmetric3 at nine hand-picked entries straddling long.MinValue and long.MaxValue (three near +2⁶³, three near −2⁶³, three mixed right-hand-side extremes)",
+        "Against": "Oracles.TrySolveSymmetric3, the same independent BigInteger oracle used by symmetric-solve.solve3-vs-oracle, at these specific operands",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PROVES THE PRECONDITIONING EARNS ITS PLACE: three raw factors this large multiply to roughly 2¹⁸⁹ — 62 bits past Int128's 127-bit magnitude — so an unpreconditioned triple product would overflow long before the six-term sum is even formed. FixedSymmetricSolve preconditions every entry to at most bit 41 before forming any triple product and answers exactly at these operands, checked against the leg above",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.singular-matrices-refuse",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Every one of TrySolveSymmetric2, TryInvertSymmetric2, TrySolveSymmetric3 and TryInvertSymmetric3 refuses — returns false with every out parameter at zero — on hand-verified exactly singular matrices at both sizes, EVERY kernel checked against EVERY matrix of its own size: the all-zero matrix (both sizes, both kernels), a rank-1 2×2 (det = 36 − 36 = 0 by hand; both Solve2 and Invert2), and a rank-deficient 3×3 whose third row is the sum of the first two (det = 24 − 18 − 6 + 18 − 18 = 0 by hand; both Solve3 and Invert3)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert-large-magnitude-envelope-refuses",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: TryInvertSymmetric2 and TryInvertSymmetric3 both refuse — return false with every out parameter at zero — on a comfortably NON-singular diagonal matrix (every entry long.MinValue, magnitude exactly 2^63; a diagonal determinant is the product of the diagonal, never zero) at output fraction shift 0, because the internal preconditioning shift needed for the determinant's own overflow safety (-2 for the 2×2 family, whose target bit is 61; -23 for the 3×3 family, whose target bit is 40 — both derived from 2^63's own bit position, 63) leaves the combined fraction-bit count negative, so there are no bits left to represent even the necessarily-tiny true inverse. This is the documented refusal envelope from FixedSymmetricSolve's type remarks, pinned directly rather than only argued in a comment. (Corrects an earlier, never-executed version of this declaration that named diagonal entries of 2^61 at output fraction shift 16 — that combination does NOT refuse: its internal shift is exactly zero, and the correctly rounded inverse underflows to representable zero, which TryInvertSymmetric2 answers as a genuine success rather than a refusal.)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TrySolveSymmetric3 at the SAME diagonal entries (long.MinValue), given a right-hand side (also long.MinValue in each component) that supplies the missing homogeneity degree Invert lacks",
+        "Against": "Oracles.TrySolveSymmetric3, the same independent BigInteger oracle used by symmetric-solve.solve3-vs-oracle — both are expected to answer exactly 1 in every component (K·(1,1,1) = rhs by construction), demonstrating that Solve is NOT bound by Invert's envelope",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.lossy-rank-one-singular-refuses",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TrySolveSymmetric2 and TryInvertSymmetric2 both refuse — return false with every out parameter at zero — on a hand-verified rank-one 2x2 matrix (u = 3000000001, v = 3000000000; K = [[u^2, uv],[uv, v^2]], raw determinant u^2*v^2 - (uv)^2 = 0 exactly by construction) whose top bit sits at 62, one past the 2x2 family's own target bit 61, so the shared preconditioning shift is -1: a lossy right-shift that ties-to-even rounds this exactly singular raw matrix into an apparently NONsingular preconditioned one. Checked directly against the refusal contract, never against an oracle that could share the same defect — this is the exact witness that exposed the fabricated-solution defect this law closes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.lossless-boundary-is-exact",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PINS THE EXACT LOSSLESS BOUNDARY: TrySolveSymmetric2 at the identity matrix (a=1, b=0, d=1) with rhsY = 2^62 - 1 (one raw strictly below the 2x2 family's target-plus-one) answers EXACTLY (1, 2^62 - 1); the SAME identity matrix with rhsY = 2^62 exactly (the leading bit now sits one past the target, so the shared shift is -1) declines rather than fabricate an answer for a well-posed system whose entries round to zero at that shift and make the preconditioned determinant zero. Declining there is honest (the raw determinant is 1, not 0) and distinguishes this corner from symmetric-solve.lossy-rank-one-singular-refuses's corner, where the raw matrix genuinely is singular",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.divide-magnitude-rounded-full-width-agrees",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryDivideMagnitudeRounded (internal) at five hand-picked contract witnesses: fractionBitCount -1 and int.MinValue must both refuse with zero output in under one second, directly pinning the pre-loop guard that prevents masked shifts and a 2,147,483,648-iteration restoring loop; fractionBitCount 129 over a numerator smaller than its denominator (zero starting integer quotient) must refuse; the SAME operands at fractionBitCount 127 (one bit inside the documented margin) must still answer exactly; and numeratorMagnitude = 2^127 with denominatorMagnitude = 2^128-1 at fractionBitCount 1 exercises the restoring-division loop's own remainder reaching exactly half of UInt128's ceiling",
+        "Against": "Oracles.RoundRationalTiesToEven — the exact BigInteger rational rounding, comparing 2r against d rather than the subject's own d-r against r, a DIFFERENT tie formulation so a shared rounding-compare defect cannot pass both",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this law exercises FusedArithmetic.TryDivideMagnitudeRounded directly at its own documented full-UInt128-width edges, a region none of the four symmetric-solve kernels' own proven determinant/numerator bit budgets ever reach as a caller — it pins the shared helper's contract, not any kernel's operand range",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.refusal-leaves-no-stale-output",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TrySolveSymmetric2 at (a=1, b=0, d=1, rhsX=1, rhsY=1048576, outputFractionShift=48): the exact first solved component is 2^48, which fits the signed 64-bit carrier, and the exact second is 2^68, which does not. The kernel must refuse with BOTH outputs at zero rather than leave the already-rounded first component behind because the second one overflowed later. This is the exact witness that exposed the shared-control-flow defect where the subject AND its BigInteger oracle both computed and exposed the first output before discovering the second one's overflow",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve2-residual-within-envelope",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SOLVE RESIDUAL, derivation-independent of both the subject and Oracles.TrySolveSymmetric2 (it shares no cofactor or determinant TRANSCRIPTION with either). NECESSARY BOUND ONLY, NOT A CORRECTNESS ORACLE (third validation, Finding 2): the forward direction — component error at most 0.5 implies residual at most 0.5·Σ|K[i][j]| — is exact and tight, but the converse is false (error = K⁻¹·residual, so an ill-conditioned K lets large component errors cancel into a small residual; concrete witness K=[[-3,-3,-3],[-3,-3,-2],[-3,-2,-3]], rhs=(-1,-2,1), C13 sign flip: wrong vector (1,2,-3) has component errors 5/3 and -2 yet passes this envelope comfortably). Does NOT discriminate a shared cofactor sign transcription — symmetric-solve.solve3-vs-bareiss and symmetric-solve.solve3-all-cofactors-exact-value are what catch that class of defect now. Over SymmetricSolveClaims.FoldModerate's band, TrySolveSymmetric2's returned (x,y) must satisfy K·(x,y) = rhs·2^shift within the ONE rounding TryFinishRatio performs, propagated through K exactly in BigInteger — row i's residual bounded by 0.5·Σ|K[i][j]|, checked as |2·residual| ≤ Σ|K[i][j]| to stay exact in integers",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-residual-within-envelope",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The 3x3 sibling of symmetric-solve.solve2-residual-within-envelope, including its NECESSARY-BOUND-ONLY caveat: does NOT discriminate a shared cofactor sign transcription (symmetric-solve.solve3-vs-bareiss and symmetric-solve.solve3-all-cofactors-exact-value do). TrySolveSymmetric3's returned (x,y,z) must satisfy K·(x,y,z) = rhs·2^shift within the tight rounding envelope 0.5·Σ|K[i][j]| per row, checked exactly in BigInteger",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert2-residual-within-envelope",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "INVERT RESIDUAL, derivation-independent of both the subject and Oracles.TryInvertSymmetric2: over SymmetricSolveClaims.FoldModerate's band, TryInvertSymmetric2's returned inverse must satisfy K·K⁻¹ = I·2^outputFractionShift within the tight rounding envelope 0.5·Σ|K[i][j]| per row (the scale 2^outputFractionShift is exact regardless of the internal preconditioning shift — see FixedSymmetricSolve's type remarks on why Invert folds that shift into its own fraction-bit request), checked exactly in BigInteger",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.invert3-residual-within-envelope",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The 3x3 sibling of symmetric-solve.invert2-residual-within-envelope: TryInvertSymmetric3's returned inverse must satisfy K·K⁻¹ = I·2^outputFractionShift within the tight rounding envelope 0.5·Σ|K[i][j]| per row, checked exactly in BigInteger and independent of Oracles.TryInvertSymmetric3's shared cofactor formulas",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-non-diagonal-exact-value",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PINS AN EXACT VALUE ON A NON-DIAGONAL MATRIX WHERE C12 != 0: K = [[2,1,0],[1,3,0],[0,0,1]] (det = 5; C11 = 3, C12 = -1, C13 = 0, C22 = 2, C23 = 0, C33 = 5), rhs = (0,1,0), outputFractionShift = 16. This rhs makes C12 and C22 load-bearing; C11 and C33 are nonzero but multiplied by zero rhs components, while C13 and C23 vanish. The exact rational solution is x = -1/5, y = 2/5, z = 0 (the third row forces z = 0, leaving 2x+y=0, x+3y=1); ties-to-even at 2^16 gives EXACTLY (-13107, 26214, 0). Stated as a hand-derived constant, independent of Oracles.TrySolveSymmetric3. It catches shared C12/C22 transcription defects but is blind to C13 specifically, so symmetric-solve.solve3-all-cofactors-exact-value closes the six-cofactor gap",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.apply2-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryApplySymmetric2 (internal) — the refuse/succeed outcome and both result components of a symmetric matrix times a vector, at THREE independently swept fraction bit counts (matrix, vector, result) over the FULL signed range of every entry. No fold: unlike Solve and Invert, Apply has no preconditioning envelope to stay inside, because each component is a sum of two raw products bounded by 2^127 and therefore exact in the sign-plus-UInt128 accumulator at any operand",
+        "Against": "Oracles.TryApplySymmetric2 — the exact BigInteger sum rounded once against an explicit power-of-two denominator, with no accumulator width anywhere and the tie decided by 2r against d rather than by the subject's own discarded-bit split",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refusal contract is 'false AND every output at zero', asserted against the subject directly on every declining draw. The three scales are independent because the motivating caller's are — an inverse inertia at a resolution-leaning scale, an angular impulse at a range-leaning one — so a kernel that assumed one shared scale would pass a same-scale sweep and fail here",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.apply3-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSymmetricSolve.TryApplySymmetric3 (internal) — the inverse-inertia-times-angular-impulse kernel itself: the outcome and all three result components, at three independently swept scales over the full signed range. Each component is a sum of THREE raw products, bounded by 3*2^126, still inside UInt128",
+        "Against": "Oracles.TryApplySymmetric3 — the same exact BigInteger route as symmetric-solve.apply2-vs-oracle's reference, one degree up",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Same refusal contract and same independent-scale argument as symmetric-solve.apply2-vs-oracle. Shares the symmetric-apply3 domain key with nothing else, so its sweep advances its own frontier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.apply-refusal-and-symmetry",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PINS THE APPLY FAMILY'S CONTRACT at hand-derived witnesses, deterministically on every run. The Q16 identity matrix applied to a Q16-to-integer vector returns that vector unchanged, which pins the mixed-scale bridge itself. The exchange matrix [[0,1],[1,0]] applied to (1,2) is (2,1): a kernel that read the off-diagonal into only one row would answer (2,0) or (0,1), a defect a swept comparison against an oracle sharing the same symmetric convention could still miss on symmetric draws. And a call whose FIRST component is exactly 2^63 — one past the raw carrier — while its second is representable must refuse with BOTH outputs at zero, never leave the computed first component behind; that is the same stale-output defect symmetric-solve.refusal-leaves-no-stale-output pins for Solve",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "symmetric-solve.solve3-all-cofactors-exact-value",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PINS AN EXACT VALUE ON A MATRIX WHERE EVERY ONE OF THE SIX ADJUGATE COFACTORS IS NONZERO AND LOAD-BEARING: K = [[2,1,1],[1,3,1],[1,1,2]] (det = 7; C11 = 5, C12 = -1, C13 = -2, C22 = 3, C23 = -1, C33 = 5 — every one nonzero, closing the gap solve3-non-diagonal-exact-value leaves at C13 = 0), rhs = (1,2,3) (every component nonzero, so every cofactor appears with a nonzero coefficient in at least one output component's numerator). The exact rational solution is x = -3/7, y = 2/7, z = 11/7; ties-to-even at outputFractionShift = 16 gives EXACTLY (-28087, 18725, 102985). Stated as a hand-derived constant, independent of Oracles.TrySolveSymmetric3 AND of Oracles.TryBareissSolveSymmetric3 alike — a THIRD, deterministic layer that guarantees catching any single cofactor sign flip on every run, closing the exact gap the third symmetric-solve validation's Finding 2 demonstrated with a concrete C13 witness (K=[[-3,-3,-3],[-3,-3,-2],[-3,-2,-3]], rhs=(-1,-2,1)) that today's exact-value law and the residual envelope both miss",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -132,16 +132,24 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             viewportHeight: m_height,
             viewportWidth: m_width
         );
-        var frame = new SdfFrame(
-            Program: m_currentProgram!,
-            ProgramChanged: false,
-            Time: context.Time,
-            Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
-            WarpAmount: 0f
-        ) {
-            DisableAmbientOcclusion = DisableAmbientOcclusion,
-            DisableSoftShadows = DisableSoftShadows,
-            DynamicTransforms = context.DynamicTransforms,
+        // Derived from the frame the room is rendering, never rebuilt beside it. Every per-frame lever the
+        // host set — the far-field isolators, the shadow-march and AO mode selectors, the sun-disc sample
+        // index, the lighting — reaches this offscreen render by construction, and only what this view
+        // genuinely owns is overridden below. A fresh `new SdfFrame(...)` would silently drop any host lever
+        // added to SdfFrame later; `with` cannot forget a member that did not exist when it was written.
+        var frame = context.HostFrame with {
+            // This view's own eye, filling this view's own render target.
+            Views = [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
+            // This view's own upload bookkeeping: its offscreen engine re-uploads on ITS revision watch (Rebuild
+            // above), so the host's ProgramChanged is never the right answer for this engine.
+            Program = m_currentProgram!,
+            ProgramChanged = false,
+            // A view may only ADD cost restrictions, never lift them. A 160x144 diegetic panel opts OUT of shadows and
+            // AO the room can afford (see WorldScreenBinder.RegisterCameraView, which sets both), but must never opt
+            // INTO quality the room itself has switched off — that would make the jumbotron cost more than the world
+            // it films, and would let a view ignore a host lever in the one direction that costs rather than saves.
+            DisableAmbientOcclusion = (context.HostFrame.DisableAmbientOcclusion || DisableAmbientOcclusion),
+            DisableSoftShadows = (context.HostFrame.DisableSoftShadows || DisableSoftShadows),
         };
 
         m_engine!.SubmitFrame(frame: frame);
@@ -160,11 +168,10 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine — GpuTimingControl.Shared, gated on
         // the backend having registered the timing seam. A [view-timing]-tagged offscreen engine, so its own per-pass GPU ms are
         // distinguishable from the host world's [world-timing] in a mixed log.
-        // WART PRESERVED BY NAME (unit 6b constructor-chain round): the timing bundle is resolved EAGERLY at the
-        // composition root regardless of arming state, but this engine only picks it up when ViewTiming.Enabled is
-        // true at THIS EnsureEngine call (once per engine lifetime) — a view whose engine builds with timing off
-        // never gains it until a device-lost rebuild re-runs EnsureEngine. Fixing this here would smuggle a behavior
-        // change into a pure restructuring; carried over unchanged from the retired IServiceProvider path.
+        // A known wart: the timing bundle is resolved eagerly at the composition root regardless of arming
+        // state, but this engine only picks it up when ViewTiming.Enabled is true at this EnsureEngine call
+        // (once per engine lifetime) — a view whose engine builds with timing off never gains it until a
+        // device-lost rebuild re-runs EnsureEngine.
         var timingFactory = (ViewTiming.Enabled ? m_services.TimingFactory : null);
         var timingRecorder = (ViewTiming.Enabled ? m_services.TimingRecorder : null);
 

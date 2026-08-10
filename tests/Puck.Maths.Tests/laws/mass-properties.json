@@ -1,0 +1,234 @@
+[
+  {
+    "Id": "mass-properties.volumes-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TrySphereVolume, TryBoxVolume, TryCylinderVolume and TryCapsuleVolume (internal) — all four exercised on every draw, each one rounding of the exact rational volume at a swept output scale",
+        "Against": "Oracles.TryPrimitiveVolume — the same four volumes assembled from the GEOMETRIC definition rather than from the subject's folded constants: the box from its FULL extents (2h in each axis) rather than three half-extents folded into a leading eight, and the capsule as a cylinder PLUS a whole sphere as two separate terms rather than as one collapsed fraction over three. A mis-folded constant in the subject therefore cannot be mirrored in the reference",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SHARED CONSTANT, declared: both sides substitute the same pinned rational FixedMassProperties.PiRaw for the transcendental, read from the subject's own declaration rather than transcribed as digits (a transcription would let the two drift while every law stayed green). That the constant IS the correctly rounded pi is decided separately by mass-properties.pinned-pi-is-correctly-rounded against this suite's own Machin enclosure. ENVELOPE: dimensions are folded onto a twenty-bit band and fraction bit counts onto [0, 32] — the accumulation is exact in BigInteger at any width, so a wider fold would buy only carrier refusals; the refusal side of the biconditional is asserted on every draw either way",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.sphere-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TrySphereBody (internal) — the mass and the isotropic inertia of a solid sphere about its centre, each one rounding of its own exact rational at independently swept density, length, mass and inertia scales",
+        "Against": "Oracles.TrySphereBody, which takes the inertia as (2/5)*M*r^2 against the EXACT rational mass, where the subject collapses the whole chain into (8/15)*rho*pi*r^5. The two routes reach the same rational by different constant folds, so a mis-folded 8/15 cannot appear in both",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Same shared-pi declaration and same fold envelope as mass-properties.volumes-vs-oracle. The refusal contract is 'false AND every output at zero', asserted against the subject directly on every declining draw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.box-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TryBoxBody (internal) — the mass and all three diagonal moments of a solid box about its centre, from half-extents",
+        "Against": "Oracles.TryBoxBody, stated entirely in FULL extents — V = Lx*Ly*Lz and I_xx = (M/12)(Ly^2 + Lz^2), the textbook forms — where the subject works in half-extents with the factors of two and twelve already folded to eight and three. A mis-folded halving, or a transposed axis pair in one of the three diagonal entries, is exactly what that difference catches; all three entries are compared separately",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Same fold envelope and refusal contract as mass-properties.sphere-vs-oracle. The box is the one primitive here that involves no pi at all, so its agreement rests on no shared constant whatsoever",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.cylinder-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TryCylinderBody (internal) — the mass, the axial moment and the perpendicular moment of a solid cylinder about its centre",
+        "Against": "Oracles.TryCylinderBody, which forms the mass as an exact rational first and then takes (1/2)*M*r^2 and (M/12)(3r^2 + h^2) against it, where the subject folds the mass numerator straight into each moment's own single fraction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Same shared-pi declaration, fold envelope and refusal contract as mass-properties.sphere-vs-oracle. ENVELOPE: the cylinder oracle and the subject differ in constant folding and in nothing else — the axial and perpendicular formulas themselves are the same two textbook expressions on both sides, so this law discriminates a fold or a scale error and not a wrong choice of formula",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.capsule-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TryCapsuleBody (internal) — the mass and both moments of a solid capsule about its centre, stated with the hemisphere's own centroidal coefficient 83/320 and the parallel-axis offset (h/2 + 3r/8)",
+        "Against": "Oracles.TryCapsuleBody, THE independent derivation of this family: it assembles the capsule from its parts and never names 83/320 at all. A hemisphere's moment about the centre of its own FLAT FACE is (2/5)*m*r^2 — half a sphere's mass carrying half its moment about the same diameter — and its centroid sits 3r/8 from that face, so the parallel-axis theorem gives the centroidal moment as (2/5)m r^2 - m(3r/8)^2 and a SECOND transfer carries it out to the capsule's centre, a distance h/2 + 3r/8 away. Agreement is what proves the 83/320 coefficient, which appears on only one side",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Same shared-pi declaration, fold envelope and refusal contract as mass-properties.sphere-vs-oracle. mass-properties.capsule-degenerates-to-sphere is the deterministic companion: it pins the h -> 0 collapse at hand-picked parameters on every run rather than waiting for a draw to land near it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.capsule-degenerates-to-sphere",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "THE DEGENERACY THAT PROVES THE CAPSULE'S OWN COEFFICIENTS. At a hemisphere-centre distance of zero a capsule IS a sphere, so TryCapsuleBody's mass and BOTH its moments must equal TrySphereBody's raws EXACTLY — not within a tolerance, because the two exact rationals coincide identically before either is rounded (the capsule's axial numerator collapses to 16/30 = 8/15 and its perpendicular numerator to 384/720 = 8/15, which is the sphere's own (8/15)*rho*pi*r^5). The identity that makes them coincide, 83/320 + (3/8)^2 = 2/5, is asserted FIRST as exact integers ((83*64 + 9*320)*5 == 2*(320*64)), so a failure says which half broke: the algebra or the kernel. A wrong 83/320 or a wrong 3r/8 offset would leave the perpendicular moment off while the axial one still matched, which is why both are compared. Swept over a bounded 4x4x3x3 ladder of densities, radii, length scales and result scales — a fixed step count, no search",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.parallel-axis-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "FixedMassProperties.TryTranslateInertia (internal) — the parallel-axis transfer I' = I + m(|d|^2*delta - d(x)d) of a symmetric tensor to a parallel frame, all six distinct entries, each rounded once",
+        "Against": "Oracles.TryTranslateInertia, which states the general tensor form with |d|^2 formed ONCE as dx^2 + dy^2 + dz^2 and each diagonal entry taken as that total minus its own squared component, where the subject writes each diagonal entry's own pre-expanded pair (dy^2 + dz^2, and so on). A mis-assigned axis in that expansion is what the difference catches",
+        "Shared": "the parallel-axis theorem itself: the reference TRANSCRIBES the same identity rather than deriving the transferred tensor independently, so a wrong theorem — as opposed to a wrong expansion, a wrong scale or a wrong sign on the outer product — would be invisible to this comparison",
+        "Citation": "The independent witness is mass-properties.capsule-vs-oracle, whose oracle applies this same theorem TWICE from first principles (flat face to hemisphere centroid, centroid to capsule centre) and reaches a coefficient the subject states independently; agreement there is evidence the theorem as applied is right, not merely transcribed consistently",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The transfer's stored entry is lifted onto the mass term's own denominator by a LOSSLESS shift before the addition, so only the narrowing rounds; the law's fold keeps masses strictly positive and offsets inside a sixteen-bit signed band, and physical realizability of the input tensor is deliberately NOT imposed — the kernel does not require it and the law does not pretend it does. A refusal leaves every one of the six outputs at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.compound-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.TryCompound (internal) — the summed mass, the composite centre of mass and the inertia tensor about that centre, for two swept parts; every part's parallel-axis contribution is taken against the EXACT rational centre rather than against the rounded centre the kernel reports",
+        "Against": "Oracles.TryCompound, which accumulates in the OPPOSITE order: every part's tensor is carried OUT to the shared origin, the parts are summed there, and the total is carried back IN to the composite centre by one reverse transfer. The subject transfers each part directly to the centre. The two routes are algebraically equal and computationally disjoint — they agree only if the transfer, the centre and both scale bridges are all right",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Masses are folded strictly positive, so the composite mass is never zero and the centre's denominator is never degenerate; the composite mass itself is an exact integer sum of raws at one scale and rounds nothing at all, which the comparison pins alongside the rounded quantities. A refusal leaves all ten outputs at zero. ENVELOPE: two parts, not an arbitrary count — the accumulation is a fold, so a third part exercises no branch the second does not, and the domain's lane budget is spent on the parts' own entries instead",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.inversion-refuses-below-resolution",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The inversions decline rather than answer a zero a caller would read as a physical claim. TryInvertMass at mass = long.MaxValue with both scales at zero must refuse, because the correctly rounded reciprocal is zero and answering it would silently declare the body immovable; a zero mass must refuse outright; and a unit mass at Q16 must invert to EXACTLY 65536 at Q16, so the law pins the boundary rather than merely observing a refusal. TryInvertInertia at a diagonal 2^40 tensor with both scales at zero must refuse for the same reason — every entry of the true inverse is below one half — while the Q16 identity tensor must invert to the Q16 identity tensor exactly. Every refusal is checked to leave all six outputs at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mass-properties.pinned-pi-is-correctly-rounded",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedMassProperties.PiRaw — the ONE constant the mass-property subject and its oracles share, and therefore the one value the family's agreement laws cannot themselves check",
+        "Against": "Oracles.Pi's Machin enclosure at 128 bits, derived by this suite from an alternating arctangent series rather than transcribed from any digit table. The enclosure's two ends are each reduced to 61 fraction bits; the law REQUIRES them to agree before deciding, so the verdict is a decision rather than an estimate, and then requires the pinned raw to equal that common value",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "This is what makes the shared constant a pinned value rather than an assumption. The substitution itself remains an envelope the mass-property kernels carry openly: every result is the exact rational value of its formula WITH this rational in place of pi, rounded once — a relative departure below 2^-62, and the only inexactness in FixedMassProperties",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -3,7 +3,7 @@ namespace Puck.Maths;
 /// <summary>The refusal a membership run returns when the span it was handed is longer than the pattern represents.</summary>
 /// <param name="Length">The number of tokens offered.</param>
 /// <param name="Window">The longest span the pattern represents.</param>
-/// <remarks>A run that walks off the machine is an ANSWER — the span does not match — while a span past the window is a
+/// <remarks>A run that walks off the machine is an answer — the span does not match — while a span past the window is a
 /// refusal, because beyond it the compiled machine has no arrows and could only report a false negative.</remarks>
 public readonly record struct MatchObstruction(int Length, int Window);
 
@@ -92,7 +92,7 @@ public sealed class PatternMatcher<TValue, TOps>
     /// The shared machine equivalence, which quotients by a pairing radical and therefore needs the material's
     /// inverses. That is a real boundary and it is worth stating plainly: over
     /// <see cref="BooleanMaterial"/> this is refused, and equivalence there is decided instead by comparing the two
-    /// pattern ELEMENTS, which the window has already made finite. Where it does run — a prime field, an exact
+    /// pattern elements, which the window has already made finite. Where it does run — a prime field, an exact
     /// rational — it decides equality of the whole weighted series without enumerating spans, which is the capability
     /// the enumeration cannot give.
     /// </remarks>

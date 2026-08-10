@@ -71,20 +71,30 @@ to a friend forever, which is strictly more than the caller needed and invisible
 at the call site. If a member looks wrong to make public, that is evidence about
 the design — say so rather than reaching for a grant to avoid the question.
 
-## `experimental/` is OFF LIMITS
+## `experimental/` is a reference tree, not a sealed one
 
-**Owner ruling, 2026-08-02.** No agent may read, edit, build, run, or reference
-anything under `experimental/` until the ruling is lifted — that is broader
-than "not in the build", and the breadth is the point. Do not open those trees
-for context, do not cite them as precedent, do not port from them, do not fix
-them. They hold `Puck.Demo`, `Puck.Post`, `tools/`, both `scripts/` trees, and
-`Puck.BareMetal`; each carries a firewall pair so the root build cannot reach
-it either. See [experimental/README.md](experimental/README.md).
+**Owner ruling, 2026-08-08, superseding the 2026-08-02 blanket ban.** The
+quarantine governs *work*, not *reading*. Under `experimental/` you are
+expected to READ the source and CITE it as prior art, and to DELETE code there
+once live code has eclipsed it. You may NOT improve it, fix it, build it, run
+it, or run its tests. Expect its builds to break as deletions land — that is
+the intended outcome, not a regression to repair. The trees hold `Puck.Demo`,
+`Puck.Post`, `tools/`, both `scripts/` trees, and `Puck.BareMetal`; each
+carries a firewall pair so the root build cannot reach it either. See
+[experimental/README.md](experimental/README.md).
 
+Read it the way you read git history: evidence of how a problem was solved
+once, never a precedent that binds, and never something to revive in place.
 Anything there that must keep working belongs in a real project or a `puck`
-verb, rewritten under the gate and verified by running — never revived in
-place. Documents that still cite the old `tools/…`, `src/Puck.World/scripts/…`,
-or `src/Puck.Post` paths are STALE; correct them where they live.
+verb, rewritten under the gate and verified by running.
+
+**Retiring eclipsed code.** The deletion rides in the SAME squash as the
+landing that eclipses it, so the evidence sits beside the removal and every
+deletion line stays accounted for. "Eclipsed" is a claim that needs a
+mechanical check behind it, not an impression — bring it to the lead for a
+decision rather than deciding alone. Documents that still cite the old
+`tools/…`, `src/Puck.World/scripts/…`, or `src/Puck.Post` paths are STALE;
+correct them where they live.
 
 ## Core rules
 
@@ -101,8 +111,9 @@ or `src/Puck.Post` paths are STALE; correct them where they live.
    overworld and everything under `src/Puck.World/` — is the playground: expected
    to churn, never settled precedent. (`Puck.Demo` is **quarantined at
    `experimental/Puck.Demo`** by owner ruling 2026-08-01 — out of the solution
-   and the root build, and **off limits**: do not read, run, build, or port from
-   it. Capabilities that once lived only there are simply absent from
+   and the root build. READ it as prior art and retire it as it is eclipsed,
+   per `experimental/` above; never build, run, fix, or revive it in place.
+   Capabilities that once lived only there are simply absent from
    `Puck.World`, and no plan of record sequences bringing them over.) Verify
    game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
@@ -168,6 +179,17 @@ or `src/Puck.Post` paths are STALE; correct them where they live.
    or to a shape the walk cannot cover — folding it as nothing would leave the
    seal narrower than the entry claims. Each entry records the `assembly` that
    owns it, and that assembly's compilation is the one that sweeps it.
+8. **Assume the system already exists; find it before building it.** This
+   repository is deep and much of it is settled, so a "new" mechanism is
+   usually an existing one wearing a different name. Before authoring, load
+   the skill that owns the area — `sdf-world`, `puck-world`, `maths-usage`,
+   `maths-laws`, `gaming-bricks`, `rom-forge`, `symbol-analysis`,
+   `content-search`, `documentation`, `boy-scout` — and then ask the CODE with
+   a mechanical control (`puck references`, `puck declarations`,
+   `puck search -M 0`) rather than guessing from a name. `experimental/` is
+   one of the places to look. A second implementation of something already
+   here is a defect, not a feature; a skill that proves wrong about its own
+   area is stale, and gets corrected in the same change (rule 2).
 
 ## The overworld — product intent
 
@@ -205,6 +227,18 @@ converge on the hub. The dmg↔cgb↔agb device swap, forged cartridges (SDF
 art, camera, hand-authored SM83 games), and creator mode await their places
 in that reveal graph — an arcade cabinet already stands dark in Play's
 plaza as the first of them; no plan of record sequences the rest.
+
+The charter bounds the GAME worlds, not the `Assets/worlds/` directory.
+`studio` ships beside them as a non-game DEV CANVAS for character and
+creation work — a neutral floor, no scenery, no crowd, and four anchored
+camera eyes with a `sheet` layout that composes front/three-quarter/side/back
+at once. It is reached with `--world`, and — owner amendment, 2026-08-09 —
+it is also Puck's FIRST FORMAL BORDER CROSSING: play and studio meet at a
+mapped border (the zone-stitching proof), so studio is additionally
+reachable by walking out of the plaza. It remains a dev canvas, not a game
+world, and not a destination in the reveal graph. A doc counting "the four
+shipped worlds" is counting the charter's roster; the directory holds five
+documents.
 
 **The unification contract (the north star).** The overworld is ONE cohesive
 experience, not a menu of `--flag` modes: every capability is reachable from

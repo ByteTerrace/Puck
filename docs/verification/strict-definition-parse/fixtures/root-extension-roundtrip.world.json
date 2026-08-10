@@ -424,9 +424,9 @@
     }
   },
   "inputHold": {
-    "ceilingTicks": 120,
-    "lowerAfterTicks": 60,
-    "defaultTicks": 0,
+    "ceilingSeconds": 0.5,
+    "lowerAfterSeconds": 0.25,
+    "defaultSeconds": 0.0,
     "equalizeByDefault": true,
     "participants": []
   },

@@ -1,13 +1,12 @@
 namespace Puck.Hosting;
 
 /// <summary>
-/// Everything a node needs to render one frame: the host capability seam — through which it resolves the
-/// <em>shared</em> device chain it renders offscreen on (every node in an in-process tree composites on one
-/// device) and any service its host publishes — the deterministic timing, and the pixel extent its parent
-/// is asking it to fill. A node (re)builds its render targets
-/// when <see cref="TargetWidth"/>/<see cref="TargetHeight"/> change. Timing is carried in integer engine
-/// ticks (<see cref="EngineTicks"/>) rather than floating point so the running total accumulates exactly and
-/// never drifts; the host advances the simulation in whole fixed steps, and a node converts to whatever
+/// Everything a node needs to render one frame: the host capability seam — through which it resolves the shared
+/// device chain it renders offscreen on (every node in an in-process tree composites on one device) and any service
+/// its host publishes — the deterministic timing, and the pixel extent its parent is asking it to fill. A node
+/// rebuilds its render targets when <see cref="TargetWidth"/>/<see cref="TargetHeight"/> change. Timing is carried
+/// in integer engine ticks (<see cref="EngineTicks"/>) rather than floating point so the running total accumulates
+/// exactly and never drifts; the host advances the simulation in whole fixed steps, and a node converts to whatever
 /// real-number unit it needs at the point of use.
 /// </summary>
 /// <param name="Host">The host capability seam exposed to the node, through which it resolves the device context and any host-published service.</param>

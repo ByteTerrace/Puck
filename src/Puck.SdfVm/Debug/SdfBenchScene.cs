@@ -11,7 +11,7 @@ namespace Puck.SdfVm.Debug;
 /// placement family — the runtime-carving cost profile), <see cref="Storm"/> (the motion/churn ladder — every
 /// instance moves, or the whole program rebuilds, each produced frame; see <see cref="SdfBenchStormMode"/>), and
 /// <see cref="DynamicMatrix"/> (the contributed dynamic-geometry ceiling matrix — N instances in a
-/// <see cref="SdfBenchPlacement"/> family, either baked STATIC or per-frame MOVING; see <see cref="SdfBenchConfig.Moving"/>).</summary>
+/// <see cref="SdfBenchPlacement"/> family, either baked static or per-frame moving; see <see cref="SdfBenchConfig.Moving"/>).</summary>
 public enum SdfBenchWorkload {
     Shapes,
     Ops,
@@ -23,8 +23,8 @@ public enum SdfBenchWorkload {
 }
 
 /// <summary>The world-space placement family a <see cref="SdfBenchWorkload.DynamicMatrix"/> run tests —
-/// <see cref="Clustered"/> (every instance packed into ONE fixed-size cluster near the origin regardless of N, so the
-/// whole set lands in the smallest possible span of screen tiles from a fixed framing camera: the worst-TILE GPU
+/// <see cref="Clustered"/> (every instance packed into one fixed-size cluster near the origin regardless of N, so the
+/// whole set lands in the smallest possible span of screen tiles from a fixed framing camera: the worst-tile GPU
 /// bound), <see cref="Uniform"/> (the existing 3D-grid spread — one instance per cell, the general/expected case), and
 /// <see cref="FarCorners"/> (N instances split across eight widely separated corner clusters: many small, far-apart
 /// tile groups instead of one dense one — the CSR grid's opposite stress from <see cref="Clustered"/>). The family is
@@ -35,14 +35,14 @@ public enum SdfBenchPlacement {
     FarCorners,
 }
 
-/// <summary>The churn axis a <see cref="SdfBenchWorkload.Storm"/> config exercises. <see cref="Motion"/> — N DYNAMIC
-/// instances that ALL move per produced frame through the per-frame dynamic-transform buffer: the host bins only
-/// STATIC instances into the uniform grid, so a per-frame-moving instance rides the FLAT always-tested list and beam
-/// returns O(moving-n) BY DESIGN — this rung is that cliff made measurable (the GPU-built-grid fork needs it before the
-/// machine-fleet arc). <see cref="Rebuild"/> — the SAME counts of STATIC instances but a full program REBUILD every
+/// <summary>The churn axis a <see cref="SdfBenchWorkload.Storm"/> config exercises. <see cref="Motion"/> — N dynamic
+/// instances that all move per produced frame through the per-frame dynamic-transform buffer: the host bins only
+/// static instances into the uniform grid, so a per-frame-moving instance rides the flat always-tested list and beam
+/// returns O(moving-n) by design — this rung is that cliff made measurable (the GPU-built-grid fork needs it before the
+/// machine-fleet arc). <see cref="Rebuild"/> — the same counts of static instances but a full program rebuild every
 /// produced frame (a per-frame revision bump forces BuildProgram + UploadProgram + the packer), so the ladder measures
-/// the authoring/carve path's upload+pack ceiling at scale. <see cref="Camera"/> — one mid-size STATIC workload whose
-/// bench camera pose orbits a FULL REVOLUTION across the sample window (still deterministic per produced frame), the
+/// the authoring/carve path's upload+pack ceiling at scale. <see cref="Camera"/> — one mid-size static workload whose
+/// bench camera pose orbits a full revolution across the sample window (still deterministic per produced frame), the
 /// re-cull cost of a moving view over a still scene. The mode rides each config's label so the table reads it back
 /// (<c>storm x1024</c>, <c>storm rebuild x1024</c>, <c>storm camera x1024</c>).
 /// <para>A future <c>monitors</c> rung may measure N small viewports refreshing round-robin; viewport
@@ -66,8 +66,8 @@ public enum SdfBenchCarveFamily {
 }
 
 /// <summary>The op catalog the <see cref="SdfBenchWorkload.Ops"/> workload steps through — the <see cref="Baseline"/>
-/// (a bare torus behind a single identity Translate, so every other row measures ONE extra instruction against it)
-/// plus one representative of each modifier family. This is a SUPERSET of <see cref="SdfDebugOpKind"/> (it adds
+/// (a bare torus behind a single identity Translate, so every other row measures one extra instruction against it)
+/// plus one representative of each modifier family. This is a superset of <see cref="SdfDebugOpKind"/> (it adds
 /// <see cref="Wallpaper"/>, which the debug op-stack does not carry), so the bench owns its own op-application switch
 /// in <see cref="SdfDebugRenderer"/> rather than reusing the debug stack.</summary>
 public enum SdfBenchOp {
@@ -115,16 +115,16 @@ public readonly record struct SdfBenchResult(
 );
 
 /// <summary>
-/// The SDF performance-bench runner — an ASYNC per-frame state machine that lives INSIDE the SDF-debug mode (composed
-/// into <c>SdfDebugMode</c> beside the scene). It cannot block <c>CaptureFrame</c>, so it advances ONE step per
+/// The SDF performance-bench runner — an async per-frame state machine that lives inside the SDF-debug mode (composed
+/// into <c>SdfDebugMode</c> beside the scene). It cannot block <c>CaptureFrame</c>, so it advances one step per
 /// produced frame (<see cref="Advance"/>, called from the render node with the previous frame's per-pass GPU ms): for
 /// each configuration it (a) selects the config — bumping <see cref="Revision"/> so the frame source rebuilds the
 /// program to that workload, (b) waits <see cref="WarmFrames"/> warm-up frames (the first dispatch of a fresh pipeline
 /// showed a ~40 ms compile stall), (c) samples <see cref="SampleFrames"/> measured frames, and (d) records the median
 /// + min/max of frame/beam/views/composite. When the last config finishes it prints a fixed-width table to stdout.
 /// <para>
-/// While a run is <see cref="Running"/> the mode's program IS the current config's workload (the debug subject is
-/// suppressed) and the camera is a FIXED deterministic pose framing the whole workload (no pad dependence) — see
+/// While a run is <see cref="Running"/> the mode's program is the current config's workload (the debug subject is
+/// suppressed) and the camera is a fixed deterministic pose framing the whole workload (no pad dependence) — see
 /// <see cref="CameraFrame"/>. Presentation only; the deterministic simulation never sees the bench.
 /// </para>
 /// </summary>
@@ -182,11 +182,11 @@ public sealed class SdfBenchScene {
     internal const float StormInstanceRadius = 0.28f;
     internal const float StormBoundRadius = (StormInstanceRadius + 0.05f);
 
-    // The DYNAMIC MATRIX ladder's placement geometry (Phase 3 L1 ceiling-measurement arc, 2026-08-02). Clustered packs
-    // the WHOLE instance count into this fixed footprint regardless of N — the point is that the span stays small (and
-    // so keeps landing in the fewest possible screen tiles from the fixed framing camera) as N climbs, unlike Uniform
-    // (InstanceSpacing above), whose grid grows with N. FarCorners spreads N across eight widely separated local
-    // clusters (each sized like a scaled-down Clustered cluster) — the CSR grid's opposite stress.
+    // The dynamic matrix ladder's placement geometry: Clustered packs the whole instance count into this fixed
+    // footprint regardless of N — the point is that the span stays small (and so keeps landing in the fewest
+    // possible screen tiles from the fixed framing camera) as N climbs, unlike Uniform (InstanceSpacing above),
+    // whose grid grows with N. FarCorners spreads N across eight widely separated local clusters (each sized like
+    // a scaled-down Clustered cluster) — the CSR grid's opposite stress.
     internal const float DynamicMatrixClusterExtent = 2.2f;
     // Kept well under half of sdf-world.hlsli's MaxDistance (60 world units) march budget: the bench camera frames a
     // placement's WHOLE radius (ComputeDistance below), so a far corner's camera-to-surface reach is up to
@@ -250,8 +250,8 @@ public sealed class SdfBenchScene {
     /// renderer emits through it (<see cref="SdfDebugRenderer.EmitBench"/>); <see cref="AdvanceCarveBake"/> drives it.</summary>
     public SdfCarveBakePlanner CarvePlanner => m_carvePlanner;
 
-    /// <summary>Advances the carve-bake planner one produced frame (carve-bake plan §3/§4): while a
-    /// <see cref="SdfBenchWorkload.Carves"/> rung is live it feeds the planner the SAME deterministic carve list the
+    /// <summary>Advances the carve-bake planner one produced frame: while a
+    /// <see cref="SdfBenchWorkload.Carves"/> rung is live it feeds the planner the same deterministic carve list the
     /// renderer emits (<see cref="SdfDebugRenderer.BuildBenchCarves"/>), so a settled cluster bakes and adopts; any
     /// other state feeds an empty pool so a prior rung's bricks are released. Returns whether the adopted set changed
     /// (the caller bumps its revision to rebuild).</summary>
@@ -285,7 +285,7 @@ public sealed class SdfBenchScene {
 
     /// <summary>The deterministic orbit pose framing the active configuration's whole workload, or null when no run is
     /// in flight (the debug controller's pad orbit resumes). Distance is computed per config; yaw/pitch are constant
-    /// FOR EVERY workload except the storm CAMERA rung, whose yaw sweeps a full revolution across the sample window
+    /// for every workload except the storm camera rung, whose yaw sweeps a full revolution across the sample window
     /// (m_producedFrame-driven, so still deterministic) — every other config returns the byte-identical fixed pose the
     /// ladder tables have always compared against.</summary>
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame {
@@ -381,7 +381,7 @@ public sealed class SdfBenchScene {
         return Begin(label: $"rigs {config.InstanceCount}", configs: [config]);
     }
 
-    /// <summary>Starts a <see cref="SdfBenchWorkload.Instances"/> SWEEP — the default ladder (64/256/1024/4096/16384) of
+    /// <summary>Starts a <see cref="SdfBenchWorkload.Instances"/> sweep — the default ladder (64/256/1024/4096/16384) of
     /// <paramref name="shape"/>, one config per rung. Battery from
     /// <see cref="SdfBenchWorkloads.BuildInstancesSweepLadder"/>.</summary>
     public string StartSweep(SdfDebugShapeKind shape) {
@@ -391,8 +391,8 @@ public sealed class SdfBenchScene {
     }
 
     /// <summary>Starts a <see cref="SdfBenchWorkload.Carves"/> run — a fixed ~2-unit subject + floor bitten by the carve
-    /// ladder (16/64/256/1024) in TWO families (clustered = the honest views-cost worst case; scattered = the beam-wall
-    /// control), plus ONE smooth rung (256 clustered SmoothSubtraction carves). Each rung is one table row; the family
+    /// ladder (16/64/256/1024) in two families (clustered = the honest views-cost worst case; scattered = the beam-wall
+    /// control), plus one smooth rung (256 clustered SmoothSubtraction carves). Each rung is one table row; the family
     /// is in the label (e.g. <c>carves clustered x256</c>). The subject only shrinks as carves bite it, so the camera
     /// holds the fixed single-shape framing across the whole run. Battery from
     /// <see cref="SdfBenchWorkloads.BuildCarvesLadder"/>.</summary>
@@ -402,9 +402,9 @@ public sealed class SdfBenchScene {
         return Begin(label: "carves", configs: configs);
     }
 
-    /// <summary>Starts the STORM run — the motion/churn ladder. Three families, one battery: the MOTION ladder
-    /// (64/256/1024/4096 DYNAMIC instances all moving per frame — the always-list cliff), the REBUILD ladder (the same
-    /// counts STATIC but a full program rebuild every frame — the upload/pack ceiling), and one CAMERA rung (a mid-size
+    /// <summary>Starts the storm run — the motion/churn ladder. Three families, one battery: the motion ladder
+    /// (64/256/1024/4096 dynamic instances all moving per frame — the always-list cliff), the rebuild ladder (the same
+    /// counts static but a full program rebuild every frame — the upload/pack ceiling), and one camera rung (a mid-size
     /// static workload under a pose sweeping a full revolution across the sample window). Each rung is one table row; the
     /// mode is in the label (e.g. <c>storm x1024</c>, <c>storm rebuild x1024</c>, <c>storm camera x1024</c>). Battery
     /// from <see cref="SdfBenchWorkloads.BuildStormLadder"/>.</summary>
@@ -414,9 +414,9 @@ public sealed class SdfBenchScene {
         return Begin(label: "storm", configs: configs);
     }
 
-    /// <summary>Starts the DYNAMIC MATRIX run — the contributed dynamic-geometry ceiling matrix (Phase 3 L1,
-    /// 2026-08-02): N ∈ {0, 256, 1024, 4096, 16384} spheres × <see cref="SdfBenchPlacement"/> {Clustered, Uniform,
-    /// FarCorners} × {static, MOVING} (moving forces the per-frame instance-grid rebuild this bench's
+    /// <summary>Starts the dynamic matrix run — the contributed dynamic-geometry ceiling matrix:
+    /// N ∈ {0, 256, 1024, 4096, 16384} spheres × <see cref="SdfBenchPlacement"/> {Clustered, Uniform,
+    /// FarCorners} × {static, moving} (moving forces the per-frame instance-grid rebuild this bench's
     /// <see cref="SdfBenchResult.RebuildMs"/> column reports). The N=0 rung in every (placement, moving) row is the
     /// baseline control. Battery from <see cref="SdfBenchWorkloads.BuildDynamicMatrixLadder"/>.</summary>
     public string StartDynamicMatrix() {
@@ -425,9 +425,9 @@ public sealed class SdfBenchScene {
         return Begin(label: "matrix", configs: configs);
     }
 
-    /// <summary>Starts a single DYNAMIC MATRIX rung — the bisection-point counterpart to
+    /// <summary>Starts a single dynamic matrix rung — the bisection-point counterpart to
     /// <see cref="StartDynamicMatrix"/>'s full ladder, for a harness that already has the ladder's coarse curve and
-    /// wants ONE additional N pinned near a budget-crossing knee without re-running the whole (expensive) battery.
+    /// wants one additional N pinned near a budget-crossing knee without re-running the whole (expensive) battery.
     /// Config from <see cref="SdfBenchWorkloads.DynamicMatrixRung"/>.</summary>
     public string StartDynamicMatrixRung(SdfBenchPlacement placement, bool moving, int count) {
         var config = SdfBenchWorkloads.DynamicMatrixRung(placement: placement, moving: moving, count: count);
@@ -435,14 +435,14 @@ public sealed class SdfBenchScene {
         return Begin(label: $"matrix {config.Label}", configs: [config]);
     }
 
-    /// <summary>Whether the active configuration is a storm MOTION rung OR a MOVING <see cref="SdfBenchWorkload.DynamicMatrix"/>
+    /// <summary>Whether the active configuration is a storm motion rung or a moving <see cref="SdfBenchWorkload.DynamicMatrix"/>
     /// rung, and if so packs this produced frame's dynamic transforms (grown to the config's instance count) into
     /// <paramref name="transforms"/> — the frame source supplies them as the frame's <c>DynamicTransforms</c> so the
     /// moving instances ride the per-frame buffer without a program rebuild. Every other state (idle, storm's
-    /// rebuild/camera rungs, a STATIC matrix rung, every other workload) returns false, so the room's own
+    /// rebuild/camera rungs, a static matrix rung, every other workload) returns false, so the room's own
     /// dynamic-transform buffer is used unchanged. A moving matrix rung's positions come from
     /// <see cref="DynamicMatrixBasePosition"/> (the config's <see cref="SdfBenchConfig.Placement"/>) displaced by the
-    /// SAME deterministic orbit+bob+spin storm motion uses — the placement sets WHERE the set sits, the orbit is what
+    /// same deterministic orbit+bob+spin storm motion uses — the placement sets where the set sits, the orbit is what
     /// forces the per-frame instance-grid rebuild either way.</summary>
     public bool TryPackStormTransforms(out Puck.SdfVm.DynamicTransform[] transforms) {
         transforms = [];
@@ -532,8 +532,8 @@ public sealed class SdfBenchScene {
     /// warm-up + samples, plus one settle frame each.</summary>
     public int EstimatedFramesFor(int configCount) => (configCount * ((m_warmFrames + m_sampleFrames) + 1));
 
-    /// <summary>Advances the run one produced frame. Called from the render node's produce loop BEFORE this frame's
-    /// CaptureFrame, with the PREVIOUS frame's per-pass GPU ms (<paramref name="hasTimings"/> false when timing is off
+    /// <summary>Advances the run one produced frame. Called from the render node's produce loop before this frame's
+    /// CaptureFrame, with the previous frame's per-pass GPU ms (<paramref name="hasTimings"/> false when timing is off
     /// or no timestamp landed) and, independently, the previous frame's CPU instance-grid-rebuild ms
     /// (<paramref name="instanceGridRebuildMs"/>, null when that frame's live program did not rebuild — see
     /// <see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>; sampled regardless of <paramref name="hasTimings"/>,
@@ -780,11 +780,11 @@ public sealed class SdfBenchScene {
     /// (⌈∛count⌉).</summary>
     internal static int GridDimension(int count) => Math.Max(val1: 1, val2: (int)MathF.Ceiling(x: MathF.Cbrt(x: MathF.Max(x: 1f, y: count))));
 
-    /// <summary>The <paramref name="index"/>-th of <paramref name="count"/> instances' BASE position (the static
-    /// placement, and — for a MOVING config — the anchor the per-frame orbit in <see cref="TryPackStormTransforms"/>
+    /// <summary>The <paramref name="index"/>-th of <paramref name="count"/> instances' base position (the static
+    /// placement, and — for a moving config — the anchor the per-frame orbit in <see cref="TryPackStormTransforms"/>
     /// displaces from) under <paramref name="placement"/>: <see cref="SdfBenchPlacement.Uniform"/> is the existing
     /// centered cube grid (spacing <see cref="InstanceSpacing"/>, grows with N); <see cref="SdfBenchPlacement.Clustered"/>
-    /// packs the WHOLE count into the fixed <see cref="DynamicMatrixClusterExtent"/> footprint (spacing SHRINKS as N
+    /// packs the whole count into the fixed <see cref="DynamicMatrixClusterExtent"/> footprint (spacing shrinks as N
     /// grows, so the span stays constant — the worst-tile GPU case); <see cref="SdfBenchPlacement.FarCorners"/> splits
     /// the count across eight local clusters centered <see cref="DynamicMatrixCornerReach"/> from the origin (each
     /// packed at the fixed <see cref="DynamicMatrixCornerSpacing"/>).</summary>

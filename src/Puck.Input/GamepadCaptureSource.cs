@@ -15,15 +15,10 @@ namespace Puck.Input;
 /// (<see cref="IInputArbiter.DrainFrame"/>) and hands the result in.
 /// </summary>
 public sealed class GamepadCaptureSource {
-    // Derived from GamepadButtons itself — NOT a hand-kept parallel list — so a newly added flag cannot silently
-    // fail to reach an InputSignal. Every named GamepadButtons flag (other than None) is required to have a same-
-    // named constant in InputSources.Gamepad (ButtonSouth -> InputSources.Gamepad.ButtonSouth, and so on); this
-    // walks Enum.GetValues once at type init (not per frame — the per-frame path only ever indexes the resulting
-    // array) and throws immediately if a flag has no matching source, rather than the bit reaching GamepadState and
-    // silently going nowhere. Adding a button now means: add the GamepadButtons flag AND the InputSources.Gamepad
-    // constant of the same name; forgetting the second one fails loudly the first time any capture runs (including
-    // GamepadCaptureSource's own constructor, since a beforefieldinit type's static fields are guaranteed to be
-    // initialized before the type is otherwise touched).
+    // Derived from GamepadButtons itself, not a hand-kept parallel list: every named flag (other than None)
+    // must have a same-named constant in InputSources.Gamepad (ButtonSouth -> InputSources.Gamepad.ButtonSouth).
+    // Built once via Enum.GetValues at type init and throws immediately if a flag has no matching source,
+    // rather than the bit silently never reaching GamepadState.
     private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = BuildButtonSources();
 
     private static (GamepadButtons Flag, string Source)[] BuildButtonSources() {

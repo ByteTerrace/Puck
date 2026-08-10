@@ -159,13 +159,12 @@ internal static class ScriptedTradeHarness {
 
     /// <summary>The number of frames <see cref="ContinueScript"/> needs to settle the crafted save into the overworld.
     /// The map (<see cref="LiveMapGroupAddress"/> reading <see cref="PokecenterFloorGroup"/>/<see cref="PokecenterFloorMap"/>)
-    /// is loaded by ~frame 450 and the standing frame is stable well before 600 (verified with <c>--trade-explore --linked</c>
-    /// on both crafted trainers).</summary>
+    /// loads by ~frame 450, and the standing frame is stable well before 600.</summary>
     public const int ContinueSettledFrame = 600;
 
     /// <summary>The frozen input script that walks the trade cart from power-on (seeded post-boot state, no boot ROM)
-    /// through the intro to the title screen and selects CONTINUE, loading the crafted save into the overworld. Verified
-    /// frame-by-frame with <c>--trade-explore</c>: three A taps blow through the publisher logo screen and the intro cinematic to
+    /// through the intro to the title screen and selects CONTINUE, loading the crafted save into the overworld. Three A
+    /// taps blow through the publisher logo screen and the intro cinematic to
     /// the main menu (cursor defaults to CONTINUE, top), a fourth A selects it, and a fifth confirms the save-info screen
     /// and loads the map — the live map block at <see cref="LiveMapGroupAddress"/> reaches
     /// <see cref="PokecenterFloorGroup"/>/<see cref="PokecenterFloorMap"/> (POKECENTER_2F, the Cable Club floor) at
@@ -175,7 +174,7 @@ internal static class ScriptedTradeHarness {
     /// The overworld renders the POKECENTER_2F room and accepts movement only when <see cref="TradeSaveFactory"/>
     /// initializes <c>wScreenSave</c> (the 6×5 saved-screen metatile window, SRAM 0x286C). Gen 2's CONTINUE path restores that window
     /// over the freshly ROM-loaded <c>wOverworldMapBlocks</c> at the player's screen centre (RestoreScreen, home/map.asm) —
-    /// it is NOT re-derived on load — so a zeroed <c>wScreenSave</c> painted border block 0 across the play area, which
+    /// it is not re-derived on load — so a zeroed <c>wScreenSave</c> painted border block 0 across the play area, which
     /// renders as one uniform tile and reads as impassable collision everywhere. The factory writes the correct window
     /// for the (5,3) spawn, matching what a real in-game save holds. The scripted receptionist walk and the full Cable Club
     /// trade depend on that window.

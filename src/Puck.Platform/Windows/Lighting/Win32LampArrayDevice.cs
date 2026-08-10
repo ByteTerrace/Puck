@@ -13,7 +13,7 @@ namespace Puck.Platform.Windows.Lighting;
 /// <c>0x59</c>): an opened lamp array whose feature reports are read and written over CsWin32 (SetupAPI-enumerated
 /// interface, <c>CreateFile</c>, <c>HidP</c> preparsed-data caps, <c>HidD_GetFeature</c>/<c>HidD_SetFeature</c>).
 /// Report ids are discovered from the device's own value caps (never hardcoded per model), so the code drives any
-/// conformant LampArray — the G915 keyboard, a mouse, a light strip — through the same path. The per-report byte
+/// conformant LampArray — a keyboard, a mouse, a light strip — through the same path. The per-report byte
 /// layout it packs is the standard HID LampArray reference report structure, which every conformant device shares.
 /// </summary>
 /// <remarks>

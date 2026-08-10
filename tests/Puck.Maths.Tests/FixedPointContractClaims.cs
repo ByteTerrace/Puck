@@ -310,4 +310,78 @@ internal static class FixedPointContractClaims {
 
         return null;
     }
+
+    // ---- FixedTickConversion.TryDurationEngineTicksExact: the exact-or-refuse rule vs. an independent BigInteger
+    // decomposition of the authored decimal's own bits, with an independent BigInteger carrier ----
+
+    /// <summary>Checks one authored decimal duration against an INDEPENDENT BigInteger recomputation — decomposing
+    /// <paramref name="seconds"/> via <see cref="decimal.GetBits(decimal)"/> into its sign, base-10 scale, and
+    /// unscaled 96-bit integer (lossless), then testing <c>unscaled * TicksPerSecond</c> for exact divisibility by
+    /// <c>10^scale</c> in <see cref="BigInteger"/> rather than the subject's bounded <see cref="UInt128"/> carrier.
+    /// </summary>
+    /// <param name="seconds">The authored duration to check.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    private static string? CheckTryDurationEngineTicksExact(decimal seconds) {
+        var actualExact = FixedTickConversion.TryDurationEngineTicksExact(seconds: seconds, ticks: out var actualTicks);
+        var bits = decimal.GetBits(d: seconds);
+        var negative = (((uint)bits[3] & 0x80000000U) != 0U);
+        var scale = (((uint)bits[3] >> 16) & 0xFFU);
+        var unscaled = ((((BigInteger)(uint)bits[2]) << 64) | (((BigInteger)(uint)bits[1]) << 32) | ((BigInteger)(uint)bits[0]));
+
+        if (negative) {
+            return actualExact
+                ? $"TryDurationEngineTicksExact({seconds}) = true (ticks={actualTicks}), expected false (negative duration)"
+                : null;
+        }
+
+        var scalePower = BigInteger.Pow(value: 10, exponent: (int)scale);
+        var numerator = (unscaled * FixedTickConversion.TicksPerSecond);
+        var expectedTicks = (numerator / scalePower);
+        var expectedExact = (((numerator % scalePower) == BigInteger.Zero) && (expectedTicks <= ulong.MaxValue));
+
+        if (actualExact != expectedExact) {
+            return $"TryDurationEngineTicksExact({seconds}) returned {actualExact}, expected {expectedExact} (unscaled={unscaled}, scale={scale})";
+        }
+
+        if (expectedExact) {
+            if ((BigInteger)actualTicks != expectedTicks) {
+                return $"TryDurationEngineTicksExact({seconds}) = {actualTicks} ticks, expected {expectedTicks}";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Exact-or-refuse: <see cref="FixedTickConversion.TryDurationEngineTicksExact"/> matches an independent
+    /// BigInteger decomposition of the authored decimal's own bits over a curated edge set (zero, a negative
+    /// duration, every dyadic value already authored in a shipped or scenario document, the finest
+    /// terminating-decimal grid that is always exact — 1/800 s and its multiples, each non-trivial divisor of 50400,
+    /// curated inexact decimals including approximations of 1/24 s and 35/12 s, and exact values beyond the ulong
+    /// result carrier) plus a dense millisecond sweep.
+    /// </summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? TryDurationEngineTicksExactAgainstDecimalBits() {
+        decimal[] edges = [
+            0.0m, -0.01m, -1.0m,
+            0.25m, 0.5m, 1.0m, 3.0m,
+            0.00125m, 0.0025m, 0.00375m, 0.005m, 0.00625m, 0.0075m, 0.00875m, 0.01m, 0.01125m, 0.0125m, 0.01375m, 0.015m,
+            0.1m, 0.02m, 0.04m, 0.05m, 0.2m,
+            0.041667m, 0.0417m, 0.04166666667m, 2.91667m,
+            1000000000000000m, decimal.MaxValue,
+        ];
+
+        foreach (var seconds in edges) {
+            if (CheckTryDurationEngineTicksExact(seconds: seconds) is { } detail) {
+                return detail;
+            }
+        }
+
+        for (var milli = 0; (milli <= 2000); milli += 37) {
+            if (CheckTryDurationEngineTicksExact(seconds: (milli / 1000.0m)) is { } detail) {
+                return detail;
+            }
+        }
+
+        return null;
+    }
 }

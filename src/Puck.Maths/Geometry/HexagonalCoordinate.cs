@@ -4,12 +4,12 @@ namespace Puck.Maths;
 
 /// <summary>
 /// An exact hexagonal grid coordinate: a point of the triangular lattice, realized as the Eisenstein integer
-/// <c>Q + R·ω</c> (where <c>ω</c> is a primitive cube root of unity). Because it is a genuine number ring, a 60°
-/// rotation is an exact integer multiply by a unit — no rounding, no drift — unlike the approximate
-/// <see cref="FixedComplex"/>, and distance, neighbours, and the ring product are all exact integer arithmetic.
+/// <c>Q + R·ω</c> (where <c>ω</c> is a primitive cube root of unity).
 /// </summary>
 /// <remarks>
-/// The six nearest neighbours are the six units of the ring (the sixth roots of unity), enumerated by
+/// Because it is a genuine number ring, a 60° rotation is an exact integer multiply by a unit — no rounding, no
+/// drift — unlike the approximate <see cref="FixedComplex"/>, and distance, neighbours, and the ring product are
+/// all exact integer arithmetic. The six nearest neighbours are the six units of the ring (the sixth roots of unity), enumerated by
 /// <see cref="Direction(int)"/>; step to one with <see cref="Neighbor(int)"/>. <see cref="Length"/> is the hex-grid
 /// step distance from the origin (the number of moves), while <see cref="Norm"/> is the field norm — the squared
 /// Euclidean distance. <see cref="RotatedRight"/> and <see cref="RotatedLeft"/> turn 60° by multiplying by a unit, and

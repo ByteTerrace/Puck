@@ -8,14 +8,14 @@ namespace Puck.Commands;
 /// document is the single source of truth for a player's controller mapping — it loads straight from JSON,
 /// compiles via <see cref="BindingProfile.Compile"/>, and an editor round-trips it back to storage.
 /// </summary>
-/// <remarks>Unmapped members are REJECTED, here and on every record it nests
+/// <remarks>Unmapped members are rejected, here and on every record it nests
 /// (<see cref="BindingModifierDefinition"/>, <see cref="BindingChordDefinition"/>, <see cref="BindingPageDefinition"/>,
 /// <see cref="BindingPageEntryDefinition"/>, <see cref="BindingCommandDefinition"/>): a retired authoring key fails
 /// by name rather than being silently dropped.</remarks>
 /// <param name="Version">The document schema version; currently <see cref="CurrentVersion"/>.</param>
 /// <param name="Modifiers">The modifier declarations chord rows reference by id.</param>
-/// <param name="Chords">The chord rows. Exactly one empty-chord (resting) PAGE row per group; the first row's
-/// group is the profile's DEFAULT group (the group a fresh slot resolves in).</param>
+/// <param name="Chords">The chord rows. Exactly one empty-chord (resting) page row per group; the first row's
+/// group is the profile's default group (the group a fresh slot resolves in).</param>
 /// <param name="Contexts">The optional context rows (<see cref="BindingContextDefinition"/>: <c>(family, state) →
 /// group</c>) deriving a seat's active group from published engine state; <see langword="null"/> declares none.
 /// First matching row in document order wins across families; a shadowed later match is reported by the

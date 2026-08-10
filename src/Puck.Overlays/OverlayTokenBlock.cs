@@ -34,7 +34,7 @@ public enum OverlayColorRole : uint {
 }
 
 /// <summary>
-/// The single GPU token slab, uploaded ONCE into the front of the unified overlay's storage buffer. Layout (all
+/// The single GPU token slab, uploaded once into the front of the unified overlay's storage buffer. Layout (all
 /// words, block at buffer word 0):
 /// <list type="bullet">
 /// <item><description>Words <c>[0, 4×RoleCount)</c> — one RGBA <c>float4</c> per <see cref="OverlayColorRole"/>, in
@@ -44,7 +44,7 @@ public enum OverlayColorRole : uint {
 /// <see cref="Scalar"/>.</description></item>
 /// </list>
 /// KEEP IN SYNC with the HLSL accessors <c>OverlayTokenColor</c>/<c>OverlayTokenScalar</c> in
-/// <c>Assets/Shaders/overlay-common.hlsli</c> — this file and those two functions are the ONE layout contract.
+/// <c>Assets/Shaders/overlay-common.hlsli</c> — this file and those two functions are the one layout contract.
 /// </summary>
 public static class OverlayTokenBlock {
     /// <summary>The geometry-scalar slots, indexed after the color table.</summary>

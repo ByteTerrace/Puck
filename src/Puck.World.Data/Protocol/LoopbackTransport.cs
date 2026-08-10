@@ -1,22 +1,26 @@
 namespace Puck.World.Protocol;
 
 /// <summary>The in-process transport binding one client to one <see cref="IWorldServerHost"/> (a
-/// <c>Puck.World.Server.WorldServer</c>, always, but this project names it only through the interface): every
-/// non-intent submission (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/addon-
-/// lifecycle) travels as ONE <see cref="SubmissionEnvelope"/> through <see cref="IWorldServerHost.Submit"/> — the
-/// server's single ordered domain — which this transport enqueues and drains INLINE, on the tick thread, before a
+/// <c>Puck.World.Server.WorldServer</c>, always, but this project names it only through the interface).</summary>
+/// <remarks>
+/// Every non-intent submission (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/addon-
+/// lifecycle) travels as one <see cref="SubmissionEnvelope"/> through <see cref="IWorldServerHost.Submit"/> — the
+/// server's single ordered domain — which this transport enqueues and drains inline, on the tick thread, before a
 /// <c>Submit*</c> call returns (the host's command-apply window immediately precedes the tick's step, so FIFO order
 /// and read-after-write are preserved — a byte transport would buffer to the same boundary instead). Per-tick
 /// intents buffer separately. The produced <see cref="WorldSnapshot"/> is pushed to every attached
 /// <see cref="IClientSink"/>. Single-threaded on the host tick. Every submission crosses <see cref="WorldFrameCodec"/>'s
 /// canonical encode-then-decode path even when no replay is armed; loopback is a transport optimization, never a
-/// second object-only protocol.</summary>
-/// <remarks>Every RECORD TAP fires immediately BEFORE its write reaches the server (before <see cref="IWorldServerHost.Submit"/>
+/// second object-only protocol.
+/// <para>
+/// Every record tap fires immediately before its write reaches the server (before <see cref="IWorldServerHost.Submit"/>
 /// is called), so the tape captures the submission stream in the exact order the server saw it — including the
 /// interleaving between a driving command and a grant change, which is the coordinate an authority verdict is pinned
 /// against. <see cref="IntentTap"/>/<see cref="CommandTap"/>/<see cref="GrantTap"/>/<see cref="RevokeTap"/>/
 /// <see cref="SessionTap"/>/<see cref="AddonLifecycleTap"/> are captured on tape today; the envelope/ordered-domain
-/// reshape does not add or remove tape coverage beyond that.</remarks>
+/// reshape does not add or remove tape coverage beyond that.
+/// </para>
+/// </remarks>
 public sealed class LoopbackTransport : IServerLink {
     private readonly IWorldServerHost m_server;
     // The local connection's per-connection monotonic Sequence and the CorrelationId every envelope mints — both
@@ -48,7 +52,7 @@ public sealed class LoopbackTransport : IServerLink {
     public Action<WorldDesignation, WorldPrincipal>? DesignationTap { get; set; }
 
     /// <summary>Gets an optional record tap invoked with every grant acquisition before it applies, carrying the grant row
-    /// and the ACTOR that asked for it. Captured for the same reason commands are: authority is an input to the tick,
+    /// and the actor that asked for it. Captured for the same reason commands are: authority is an input to the tick,
     /// and a replay whose fresh world was never granted re-drives a differently-authorized simulation — which bites
     /// hardest on the addon path, where the re-run guest is checked against the replayed world's own table.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
@@ -63,15 +67,17 @@ public sealed class LoopbackTransport : IServerLink {
     public Action<SessionRequest>? SessionTap { get; set; }
 
     /// <summary>Gets an optional record tap invoked with every addon-lifecycle submission before it reaches the server,
-    /// carrying the action and the ACTOR that submitted it — the same reasoning <see cref="GrantTap"/> carries: a
+    /// carrying the action and the actor that submitted it — the same reasoning <see cref="GrantTap"/> carries: a
     /// replay whose fresh world never re-mounted (or re-unmounted) a guest re-drives a differently-composed
     /// simulation. <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldAddonLifecycle, WorldPrincipal>? AddonLifecycleTap { get; set; }
 
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
     /// <param name="sink">The client sink.</param>
-    public void Bind(IClientSink sink) {
-        m_server.AttachSink(sink: sink);
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed — see
+    /// <see cref="IWorldServerHost.AttachSink"/>'s own remarks for the threading and disposal contract.</returns>
+    public IDisposable Bind(IClientSink sink) {
+        return m_server.AttachSink(sink: sink);
     }
 
     /// <inheritdoc/>
@@ -115,9 +121,9 @@ public sealed class LoopbackTransport : IServerLink {
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        // Queries carry no principal of their own today (every caller is an in-process, trusted console/script
-        // reader — see WorldCapability.Observe's own remarks); Console is the honest stand-in until a wire admits
-        // untrusted queries and this transport starts stamping the connection's own claimed identity instead.
+        // Queries carry no principal of their own; the envelope is the identity coordinate. In-process read-backs
+        // are trusted console/script readers, so loopback stamps Console. WorldTcpHost stamps its admitted peer
+        // instead, and WorldServer applies the same Observe gate to both before composing the answer.
         if (TryNextEnvelope(principal: WorldPrincipal.Console, payload: new WorldSubmissionPayload.Query(Value: query), envelope: out var envelope)) {
             m_server.Submit(envelope: envelope, completion: result => completion(((WorldSubmissionResult.Query)result).Answer));
         } else {

@@ -137,6 +137,18 @@
     "portals": {
       "$ref": "./schema/portals.schema.json"
     },
+    "simulation": {
+      "$ref": "./schema/simulation.schema.json"
+    },
+    "destinations": {
+      "$ref": "./schema/destinations.schema.json"
+    },
+    "admission": {
+      "$ref": "./schema/admission.schema.json"
+    },
+    "market": {
+      "$ref": "./schema/market.schema.json"
+    },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"
     },

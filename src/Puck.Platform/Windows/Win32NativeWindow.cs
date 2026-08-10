@@ -577,8 +577,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         // LOWORD(lParam) is the WM_NCHITTEST result. Own only HTCLIENT: the non-client frame still belongs to
         // DefWindowProc so Windows supplies its native edge/corner resize cursors. The explicit arrow assignment is
-        // intentional even though the class carries IDC_ARROW too — a class with no cursor used to leave whatever
-        // process-global cursor happened to be active (commonly the startup wait spinner) unchanged indefinitely.
+        // needed even though the class carries IDC_ARROW too — a class with no cursor leaves whatever process-global
+        // cursor happened to be active (commonly the startup wait spinner) unchanged indefinitely.
         if ((unchecked((ushort)lParam.ToInt64())) == HtClient) {
             _ = User32.SetCursor(cursorHandle: ArrowCursorHandle);
             return 1;

@@ -12,31 +12,30 @@ namespace Puck.World;
 /// <summary>
 /// The players' console surface: the verbs a piped script (or the on-screen console) drives the avatars with, the two
 /// stick routers, and the channel-generic verbs (<see cref="ChannelVerbs"/>) the keyboard binding table targets —
-/// one auto-registered command per declared world channel, replacing the old fixed six-verb movement set. The
-/// drive-a-player verbs (<c>fly</c> / <c>pose</c> / <c>where</c> / <c>stop</c>) take an optional
-/// trailing player index reaching the whole population (1..128, default player 1): 1..4 resolve to the local roster
-/// seats, 5..128 to the population's simulated entries (each owning its own <see cref="WorldBody"/> sim). A non-local
-/// entity is only ever sent inputs (a fly/pose is a command producing intents or a teleport, never a pose stream). The
-/// channel verbs carry no player-index argument at all: a bound control targets whichever local seat's device dispatched it
-/// (the recorded logical slot — see the class remarks below), and a TYPED invocation with no device defaults to
-/// player 1. The roster-management verbs (<c>join</c> / <c>leave</c> / <c>profile</c> /
-/// <c>assign</c>) stay seat-only (1..4). Mutations are simulation-routed and applied from the tick snapshot immediately
-/// before <see cref="WorldSimulation"/> advances; read-only inspection sees the last completed tick.
+/// one auto-registered command per fixed channel ordinal, so a channel verb never depends on which destination
+/// world's channel names exist at boot. The drive-a-player verbs (<c>fly</c> / <c>pose</c> / <c>where</c> /
+/// <c>stop</c>) take an optional trailing player index reaching the whole population (1..128, default player 1):
+/// 1..4 resolve to the local roster seats, 5..128 to the population's simulated entries (each owning its own
+/// <see cref="WorldBody"/> sim). A non-local entity is only ever sent inputs (a fly/pose is a command producing
+/// intents or a teleport, never a pose stream). The channel verbs carry no player-index argument at all: a bound
+/// control targets whichever local seat's device dispatched it (the recorded logical slot — see the class remarks
+/// below), and a typed invocation with no device defaults to player 1. The roster-management verbs (<c>join</c> /
+/// <c>leave</c> / <c>profile</c> / <c>assign</c>) stay seat-only (1..4). Mutations are simulation-routed and applied
+/// from the tick snapshot immediately before <see cref="WorldSimulation"/> advances; read-only inspection sees the
+/// last completed tick.
 /// </summary>
 /// <remarks><para>The stick channels (<c>player.move</c> / <c>player.look</c>) are not polled: their bindings fire on the
 /// default active phase, and the snapshot router re-dispatches carried analog values each tick. Handlers route each
 /// dispatch by its recorded logical slot; the local device id is consulted only when a previously unseen live device
 /// first needs seating.</para>
 /// <para><c>join</c>/<c>leave</c>/<c>fly</c>/<c>stop</c>/<c>where</c>/<c>pose</c> also accept a trailing
-/// <c>instance:&lt;name&gt;</c> token (see <see cref="TryStripInstanceToken"/>), addressing a NAMED running
-/// <see cref="WorldInstance"/> (<see cref="WorldInstanceHost"/>) instead of the boot world — the ordinary player
-/// surface reaching what used to be the separate world.instance.seat.* verb family. The instance form
-/// preserves THOSE verbs' exact semantics rather than the boot form's convenience: a slot is always the 1-based local
-/// seat 1..<see cref="Server.WorldPopulation.LocalSeatCount"/> (never a population entry, and never defaulted — a
-/// bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s "next free slot"/either-order
-/// profile-then-slot convenience does not apply there (the instance form never had it either).</para>
+/// <c>instance:&lt;name&gt;</c> token (see <see cref="TryStripInstanceToken"/>), addressing a named running
+/// <see cref="WorldInstance"/> (<see cref="WorldInstanceHost"/>) instead of the boot world. In the instance form, a
+/// slot is always the 1-based local seat 1..<see cref="Server.WorldPopulation.LocalSeatCount"/> (never a population
+/// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
+/// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances) : ICommandModule {
+internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings) : ICommandModule {
     /// <summary>The Axis2D command the gamepad's LEFT stick is bound to (+Y forward, +X strafe right). The handler
     /// ROUTES the dispatch to the owning device's player (joining an unmapped pad per the roster rules).</summary>
     public const string MoveCommand = "player.move";
@@ -67,10 +66,16 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     private readonly WorldServer m_server = server;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
-    // The world's compiled channel table — name→ordinal resolution for player.press and the auto-registered
-    // per-channel commands (ChannelVerbs). Validation (WorldDefinitionValidator) has already run by the time a
-    // WorldDefinition reaches here, so every declared name resolves.
+    // The BOOT world's compiled channel table — name→ordinal resolution for player.press and PickerDirection's
+    // pre-join Turn-role check. Validation has already run by the time a WorldDefinition reaches here, so every
+    // declared name resolves. NEVER the source a bound channel verb dispatches against — see m_seatBindings.
     private readonly WorldChannelTable m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+    // The per-seat CURRENTLY ROUTED channel vocabulary (WorldSeatBindings.Channels, kept in sync with each seat's
+    // WorldSeatInstanceRouter location by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
+    // channel NAME through that table to one of the fixed ordinal commands registered below; ChannelVerb checks the
+    // same table again when the bound control fires. The command registry and its replay-stable ids therefore never
+    // depend on which local, late-mounted, or remote destination documents happened to be readable at boot.
+    private readonly WorldSeatBindings m_seatBindings = seatBindings;
 
     // The reserved trailing token an instance-addressed drive-a-player verb carries — see TryStripInstanceToken.
     private const string InstanceTokenPrefix = "instance:";
@@ -98,12 +103,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         }
     }
 
-    /// <summary>The command name a declared channel's binding destination compiles down to (see
-    /// <see cref="Puck.Commands.BindingProfile.ChannelCommandName"/>). One command per declared channel (movement
-    /// roles included), auto-registered from the world's channel table by <see cref="ChannelVerbs"/>; a binding's
-    /// <c>Value</c> carries the destination's <c>scale</c>.</summary>
-    /// <param name="channel">The channel destination.</param>
-    public static string ChannelCommandName(ChannelRef channel) => Puck.Commands.BindingProfile.ChannelCommandName(channel: channel);
+    /// <summary>The runtime command name a seat binding lowers one validated channel ordinal to. Every possible
+    /// ordinal is registered at boot, so destination discovery never mutates the command registry or its replay ids.</summary>
+    /// <param name="ordinal">The channel ordinal.</param>
+    internal static string RoutedChannelCommandName(int ordinal) => $"channel.ordinal.{ordinal}";
 
     // Text mutations enter the same tick snapshots as physical input. Read-only inspection stays immediate so an
     // operator can inspect the last completed tick even while no simulation step is currently due.
@@ -269,40 +272,31 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         );
     }
 
-    // One command per declared channel (movement roles included), auto-registered from the world's channel table —
-    // the destination every binding's "channel" field compiles down to (see ChannelCommandName). Replaces the six
-    // fixed per-direction movement verbs and the Primary/Secondary gesture verbs with one channel-generic shape. A
-    // channel that also claims an engine motion role (WorldChannel.Role) registers no SEPARATE role-named command —
-    // channel.role.<v> and channel.name.<v> always resolved to the identical ordinal, so the role form was a
-    // duplicate destination, not a distinct one (ChannelRef.Role is retired; every binding names the channel by its
-    // declared name).
+    // One command per fixed channel ORDINAL, not per authored name. WorldSeatBindings validates a name against the
+    // firing seat's currently routed table and lowers it to this stable vocabulary while compiling that seat's
+    // profile. This is complete for every legal world because ChannelLimits.MaxChannels is the document ceiling; it
+    // does not crawl references, assume a target exists at boot, or change the command-id table when one appears.
     private IEnumerable<CommandDefinition> ChannelVerbs() {
-        foreach (var channel in m_definition.Channels) {
-            if (!m_channels.TryGetOrdinal(name: channel.Name, ordinal: out var ordinal)) {
-                continue;
-            }
-
-            yield return ChannelVerb(ordinal: ordinal, channelName: channel.Name, reference: new ChannelRef.Name(Value: channel.Name));
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            yield return ChannelVerb(ordinal: ordinal);
         }
     }
 
-    // A channel-generic movement/composition verb, targeting whichever player owns the binding's device (the default
-    // device id, reassignable between slots). Press/continuous edges hold the channel at the binding's scaled value,
-    // a release edge frees it (the binding pushes both edges to this verb, so the phase separates them). While the
-    // keyboard's player is pending, the Turn-role channel is repurposed as the profile picker (positive scale cycles
-    // forward, negative back) and every other channel stays inert — the channel-named generalization of the old
-    // turn-left/turn-right picker rule.
-    private CommandDefinition ChannelVerb(int ordinal, string channelName, ChannelRef reference) {
-        var commandName = ChannelCommandName(channel: reference);
+    // A channel-generic movement/composition verb targeting whichever player owns the binding's device. Press/
+    // continuous edges hold the channel at the binding's scaled value; a release edge frees it. While the keyboard's
+    // player is pending, the Turn-role channel becomes the profile picker (positive scale cycles forward, negative
+    // back) and every other channel stays inert.
+    private CommandDefinition ChannelVerb(int ordinal) {
+        var commandName = RoutedChannelCommandName(ordinal: ordinal);
 
         return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: commandName,
-            description: $"Holds channel \"{channelName}\" at the binding's scaled value while its source is active — the channel-generic movement/composition destination (see world.affordances). A held control, not a typed verb: use player.press {channelName} [value] [holdSeconds] [player] to script it.",
+            description: $"Holds the currently routed world's declared channel at ordinal {ordinal} while its source is active — an internal binding target lowered from the authored channel name, not a typed verb.",
             valueKind: CommandValueKind.Axis1D,
             handler: context => {
                 if (context.Parse is not null) {
-                    return CommandResult.Error(output: $"[{commandName}: a bound channel destination, not a typed verb — use player.press {channelName} [value] [holdSeconds] [player] to script it]");
+                    return CommandResult.Error(output: $"[{commandName}: an internal bound-channel destination, not a typed verb — use player.press <channel-name> [value] [holdSeconds] [player] to script it]");
                 }
 
                 var slot = context.Slot;
@@ -311,11 +305,20 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                     return CommandResult.None;
                 }
 
+                // Checked against the DISPATCHING SEAT's own CURRENTLY ROUTED table. A release always runs even if
+                // the route changed since the press: it frees whatever this physical control last actually held.
+                var seatTable = m_seatBindings.Channels(slot: slot);
+                var declared = seatTable.IsDeclared(ordinal: ordinal);
                 var scale = FixedQ4816.FromDouble(value: context.Value.AsAxis1D);
 
                 // The roster owns the pending-vs-locomotion decision: while the slot is pending it consumes a Turn-role
-                // press as a picker step; an active slot lets the held-channel locomotion run.
-                if (m_roster.TryPickerStep(slot: slot, direction: ((context.Phase is CommandPhase.Started) ? PickerDirection(ordinal: ordinal, scale: scale) : 0))) {
+                // press as a picker step; an active slot lets the held-channel locomotion run. TryPickerStep's own
+                // contract consumes the press unconditionally while pending — every pending seat sits at the boot
+                // route (pre-join), so an ordinal the boot table does not declare steers nothing (direction 0) and
+                // never breaks the consume.
+                var direction = (((context.Phase is CommandPhase.Started) && declared) ? PickerDirection(table: seatTable, ordinal: ordinal, scale: scale) : 0);
+
+                if (m_roster.TryPickerStep(slot: slot, direction: direction)) {
                     return CommandResult.None;
                 }
 
@@ -327,7 +330,9 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                     }
 
                     if (context.Phase is CommandPhase.Started or CommandPhase.Active) {
-                        seat.HoldChannel(controlId: context.Source, ordinal: ordinal, scale: scale);
+                        if (declared) {
+                            seat.HoldChannel(controlId: context.Source, ordinal: ordinal, scale: scale);
+                        }
                     } else {
                         seat.ReleaseChannel(controlId: context.Source);
                     }
@@ -340,9 +345,11 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
 
     // The picker step direction while pending: only the Turn-role channel steers the picker (positive scale = next
     // candidate, negative = previous), every other channel is inert — the channel-role generalization of the old
-    // fixed AxisTurnLeft/AxisTurnRight check.
-    private int PickerDirection(int ordinal, FixedQ4816 scale) {
-        if (ordinal != m_channels.RoleOrdinals.Turn) {
+    // fixed AxisTurnLeft/AxisTurnRight check. Reads the Turn role from the SAME table the caller resolved `ordinal`
+    // against, never a different (e.g. boot) table — an ordinal is only ever meaningful against the table that
+    // produced it.
+    private static int PickerDirection(WorldChannelTable table, int ordinal, FixedQ4816 scale) {
+        if (ordinal != table.RoleOrdinals.Turn) {
             return 0;
         }
 
@@ -696,10 +703,8 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
 
         // A seat's held device state is client-side: free it here so the stop covers both halves. Only on an actual
         // stop — a refused command changed nothing server-side, so the seat's own local image should not be
-        // silently dropped either. This ALSO clears the input-layer half a physical release never reaches on its
-        // own — a Toggle-mode channel latched ON (see BindingEntryMode) — so the panic verb's totality covers it
-        // too, not just the client-side held image; ClearSlotHeld's own cancellations are what actually calls the
-        // held channel's release handler (see its remarks on CommandRegistry.ApplySnapshot's Dispatch gate).
+        // silently dropped. This also releases a Toggle-mode channel latched ON (see BindingEntryMode), which a
+        // physical release alone never reaches.
         if (IsSeat(index: index)) {
             var slot = PlayerRoster.SlotFromDisplay(number: index);
 
@@ -822,15 +827,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: missError);
         }
 
-        // AUTHORITY FIRST, before any mutation (including a screen's auto-insert boot below): the ACTING principal —
-        // the submitter, never the target player index's own principal (every seat is pre-seeded Control/all, so
-        // checking the target instead of the actor would pass unconditionally) — must hold Control over the ROUTE
-        // TARGET. A denied actor changes nothing, not even the magazine selection a boot would have made. This is a
-        // CLIENT-SIDE precheck against the server's own grant table (WorldServer.Engagement.CheckEngage is a
-        // read-only query, ungated like every other in-process read) — the actual mutation still re-checks the
-        // identical pair server-side, atomically, inside WorldCommand.Engage's apply (see PlayerCommandModule's own
-        // class remarks on why nothing can intervene between this read and the command submitted a few lines below,
-        // over loopback).
+        // Authority check happens before any mutation, including the auto-insert boot below: it checks the acting
+        // principal (the submitter), not the target player's own principal — every seat is pre-seeded Control/all,
+        // so checking the target would pass unconditionally. This is a client-side precheck against the server's
+        // grant table; the mutation itself re-checks the identical pair atomically in WorldCommand.Engage's apply.
         var actingPrincipal = context.ActingPrincipal();
 
         if (m_server.Engagement.CheckEngage(target: target, actingPrincipal: actingPrincipal) is { IsAllowed: false } engageVerdict) {
@@ -844,12 +844,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                 return CommandResult.Error(output: $"[player.engage: no screen {screenIndex} — see world.screens]");
             }
 
-            // Route policy is mechanical data-following: the screen must permit engagement, carry a machine to receive
-            // the input (an engageable None/test-pattern/unbooted screen has nothing to control — engage errors
-            // loudly), and, when its route sets a radius, the avatar must be within it of the screen's origin (a
-            // plain planar distance). LOOPBACK-ONLY: the radius check reads the server body's pose in-process; a
-            // socket transport checks the radius server-side in the engage command (machine presence stays a client
-            // check — the binder is client-owned).
+            // Engaging requires the screen to permit engagement, carry a machine to receive input, and — when the
+            // route sets a radius — the avatar be within that planar distance of the screen's origin. The radius
+            // check here reads the server body's pose in-process (loopback only); a socket transport checks the
+            // radius server-side in the engage command instead.
             if (!screen.Route.Engageable) {
                 return CommandResult.Error(output: $"[player.engage: screen {screenIndex} is not engageable]");
             }
@@ -883,12 +881,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: $"[player.engage: no body {target.Value} — see world.population]");
         }
 
-        // The precheck above already confirmed actingPrincipal holds Control over target, moments ago on this same
-        // thread, with nothing over loopback able to intervene — so this submission is guaranteed to land. The
-        // command itself re-checks the identical pair atomically with its mutation server-side (see
-        // Server.WorldEngagement.Engage), so a denial can only ever be reported here, never silently applied without
-        // it. p{index}'s device state is dropped client-side (only this side tracks held keys/lanes) in the same
-        // breath as the submission, matching Engage's old atomic shape.
+        // The precheck above already confirmed actingPrincipal holds Control over target on this same thread, so
+        // this submission is guaranteed to land; the command re-checks the identical pair atomically server-side in
+        // Server.WorldEngagement.Engage. p{index}'s device state (held keys/lanes) is dropped client-side in the
+        // same breath as the submission.
         var targetPrincipal = TargetPrincipalFor(index: index);
 
         m_link.SubmitCommand(command: new WorldCommand.Engage(Principal: actingPrincipal, EntityIndex: (index - 1), Target: target, Capture: capture, TargetPrincipal: targetPrincipal));
@@ -977,12 +973,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: $"[player.disengage: {actingPrincipal.Describe()} lacks control over p{index}'s screen — see world.why]");
         }
 
-        // Only a TRUE disengage (ordinary, or the stuck-latch repair) drops p{index}'s held device state — the
-        // route-without-latch repair means the entity was never actually engaged, so there is nothing to release (see
-        // WorldEngagement.ResolveDisengage's own remarks on why the two REPAIRED cases are not symmetric here). As at
-        // player.engage, this is CLIENT-side held state only — a BindingEntryMode.Toggle latch (InputRouter) survives
-        // a disengage on purpose: rerouting input is not a stop, so a toggled-on channel should keep reading toggled
-        // on once the seat's own body is driving it again.
+        // Only a true disengage (ordinary, or the stuck-latch repair) drops p{index}'s held device state; the
+        // route-without-latch repair means the entity was never actually engaged, so there is nothing to release.
+        // This is client-side held state only — a BindingEntryMode.Toggle latch (InputRouter) survives a disengage
+        // on purpose, since rerouting input is not a stop.
         if (((outcome == DisengageOutcome.RepairedLatch) || (outcome == DisengageOutcome.Disengaged)) && IsSeat(index: index)) {
             m_roster.Seat(slot: PlayerRoster.SlotFromDisplay(number: index))?.ReleaseAllHeld();
         }
@@ -999,12 +993,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             : Echoed(args: in args, handler: $"[player.disengage: p{index} was not engaged]"));
     }
 
-    // The identity an engagement ROUTE is recorded under for a 1-based display index — the seat's own claimed
-    // identity (Puck.World.Client.PlayerRoster.PrincipalOf, which already falls back to WorldPrincipal.Seat when
-    // nothing claimed the slot) for 1..4, or the population's current generation-bearing peer identity for 5..128. Passed
-    // explicitly on WorldCommand.Engage/Disengage because only the CLIENT's roster knows about a claim override —
-    // Server.WorldEngagement resolves a body's OWN principal by index arithmetic alone (see its class remarks) and
-    // has no roster to ask.
+    // The identity an engagement route is recorded under for a 1-based display index — the seat's own claimed
+    // identity (PlayerRoster.PrincipalOf, falling back to WorldPrincipal.Seat) for 1..4, or the population's current
+    // peer identity for 5..128. Passed explicitly because only the client's roster knows about a claim override;
+    // Server.WorldEngagement resolves a body's own principal by index arithmetic alone and has no roster to ask.
     private WorldPrincipal TargetPrincipalFor(int index) {
         return (IsSeat(index: index)
             ? m_roster.PrincipalOf(slot: PlayerRoster.SlotFromDisplay(number: index))
@@ -1280,11 +1272,9 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     }
 
     // The hold-current resolution shared by the boot and instance-targeted branches: a synchronous, same-thread read
-    // of the SAME live body the caller just resolved — nothing can move it between this read and the SnapPose
-    // submission a few lines later, so a partial update is one atomic write, never a read-then-write race (see the
-    // class remarks this handler's description references). Position reads straight off the public pose;
-    // heading/pitch/roll are decomposed from the public Orientation with the exact inverse of the server's own Euler
-    // construction (WorldBody's private EulerRadians/OrientationFromEuler pair), so a held axis reproduces the
+    // of the same live body the caller just resolved, so nothing can move it before the SnapPose submission a few
+    // lines later — one atomic write, never a read-then-write race. Heading/pitch/roll are decomposed from the
+    // public Orientation with the exact inverse of WorldBody's Euler construction, so a held axis reproduces the
     // identical triple player.where would report.
     private static bool TryResolvePoseSegment(in WireArgs args, WorldBody player, string verb, out float x, out float y, out float z, out float yawDegrees, out float pitchDegrees, out float rollDegrees, out CommandResult? error) {
         x = y = z = yawDegrees = pitchDegrees = rollDegrees = 0f;
@@ -1392,12 +1382,9 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                 return CommandResult.Error(output: "[player.press: could not parse <holdSeconds> as a number]");
             }
 
-            // RAW, unclamped — the server is the one authority over both caps (the deciding grant's ceiling AND the
-            // engine backstop) and the one that labels which bound the result. Pre-clamping here to the backstop
-            // made a >60s request with a widened grant indistinguishable from an honest 60s request by the time it
-            // reached PressChannel: exceedsBackstop could never be true, so EngineCeiling could never be named and
-            // the request silently truncated in stdin — exactly the lie this lane exists to kill. NaN and
-            // non-positive values are already handled authoritatively server-side (PressHoldCapKind.Ignored).
+            // Sent raw, unclamped — the server is the sole authority over both caps (the deciding grant's ceiling
+            // and the engine backstop) and the one that labels which bound the result. NaN and non-positive values
+            // are handled authoritatively server-side (PressHoldCapKind.Ignored).
             holdSeconds = authoredHoldSeconds;
         }
 
@@ -1688,6 +1675,14 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                 return CommandResult.Error(output: $"[player.leave: instance-targeted <slot> must be an integer 1..{WorldPopulation.LocalSeatCount}]");
             }
 
+            if (m_instances.TryFindFollowedRosterSlot(instanceName: instance.Name, instanceSlot: (instanceSlot - 1), rosterSlot: out var rosterSlot)) {
+                if (!m_roster.Leave(slot: rosterSlot, actingPrincipal: context.ActingPrincipal())) {
+                    return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {(rosterSlot + 1)}, which cannot leave or the actor was denied]");
+                }
+
+                return new CommandResult(Output: $"[player.leave: player {(rosterSlot + 1)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
+            }
+
             var leaveReply = instance.Server.ApplySession(request: new SessionRequest.Leave(Principal: context.ActingPrincipal(), Slot: (instanceSlot - 1)));
 
             if (!leaveReply.Accepted) {
@@ -1719,13 +1714,11 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     private readonly record struct InstanceTarget(WorldInstance? Instance, int EffectiveCount);
 
     // Strips an optional trailing `instance:<name>` token — the addressing token that redirects join/leave/fly/stop/
-    // where/pose from the boot world's roster/population onto a NAMED running instance's own local-seat table (see
-    // WorldInstanceHost), reaching what used to be the separate world.instance.seat.* verb family through the
-    // ordinary player surface. Unambiguous against the trailing player/slot index: "instance:" is a reserved prefix
-    // no integer index can ever parse as, and this token is read ONLY as the line's LAST token, stripped before every
-    // other positional argument (including the player index) is parsed — so its presence or absence never shifts any
-    // other token's position. 'boot' is refused by name (the boot world is already the default; see
-    // WorldInstanceCommandModule.TryResolveNonBoot, whose refusal wording this mirrors).
+    // where/pose from the boot world's roster/population onto a named running instance's own local-seat table (see
+    // WorldInstanceHost). Unambiguous against the trailing player/slot index: "instance:" is a reserved prefix no
+    // integer index can ever parse as, and this token is read only as the line's last token, stripped before every
+    // other positional argument is parsed — so its presence or absence never shifts any other token's position.
+    // 'boot' is refused by name; the boot world is already the default (see WorldInstanceCommandModule.TryResolveNonBoot).
     private bool TryStripInstanceToken(in WireArgs args, string verb, out InstanceTarget target, out CommandResult? error) {
         var count = args.Count;
 
@@ -1785,12 +1778,11 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     private static string WithInstanceTag(string text, string instanceName) =>
         (text.EndsWith(value: ']') ? $"{text[..^1]} instance:{instanceName}]" : text);
 
-    // Resolve the target body from an optional trailing index at args[requiredCount] (default player 1), reaching the
-    // whole entity table: 1..4 are the local roster seats (gated on roster membership), 5..128 the simulated entries
-    // (each owning its own body). Returns an error (naming world.players for a seat, world.population for an entry)
-    // when the index is malformed or names an inactive one. The m_server/m_population liveness reads are in-process, so
-    // this is the loopback's fast path with the sharper wording (seat vs population entry); off the loopback the server's
-    // own QueryAnswer.Refused verdict carries the same miss, and the handler renders it as IsError either way.
+    // Resolve the target body from an optional trailing index at args[requiredCount] (default player 1): 1..4 are
+    // the local roster seats (gated on roster membership), 5..128 the simulated entries. Returns an error (naming
+    // world.players for a seat, world.population for an entry) when the index is malformed or names an inactive
+    // one. This is the loopback's fast path with sharper wording; off the loopback the server's own
+    // QueryAnswer.Refused verdict carries the same miss, rendered as IsError either way.
     private (WorldBody? Player, int Index, string? Error) ResolveTarget(in WireArgs args, int requiredCount, string verb) {
         if (!WorldArgs.TryParseIndex(args: in args, at: requiredCount, min: 1, max: m_population.Capacity, fallback: 1, value: out var index)) {
             return (Player: null, Index: 0, Error: $"[{verb}: player index must be an integer 1..{m_population.Capacity}]");

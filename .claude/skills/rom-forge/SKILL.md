@@ -18,8 +18,8 @@ a CGB cartridge that a Humble core steps cycle-exactly for world audio. That is
 the forge's one live consumer, and it is a real one.
 
 **Everything that turned art into cartridges is gone.** The following lived only
-in `Puck.Demo`, which is quarantined under `experimental/` and **off limits** —
-do not open it, do not port from it, do not cite it:
+in `Puck.Demo`, which is quarantined under `experimental/`. Read it as prior
+art; never build it, run it, or revive a capability in place:
 
 | Absent | What it did |
 |---|---|

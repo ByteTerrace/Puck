@@ -57,8 +57,8 @@ public struct FixedRateAccumulator {
     public readonly long TicksPerSecond => m_ticksPerSecond;
 
     /// <summary>Restores an accumulator from a snapshotted remainder and its bound time base.</summary>
-    /// <param name="remainder">The signed remainder previously read from <see cref="Remainder"/>.</param>
-    /// <param name="ticksPerSecond">The positive time-base denominator previously read from <see cref="TicksPerSecond"/>.</param>
+    /// <param name="remainder">The signed remainder returned by <see cref="Remainder"/>.</param>
+    /// <param name="ticksPerSecond">The positive time-base denominator returned by <see cref="TicksPerSecond"/>.</param>
     /// <returns>An accumulator that continues the captured integration exactly.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="ticksPerSecond"/> is not positive, or the magnitude of <paramref name="remainder"/> is not
@@ -181,10 +181,10 @@ public struct FixedVector3RateAccumulator {
     public readonly long TicksPerSecond => m_ticksPerSecond;
 
     /// <summary>Restores three snapshotted axis remainders under their shared bound time base.</summary>
-    /// <param name="xRemainder">The signed X-axis remainder previously read from <see cref="XRemainder"/>.</param>
-    /// <param name="yRemainder">The signed Y-axis remainder previously read from <see cref="YRemainder"/>.</param>
-    /// <param name="zRemainder">The signed Z-axis remainder previously read from <see cref="ZRemainder"/>.</param>
-    /// <param name="ticksPerSecond">The positive time-base denominator previously read from <see cref="TicksPerSecond"/>.</param>
+    /// <param name="xRemainder">The signed X-axis remainder returned by <see cref="XRemainder"/>.</param>
+    /// <param name="yRemainder">The signed Y-axis remainder returned by <see cref="YRemainder"/>.</param>
+    /// <param name="zRemainder">The signed Z-axis remainder returned by <see cref="ZRemainder"/>.</param>
+    /// <param name="ticksPerSecond">The positive time-base denominator returned by <see cref="TicksPerSecond"/>.</param>
     /// <returns>A vector accumulator that continues each axis's captured integration exactly.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="ticksPerSecond"/> is not positive, or the magnitude of <paramref name="xRemainder"/>,
@@ -217,7 +217,7 @@ public struct FixedVector3RateAccumulator {
     /// <exception cref="InvalidOperationException">The accumulator is default-initialized (no time base was bound).</exception>
     /// <exception cref="OverflowException">
     /// Any axis's integrated quotient cannot fit in Q48.16 raw storage. The call is atomic across the three axes: all
-    /// three quotients are formed before any remainder is stored, so a throw on one axis leaves NONE of them advanced.
+    /// three quotients are formed before any remainder is stored, so a throw on one axis leaves none of them advanced.
     /// </exception>
     public FixedVector3 Integrate(FixedVector3 ratePerSecond, ulong elapsedTicks) {
         FixedRateAccumulator.ThrowIfUnbound(ticksPerSecond: m_ticksPerSecond);

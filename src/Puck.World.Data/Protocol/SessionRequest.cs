@@ -58,6 +58,20 @@ public readonly record struct SessionReply(bool Accepted, int AssignedIndex, str
 /// <c>screen.state</c>): the server composes the answer string authoritatively so the client prints a byte-identical
 /// echo.</summary>
 public abstract record WorldQuery {
+    /// <summary>Returns the capability subject a submitted query must hold <see cref="WorldCapability.Observe"/>
+    /// over. Body/screen read-backs narrow to their concrete target; world-wide read-backs require <c>all</c>. Kept
+    /// with the closed query union so a transport/server does not need access to its intentionally internal leaves.</summary>
+    /// <returns>The query's observation subject.</returns>
+    public GrantSubject ObservationSubject() => this switch {
+        PlayerWhere where => GrantSubject.Body(index: (where.Index - 1)),
+        PlayerChannels channels => GrantSubject.Body(index: (channels.Index - 1)),
+        PlayerState state => GrantSubject.Body(index: (state.Index - 1)),
+        PlayerTargets targets => GrantSubject.Body(index: (targets.Index - 1)),
+        ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
+        Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
+        _ => GrantSubject.All,
+    };
+
     /// <summary>The full 6DOF pose read-back for one entity (<c>player.where</c>).</summary>
     /// <param name="Index">The 1-based player display index.</param>
     public sealed record PlayerWhere(int Index) : WorldQuery;

@@ -8,7 +8,7 @@ public readonly record struct ClosureObstruction(long StatesExplored, int Blocke
 
 /// <summary>
 /// The eager determinization of one element by its residuals: the finitely many distinct residuals of a seed, numbered
-/// canonically, together with the quiver-presented machine whose transition elements ARE those residuals' arrows.
+/// canonically, together with the quiver-presented machine whose transition elements are those residuals' arrows.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <typeparam name="TOps">The material.</typeparam>

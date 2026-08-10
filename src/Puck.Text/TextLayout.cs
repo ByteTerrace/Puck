@@ -12,7 +12,7 @@ namespace Puck.Text;
 /// <see cref="FontAtlasGlyph.Advance"/> and applying kerning between consecutive glyphs. Carriage returns
 /// are ignored and line feeds start a new line; code points the atlas does not contain are skipped.
 /// <para>
-/// Enrichment composes WITH layout, not around it: the
+/// Enrichment composes with layout, not around it: the
 /// <see cref="Layout(FontAtlas, IEnumerable{TextEffectRune}, float, float?)"/> overload takes runes already paired
 /// with their effect (from <see cref="TextEnrichmentTags"/> / <see cref="BbCodeTextMarkup"/>) and carries each effect
 /// onto its <see cref="TextGlyphPlacement.Effect"/>, so one atlas and one layout serve every text tier. The plain

@@ -30,8 +30,8 @@ public readonly record struct MachinePadState(
     Vector2 Tilt = default,
     byte LightLevel = 0
 ) {
-    /// <summary>A neutral image: no buttons, centered sticks, released triggers, motionless tilt, darkest light — the
-    /// input for a frame with no signal.</summary>
+    /// <summary>Gets a neutral image: no buttons, centered sticks, released triggers, motionless tilt, darkest light —
+    /// the input for a frame with no signal.</summary>
     public static MachinePadState Neutral => default;
 
     /// <summary>Merges two pad images into one — the multi-driver shape (several engaged players on one machine): buttons

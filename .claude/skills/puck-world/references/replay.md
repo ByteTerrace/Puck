@@ -224,8 +224,19 @@ against the live catalog is printed, never thrown) → mount addons after
 seats, matching live composition order → `VerifyMountedAddons` → per tick:
 apply authority and peer-lifecycle entries in recorded order through the
 same population/grant doors, enqueue intents,
-`server.Step` (240 Hz `SimulationRate`), hash.
+`server.Step` (stepped at the tape's OWN recorded `SimulationRate` — 240 Hz
+for every world that authors no `simulation` section, or whatever rate the
+recorded world authored), hash.
 
+- The recorded rate is checked right after deserializing the embedded
+  definition — as early as it CAN run now that the rate is authored per
+  world rather than one build-wide constant: a tape's `SimulationRate`
+  disagreeing with that SAME embedded definition's own `SimulationRateHz`
+  refuses by name (`RateMismatch`) rather than re-driving at the wrong step
+  size — that would produce a genuinely different trajectory that reports as
+  an ordinary MISMATCH, indistinguishable from a real determinism
+  regression. `Drive` always steps at the RECORDED rate, so a tape stays
+  self-describing.
 - Receipt disagreements refuse LOUDLY with no verdict, by name:
   `PinnedAddonNotMounted`, `AddonModuleMismatch` (content hash),
   `AddonFuelMismatch`. Comparison is index-by-index over the mounted

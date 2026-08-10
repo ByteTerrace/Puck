@@ -59,7 +59,7 @@ public interface IMaterialOps<TValue, TSelf>
     /// <remarks>Support pruning reads this and nothing else, so a material whose zero is not the carrier's default
     /// (the tropical <c>+∞</c>) is served without a special case in the kernel.</remarks>
     bool IsZero(TValue value);
-    /// <summary>Folds the exact value of <c>Σ charges[i]·left[i]·right[i]</c> with exactly ONE rounding, wrapped to the carrier.</summary>
+    /// <summary>Folds the exact value of <c>Σ charges[i]·left[i]·right[i]</c> with exactly one rounding, wrapped to the carrier.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients; the same length as <paramref name="charges"/>.</param>
     /// <param name="right">The per-term right coefficients; the same length as <paramref name="charges"/>.</param>
@@ -68,7 +68,7 @@ public interface IMaterialOps<TValue, TSelf>
     /// <remarks>The wide accumulator is private to the material — the wide type never appears in the signature — and
     /// the lane is classified at construction, never per operand. An empty span folds to <see cref="Zero"/>.</remarks>
     TValue FusedChargedSum(ReadOnlySpan<TValue> charges, ReadOnlySpan<TValue> left, ReadOnlySpan<TValue> right, ChargeLane lane);
-    /// <summary>Folds the exact value of <c>Σ charges[i]·values[i]</c> with exactly ONE rounding, wrapped to the carrier.</summary>
+    /// <summary>Folds the exact value of <c>Σ charges[i]·values[i]</c> with exactly one rounding, wrapped to the carrier.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="values">The per-term values; the same length as <paramref name="charges"/>.</param>
     /// <param name="lane">The presentation's construction-time rounding lane.</param>
@@ -277,7 +277,7 @@ public readonly struct ParityMaterial : ISignedMaterial<ulong, ParityMaterial>, 
 
 /// <summary>The counting semiring <c>(ℕ, +, ·)</c> over <see cref="BigInteger"/> — walk counts, ambiguity degrees, and
 /// every multiplicity that must not overflow. Exact and unbounded.</summary>
-/// <remarks>The carrier is the NATURALS, and admission enforces it: a negative coefficient is refused rather than
+/// <remarks>The carrier is the naturals, and admission enforces it: a negative coefficient is refused rather than
 /// widened, because the counting reading of a coefficient — how many ways, how many walks, how many parses — has no
 /// negative value, and a material that squared <c>-1</c> to <c>1</c> would answer that question wrongly without
 /// saying so. <see cref="IntegerMaterial"/> is the signed carrier, and the two are chosen at the type argument.</remarks>
@@ -352,7 +352,7 @@ public readonly struct CountingMaterial : IExactSemiringMaterial<BigInteger, Cou
 
 /// <summary>
 /// The tropical material <c>(min, +)</c> over the house scalar <see cref="FixedQ4816"/> — shortest paths, minimum
-/// weights, and the whole algebraic path problem at its cheapest dial setting. Its finite carrier is the NONNEGATIVE
+/// weights, and the whole algebraic path problem at its cheapest dial setting. Its finite carrier is the nonnegative
 /// <see cref="FixedQ4816"/> values below <see cref="FixedQ4816.MaxValue"/>; negative carrier values are not tropical
 /// weights. It is exact and closed: <c>min</c> selects a representable value and finite addition saturates deliberately
 /// to the infinity sentinel instead of wrapping.
@@ -455,7 +455,7 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
 }
 
 /// <summary>
-/// The house scalar <see cref="FixedQ4816"/> as a material: the one member that accumulates at a WIDER scale before
+/// The house scalar <see cref="FixedQ4816"/> as a material: the one member that accumulates at a wider scale before
 /// rounding, and so the one that routes through the shared fused kernels rather than re-deriving them.
 /// </summary>
 /// <remarks>
@@ -464,7 +464,7 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
 /// integer charges as plain multipliers and rounds once at shift 16 — the per-blade discipline of
 /// <see cref="GeometricAlgebra.GeometricProduct"/> and the integer lane of <see cref="QuadraticAlgebra{TScalar}"/>. At
 /// <see cref="ChargeLane.General"/> it accumulates <c>Σ cᵢ·lᵢ·rᵢ</c> at Q48 and rounds once at shift 32 — the
-/// fractional lane. Both fold into an unchecked <see cref="Int128"/>, which is sufficient at ANY term count: every
+/// fractional lane. Both fold into an unchecked <see cref="Int128"/>, which is sufficient at any term count: every
 /// accumulated value is an integer-coefficient polynomial in the raw inputs, so the wrapped fold is congruent to the
 /// true value modulo <c>2^128</c>; a rounding shift of <c>s ≤ 32</c> turns that <c>k·2^128</c> into <c>k·2^(128−s)</c>
 /// on the rounded result, and <c>2^96</c> and <c>2^112</c> both vanish under the carrier's final 64-bit wrap without
@@ -473,7 +473,7 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
 /// </para>
 /// <para>
 /// <see cref="FusedChargedLinear"/> is the same statement at a constant right operand of one. At
-/// <see cref="ChargeLane.Exact"/> the shift-16 rounding has an identically zero remainder, so the linear fold is EXACT
+/// <see cref="ChargeLane.Exact"/> the shift-16 rounding has an identically zero remainder, so the linear fold is exact
 /// — the property that makes the companion Möbius step exact on an integer relation.
 /// </para>
 /// </remarks>
@@ -630,7 +630,7 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
 
 /// <summary>The exact rationals as a field material, carried by the rational values of <see cref="QuadraticSurd"/> — no
 /// new primitive, and the resolvent lane every exact solve wants.</summary>
-/// <remarks>The carrier is the RATIONAL surds only, and admission enforces it. The surd type also represents
+/// <remarks>The carrier is the rational surds only, and admission enforces it. The surd type also represents
 /// <c>a + b·√d</c> for a nonzero <c>b</c>, and those values are not a field between them: each real quadratic field is
 /// closed on its own, but <c>√2</c> and <c>√3</c> live in different ones, so admitting both would let a sum leave the
 /// carrier and the field material would stop being a field. A coefficient carrying a square root is therefore refused
@@ -851,7 +851,7 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
 /// <summary>
 /// The most-likely-path material <c>(max, ·)</c> over <see cref="UnitInterval32"/> — the probability twin of
 /// <see cref="TropicalMaterial"/>. A coefficient is the best likelihood a route carries, so a quiver readout is the
-/// most probable path where the tropical one is the shortest. Both absorbing elements are EXACT: impossible is
+/// most probable path where the tropical one is the shortest. Both absorbing elements are exact: impossible is
 /// <see cref="UnitInterval32.Zero"/>, certain is <see cref="UnitInterval32.One"/>, and multiplication by either rounds
 /// nothing.
 /// </summary>
@@ -859,12 +859,12 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
 /// <para>
 /// The one member of the unit-interval family whose product rounds. <see cref="UnitInterval32.Multiply(UnitInterval32, UnitInterval32)"/>
 /// carries one ties-to-even rounding, so a route of <c>L</c> steps carries <c>L − 1</c> of them and its value depends on
-/// the ORDER the steps compose — which is the whole content of the log-domain difference from the tropical material,
+/// the order the steps compose — which is the whole content of the log-domain difference from the tropical material,
 /// whose <c>+</c> associates exactly. Where the weights are exact powers of two the products are exact and the two
 /// materials name the same route at the same cost, which is the isomorphism stated as a law rather than as an analogy.
 /// </para>
 /// <para>
-/// The fused sums round ONCE PER TERM rather than twice, because a term's three factors are multiplied exactly and
+/// The fused sums round once per term rather than twice, because a term's three factors are multiplied exactly and
 /// rounded together through <see cref="UnitInterval32.Multiply(UnitInterval32, UnitInterval32, UnitInterval32)"/>. The fold
 /// itself is a maximum, which selects a value already representable and cannot round, so no wide accumulator exists
 /// here and none is possible.
@@ -926,13 +926,13 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
 
 /// <summary>
 /// The fuzzy material <c>(max, min)</c> over <see cref="UnitInterval32"/> — a coefficient is a degree of membership, a
-/// quiver readout is the widest bottleneck along a route, and NOTHING here rounds: both operations select an operand,
+/// quiver readout is the widest bottleneck along a route, and nothing here rounds: both operations select an operand,
 /// so the material joins <see cref="TropicalMaterial"/> in the exact club.
 /// </summary>
 /// <remarks>
 /// The one material besides <see cref="BooleanMaterial"/> that carries a De Morgan complement, and the reason the
 /// pattern lens's <see cref="PatternComplement"/> is not a Boolean-only surface. The involution is
-/// <see cref="UnitInterval32.Complement"/>, the exact <c>1 − x</c>: it is an order-REVERSING bijection of the closed
+/// <see cref="UnitInterval32.Complement"/>, the exact <c>1 − x</c>: it is an order-reversing bijection of the closed
 /// interval, so it carries the maximum onto the minimum and back at every raw, and both De Morgan laws hold exactly
 /// rather than approximately. The other admission condition holds too, since <c>max(1, 1) = 1</c>.
 /// </remarks>

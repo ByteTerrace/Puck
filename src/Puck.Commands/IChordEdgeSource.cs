@@ -12,13 +12,13 @@ namespace Puck.Commands;
 /// <param name="Value">The value the edge carries (the row's press value, or its inactive twin on release).</param>
 /// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches only
 /// for a <see cref="BindingCommandDefinition.HoldRelease"/> row — either way the release clears the carried held state).</param>
-/// <param name="Momentary">Whether a <see cref="CommandPhase.Started"/> edge should carry NO held state forward
+/// <param name="Momentary">Whether a <see cref="CommandPhase.Started"/> edge should carry no held state forward
 /// (<see langword="false"/>, the default, is every existing chord-command/Held-activator row: it marks the router's
 /// carried-held table exactly like a physical hold, re-asserting every subsequent tick until a real
 /// <see cref="CommandPhase.Completed"/> edge arrives). <see langword="true"/> is a
-/// <see cref="BindingActivatorMode.Tapped"/> completion's press: its OWN release is already scheduled one tick
+/// <see cref="BindingActivatorMode.Tapped"/> completion's press: its own release is already scheduled one tick
 /// later (see <see cref="IChordEdgeSource.DrainScheduledEdges"/>), so marking it held too would make the tick
-/// carrying that scheduled release ALSO carry a stale, non-dispatching re-assertion of the press — harmless to a
+/// carrying that scheduled release also carry a stale, non-dispatching re-assertion of the press — harmless to a
 /// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. Ignored on a
 /// <see cref="CommandPhase.Completed"/> edge (a release never marks anything held regardless).</param>
 public readonly record struct BindingChordEdge(
@@ -48,9 +48,9 @@ public interface IChordEdgeSource {
     /// <see cref="CommandSnapshot"/>, which a downstream reader that only samples state between ticks would never
     /// observe — a same-tick press+release is indistinguishable from never having pressed at all).</summary>
     /// <returns>Every (slot, edge) pair now due, in scheduling order. Empty when nothing is pending.</returns>
-    /// <remarks>Called exactly once per tick, by <see cref="InputRouter"/>, BEFORE that tick folds its own due
-    /// signals — so anything scheduled DURING this tick's signal processing is, by construction of that call
-    /// order, deferred to the NEXT tick's call rather than drained again immediately. No clock or engine-tick
+    /// <remarks>Called exactly once per tick, by <see cref="InputRouter"/>, before that tick folds its own due
+    /// signals — so anything scheduled during this tick's signal processing is, by construction of that call
+    /// order, deferred to the next tick's call rather than drained again immediately. No clock or engine-tick
     /// arithmetic is involved; the ordering IS the one-tick delay.</remarks>
     IReadOnlyList<(int Slot, BindingChordEdge Edge)> DrainScheduledEdges() {
         return [];

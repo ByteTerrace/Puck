@@ -156,7 +156,7 @@ public static class TextEnrichmentTags {
         }
     }
 
-    /// <summary>Whether a Unicode scalar is one of the grammar's delimiter control chars.</summary>
+    /// <summary>Determines whether a Unicode scalar is one of the grammar's delimiter control chars.</summary>
     /// <param name="unicodeScalar">The scalar to test.</param>
     /// <returns><see langword="true"/> when the scalar is a tag delimiter.</returns>
     public static bool IsDelimiter(int unicodeScalar) =>

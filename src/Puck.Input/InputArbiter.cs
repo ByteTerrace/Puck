@@ -139,7 +139,7 @@ public interface IInputArbiter {
     /// <see cref="RegisterLane"/>.</exception>
     void SuppressLane(object laneToken, bool suppressed);
 
-    /// <summary>Whether a lane is currently muted — either explicitly via <see cref="SuppressLane"/>, or because it
+    /// <summary>Returns a value indicating whether a lane is currently muted — either explicitly via <see cref="SuppressLane"/>, or because it
     /// was registered under <see cref="InputLaneMode.Suppressed"/>. Lets a registrant that keeps its own
     /// higher-level policy on top of a lane (a shared/mirror routing fallback, say) ask "would this lane read
     /// neutral right now" without duplicating the mute bookkeeping itself.</summary>

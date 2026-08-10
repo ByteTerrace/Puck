@@ -1,0 +1,601 @@
+[
+  {
+    "Id": "q1648.mul-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ1648",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Multiply — the Int128 sign-magnitude ties-to-even rounder at FixedQ1648.cs, sibling of FixedQ4816.op_Multiply retargeted at forty-eight fraction bits",
+        "Against": "Oracles.RoundDyadic at shift 48 over BigInteger, wrapped by Oracles.WrapToRaw; the oracle side calls no Puck.Maths kernel",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.add-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ1648",
+        "Name": "op_Addition"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Addition",
+        "Against": "Oracles.WrapToRaw over an exact BigInteger sum — EXACT on both sides, so condition (B) drops out entirely and the statement is purely the two's-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.mul-purity",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ1648",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Multiply is pure in-process: two back-to-back calls on identical operands return identical bits. This observes hidden mutable state or an operand-independent result and nothing else, and is NOT the cross-run/cross-machine determinism contract",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.grid-and-construction",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": ".ctor" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Value" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "FromRawBits" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "FromInteger" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "FromDouble" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Explicit" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "AdditiveIdentity" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Epsilon" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "FractionBitCount" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IntegerBitCount" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TotalBitCount" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MaxValue" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MinValue" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MultiplicativeIdentity" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "NegativeOne" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "One" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Radix" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Zero" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the declared bit-count constants (48/16/64), Radix, and the nine named constants (One, Epsilon, NegativeOne, Zero, MaxValue, MinValue, AdditiveIdentity, MultiplicativeIdentity, and the default value)",
+        "Against": "the Q16.48 definition itself — raw = real × 2⁴⁸, MaxValue/MinValue = long.MaxValue/MinValue — read as hand-derived integer literals sharing no line with the type",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the positional constructor and FromRawBits over a raw ladder spanning both carrier extremes, the fraction/integer seam at 2⁴⁸, and zero",
+        "Against": "the identity map — each is required to return its input raw unchanged, checked against the raw literal itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FromInteger admits exactly the sixteen-bit signed integer range [-32768, 32767] and refuses ArgumentOutOfRangeException naming 'value' at the first integer beyond either end",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FromDouble over a hand-derived ladder: not-a-number, both infinities, the two carrier-extreme saturations (±32768 scales to ±2⁶³, one raw past MaxValue on the positive side and exactly MinValue on the negative), the exactly representable interior points (±1, ±0.5, ±Epsilon), and four half-ULP ties whose ties-to-even resolution is the house rounding discipline",
+        "Against": "the IEEE-754 layout and the 2⁻⁴⁸ grid, computed independently of the FromDouble kernel — every ladder value is a power-of-two-exact double literal, so no double rounding ambiguity enters the expectation",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the OUTWARD double seam (op_Explicit) over the same raw ladder used for the construction round trip — one round-to-nearest-ties-to-even of the signed raw followed by an exact scale by 2⁻⁴⁸, read as an EXACT bit pattern",
+        "Against": "Oracles.NearestBinary64Bits at shift 48 — the same shared oracle FixedQ4816's own double-projection law uses, which assembles the IEEE-754 encoding from the format in BigInteger and calls no Puck.Maths kernel",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.additive-ops-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Decrement" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Increment" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Subtraction" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_UnaryNegation" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_UnaryPlus" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Subtraction",
+        "Against": "Oracles.WrapToRaw over an exact BigInteger difference — EXACT on both sides, so condition (B) drops out and the statement is purely the two's-complement wrapping policy",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_UnaryNegation, op_Increment and op_Decrement",
+        "Against": "Oracles.WrapToRaw over the exact BigInteger −a, a + 2⁴⁸ and a − 2⁴⁸ — exact on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "unary plus is the identity at every swept raw, and negation is an involution over the full raw range including MinValue, where the two's-complement negation is its own fixed point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the increment and decrement operators are mutually inverse at every swept raw, and each equals the corresponding addition of One",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.checked-ops-refuse",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedAddition" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedDecrement" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedDivision" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedIncrement" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedMultiply" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedSubtraction" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_CheckedUnaryNegation" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "all seven checked operators — addition, subtraction, unary negation, increment, decrement, multiplication and division — over every swept operand pair",
+        "Against": "the exact BigInteger value of each operation, which decides BOTH halves of the statement: the operator must return that value when it lands inside [−2⁶³, 2⁶³ − 1] and must throw OverflowException when it does not. The multiplication's expected value is a locally derived Q1648ExactRoundedProduct and the division's Q1648ExactRoundedRatio, both routing through the SAME shared Oracles.RoundRationalTiesToEven body FixedQ4816's own ExactRoundedProduct/ExactRoundedRatio use, at shift 48 rather than their hardcoded 16, both UNWRAPPED, so the checked contract is decided by the exact rounded value rather than by the unchecked sibling",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seven checked operators agree BIT-FOR-BIT with their unchecked siblings on every operand pair whose exact value is representable — a wrapping operator and its checked twin differ only in the refusal, never in the answer",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two documented division refusals are distinct and both reachable: a zero divisor throws DivideByZeroException from BOTH the checked and the unchecked operator, and MinValue over NegativeOne throws OverflowException from the checked operator while the unchecked one wraps to MinValue",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.divide-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Division" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Division — the hardware 128-by-64 quotient under the raw_x >> 16 < raw_y gate, its UInt128 fallback, the r versus d − r tie test, and the magnitude-wrap-then-negate sign policy (structurally FixedQ4816.op_Division's shift-16-generalized sibling, at shift 48)",
+        "Against": "Oracles.RoundDyadicRatio at shift 48 — ONE ties-to-even rounding of the exact rational (raw_x·2⁴⁸)/raw_y in BigInteger, wrapped once at the end by Oracles.WrapToRaw. The tie is decided by 2r versus d, the formulation the subject cannot use because 2r would overflow its carrier. ENVELOPE: a zero divisor is substituted with Epsilon, so the value statement runs over every OTHER operand pair and the refusal at zero is stated in q1648.checked-ops-refuse",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.modulus-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_Modulus" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.op_Modulus over every swept operand pair, with a zero divisor substituted by Epsilon",
+        "Against": "the exact BigInteger truncated remainder (a − (a ÷ b) × b, BigInteger.Divide truncates toward zero), plus the division identity a = q·b + r and the magnitude bound |r| < |b| checked independently",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the two short-circuit divisors (raw ±1) always answer Zero, MinValue over the negative epsilon answers Zero rather than raising the platform's signed-remainder trap, and a zero divisor throws DivideByZeroException",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.order-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "CompareTo" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Min" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Max" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Clamp" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Sign" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_GreaterThan" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_GreaterThanOrEqual" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_LessThan" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "op_LessThanOrEqual" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CompareTo(FixedQ1648) and all four comparison operators, against the exact BigInteger order of the raws; Min/Max against BigInteger.Min/Max; Sign against BigInteger.Sign; Clamp against the exact ordered-bound clamp formula",
+        "Against": "arbitrary-width BigInteger comparison and selection, sharing no line with the subject's raw long comparisons",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the boxed CompareTo(object) sorts null first, compares zero against itself, and throws ArgumentException naming 'obj' for a foreign type; Clamp refuses an inverted range with the platform's own parameterless ArgumentException; Clamp is the identity inside its own bounds",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.magnitude-selection-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Abs" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "CopySign" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MaxMagnitude" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MaxMagnitudeNumber" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MinMagnitude" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MinMagnitudeNumber" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MaxMagnitude/MinMagnitude and Abs/CopySign over every swept pair",
+        "Against": "the IEEE-754 maximumMagnitude/minimumMagnitude rules and the exact BigInteger absolute value and sign transplant, re-derived independently of FusedArithmetic.RawMagnitude",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MaxMagnitudeNumber/MinMagnitudeNumber do not diverge from their non-Number siblings, the two selections partition the operand pair (their raws sum, mod the carrier, to the pair's own wrapped sum), and Abs/CopySign refuse OverflowException exactly at MinValue's unrepresentable positive magnitude",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.integral-parts-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Floor" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Ceiling" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Round" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Truncate" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Fractional" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the five integral parts over sampled operands PLUS the top integer bucket's own boundary ladder (an exact top integer, a fraction just below half, an exact half-tie on an ODD integer part, and the maximal fraction)",
+        "Against": "arbitrary-width derivations reaching each answer by a DIFFERENT route from the subject's bit masking: a floored quotient (Oracles.FloorQuotient) for Floor, a toward-zero BigInteger.Divide for Truncate, a negated floor of the negation for Ceiling, and an independently re-derived ties-to-even step for Round",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Ceiling and Round refuse OverflowException exactly inside the top integer bucket (where the true ceiling or rounding would exceed MaxValue) and never elsewhere in the swept ladder; Floor, Truncate and Fractional never throw; the floor and fraction reconstruct the raw exactly and the fraction never leaves [0, one whole unit)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.predicates-classify",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsCanonical" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsComplexNumber" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsEvenInteger" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsFinite" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsImaginaryNumber" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsInfinity" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsInteger" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsNaN" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsNegative" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsNegativeInfinity" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsNormal" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsOddInteger" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsPositive" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsPositiveInfinity" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsRealNumber" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsSubnormal" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "IsZero" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "IsInteger, IsEvenInteger, IsOddInteger, IsZero, IsNegative and IsPositive over sampled operands plus the extremes and zero",
+        "Against": "exact BigInteger divisibility by 2⁴⁸ and the exact sign, sharing no line with the subject's bit-mask tests",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the eleven constant classifiers (IsCanonical/IsFinite/IsRealNumber true; IsComplexNumber/IsImaginaryNumber/IsInfinity/IsNegativeInfinity/IsPositiveInfinity/IsNaN/IsSubnormal false; IsNormal iff nonzero) hold at every swept raw, the sign predicates never agree, the parities never both hold and together exactly cover integrality, and IsZero disagrees with IsNormal but agrees with equality to AdditiveIdentity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.lerp-endpoints-and-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Lerp" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ1648.Lerp — from + (to − from) × amount, computed as one exact wide intermediate (fromRaw·2^48 plus a difference of two Q32 products) with no standalone difference or product rounded before the final combine, rounded to the Q16.48 grid exactly once",
+        "Against": "the true rational value re-derived independently in BigInteger with NO intermediate wrap at any width: fromRaw shifted left 48 bits plus the exact BigInteger difference (toRaw − fromRaw) times amountRaw, formed as one arbitrary-width integer, then Oracles.RoundDyadic at shift 48 — the ONE rounding, which would catch a subject that wraps (to − from) before multiplying even where every operand and the true result are representable",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Lerp is exactly 'from' at amount zero, exactly 'to' at amount one, and the identity on a degenerate (equal-endpoint) segment at every amount",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.text-round-trip",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryFormat" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Parse" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryParse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the ToString/TryFormat rendering over sampled raws",
+        "Against": "Oracles.ExactDyadicDecimalSigned at shift 48, an independent BigInteger-driven decimal-expansion derivation sharing no line with FixedPointText.WriteFractionDigits",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFormat fills an exact destination and refuses (leaving it byte-for-byte untouched) a destination one character short, and throws FormatException on an unsupported specifier",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the rendered text re-quantized back to a raw",
+        "Against": "Oracles.DecimalToRaw at shift 48 — the digits parsed as an exact BigInteger and rounded once, ties to even, never through FixedQ1648.Parse itself",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "all four signed parse entry points (string/span × throwing/trying, at the default style) round-trip the rendered text to the exact original raw",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.text-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Parse" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryParse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "nine malformed spellings (empty, blank, a bare sign, a bare point, two points, an unsupported exponent, hexadecimal, a word) are refused on every entry point with FormatException from the throwing routes and false-plus-default from the trying ones; a null string is refused rather than accepted or defaulted, and the throwing string overload names 's'; the asymmetric integer extremes round-trip and refuse correctly — '-32768' parses to MinValue exactly, '32768' is refused as an OverflowException rather than accepted or silently truncated",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.decimal-conversion-modes",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MaxValue" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "MinValue" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the three INumberBase conversion hooks (TryConvertFromChecked/Saturating/Truncating, reached only through T.CreateChecked/CreateSaturating/CreateTruncating<FixedQ1648, decimal> since they are explicit interface implementations) at decimal.MaxValue, decimal.MinValue, and an in-range decimal — the only route to FixedPointConvert.ScaleDecimalWide, which q1648.text-round-trip and scalar.generic-conversion-modes never reach (the latter is hardcoded to FixedQ4816/UFixedQ4816, both of which route decimal through the narrower ScaleDecimal instead)",
+        "Against": "the exact scaled value re-derived independently from decimal.GetBits and Oracles.RoundRationalTiesToEven at shift 48 — never through ScaleDecimalWide — including a hand-verified bit-layout derivation of decimal.MaxValue's own mantissa (2^96 - 1, scale 0) that the oracle is checked against before being trusted",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.styled-parse-is-genuine",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Parse" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryParse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the four-argument (NumberStyles-taking) Parse/TryParse overloads, called DIRECTLY with a caller-supplied style rather than through the two-argument provider-only overloads' internal forwarding — every other FixedQ1648 text law calls only the provider-only overloads, whose forwarded style never varies, so the manifest's 'covered' mark on the styled overloads previously rested on that forwarding alone: '1e3' is refused under a style without AllowExponent and accepted, quantized to exactly 1000, under NumberStyles.Float, which adds it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.text-parse-ties",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "Parse" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryParse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Parse/TryParse on three decimal strings at FixedQ1648's own forty-nine-fraction-digit limit — 3·2⁻⁴⁹, which lands exactly on the tie between raw 1 and raw 2, and the same string with its forty-ninth digit perturbed one part in 2·5⁴⁹ either side of the tie",
+        "Against": "Oracles.DecimalToRaw — the digits parsed as an exact BigInteger and rounded once, ties to even, never through FixedQ1648.Parse or FixedPointText.Parse itself; the same shared-nothing oracle q1648.text-round-trip uses, but here fed a string q1648.text-round-trip never produces, since every string that law feeds Parse is the exact terminating expansion of an already-representable raw (zero remainder, no tie ever reached)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "q1648.peer-conversion-vs-fixedq4816",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "ToFixedQ4816" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "FromFixedQ4816" },
+      { "Type": "Puck.Maths.FixedQ1648", "Name": "TryFromFixedQ4816" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ToFixedQ4816 over a raw ladder spanning both carrier extremes and the fraction/integer seam — the narrowing that discards the low thirty-two fraction bits with one ties-to-even rounding",
+        "Against": "Oracles.RoundDyadic at shift 32 (the fraction-bit DIFFERENCE between the two formats) over the same raw treated as a plain BigInteger, wrapped by Oracles.WrapToRaw — the same shared dyadic-rounding oracle every other narrowing law in this suite uses, at its own shift",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "TryFromFixedQ4816 and FromFixedQ4816 over a dedicated FixedQ4816 raw ladder spanning comfortably inside, exactly at both integer-range edges, one raw past both edges, and wildly out of range — the widening that appends thirty-two zero fraction bits",
+        "Against": "the exact BigInteger left-shift of the FixedQ4816 raw by thirty-two, compared against the plain signed sixty-four-bit range [long.MinValue, long.MaxValue] with no rounding involved at all, since the widening adds only zero bits",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "TryFromFixedQ4816 reports success/failure matching the exact BigInteger range test, leaves the out parameter at its default on failure, and FromFixedQ4816 returns the identical value on success or throws OverflowException on failure — the pairing the family's other Try/throw pairs (UnitInterval32.Create/TryCreate, FixedRigidTransform.FromDualQuaternion/TryFromDualQuaternion) already establish. The widen-then-narrow round trip (TryFromFixedQ4816 then ToFixedQ4816) recovers the ORIGINAL FixedQ4816 value exactly at every raw where the widen succeeded, because the appended low bits are all zero and narrowing them back is the identity rather than a rounding event — this is the type's whole reason for existing, stated as a closed loop rather than as two one-directional checks",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

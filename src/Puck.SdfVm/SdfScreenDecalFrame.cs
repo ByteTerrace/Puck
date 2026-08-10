@@ -2,7 +2,7 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// One frame of a GLYPH DECAL bound to a screen slot: a grid of glyph cells + colours the screen's
-/// <see cref="SdfShapeType.ScreenSlab"/> face samples AT THE HIT as dense reading text (the material-level text tier —
+/// <see cref="SdfShapeType.ScreenSlab"/> face samples at the hit as dense reading text (the material-level text tier —
 /// see <see cref="SdfWorldEngine.SetScreenDecal"/>), instead of a bound image. Supplied per frame through
 /// <see cref="ISdfFrameSource.ScreenDecals"/>; a <see langword="null"/> provider result clears the slot back to the
 /// image/procedural path (<see cref="SdfWorldEngine.ClearScreenDecal"/>) — the documented non-atlas-host degrade.

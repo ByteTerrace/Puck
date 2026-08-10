@@ -11,8 +11,9 @@ There is deliberately no feature inventory document — ask the code, or run
   synthesize the same model; they do not create a second execution path.
 - Vulkan and Direct3D 12 implement the same neutral GPU contracts. Shared GPU
   changes must be verified on both backends.
-- `Puck.Demo` and `Puck.World` are greenfield game composition roots. Run them
-  to verify game behavior; use `Puck.Post` only for shared engine contracts.
+- `Puck.World` is the greenfield game composition root. Run it to verify game
+  behavior; no automated gate covers the shared engine contract today, as
+  Verification below sets out.
 - Emulator cores live under `src/` (`Puck.HumbleGamingBrick`, `Puck.AdvancedGamingBrick`)
   with hosting folded into the cores. Each core has its own POST battery.
 - Authoritative simulation uses fixed-point values and per-tick command
@@ -48,8 +49,8 @@ Prefer the cheapest correct tool:
 ### Engine changes — THERE IS NO ENGINE GATE TODAY
 
 **`Puck.Post` is quarantined** (`experimental/Puck.Post`, owner ruling
-2026-08-02) — out of the solution, out of the build, and off limits. Do not
-run it, cite it, or write a stage for it.
+2026-08-02) — out of the solution and out of the build. Read it as prior art;
+do not run it, cite it as coverage, or write a stage for it.
 
 So the shared engine contract it used to gate — the cross-backend render path,
 the SDF VM ISA, the document schemas, the deterministic numerics, the
@@ -231,7 +232,7 @@ framed as unverified when no device run exists.
   relocating the runfile cache did not help; `-c Release` loaded cleanly. Kept
   because the App Control behaviour is a property of the machine and will bite
   the next thing that loads a fresh Debug binary, not because those scripts are
-  reachable: they are quarantined under `experimental/` and off limits.
+  reachable: they are quarantined under `experimental/` and never run.
 
 ## Engineering doctrine
 

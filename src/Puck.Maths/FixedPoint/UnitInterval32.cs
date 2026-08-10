@@ -4,31 +4,31 @@ using System.Runtime.CompilerServices;
 namespace Puck.Maths;
 
 /// <summary>
-/// The CLOSED unit interval on the <c>2⁻³²</c> grid: a real number in <c>[0, 1]</c> stored as <see cref="Value"/> /
+/// The closed unit interval on the <c>2⁻³²</c> grid: a real number in <c>[0, 1]</c> stored as <see cref="Value"/> /
 /// <c>2³²</c> in a <see cref="ulong"/>, under the single invariant <c>Value ≤ 2³²</c>. Unlike <see cref="UnitFraction32"/>
-/// — which shares the grid but stops one unit short — one IS representable here, so the type has a multiplicative
+/// — which shares the grid but stops one unit short — one is representable here, so the type has a multiplicative
 /// identity, an exact absorbing pair (zero and one), and closure under multiplication at both ends.
 /// </summary>
 /// <remarks>
 /// <para>
-/// THE EXTRA BIT. A binary type with <c>F</c> fraction bits needs <c>w ≥ F + 1</c> bits of storage to contain the value
+/// <b>The extra bit.</b> A binary type with <c>F</c> fraction bits needs <c>w ≥ F + 1</c> bits of storage to contain the value
 /// one, so every closed unit type leaves bits unused; this one spends the thirty-third bit on the point one and leaves
 /// the remaining thirty-one as seam identity (a sampler draw is a value here with no representation event),
 /// vectorization headroom (products of raws below <c>2³²</c> fit 64-bit arithmetic, so <c>32×32→64</c> lanes
 /// vectorize), and a one-compare validity invariant.
 /// </para>
 /// <para>
-/// WHY THIS GRID. Q1.31 was rejected because it is coarser than the sampler grid, so every seam crossing would round.
+/// <b>Why this grid.</b> Q1.31 was rejected because it is coarser than the sampler grid, so every seam crossing would round.
 /// Q1.63 was rejected because nothing consumes <c>2⁻⁶³</c> and narrowing back to the sampler grid would double-round.
 /// A denominator of <c>2³² − 1</c> was rejected because a non-binary denominator poisons the conversions and turns
 /// multiplication into a divide-and-correct.
 /// </para>
 /// <para>
-/// NO ARITHMETIC OPERATORS. Not because the combining operations are inexact — <see cref="Max"/>, <see cref="Min"/> and
-/// <see cref="Complement"/> are exact at every raw — but because the operator SPELLINGS already mean something else in
-/// this family, on the very type that shares this grid: <see cref="UnitFraction32"/>'s <c>~</c> is the BITWISE complement,
+/// <b>No arithmetic operators.</b> Not because the combining operations are inexact — <see cref="Max"/>, <see cref="Min"/> and
+/// <see cref="Complement"/> are exact at every raw — but because the operator spellings already mean something else in
+/// this family, on the very type that shares this grid: <see cref="UnitFraction32"/>'s <c>~</c> is the bitwise complement,
 /// <c>2³² − 1 − raw</c>, one unit away from the arithmetic <c>2³² − raw</c> that <see cref="Complement"/> means here,
-/// and its <c>+</c> and <c>-</c> WRAP where <see cref="AddSaturating"/> and <see cref="SumExcess"/> clamp. A bare
+/// and its <c>+</c> and <c>-</c> wrap where <see cref="AddSaturating"/> and <see cref="SumExcess"/> clamp. A bare
 /// <c>*</c> would silently round and a bare <c>+</c> would silently saturate, so every combining operation is a named
 /// method that says which. The comparison operators carry no such collision and are exact, so they are the only ones
 /// offered. The surface is deliberately the minimum its consumers need and grows on demand; there is no
@@ -222,7 +222,7 @@ public readonly record struct UnitInterval32
     /// <param name="z">The third factor.</param>
     /// <returns>The rounded product, which never leaves <c>[0, 1]</c>.</returns>
     /// <remarks>Nesting two <see cref="Multiply(UnitInterval32, UnitInterval32)"/> calls would round twice and is a
-    /// DIFFERENT value at some operands; a fused sum whose terms are charge, left and right needs this one, because its
+    /// different value at some operands; a fused sum whose terms are charge, left and right needs this one, because its
     /// contract is one rounding per returned coefficient. Three raws are at most <c>2⁹⁶</c> together, so the exact
     /// product still fits in 128 bits and no wide accumulator is needed.</remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
@@ -295,7 +295,7 @@ public readonly record struct UnitInterval32
     /// <summary>Converts this value to a <see cref="FixedQ4816"/>, rounding to nearest with ties to even — exactly one
     /// rounding.</summary>
     /// <returns>The value on <see cref="FixedQ4816"/>'s coarser sixteen-bit fraction grid. The narrowing discards
-    /// sixteen bits and is therefore NOT injective: every raw within half a ULP of one — the top <c>2¹⁵</c> of them —
+    /// sixteen bits and is therefore not injective: every raw within half a ULP of one — the top <c>2¹⁵</c> of them —
     /// carries up onto the exact <c>1.0</c>, so a value strictly below one can convert to one.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public FixedQ4816 ToFixedQ4816() {

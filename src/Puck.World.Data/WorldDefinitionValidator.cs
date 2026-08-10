@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
+using Puck.Carriage;
 using Puck.Commands;
 using Puck.Abstractions.Documents;
 using Puck.Forge.Authoring;
@@ -20,38 +21,48 @@ namespace Puck.World;
 /// <remarks>
 /// <para><b>Field taxonomy — the checklist a future field lands against.</b> A definition field is one of two kinds,
 /// and that kind decides its numeric contract:</para>
-/// <para><b>SIM-AFFECTING</b> — quantized to fixed point ONCE at compile via the <c>Fixed*</c> compilers (exactly the
+/// <para><b>Sim-affecting</b> — quantized to fixed point once at compile via the <c>Fixed*</c> compilers (exactly the
 /// <see cref="FixedWorldKit"/> / <see cref="FixedMotionTuning"/> pattern) and then deterministic: the profileless
 /// <see cref="WorldDefinition.Motion"/> tuning, every kit's tuning/producer/action rows, the named
 /// <see cref="WorldDefinition.SpawnPoints"/>, the
 /// <see cref="WorldDefinition.Population"/> census, and the <see cref="WorldDefinition.Assignment"/> policy. These are
 /// gated here for finiteness and physical sign (speeds/gravities/radii positive; durations non-negative) so a
 /// bad authored value cannot poison the quantized sim.</para>
-/// <para><b>PRESENTATION-ONLY</b> — stays float, never enters sim state: the scene albedos, the camera FOV/extent, the
+/// <para><b>Presentation-only</b> — stays float, never enters sim state: the scene albedos, the camera FOV/extent, the
 /// screen geometry/sources, and the render-lever defaults. These are gated only for structural GPU safety (finite
 /// frames, bounded extents, non-degenerate bases).</para>
 /// </remarks>
 public static class WorldDefinitionValidator {
     // World-local CPU/GPU screen sources are intentionally presentation-sized. A bad authored extent must fail here,
-    // before it can become an unchecked pixel-buffer or offscreen-render allocation.
-    private const int MaxSurfaceDimension = 4096;
+    // before it can become an unchecked pixel-buffer or offscreen-render allocation. Public: it is also the structural
+    // GPU-safety ceiling Puck.World.Client.WorldAwaySeatViews clamps a DERIVED (not authored) away-seat render target
+    // to, so a maximized/multi-monitor window cannot silently drive an unbounded offscreen allocation.
+    public const int MaxSurfaceDimension = 4096;
     // A look scale feeds the stamp pool's per-instance bound radius; an unbounded one is a GPU-SAFETY issue (a
     // spatial-cull metadata blow-up), not a taste one, so it carries a hard ceiling beside MaxSurfaceDimension.
     private const float MaxLookScale = 16f;
     private const float MinimumBasisLengthSquared = 1e-8f;
+    // PlanarImpulse.BodyDirection quantizes to FixedQ4816 (step 2^-16) before reaching the sim; that rounds a unit
+    // vector's length by at most ~1.3e-5. This tolerance sits ~8x above that quantization floor and far below any
+    // unnormalized axis (e.g. (3, 0, 4) is off by 4).
+    private const float PlanarImpulseUnitDirectionTolerance = 1e-4f;
     // Each camera can carry a persistent offscreen render (a View screen samples it); the bound keeps a floody document
     // from declaring thousands of budgeted offscreen engines (ViewStack.MaxRegisteredViews is the runtime floor).
     private const int MaxCameras = 64;
 
-    /// <summary>Validates a candidate definition without throwing — the apply-time seam a buffered mutation runs its
-    /// composed candidate through before the server swaps it in. On failure, <paramref name="reason"/> carries the
-    /// collapsed one-line error list for the loud rejection console line.</summary>
+    /// <summary>Validates a candidate definition, including its cross-document margin claims, without throwing. On
+    /// failure, <paramref name="reason"/> carries the collapsed one-line error list.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="reason">The collapsed failure reason, or empty on success.</param>
+    /// <param name="neighbours">The injected neighbour resolver a cross-document border-margin check reads (see
+    /// <see cref="Validate"/>). Required — not defaulted — so every call site states whether it can resolve a
+    /// neighbour rather than silently opting out; <see langword="null"/> remains a legitimate, explicit answer for a
+    /// call site that must refuse an unprovable claim. It is consulted only when a document authors a
+    /// <see cref="WorldPlacementPortal.MarginDepth"/>.</param>
     /// <returns><see langword="true"/> when the candidate is valid.</returns>
-    public static bool TryValidate(WorldDefinition definition, out string reason) {
+    public static bool TryValidate(WorldDefinition definition, out string reason, IWorldNeighbourResolver? neighbours) {
         try {
-            Validate(definition: definition);
+            ValidateCore(definition: definition, neighbours: neighbours, validateMarginClaims: true);
             reason = string.Empty;
 
             return true;
@@ -62,7 +73,41 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    public static void Validate(WorldDefinition definition) {
+    /// <summary>Validates every fact owned by one document without re-reading neighbour documents. This is the
+    /// apply-time gate for a candidate whose cross-document margin claims were already proved at its load boundary;
+    /// callers must separately refuse edits that change an existing claim or any input to its derived floor.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="reason">The collapsed failure reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the document-local facts are valid.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, out string reason) {
+        try {
+            ValidateCore(definition: definition, neighbours: null, validateMarginClaims: false);
+            reason = string.Empty;
+
+            return true;
+        } catch (InvalidOperationException exception) {
+            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+            return false;
+        }
+    }
+
+    /// <summary>Validates a candidate definition, throwing <see cref="InvalidOperationException"/> naming every
+    /// collected failure when it is not sound.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="neighbours">The injected seam a mapped portal facet's <see cref="WorldPlacementPortal.MarginDepth"/>
+    /// resolves its counterpart document through. The implementation must obtain an authority-delivered document,
+    /// not assume that the neighbour shares a host, process, or filesystem (see <see cref="IWorldNeighbourResolver"/>).
+    /// Required — not defaulted — so a caller states its answer rather than silently declining to decide; pass
+    /// <see langword="null"/> explicitly for a call site with no reachable resolver (see <see cref="TryValidate"/>).
+    /// A document authoring no <see cref="WorldPlacementPortal.MarginDepth"/> is unaffected either way. A document
+    /// that does author one, validated with a null (or an unreachable) resolver, is refused by name — a
+    /// border-margin claim this pass cannot verify is never silently accepted.</param>
+    public static void Validate(WorldDefinition definition, IWorldNeighbourResolver? neighbours) {
+        ValidateCore(definition: definition, neighbours: neighbours, validateMarginClaims: true);
+    }
+
+    private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateMarginClaims) {
         ArgumentNullException.ThrowIfNull(definition);
 
         RequireSections(definition: definition);
@@ -74,6 +119,11 @@ public static class WorldDefinitionValidator {
         }
 
         ValidateExtensions(extensions: definition.Extensions, errors: errors);
+
+        // Validated FIRST among the sim-affecting sections: definition.SimulationRateHz (read by
+        // PopulationReconnectGraceTicks and CompiledInputHold below, and by every downstream Puck.World.Server/
+        // Puck.Launcher consumer) must be a sane rate before anything derived from it is worth checking.
+        ValidateSimulation(simulation: definition.Simulation, errors: errors);
 
         // The profileless fallback tuning is SIM-AFFECTING and compiles to fixed point.
         ValidateMotionDefaults(motion: definition.Motion, path: "motion", errors: errors);
@@ -115,11 +165,11 @@ public static class WorldDefinitionValidator {
             errors.Add(item: $"population.networkPlayers {definition.Population.NetworkPlayers} is outside 0..{peerCapacity} for the authored capacity.");
         }
 
-        // 0 is a deliberately admitted floor (disables the grace window — an immediate teardown, the pre-park
-        // behavior); the ceiling mirrors world.wait's own ten-minute bound so an author cannot park the entity table
-        // open indefinitely by typo.
-        if ((definition.Population.ReconnectGraceTicks < 0) || (definition.Population.ReconnectGraceTicks > 144000)) {
-            errors.Add(item: $"population.reconnectGraceTicks {definition.Population.ReconnectGraceTicks} is outside 0..144000.");
+        // 0 disables the reconnect grace window (immediate teardown); the 600s ceiling mirrors world.wait's own
+        // ten-minute bound. Validated in authored seconds, not derived ticks — at rate 0 a positive value means
+        // NEVER, not a tick count (see CompiledTickDuration).
+        if (!float.IsFinite(f: definition.Population.ReconnectGraceSeconds) || (definition.Population.ReconnectGraceSeconds < 0f) || (definition.Population.ReconnectGraceSeconds > 600f)) {
+            errors.Add(item: $"population.reconnectGraceSeconds {definition.Population.ReconnectGraceSeconds} is outside 0..600.");
         }
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
@@ -130,7 +180,11 @@ public static class WorldDefinitionValidator {
         var spawnPointIds = ValidateSpawnPoints(spawnPoints: definition.SpawnPoints, errors: errors);
 
         ValidateSeatSpawns(seatSpawns: definition.Population.SeatSpawns, spawnPointIds: spawnPointIds, errors: errors);
-        ValidateInputHold(settings: definition.InputHold, populationCapacity: definition.Population.Capacity, errors: errors);
+        // Validated in the AUTHORED seconds, not definition.CompiledInputHold: every compiled *Ticks field
+        // collapses to 0 at simulation.rateHz 0 (a legal, non-stepping world), so a ticks-domain check would refuse
+        // an ordinary input-hold section on such a world. The rate is threaded through so ValidateInputHold can also
+        // prove the authored value actually compiles (see its own remarks).
+        ValidateInputHold(settings: definition.InputHold, ratePerSecond: (uint)definition.SimulationRateHz, populationCapacity: definition.Population.Capacity, errors: errors);
 
         // Population distributions run after spawn points so an explicit-points region can resolve every name.
         ValidateDistribution(distribution: definition.Population.Distribution, path: "population.distribution", spawnPointIds: spawnPointIds, allowDisc: true, allowPoints: true, allowLattice: false, allowZeroDisc: false, errors: errors);
@@ -157,13 +211,13 @@ public static class WorldDefinitionValidator {
         ValidateBindingOverlays(overlays: definition.BindingOverlays, channels: CompilableChannelTable(channels: definition.Channels), errors: errors);
         ValidateStorage(storage: definition.Storage, errors: errors);
 
-        // An owned world (definition.Identity is not null) carries its player-scope seat panel through this SAME hud
-        // section — WorldIdentity.Hud reads Panels.FirstOrDefault() — so its elements are capped at the tighter
-        // WorldHudCapacity.MaxElementsPerSeatPanel (the OverlayChannels reservation's seat-panel budget assumes this
-        // ceiling) and WorldHudLayer.Replace is refused (a panel confined to one seat's viewport has no base slot to
-        // take over). A plain world document (Identity is null) keeps the world-scope MaxElementsPerPanel/Replace-
-        // allowed rules unchanged.
+        // When definition.Identity is not null (an owned world), WorldIdentity.Hud reads Panels.FirstOrDefault() as
+        // the player-scope seat panel: its elements are capped at the tighter WorldHudCapacity.MaxElementsPerSeatPanel
+        // and WorldHudLayer.Replace is refused (a panel confined to one seat's viewport has no base slot to take
+        // over). A plain world document (Identity null) keeps the world-scope MaxElementsPerPanel/Replace-allowed
+        // rules.
         ValidateHud(hud: definition.Hud, stateRows: stateRows, isIdentityScope: (definition.Identity is not null), errors: errors);
+        ValidateIdentityMotionState(identity: definition.Identity, stateRows: stateRows, errors: errors);
 
         // The declared SOURCES validate before anything resolves a reference against them, so a site's refusal is
         // "no such source" rather than a second reading of a source this pass would have refused anyway.
@@ -186,9 +240,25 @@ public static class WorldDefinitionValidator {
 
         ValidateWater(water: definition.Water, errors: errors);
 
-        // A portal facet's destination resolves against this set (below, inside ValidatePlacements) — captured here
-        // rather than re-walked, the same forward-threading creationIds/lookNames already ride.
+        // The local auction house: null IS today's no-market world, matching Water's own posture. Needs only
+        // stateRows (already built above) to resolve a listing's item/currency rows.
+        ValidateMarket(market: definition.Market, stateRows: stateRows, errors: errors);
+
+        // Groups validates HERE — ahead of its original position ahead of Grants below — because a destination row's
+        // scope=group selector (docs/world-model.md Campaign 1 item 3) resolves against the SAME declared group-id set
+        // Grants already needed: both are threaded from this ONE call rather than validating groups twice. Only
+        // stateRows (already built above) is a dependency, so the move changes no other ordering.
+        var groupIds = ValidateGroups(groups: definition.Groups, stateRows: stateRows, errors: errors);
+
+        // A destination row's own `reference` resolves against this set — captured here rather than re-walked, the
+        // same forward-threading creationIds/lookNames already ride.
         var referenceNames = ValidateReferences(references: definition.References, errors: errors);
+
+        // A portal facet's destination resolves against THIS set (below, inside ValidatePlacements), never against
+        // referenceNames directly — the destinations section is the layer a portal facet now names, exactly the
+        // model docs/world-model.md "Reference, destination and session are different facts" describes. A scope=group
+        // row's selector resolves against groupIds (see the move above).
+        var destinationNames = ValidateDestinations(destinations: definition.Destinations, references: definition.References, referenceNames: referenceNames, groupIds: groupIds, errors: errors);
 
         var authoring = definition.Authoring;
 
@@ -207,7 +277,18 @@ public static class WorldDefinitionValidator {
 
         ValidateLookAssignment(assignment: definition.LookAssignment, lookNames: lookNames, errors: errors);
 
-        var placementIds = ValidatePlacements(placements: definition.Placements, definition: definition, creationIds: creationIds, lookNames: lookNames, kitNames: kitNames, authoring: authoring, patchIds: patchIds, requiresField: WorldContactSelection.RequiresField(collision: collision), referenceNames: referenceNames, errors: errors);
+        var placementIds = ValidatePlacements(placements: definition.Placements, definition: definition, creationIds: creationIds, lookNames: lookNames, kitNames: kitNames, authoring: authoring, patchIds: patchIds, requiresField: WorldContactSelection.RequiresField(collision: collision), destinationNames: destinationNames, errors: errors);
+
+        // The border-margin strip: an independent pass over the same placement rows ValidatePlacements just walked,
+        // rather than another parameter threaded through its per-face loop — the check is cross-document (it needs
+        // the neighbour's own declared data) where every other placement/face rule is single-document, so keeping it
+        // separate keeps a document-only reviewer from needing to reason about resolver plumbing at all.
+        if (validateMarginClaims) {
+            ValidateMarginStrips(definition: definition, neighbours: neighbours, errors: errors);
+        }
+
+        // Document-wide, independent of any single placement's own row checks above — see its own remarks.
+        ValidateSessionWindowBudget(placements: definition.Placements, errors: errors);
 
         var cameras = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -263,6 +344,8 @@ public static class WorldDefinitionValidator {
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
         var reservedFaceStart = WorldPlacementPolicy.DerivedFaceBase;
         var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);
+        var awaySeatStart = WorldPlacementPolicy.AwaySeatScreenBase;
+        var awaySeatEnd = (awaySeatStart + WorldPlacementPolicy.AwaySeatScreenCount);
 
         {
             var screens = definition.Screens;
@@ -282,6 +365,8 @@ public static class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.index {screen.Index} is duplicated.");
                 } else if (WorldPlacementPolicy.IsReservedFaceIndex(index: screen.Index, derivedFaceScreens: authoring.DerivedFaceScreens)) {
                     errors.Add(item: $"{path}.index {screen.Index} is inside the reserved derived-face range {reservedFaceStart}..{(reservedFaceEnd - 1)} (creation faces bind there — author screens below {reservedFaceStart}).");
+                } else if (WorldPlacementPolicy.IsReservedAwaySeatScreenIndex(index: screen.Index)) {
+                    errors.Add(item: $"{path}.index {screen.Index} is inside the reserved traveler-follow range {awaySeatStart}..{(awaySeatEnd - 1)} (one away-seat view binds each local seat there).");
                 }
 
                 if (!IsFinite(value: screen.Origin) || !IsFinite(value: screen.Right) || !IsFinite(value: screen.Up)) {
@@ -300,12 +385,12 @@ public static class WorldDefinitionValidator {
                 // The declared source and each magazine entry cross the SAME source gate (a magazine entry could
                 // otherwise name an undeclared camera). A declared console source counts against the one-live ceiling;
                 // a console entry sitting in the magazine does not.
-                if (ValidateScreenSource(source: screen.Source, path: $"{path}.source", cameras: cameras, errors: errors)) {
+                if (ValidateScreenSource(source: screen.Source, path: $"{path}.source", cameras: cameras, destinationNames: destinationNames, errors: errors)) {
                     consoleLiveIndices.Add(item: screen.Index);
                 }
 
                 ValidateRoute(route: screen.Route, path: $"{path}.route", channelNames: allChannelNames, errors: errors);
-                ValidateMagazine(magazine: screen.Magazine, path: $"{path}.magazine", cameras: cameras, errors: errors);
+                ValidateMagazine(magazine: screen.Magazine, path: $"{path}.magazine", cameras: cameras, destinationNames: destinationNames, errors: errors);
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective
                 // per-axis extent must stay positive (a margin that inverts the box is rejected by name).
@@ -313,6 +398,12 @@ public static class WorldDefinitionValidator {
                     RequireFinite(value: screenSolid.Margin, name: $"{path}.solid.margin", errors: errors);
                     RequirePositiveEffectiveExtent(halfExtents: new Vector3(x: screen.HalfWidth, y: screen.HalfHeight, z: screen.HalfDepth), margin: screenSolid.Margin, path: $"{path}.solid.margin", errors: errors);
                 }
+            }
+
+            var availableHeadroom = (SdfProgramBuilder.MaxScreenSurfaces - WorldPlacementPolicy.AwaySeatScreenCount - authoring.DerivedFaceScreens - screenIndices.Count);
+
+            if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
+                errors.Add(item: $"authoring.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(val1: 0, val2: availableHeadroom)} remain after {screenIndices.Count} authored screen(s), {authoring.DerivedFaceScreens} derived-face reservation(s), and {WorldPlacementPolicy.AwaySeatScreenCount} traveler-follow reservation(s).");
             }
         }
 
@@ -332,13 +423,14 @@ public static class WorldDefinitionValidator {
 
         ValidateAudioDefaults(audio: definition.Audio, cameras: cameras, patchIds: patchIds, speakerNames: speakerNames, errors: errors);
 
-        // Groups validates BEFORE Grants (a document-authored grant row may target a group: principal, so Grants
-        // needs the declared group-id set to check it against — the same forward-threading addonNames already rides).
-        var groupIds = ValidateGroups(groups: definition.Groups, stateRows: stateRows, errors: errors);
-
-        // Last: the document-authored grant rows reference nothing later validated, but sit last for the same reason
-        // Links does — the newest section, appended rather than interleaved into an established order.
+        // Groups validates before Grants: a grant row may target a group principal, so Grants needs the declared
+        // group-id set already resolved.
         ValidateGrants(grants: definition.Grants, addonNames: addonNames, groupIds: groupIds, populationCapacity: definition.Population.Capacity, errors: errors);
+
+        // Admission validates last of all: it references nothing else in the document except the population
+        // capacity its templates' body subjects bound against (already in scope), and it is the newest section,
+        // appended over the already-shipped set for the same reason Grants/Links are.
+        ValidateAdmission(entries: definition.Admission, populationCapacity: definition.Population.Capacity, errors: errors);
 
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: errors)}");
@@ -383,7 +475,9 @@ public static class WorldDefinitionValidator {
         Require(section: definition.Grants, name: "grants", missing: missing);
         Require(section: definition.Hud, name: "hud", missing: missing);
         Require(section: definition.State, name: "state", missing: missing);
-        Require(section: definition.InputHold.Participants, name: "inputHold", missing: missing);
+        // InputHold is now a reference-typed (WorldInputHoldAuthoring) section like every other row here — checked
+        // on the section itself, not (as when it was a struct with no honest "absent" state) on its Participants field.
+        Require(section: definition.InputHold, name: "inputHold", missing: missing);
 
         if (missing.Count > 0) {
             throw new InvalidOperationException(message: $"Incomplete WorldDefinition:{Environment.NewLine} - {string.Join(separator: $"{Environment.NewLine} - ", values: missing)}");
@@ -404,16 +498,107 @@ public static class WorldDefinitionValidator {
         DocumentExtensionsPolicy.ValidateKeys(extensions: extensions, report: key => errors.Add(item: $"unknown top-level member '{key}'; top-level keys are case-sensitive camelCase."));
     }
 
-    private static void ValidateInputHold(WorldInputHoldSettings settings, int populationCapacity, List<string> errors) {
-        if (settings.CeilingTicks < 0) {
-            errors.Add(item: $"inputHold.ceilingTicks {settings.CeilingTicks} is negative.");
+    // An authored simulation rate must be exactly 0 (resident, non-stepping — see WorldSimulationDefaults.RateHz) or
+    // a positive divisor of the fixed 50400 engine-tick base (FixedTickConversion.TicksPerSecond; duplicated here
+    // because Puck.World.Data cannot reference Puck.Hosting, where EngineTicks lives), so EngineTicks.PerRate always
+    // derives a whole engine-tick step width. A negative rate is refused outright; the divisor check applies only to
+    // a positive rate (0 divides nothing).
+    private static void ValidateSimulation(WorldSimulationDefaults? simulation, List<string> errors) {
+        if (simulation is null) {
+            // Unauthored — WorldDefinition.SimulationRateHz falls back to WorldSimulationDefaults.DefaultRateHz
+            // (240), a divisor of 50400 by construction. Nothing to check.
+            return;
         }
-        if (settings.LowerAfterTicks < 1) {
-            errors.Add(item: $"inputHold.lowerAfterTicks {settings.LowerAfterTicks} is below 1.");
+
+        var rate = simulation.RateHz;
+
+        if (rate < 0) {
+            errors.Add(item: $"simulation.rateHz {rate} must not be negative.");
+
+            return;
         }
-        if ((settings.DefaultTicks < 0) || (settings.DefaultTicks > settings.CeilingTicks)) {
-            errors.Add(item: $"inputHold.defaultTicks {settings.DefaultTicks} is outside 0..{settings.CeilingTicks}.");
+
+        if (rate == 0) {
+            // The resident, non-stepping rate — a legal, distinct value (WorldSimulationDefaults.RateHz's own
+            // remarks), never refused. No divisor check applies: there is no engine-tick step width to derive when
+            // the world never steps at all.
+            return;
         }
+
+        if ((FixedTickConversion.TicksPerSecond % (ulong)rate) != 0UL) {
+            var (lower, upper) = NearestRateDivisors(rate: rate);
+            var nearest = ((lower, upper) switch {
+                ({ } low, { } high) => $"{low} and {high}",
+                ({ } low, null) => $"{low}",
+                (null, { } high) => $"{high}",
+                (null, null) => "none", // unreachable: 1 and 50400 always bracket a positive rate.
+            });
+
+            errors.Add(item: $"simulation.rateHz {rate} does not divide {FixedTickConversion.TicksPerSecond} engine ticks per second exactly; nearest valid rates are {nearest} Hz.");
+        }
+    }
+
+    // Linear scan over every divisor of 50400 (108 of them) — run at most once per Validate call, so simplicity beats
+    // a precomputed table here.
+    private static (int? Lower, int? Upper) NearestRateDivisors(int rate) {
+        int? lower = null;
+        int? upper = null;
+
+        for (var candidate = 1; ((ulong)candidate <= FixedTickConversion.TicksPerSecond); candidate++) {
+            if ((FixedTickConversion.TicksPerSecond % (ulong)candidate) != 0UL) {
+                continue;
+            }
+
+            if (candidate <= rate) {
+                lower = candidate;
+            }
+            if ((candidate >= rate) && (upper is null)) {
+                upper = candidate;
+            }
+        }
+
+        return (lower, upper);
+    }
+
+    // Validated in the AUTHORED unit (seconds), not the compiled tick count: DurationTicks' rounding-up guarantee
+    // only holds once its FixedQ4816 conversion sees a nonzero value, so a positive value below half a Q48.16 LSB
+    // quantizes to zero ticks at any rate — LowerAfterSeconds must be checked as "positive AND does not quantize to
+    // FixedQ4816.Zero", not merely positive. `defaultSeconds > ceilingSeconds` is also not exactly equivalent to the
+    // ticks-domain `defaultTicks > ceilingTicks` comparison it replaces (DurationTicks' ceiling-rounding is
+    // monotonic non-decreasing, so two seconds values under one tick apart can compile to the same count) — this
+    // refuses strictly more, never less, which is the safe direction. Every seconds field is also checked finite
+    // (NaN/Infinity evade the ordered comparisons and can overflow the checked casts inside Compile) and checked to
+    // fit the runtime's int-typed compiled fields via FitsCompiledRange before Compile ever runs.
+    private static void ValidateInputHold(WorldInputHoldAuthoring settings, uint ratePerSecond, int populationCapacity, List<string> errors) {
+        var ceilingFinite = float.IsFinite(f: settings.CeilingSeconds);
+        var defaultFinite = float.IsFinite(f: settings.DefaultSeconds);
+
+        if (!ceilingFinite) {
+            errors.Add(item: $"inputHold.ceilingSeconds {settings.CeilingSeconds} must be a finite number.");
+        } else if (!FitsCompiledRange(seconds: settings.CeilingSeconds, ratePerSecond: ratePerSecond)) {
+            errors.Add(item: $"inputHold.ceilingSeconds {settings.CeilingSeconds} compiles to more simulation ticks than the runtime's compiled field can hold at {ratePerSecond} Hz.");
+        }
+
+        if (!float.IsFinite(f: settings.LowerAfterSeconds)) {
+            errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} must be a finite number.");
+        } else if (!(settings.LowerAfterSeconds > 0f)) {
+            errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} must be positive.");
+        } else if (FixedQ4816.FromDouble(value: settings.LowerAfterSeconds) == FixedQ4816.Zero) {
+            errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} is positive but quantizes to zero in fixed point (Q48.16) — too small to represent as a duration at ANY rate; author a larger value.");
+        } else if (!FitsCompiledRange(seconds: settings.LowerAfterSeconds, ratePerSecond: ratePerSecond)) {
+            errors.Add(item: $"inputHold.lowerAfterSeconds {settings.LowerAfterSeconds} compiles to more simulation ticks than the runtime's compiled field can hold at {ratePerSecond} Hz.");
+        }
+
+        if (!defaultFinite) {
+            errors.Add(item: $"inputHold.defaultSeconds {settings.DefaultSeconds} must be a finite number.");
+        } else if (!FitsCompiledRange(seconds: settings.DefaultSeconds, ratePerSecond: ratePerSecond)) {
+            errors.Add(item: $"inputHold.defaultSeconds {settings.DefaultSeconds} compiles to more simulation ticks than the runtime's compiled field can hold at {ratePerSecond} Hz.");
+        }
+
+        if (ceilingFinite && defaultFinite && (settings.DefaultSeconds > settings.CeilingSeconds)) {
+            errors.Add(item: $"inputHold.defaultSeconds {settings.DefaultSeconds} exceeds inputHold.ceilingSeconds {settings.CeilingSeconds}.");
+        }
+
         if (settings.Participants is null) {
             return;
         }
@@ -429,9 +614,31 @@ public static class WorldDefinitionValidator {
             } else if (!bodies.Add(item: participant.BodyIndex)) {
                 errors.Add(item: $"{path}.bodyIndex {participant.BodyIndex} is duplicated.");
             }
-            if ((participant.Ticks < 0) || (participant.Ticks > settings.CeilingTicks)) {
-                errors.Add(item: $"{path}.ticks {participant.Ticks} is outside 0..{settings.CeilingTicks}.");
+
+            if (!float.IsFinite(f: participant.Seconds)) {
+                errors.Add(item: $"{path}.seconds {participant.Seconds} must be a finite number.");
+
+                continue;
             }
+
+            if (participant.Seconds > settings.CeilingSeconds) {
+                errors.Add(item: $"{path}.seconds {participant.Seconds} exceeds inputHold.ceilingSeconds {settings.CeilingSeconds}.");
+            }
+            if (!FitsCompiledRange(seconds: participant.Seconds, ratePerSecond: ratePerSecond)) {
+                errors.Add(item: $"{path}.seconds {participant.Seconds} compiles to more simulation ticks than the runtime's compiled field can hold at {ratePerSecond} Hz.");
+            }
+        }
+    }
+
+    // Whether an authored seconds value compiles to a tick count the runtime's int-typed compiled fields (the checked
+    // casts in WorldInputHoldAuthoring.Compile) can hold. Delegates to the same ulong-typed conversion Compile uses
+    // (WorldSimulationTickConversion.DurationTicks) so int overflow is a plain comparison, never a duplicated
+    // rounding rule. The catch covers a value large enough to overflow that conversion's own ulong arithmetic.
+    private static bool FitsCompiledRange(float seconds, uint ratePerSecond) {
+        try {
+            return (WorldSimulationTickConversion.DurationTicks(seconds: seconds, ratePerSecond: ratePerSecond) <= int.MaxValue);
+        } catch (OverflowException) {
+            return false;
         }
     }
 
@@ -1064,14 +1271,11 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The world's channel table (SIM-AFFECTING — it is the PlayerIntent vector's vocabulary): name uniqueness,
-    // exactly-one consumer per row (a role claimable by at most one channel, XOR a composition trigger), a role
-    // channel's shape (bipolar only — a role is a signed axis, never unipolar or binary), the channel-count ceiling,
-    // threshold range on binary rows, and motion-model role completeness (a document whose kits can run Grounded
-    // needs move-forward/move-strafe/turn; Free needs all six — the integrator tolerates absence, so silence is
-    // exactly the failure mode this rule exists to refuse). Returns the composition-channel name set kit Actions
-    // maps resolve against. A COMPOSITION channel carries no shape restriction — Unipolar is a deliberately supported
-    // composition shape.
+    // The channel table (SIM-AFFECTING — the PlayerIntent vector's vocabulary): name uniqueness; exactly one
+    // consumer per row (a role XOR a composition trigger); role channels are bipolar only; channel-count ceiling;
+    // threshold range on binary rows; motion-model role completeness (Grounded needs move-forward/move-strafe/turn,
+    // Free needs all six). Returns the composition-channel name set kit Actions maps resolve against; composition
+    // channels carry no shape restriction.
     private static (HashSet<string> AllNames, HashSet<string> CompositionNames) ValidateChannels(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var compositionNames = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -1569,39 +1773,26 @@ public static class WorldDefinitionValidator {
         return names;
     }
 
-    // The ONE bound neither the token grammar nor the JSON converter can enforce on its own (GrantSubjectJsonConverter
-    // parses every document-sourced GrantSubject — a WorldAddonRow.Requests entry, a WorldDefinition.Grants row's
-    // Subject — through WorldGrantCommandModule.TryParseSubject, the SAME grammar world.grant's own tokens parse
-    // through, so every OTHER shape question — a canonical encoding, a defined WorldSection, a non-empty profile id —
-    // is already settled the moment the document deserialized at all). TryParseSubject has no population figure to
-    // check a body:<n> token against (neither does the console's own parse step — WorldGrants.IsLegitimateSubject
-    // bounds it later, at GRANT time, and only for an actual grant, never a mere request), so a body index is the one
-    // thing worth catching here, at parse-adjacent validation time, for both a request and an authored grant alike.
+    // GrantSubjectJsonConverter already validates a subject's grammar/shape via WorldGrantCommandModule.TryParseSubject
+    // at parse time; it has no population figure to check a body:<n> token against (WorldGrants.IsLegitimateSubject
+    // bounds it later, at grant time, and only for an actual grant), so that bound is checked here instead, for both
+    // a request and an authored grant.
     private static void ValidateGrantSubjectBounds(GrantSubject subject, int populationCapacity, string path, List<string> errors) {
         if ((subject.Kind == GrantSubjectKind.Body) && ((subject.Value < 0) || (subject.Value >= populationCapacity))) {
             errors.Add(item: $"{path}.subject body:{subject.Value} is outside 0..{populationCapacity - 1} for the authored population capacity.");
         }
     }
 
-    // The document-authored grant rows (WorldDefinition.Grants). Console and Seat principals are already fully
-    // canonical and bounded by WorldGrantCommandModule.TryParsePrincipal's own grammar (seat1..seat4 IS 0..3, and
-    // 'console' carries no index/name to go wrong) — nothing further to check. An Addon principal's name is
-    // resolved against addonNames (a typo here would otherwise seat a grant for a principal that can never mount,
-    // caught only much later, if ever); a Peer's index is checked against the reserved peer slice even though the JSON
-    // converter's shared parser already enforces it, so a programmatically constructed definition reaches the same rule.
-    // An exclusive 'all' reservation is refused (the same
-    // universal rule WorldGrants.TryGrant enforces — checked once more here for immediate authoring feedback), and no
-    // two rows may name the identical (principal, capability, subject) triple — an ambiguous authored duplicate,
-    // unlike the ordinary idempotent re-grant a live world.grant tolerates. WHETHER a legitimate, non-conflicting row
-    // is actually held is WorldGrants.TryGrant's call alone, made once at boot (WorldServer's constructor) through the
-    // identical path world.grant submits through — this function never re-derives that decision. That is also where
-    // a row's Budget is decided: a missing budget on an untrusted Observe row, an explicit budget:0, or a budget on
-    // a trusted/non-Observe row are all TryGrant refusals, not validation errors here — they print the same loud
-    // accept/reject line at boot a live world.grant would.
-    // Whether a member principal kind is a legitimate group member — the positive rule: Seat/Console/Addon/Peer are
-    // real actors a hold could reach; Group is refused BY NAME (FLAT ONLY — a member is a principal, never a group,
-    // the nested-group refusal the substrate's whole design depends on), and World/Document are refused because
-    // neither is a real actor (the identical reasoning the grant door already applies to both).
+    // Document-authored grant rows (WorldDefinition.Grants). Console and Seat principals are already canonical per
+    // WorldGrantCommandModule.TryParsePrincipal's grammar. An Addon principal's name is resolved against addonNames;
+    // a Peer's index is checked against the reserved peer slice (defense in depth against a programmatically
+    // constructed definition, since the JSON converter's shared parser already enforces it). An exclusive 'all'
+    // reservation is refused, and no two rows may name the identical (principal, capability, subject) triple —
+    // unlike the ordinary idempotent re-grant a live world.grant tolerates. Whether a legitimate, non-conflicting row
+    // is actually held — including Budget legitimacy — is WorldGrants.TryGrant's decision alone, made once at boot;
+    // this pass does not re-derive it.
+    // A group member must be a real actor: Seat/Console/Addon/Peer. Group is refused (members are flat, never
+    // nested); World/Document are refused (neither is a real actor).
     private static bool IsLegitimateGroupMember(WorldPrincipal member) => member.Kind is
         PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer;
 
@@ -1729,10 +1920,34 @@ public static class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: row.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!groupIds.Add(item: row.Id)) {
+            // row.Id already crossed the WorldSafeName door at JSON parse — it CANNOT hold a value the
+            // id-to-instance-name composition (WorldSessionResolver.MintInstanceName) would refuse (the identical
+            // reasoning WorldIdentitySeed.Id's own validator comment states: the mapping is injective over
+            // WorldSafeName, so no separate "does it survive the mapping" check can ever fire here). The only thing
+            // left to check is ORDINAL UNIQUENESS within this document.
+            if (!groupIds.Add(item: row.Id)) {
                 errors.Add(item: $"{path}.id '{row.Id}' is duplicated.");
+            }
+
+            // A row's own tags — what a scope=group `tagged` destination selector matches against (see
+            // ValidateGroupSelector/WorldGroup.Tags). Absent means none; present-but-empty is refused rather than
+            // silently treated as absent, the same "author it or omit it" discipline the section's other optional
+            // lists (kind.SharedStateScope, this section's own Ownership) follow.
+            if (row.Tags is { Count: 0 }) {
+                errors.Add(item: $"{path}.tags is present but empty — omit the member instead of authoring an empty list.");
+            } else if (row.Tags is { Count: > 0 } tags) {
+                var seenTags = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                for (var tagIndex = 0; (tagIndex < tags.Count); tagIndex++) {
+                    var tag = tags[tagIndex];
+                    var tagPath = $"{path}.tags[{tagIndex}]";
+
+                    if (string.IsNullOrWhiteSpace(value: tag)) {
+                        errors.Add(item: $"{tagPath} must be non-empty.");
+                    } else if (!seenTags.Add(item: tag)) {
+                        errors.Add(item: $"{tagPath} '{tag}' is duplicated.");
+                    }
+                }
             }
 
             if (!kindsByName.TryGetValue(key: row.KindName ?? string.Empty, value: out var kind)) {
@@ -1905,6 +2120,92 @@ public static class WorldDefinitionValidator {
         }
     }
 
+    // The admission section: which identities/issuers the TCP door admits (WorldAdmissionDoor, Puck.World.Server's
+    // WorldTcpHost), and what each is minted. Crypto-shape rules reuse Puck.Carriage's TrustListEntry.Validate()
+    // directly rather than re-deriving them. Grant TEMPLATE rows are checked against the same subject-bounds/
+    // exclusive-over-all rules ValidateGrants applies; Budget/exclusivity legitimacy is WorldServer.Grant's decision
+    // at admission time, not this pass's.
+    private static void ValidateAdmission(IReadOnlyList<WorldAdmissionEntry>? entries, int populationCapacity, List<string> errors) {
+        if (entries is not { Count: > 0 } rows) {
+            return;
+        }
+
+        var seen = new HashSet<(string Domain, string? Subject, WorldAdmissionTrustMode Mode)>();
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"admission[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!seen.Add(item: (row.Domain, row.Subject, row.Mode))) {
+                errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
+            }
+
+            byte[]? spki = null;
+
+            try {
+                spki = Convert.FromBase64String(s: (row.PublicKey ?? string.Empty));
+            } catch (FormatException) {
+                errors.Add(item: $"{path}.publicKey is not valid base64.");
+            }
+
+            if (spki is { Length: > 0 }) {
+                try {
+                    var pinnedId = new KeyId {
+                        Algorithm = (row.Algorithm ?? string.Empty),
+                        Domain = (row.Domain ?? string.Empty),
+                        KeyHash = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki),
+                        Subject = ((row.Mode == WorldAdmissionTrustMode.Vouches) ? null : row.Subject),
+                    };
+                    var entry = new TrustListEntry(
+                        PinnedId: pinnedId,
+                        PublicKeySubjectPublicKeyInfo: spki,
+                        Mode: ((row.Mode == WorldAdmissionTrustMode.Vouches) ? CarriageTrustMode.Vouches : CarriageTrustMode.SignsDirectly),
+                        Reach: WorldAdmissionEmptyReach,
+                        MaximumAge: null
+                    );
+
+                    entry.Validate();
+                } catch (ArgumentException exception) {
+                    errors.Add(item: $"{path}: {exception.Message}");
+                }
+            } else if (spki is not null) {
+                errors.Add(item: $"{path}.publicKey decodes to zero bytes.");
+            }
+
+            if ((row.Mode == WorldAdmissionTrustMode.SignsDirectly) && string.IsNullOrWhiteSpace(value: row.Subject)) {
+                errors.Add(item: $"{path}.subject is required for mode 'signsDirectly'.");
+            }
+
+            if ((row.Mode == WorldAdmissionTrustMode.Vouches) && (row.Subject is not null)) {
+                errors.Add(item: $"{path}.subject must be absent for mode 'vouches' — a vouching root's chain resolves its own subject; it does not pin one here.");
+            }
+
+            var grants = (row.Grants ?? []);
+
+            for (var grantIndex = 0; (grantIndex < grants.Count); grantIndex++) {
+                var grant = grants[grantIndex];
+                var grantPath = $"{path}.grants[{grantIndex}]";
+
+                ValidateGrantSubjectBounds(subject: grant.Subject, populationCapacity: populationCapacity, path: grantPath, errors: errors);
+
+                if (grant.Exclusive && (grant.Subject.Kind == GrantSubjectKind.All)) {
+                    errors.Add(item: $"{grantPath} is exclusive over 'all' — an exclusive reservation must name a concrete subject.");
+                }
+            }
+        }
+    }
+
+    // Mirrors WorldAdmissionDoor's own s_noReach: this section's authorization vocabulary is
+    // WorldAdmissionEntry.Grants, never Puck.Carriage's slot-reach mechanism, so every entry validates against an
+    // empty reach set here too.
+    private static readonly IReadOnlySet<string> WorldAdmissionEmptyReach = new HashSet<string>(comparer: StringComparer.Ordinal);
+
     // Hand-rolled rather than System.Text.Regex — the canonical form is a "sha256-64/" prefix followed by exactly
     // 16 lowercase hex digits (AssetContentHash.ToString's "x16" format).
     private static bool IsValidAddonHash(string hash) {
@@ -1999,16 +2300,12 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The hud section: schema caps (WorldHudCapacity.MaxWorldPanels panels; MaxElementsPerPanel elements per panel
-    // for a plain world document, or the tighter MaxElementsPerSeatPanel for an owned identity's seat panel — see
-    // isIdentityScope), id uniqueness (panels within the section; elements within their owning panel), rect sanity
-    // (finite, positive width/height), WorldHudLayer.Replace refused for an identity's seat panel (no base slot to
-    // take over), and the closed HudBindingVocabulary (refuse-unknown-by-name) — INCLUDING, for the state.<name>
-    // family, whether the name resolves against the state rows validated just before this call (stateNames). Every
-    // check throws an ENUM-REASONED HudValidationException (the sdf.decode/SdfRefusal discipline) at its FIRST
-    // violation — caught here and folded into the whole-document errors list, so this section reports exactly one
-    // finding (fail-fast within the section) that composes with every other section's findings (aggregate across
-    // sections).
+    // The hud section: schema caps (MaxWorldPanels; MaxElementsPerPanel, or the tighter MaxElementsPerSeatPanel for
+    // an owned identity's seat panel — see isIdentityScope), id uniqueness (panels; elements within their panel),
+    // rect sanity, WorldHudLayer.Replace refused for a seat panel, and the closed HudBindingVocabulary — including
+    // whether a state.<name> binding resolves against the state rows validated just before this call. Throws an
+    // enum-reasoned HudValidationException at the first violation, caught here and folded into the whole-document
+    // errors list.
     private static void ValidateHud(WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
         if (hud is null) {
             errors.Add(item: "hud is required.");
@@ -2068,17 +2365,11 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The state section: schema cap (WorldStateCapacity.MaxRows), name uniqueness, the both-or-neither Min/Max range
-    // rule (a half-declared range is refused rather than guessed), a declared range applying to EVERY cell's value,
-    // a text cell's value length against WorldStateCapacity.MaxTextValueLength, and the per-row cell-count ceiling
-    // (WorldStateCapacity.MaxCellsPerRow, optionally narrowed by an authored Capacity — a slot never approaches it,
-    // so this governs keyed rows in practice). ONE pass now covers both shapes a row may take (see
-    // WorldStateRow's "a slot is a table with one key" remarks) — there is no more separate table-only gate, because
-    // there is no more separate table type. A row's NAME can no longer be empty or carry an unsafe/dotted character —
-    // WorldCellName refuses that at JSON parse, before this method ever sees the row — so this pass checks only
-    // uniqueness, never shape. Returns the declared rows by name so ValidateHud can refuse a state.<row>/
-    // state.<row>.<key> binding naming no row (or no cell), by the SAME refuse-unknown-by-name discipline every other
-    // HudBindingVocabulary token already gets.
+    // The state section: schema cap (MaxRows), name uniqueness, both-or-neither Min/Max range (applied to every
+    // cell's value), text-cell length against MaxTextValueLength, and per-row cell-count ceiling (MaxCellsPerRow,
+    // optionally narrowed by an authored Capacity). WorldCellName already refuses an empty/unsafe/dotted row name at
+    // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
+    // an unknown state.<row>/state.<row>.<key> binding.
     private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 
@@ -2195,19 +2486,20 @@ public static class WorldDefinitionValidator {
                 } else if (reservesSlotKey && (cell.Key == WorldStateRow.SlotKey)) {
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
                 } else if (!WorldStateReservedCells.TryValidateReservedCell(row: row, key: cell.Key, reason: out var reservedReason)) {
-                    // Every OTHER reserved-prefix key: refused unless it is exactly the engine-minted key legitimate
-                    // for THIS row's shape AND carries a value the engine could have written there (a non-negative
-                    // cursor; a deck mask inside its context's alternative count, under a deck mode). That is what
-                    // "engine-minted only" means operationally — a key the engine never mints, mints only for a
-                    // different shape of row, or a value it could never have minted, cannot appear however it arrived
-                    // (hand-authored file, console verb, addon decoder: all pass through here). The rule itself lives
-                    // in WorldGeneratorCells so the UpsertStateCell compose arm refuses the identical shape from the
-                    // identical code rather than from a second reading of it.
+                    // Any other reserved-prefix key is refused unless it is exactly the engine-minted key legitimate
+                    // for this row's shape, carrying a value the engine could have written (a non-negative cursor; a
+                    // deck mask inside its context's alternative count under a deck mode). The rule lives in
+                    // WorldGeneratorCells so UpsertStateCell's compose arm refuses the identical shape from the
+                    // identical code.
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
                 }
 
                 if (cell.Advance is { } cellAdvance) {
                     ValidateCellAdvance(row: row, cell: cell, advance: cellAdvance, numeric: numeric, cellPath: cellPath, errors: errors);
+                }
+
+                if ((cell.Provenance is { } provenance) && (provenance.Length > WorldStateCapacity.MaxProvenanceLength)) {
+                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {WorldStateCapacity.MaxProvenanceLength}.");
                 }
 
                 if (row.Kind == CellKind.Text) {
@@ -2255,9 +2547,9 @@ public static class WorldDefinitionValidator {
         return byName;
     }
 
-    /// <summary>Validates the document's <c>generators</c> section — the DECLARED stochastic sources sites reference
+    /// <summary>Validates the document's <c>generators</c> section — the declared stochastic sources sites reference
     /// by name. A source is a pure shape here; whether any particular site may draw from it (kind, timing) is the
-    /// SITE's question, asked in <see cref="ValidateDrawSite"/>, because the same source is legitimately shared by
+    /// site's question, asked in <see cref="ValidateDrawSite"/>, because the same source is legitimately shared by
     /// sites that answer it differently.</summary>
     private static void ValidateGenerators(IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
         var rows = (generators ?? []);
@@ -2295,9 +2587,9 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    /// <summary>Validates one <see cref="WorldGenerator"/>'s own SHAPE — dispatching on
-    /// <see cref="WorldGenerator.Source"/>, since each source owns a disjoint field set. Shared by a DECLARED source
-    /// row and a site's INLINE source, so the two spellings are held to the identical rules rather than to two
+    /// <summary>Validates one <see cref="WorldGenerator"/>'s own shape — dispatching on
+    /// <see cref="WorldGenerator.Source"/>, since each source owns a disjoint field set. Shared by a declared source
+    /// row and a site's inline source, so the two spellings are held to the identical rules rather than to two
     /// readings of them.</summary>
     private static void ValidateSource(WorldGenerator generator, string path, List<string> errors) {
         if (!Enum.IsDefined(value: generator.Source)) {
@@ -2507,13 +2799,13 @@ public static class WorldDefinitionValidator {
     }
 
     /// <summary>
-    /// Applies the ONE site rule — asked identically by a <c>state</c> draw row and by both boot-only field sites.
+    /// Applies the one site rule — asked identically by a <c>state</c> draw row and by both boot-only field sites.
     /// Resolves the facet's source (named or inline), holds the pairing to the one kind predicate, refuses a source
-    /// the site's TIMING cannot drive, and narrows the source's numeric domain against what the site can actually
+    /// the site's timing cannot drive, and narrows the source's numeric domain against what the site can actually
     /// hold.
     /// </summary>
-    /// <remarks>The domain narrowing is the difference between a refusal at AUTHORING and a coin-flip refusal at
-    /// boot: without it a draw whose shape the validator admits can produce a value the SAME validator refuses on the
+    /// <remarks>The domain narrowing is the difference between a refusal at authoring and a coin-flip refusal at
+    /// boot: without it a draw whose shape the validator admits can produce a value the same validator refuses on the
     /// resolved document, so whether the world boots depends on what it rolled — a refusal that moves with the world
     /// seed and the instance identity. Refusing the authoring mismatch makes the door the type rather than the
     /// outcome.</remarks>
@@ -2564,7 +2856,7 @@ public static class WorldDefinitionValidator {
         ValidateSourceDomain(generator: generator, domainLow: domainLow, domainHigh: domainHigh, path: path, errors: errors);
     }
 
-    /// <summary>Narrows a NUMERIC source's own declared band against the site's admissible domain — see
+    /// <summary>Narrows a numeric source's own declared band against the site's admissible domain — see
     /// <see cref="ValidateDrawSite"/>'s remarks for why this is an authoring refusal rather than a boot-time
     /// one.</summary>
     private static void ValidateSourceDomain(WorldGenerator generator, long domainLow, long domainHigh, string path, List<string> errors) {
@@ -2597,7 +2889,7 @@ public static class WorldDefinitionValidator {
     }
 
     /// <summary>Validates a state row's authored <see cref="WorldDraw"/> site — its own shape rules, then the shared
-    /// site rule with the row's OWN envelope as the admissible domain.</summary>
+    /// site rule with the row's own envelope as the admissible domain.</summary>
     private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
         if (row.Draw is not { } draw) {
             if (row.DrawCursor != 0L) {
@@ -2644,7 +2936,7 @@ public static class WorldDefinitionValidator {
     }
 
     /// <summary>Validates a row's authored <see cref="WorldStateAdvance"/> continuous-accumulation trait. Whether
-    /// reaching a declared envelope bound CLAMPS the computed value (it never rewrites the stored base/epoch) is the
+    /// reaching a declared envelope bound clamps the computed value (it never rewrites the stored base/epoch) is the
     /// settled read-side half of the envelope duality, documented on <see cref="WorldStateAdvance"/> itself and not a
     /// validator concern — this method refuses only shapes the read side could not honestly compute over.</summary>
     private static void ValidateAdvance(WorldStateRow row, bool numeric, string path, List<string> errors) {
@@ -2680,10 +2972,10 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    /// <summary>Validates ONE cell's own <see cref="WorldStateAdvance"/> — the KEYED counterpart of
+    /// <summary>Validates one cell's own <see cref="WorldStateAdvance"/> — the keyed counterpart of
     /// <see cref="ValidateAdvance"/>, stated separately because it governs the opposite shape: a cell inside a
-    /// TABLE rather than a row's own slot. The two never overlap by construction (this rejects the slot key
-    /// outright), so a cell's advance and its row's advance can never both claim the SAME cell.</summary>
+    /// table rather than a row's own slot. The two never overlap by construction (this rejects the slot key
+    /// outright), so a cell's advance and its row's advance can never both claim the same cell.</summary>
     private static void ValidateCellAdvance(WorldStateRow row, WorldStateCell cell, WorldStateAdvance advance, bool numeric, string cellPath, List<string> errors) {
         // The slot key's own accumulation is authored at the ROW level (beside 'value'), never here — refusing this
         // combination outright is what keeps "which advance governs the slot cell" from ever being two mechanisms
@@ -2736,10 +3028,10 @@ public static class WorldDefinitionValidator {
         }
 
         RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
-        // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The ceiling
-        // is the screen-surface span ABOVE the reserved base — a larger count would push a reserved slot past the
-        // engine's MaxScreenSurfaces and throw at the first frame.
-        RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: (SdfProgramBuilder.MaxScreenSurfaces - WorldPlacementPolicy.DerivedFaceBase), name: "authoring.derivedFaceScreens", errors: errors);
+        // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The
+        // ceiling is the span up to the fixed traveler-follow band; a larger count would collide with an away-seat
+        // screen even though both ranges individually remain below the engine's absolute surface ceiling.
+        RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: WorldPlacementPolicy.MaxDerivedFaceScreens, name: "authoring.derivedFaceScreens", errors: errors);
     }
 
     // The creation ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants
@@ -2821,7 +3113,7 @@ public static class WorldDefinitionValidator {
     // scale envelope, the lattice distribution's positive counts and finite steps, the mirror plane, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, HashSet<string> creationIds, HashSet<string> lookNames, HashSet<string> kitNames, WorldAuthoringDefaults authoring, HashSet<string> patchIds, bool requiresField, HashSet<string> referenceNames, List<string> errors) {
+    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, HashSet<string> creationIds, HashSet<string> lookNames, HashSet<string> kitNames, WorldAuthoringDefaults authoring, HashSet<string> patchIds, bool requiresField, HashSet<string> destinationNames, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
         var creations = definition.Creations;
 
@@ -2836,13 +3128,14 @@ public static class WorldDefinitionValidator {
         var stampRegistrationCount = 0;
         // The document-global dynamic-instance total (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances):
         // every animated placement's single replay instance plus every inhabited placement's declared body count,
-        // summed across the WHOLE document. ValidateInhabit bounds one row's count to the authored peer capacity but
-        // never totals across rows — a document with many inhabited placements can otherwise declare an unbounded
-        // sum of per-frame dynamic bodies. This catches that sum; the runtime entity table separately caps actual
-        // occupancy at the authored population capacity regardless of what a document merely declares.
+        // summed across the whole document — ValidateInhabit only bounds one row's count to the peer capacity, never
+        // totals across rows. The runtime entity table separately caps actual occupancy at population capacity.
         var dynamicInstanceCount = 0;
         var staticPlacementInstanceCount = 0L;
         var solidPlacementColliderCount = 0L;
+        // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
+        // loop — never a second walk of (placements x declared faces) to answer the same questions.
+        var faces = WorldFaceCatalog.For(definition: definition);
 
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
@@ -2969,7 +3262,7 @@ public static class WorldDefinitionValidator {
             // The per-instance FACE overrides: each names a declared creation face, no duplicates. The View source's
             // camera name is resolved LENIENTLY (a derived creation-camera name is unknown to the document validator; the
             // binder lights an unresolved feed with its no-signal card, never a hard reject).
-            ValidateFaceSources(faceSources: placement.FaceSources, placement: placement, creations: creations, referenceNames: referenceNames, path: $"{path}.faceSources", errors: errors);
+            ValidateFaceSources(faceSources: placement.FaceSources, placement: placement, creations: creations, faces: faces, destinationNames: destinationNames, path: $"{path}.faceSources", errors: errors);
 
             // The REGION facet: a named sensing volume (see WorldPlacementRegion's own doc). The name IS the
             // placement's own id, so no separate uniqueness check is owed — the id duplication check above already
@@ -2980,14 +3273,13 @@ public static class WorldDefinitionValidator {
                 }
             }
 
-            // The ATTACH facet: binds the row's resolved pose to a live population body (see WorldPlacementAttach's
-            // own doc). BodyIndex uses the SAME 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant
-            // subject — never the 1-based player.* seat number. REGION, SOLID (under the analytic contact provider),
-            // and EMISSION all now read the resolved DYNAMIC pose (WorldEventFeed.CollectRegions,
-            // WorldColliderSet.RefreshAttached, WorldStampPool.TryShapePosition/RootPose), so an equipped item's
-            // aura/hitbox/voice tracks the carrier. Distribution/mirror (static-stamp-only) and inhabit (a row cannot
-            // both spawn its own bodies and ride another's) stay refused; FaceSources is orthogonal (a content
-            // selector, not a transform) and stays permitted.
+            // The ATTACH facet binds the row's resolved pose to a live population body (see WorldPlacementAttach).
+            // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —
+            // never the 1-based player.* seat number. Region, Solid (analytic contact provider), and Emission all
+            // read the resolved dynamic pose (WorldEventFeed.CollectRegions, WorldColliderSet.RefreshAttached,
+            // WorldStampPool.TryShapePosition/RootPose), so an equipped item's aura/hitbox/voice tracks the carrier.
+            // Distribution/mirror and inhabit stay refused (a row cannot both spawn its own bodies and ride
+            // another's); FaceSources stays permitted (a content selector, not a transform).
             if (placement.Attach is { } attach) {
                 if ((attach.BodyIndex < 0) || (attach.BodyIndex >= definition.Population.Capacity)) {
                     errors.Add(item: $"{path}.attach.bodyIndex {attach.BodyIndex} is outside 0..{(definition.Population.Capacity - 1)} for the authored population capacity (0-based entity index — body:1 is player.* seat 2, not body index 1).");
@@ -3027,6 +3319,15 @@ public static class WorldDefinitionValidator {
         // per-frame instance-grid rebuild cost, so it is gated once here rather than per row.
         if (dynamicInstanceCount > WorldDynamicGeometryCeilings.MaxContributedDynamicInstances) {
             errors.Add(item: $"{dynamicInstanceCount} contributed dynamic instances (animated placements + inhabited placement bodies) exceed the {WorldDynamicGeometryCeilings.MaxContributedDynamicInstances}-instance document-global dynamic-geometry ceiling.");
+        }
+
+        // The derived-face SCREEN budget, refused here because it is provable from the document alone: a face whose
+        // resolved source renders nothing claims no slot, so this counts only the faces that actually ask for one.
+        // Overflow that reaches the running engine can only darken a face, never remove a door — but a document that
+        // over-claims statically is an authoring error, and naming it at validation beats discovering it as a dark
+        // screen.
+        if (faces.ClaimingFaceCount > faces.SlotCapacity) {
+            errors.Add(item: $"{faces.ClaimingFaceCount} derived creation face(s) resolve to a source that renders something, but authoring.derivedFaceScreens reserves only {faces.SlotCapacity} slot(s); raise the reservation or give a face a 'none' source.");
         }
 
         // No census-fit rule: networkPlayers is a remote admission CAP, not a static reservation an
@@ -3076,7 +3377,7 @@ public static class WorldDefinitionValidator {
     }
 
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
-    private static void ValidateFaceSources(IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, HashSet<string> referenceNames, string path, List<string> errors) {
+    private static void ValidateFaceSources(IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyList<WorldCreation> creations, WorldFaceCatalog faces, HashSet<string> destinationNames, string path, List<string> errors) {
         if (faceSources is not { Count: > 0 } sources) {
             return;
         }
@@ -3089,6 +3390,7 @@ public static class WorldDefinitionValidator {
         }
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        string? portalFaceName = null;
 
         for (var index = 0; (index < sources.Count); index++) {
             var source = sources[index];
@@ -3110,28 +3412,355 @@ public static class WorldDefinitionValidator {
 
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");
+            } else if (source.Source is WorldScreenSource.Session session) {
+                ValidateSessionSource(session: session, destinationNames: destinationNames, portal: source.Portal, path: facePath, errors: errors);
             }
 
             if (source.Portal is { } portal) {
-                ValidatePortal(portal: portal, referenceNames: referenceNames, path: $"{facePath}.portal", errors: errors);
+                ValidatePortal(portal: portal, destinationNames: destinationNames, path: $"{facePath}.portal", errors: errors);
+
+                // A door is geometry the trigger scan derives ONCE per revision from the row's authored transform
+                // (WorldFaceCatalog). A row whose resolved pose moves every tick has no such derivation, so a portal
+                // facet on one is refused rather than silently triggering at a stale place.
+                if (placement.Attach is not null) {
+                    errors.Add(item: $"{facePath}.portal sits on a placement that ATTACHES to a live body — a portal's frame is derived once per document revision from the row's own authored transform, which an attached row does not have; move the door onto a static placement.");
+                } else if (placement.Inhabit is not null) {
+                    errors.Add(item: $"{facePath}.portal sits on an INHABITED placement — its stamp rides a live body's pose rather than the row's authored transform, so the door's frame would be stale every tick; move the door onto a static placement.");
+                } else if (creation is { Document.Frames.Count: > 0 }) {
+                    errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.CreationId}' carries timeline frames) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
+                }
+
+                // The derived face itself: its shape kind must map onto a region arm (WorldFaceApertureKind), and its
+                // frame must be yaw-only. A face may be DRAWN on any primitive at any orientation; a DOOR is narrower.
+                if (faces.TryFind(placementId: placement.Id, faceName: source.Face, out var portalRow)) {
+                    if (portalRow.ShapeType is not { } shapeType) {
+                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', which declares no concrete shape (shapeId {(portalRow.ShapeId?.ToString(provider: CultureInfo.InvariantCulture) ?? "null")}) — a door needs a surface to open, so it has no aperture mapping.");
+                    } else if (portalRow.Aperture == WorldFaceApertureKind.None) {
+                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose shape is a {shapeType} — only Box maps onto a walkable aperture today; a curved or unbounded face has no aperture mapping.");
+                    }
+
+                    if (!portalRow.Frame.IsYawOnly) {
+                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose derived frame carries pitch or roll (its up axis is not world +Y once the placement yaw and the shape rotation compose) — the mapped-arrival isometry is a rotation about world up only and cannot map such a frame; level the shape's rotation or drop the portal facet.");
+                    }
+                }
+
+                // One portal face per placement is refused rather than assumed: the coalesced group key carries
+                // (placement, face), so a party straddling two portal faces of one placement would split into two
+                // transfers, breaking whole-party atomicity. The destination for a two-sided door is one transfer
+                // whose members map through their own entry face (per-member source frames), which PendingTransfer
+                // cannot carry yet.
+                if (portalFaceName is { } firstPortalFace) {
+                    errors.Add(item: $"{facePath}.portal is placement '{placement.Id}'s second portal face ('{firstPortalFace}' already carries one) — a party spanning two faces of one placement would split its transfer atomicity; one portal face per placement until per-member source frames land.");
+                } else {
+                    portalFaceName = source.Face;
+                }
             }
         }
     }
 
-    // The PORTAL facet: destination must name a references row (by name — the row's own file-existence is a future
-    // consumer's job, exactly like WorldReference itself), and a persistent lifetime must carry a stable instance
-    // name to be stable at all. Lifetime/travel enum SHAPE is already refused at strict parse (an unknown or numeric
-    // token never reaches here), so this pass owns only the two cross-section/cross-field facts strict parse cannot.
-    private static void ValidatePortal(WorldPlacementPortal portal, HashSet<string> referenceNames, string path, List<string> errors) {
-        if (string.IsNullOrWhiteSpace(value: portal.Destination) || !referenceNames.Contains(item: portal.Destination)) {
-            errors.Add(item: (referenceNames.Count > 0)
-                ? $"{path}.destination '{portal.Destination}' names no references row; the world declares: {string.Join(separator: ", ", values: referenceNames)}."
-                : $"{path}.destination '{portal.Destination}' names no references row; the world declares none.");
+    // The PORTAL facet: destination must name an existing destinations row. Travel/Arrival enum shape is already
+    // refused at strict parse. This pass owns what parse cannot: that the named destination row exists, and that
+    // arrival/counterpart cohere (mapped requires a counterpart, a counterpart requires mapped, and its shape
+    // parses). A counterpart's cross-document existence is NOT checked here — the named document is not resolved at
+    // boot; Puck.World.WorldInstanceHost resolves it against the destination's delivered definition at transfer
+    // time (see WorldPortalCounterpart).
+    private static void ValidatePortal(WorldPlacementPortal portal, HashSet<string> destinationNames, string path, List<string> errors) {
+        if (string.IsNullOrWhiteSpace(value: portal.Destination) || !destinationNames.Contains(item: portal.Destination)) {
+            errors.Add(item: (destinationNames.Count > 0)
+                ? $"{path}.destination '{portal.Destination}' names no destinations row; the world declares: {string.Join(separator: ", ", values: destinationNames)}."
+                : $"{path}.destination '{portal.Destination}' names no destinations row; the world declares none.");
         }
 
-        if ((portal.Lifetime == WorldPortalLifetime.Persistent) && (portal.Instance is null)) {
-            errors.Add(item: $"{path} lifetime='{WorldPortalTokens.LifetimePersistent}' requires an instance name.");
+        if (portal.Arrival == WorldPortalArrival.Mapped) {
+            if (string.IsNullOrWhiteSpace(value: portal.Counterpart)) {
+                errors.Add(item: $"{path}.arrival 'mapped' requires {path}.counterpart (the destination document's border placementId/face) — none was authored.");
+            } else if (!WorldPortalCounterpart.TryParse(counterpart: portal.Counterpart, placementId: out _, face: out _)) {
+                errors.Add(item: $"{path}.counterpart '{portal.Counterpart}' is malformed — expected '<placementId>/<face>'.");
+            }
+        } else if (!string.IsNullOrWhiteSpace(value: portal.Counterpart)) {
+            errors.Add(item: $"{path}.counterpart '{portal.Counterpart}' is authored but {path}.arrival is not 'mapped' — a counterpart names a mapped arrival's destination frame only.");
         }
+
+        // marginDepth's own SHAPE (mapped-only, finite, positive) is a single-document fact this pass already owns;
+        // whether it clears the DERIVED floor and matches what the neighbour authors is a cross-document fact only
+        // ValidateMarginStrips can check (it needs the counterpart document, which this pass never resolves — see
+        // Counterpart's own remarks above).
+        if (portal.MarginDepth is { } marginDepth) {
+            if (portal.Arrival != WorldPortalArrival.Mapped) {
+                errors.Add(item: $"{path}.marginDepth {marginDepth} is authored but {path}.arrival is not 'mapped' — a margin strip shares ground with a mapped arrival's counterpart face only.");
+            } else if (!float.IsFinite(f: marginDepth) || (marginDepth <= 0f)) {
+                errors.Add(item: $"{path}.marginDepth {marginDepth} must be finite and positive.");
+            }
+        }
+    }
+
+    // The border-margin strip: walks every mapped portal facet that authors a marginDepth and proves it against the
+    // NEIGHBOUR document (through the injected resolver) rather than this one alone. A facet authoring no
+    // marginDepth needs no proof and costs this pass nothing beyond the walk. Memoizes one resolution per distinct
+    // WorldReference.Document so a quilt of several borders naming the same neighbour fetches it once.
+    private static void ValidateMarginStrips(WorldDefinition definition, IWorldNeighbourResolver? neighbours, List<string> errors) {
+        var placements = definition.Placements;
+
+        if (placements is not { Count: > 0 }) {
+            return;
+        }
+
+        var destinationsByName = new Dictionary<string, WorldDestination>(comparer: StringComparer.Ordinal);
+        foreach (var destination in (definition.Destinations ?? [])) {
+            if (destination is not null) {
+                destinationsByName[destination.Name.Value] = destination;
+            }
+        }
+
+        var referencesByName = new Dictionary<string, WorldReference>(comparer: StringComparer.Ordinal);
+        foreach (var reference in (definition.References ?? [])) {
+            if (reference is not null) {
+                referencesByName[reference.Name.Value] = reference;
+            }
+        }
+
+        var resolutions = new Dictionary<string, WorldNeighbourResolution>(comparer: StringComparer.Ordinal);
+
+        foreach (var placement in placements) {
+            if ((placement?.FaceSources) is not { Count: > 0 } faceSources) {
+                continue;
+            }
+
+            foreach (var face in faceSources) {
+                if ((face?.Portal) is not { Arrival: WorldPortalArrival.Mapped, MarginDepth: { } authoredDepth } portal) {
+                    continue;
+                }
+
+                // Malformed/unparseable/undeclared shapes already carry their own named refusal from ValidatePortal
+                // and ValidateDestinations/ValidateReferences — this pass adds nothing for a fact another pass has
+                // already named, and a malformed counterpart has no neighbour to resolve against anyway.
+                if (!float.IsFinite(f: authoredDepth) || (authoredDepth <= 0f) ||
+                    !WorldPortalCounterpart.TryParse(counterpart: portal.Counterpart, placementId: out _, face: out _) ||
+                    !destinationsByName.TryGetValue(key: portal.Destination, value: out var destination) ||
+                    !referencesByName.TryGetValue(key: destination.Reference, value: out var reference)) {
+                    continue;
+                }
+
+                var path = $"placements[{placement.Id}].faceSources[{face.Face}].portal.marginDepth";
+
+                if (destination.Scope != WorldDestinationScope.Global) {
+                    errors.Add(item: $"{path} is authored for {WorldDestinationTokens.ScopeToken(scope: destination.Scope)}-scoped destination '{destination.Name}', but one shared authority-side contact field cannot select a viewer-specific neighbour — omit marginDepth until per-body scoped stitching exists.");
+
+                    continue;
+                }
+
+                if (neighbours is null) {
+                    errors.Add(item: $"{path} {authoredDepth} is authored, but no neighbour resolver was supplied — a shared strip cannot be proven identical against an unreachable document, so it is refused rather than silently accepted.");
+
+                    continue;
+                }
+
+                if (!resolutions.TryGetValue(key: reference.Document, out var resolution)) {
+                    resolution = neighbours.Resolve(document: reference.Document);
+                    resolutions[reference.Document] = resolution;
+                }
+
+                if (resolution.Kind != WorldNeighbourResolutionKind.Resolved) {
+                    errors.Add(item: $"{path} {authoredDepth} is authored, but neighbour '{reference.Document}' could not be reached — {resolution.Reason}.");
+
+                    continue;
+                }
+
+                var neighbourDefinition = resolution.Definition!;
+
+                if (!WorldPortalCounterpart.TryResolve(definition: neighbourDefinition, counterpart: portal.Counterpart, placement: out var counterpartPlacement, face: out var counterpartFace, reason: out var counterpartReason)) {
+                    errors.Add(item: $"{path} {authoredDepth} cannot be proven identical — {counterpartReason}.");
+
+                    continue;
+                }
+
+                // A shared strip is a PAIR of faces, not merely two same-sized rectangles that happen to author the
+                // same number. Prove that the destination face names this exact source face as its own counterpart;
+                // otherwise A/B and B/C can accidentally borrow one another's geometry under a one-way chain.
+                var expectedReturn = $"{placement.Id}/{face.Face}";
+
+                if (counterpartFace!.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } returnCounterpart } ||
+                    !string.Equals(a: returnCounterpart, b: expectedReturn, comparisonType: StringComparison.Ordinal)) {
+                    errors.Add(item: $"{path} cannot be proven reciprocal — neighbour '{reference.Document}''s counterpart '{portal.Counterpart}' must map back to '{expectedReturn}'.");
+
+                    continue;
+                }
+
+                // Dimension parity. Arrival applies (-SeamU, SeamV) onto the counterpart's own
+                // frame — a border whose two faces carry different half-extents lands a traveler off the door (or
+                // off any strip) on whichever side is narrower. A shared strip's whole claim is that both faces
+                // occupy the SAME rectangle, so that claim is refused by name here rather than assumed, reading the
+                // SAME derived frames WorldFaceCatalog already computes for arrival/render (never re-derived).
+                if (!WorldFaceCatalog.For(definition: definition).TryFind(placementId: placement.Id, faceName: face.Face, out var localRow)) {
+                    errors.Add(item: $"{path} names a face this document's own face catalog cannot resolve.");
+
+                    continue;
+                }
+
+                if (!WorldFaceCatalog.For(definition: neighbourDefinition).TryFind(placementId: counterpartPlacement!.Id, faceName: counterpartFace!.Face, out var neighbourRow)) {
+                    errors.Add(item: $"{path} cannot be proven identical — neighbour '{reference.Document}''s counterpart '{portal.Counterpart}' names a face its own face catalog cannot resolve.");
+
+                    continue;
+                }
+
+                if ((localRow.Frame.HalfWidth != neighbourRow.Frame.HalfWidth) || (localRow.Frame.HalfHeight != neighbourRow.Frame.HalfHeight)) {
+                    errors.Add(item: $"{path} is authored, but this face is {(double)localRow.Frame.HalfWidth:0.#####}x{(double)localRow.Frame.HalfHeight:0.#####} while neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' is {(double)neighbourRow.Frame.HalfWidth:0.#####}x{(double)neighbourRow.Frame.HalfHeight:0.#####} — a shared strip needs matching door dimensions on both sides, or the arrival isometry lands off one of them.");
+
+                    continue;
+                }
+
+                if (!TryMarginDepthFloor(local: definition, neighbour: neighbourDefinition, floor: out var floor, unreadableReason: out var unreadableReason)) {
+                    errors.Add(item: $"{path} {authoredDepth} cannot be proven — {unreadableReason} — a derived floor this validator cannot compute from declared data is refused rather than treated as zero.");
+
+                    continue;
+                }
+
+                var authoredFixed = FixedQ4816.FromDouble(value: authoredDepth);
+
+                if (authoredFixed < floor) {
+                    errors.Add(item: $"{path} {authoredDepth} is below the derived floor {(double)floor:0.#####} world units (interaction reach + max closing speed x tape latency, read from this document and neighbour '{reference.Document}') — raise it, or drop it to take the floor.");
+
+                    continue;
+                }
+
+                if (counterpartFace.Portal.MarginDepth is not { } neighbourDepth) {
+                    errors.Add(item: $"{path} authors {authoredDepth}, but neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' authors no marginDepth of its own — a shared strip must be authored on BOTH sides.");
+
+                    continue;
+                }
+
+                var neighbourFixed = FixedQ4816.FromDouble(value: neighbourDepth);
+
+                if (authoredFixed != neighbourFixed) {
+                    errors.Add(item: $"{path} authors {authoredDepth}, but neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' authors {neighbourDepth} — a shared strip must be bit-identical on both sides.");
+                }
+            }
+        }
+    }
+
+    // The derived margin floor: how deep a shared strip must be so a body already touching one side's face still
+    // has real ground under it by the time the slower side has heard about it.
+    //   floor = reach + (closingSpeed * tapeLatency)
+    // reach is the larger of either side's own declared collider extent (TryColliderReach). closingSpeed is the sum
+    // of both sides' declared speed ceilings (WorldFacePortalPolicy.SpeedCeiling), worst-cased as two bodies closing
+    // from opposite sides. tapeLatency is one full tick period of the slower of the two documents' simulation rates.
+    // The terms are symmetric in (local, neighbour), so both documents derive the same floor independently.
+    //
+    // Rounds up end to end, never nearest: a safety floor must be a true lower bound, and a nearest-rounded term
+    // could understate it while an authored marginDepth sitting at the understated floor would still validate while
+    // unsafe. Every step goes through Puck.Maths.FixedDirectedRounding's ceiling family, and the whole
+    // speed*latency+reach combination rounds up exactly once (TryCeilingProductSum) rather than as separately
+    // rounded steps.
+    //
+    // CAVEAT: WorldFacePortalPolicy.SpeedCeiling is SAMPLING-only — a live seated player's profile speed can exceed
+    // an unenveloped kit's own declared ceiling. This floor consumes SpeedCeiling as a soundness term, so "a
+    // straddling body always has ground under it" can still fail for a profile-boosted body until every kit's speed
+    // is bound by an authored envelope (MoveSpeedEnvelope/ThrustSpeedEnvelope/TopSpeedEnvelope).
+    private static bool TryMarginDepthFloor(WorldDefinition local, WorldDefinition neighbour, out FixedQ4816 floor, out string? unreadableReason) {
+        floor = FixedQ4816.Zero;
+        unreadableReason = null;
+
+        if (!TryColliderReach(definition: local, reach: out var localReach, unreadableKitName: out var localUnreadableKit)) {
+            unreadableReason = $"kit '{localUnreadableKit}' declares a collider this floor cannot measure";
+
+            return false;
+        }
+
+        if (!TryColliderReach(definition: neighbour, reach: out var neighbourReach, unreadableKitName: out var neighbourUnreadableKit)) {
+            unreadableReason = $"neighbour kit '{neighbourUnreadableKit}' declares a collider this floor cannot measure";
+
+            return false;
+        }
+
+        var reach = FixedQ4816.Max(x: localReach, y: neighbourReach);
+        // SpeedCeiling values are already exact FixedQ4816 sums of exact terms (see WorldFacePortalPolicy's own
+        // remarks) — an ordinary addition of two already-fixed values is itself exact, so it needs no ceiling
+        // treatment; only the multiply-by-latency-and-add-reach step below can lose precision.
+        var closingSpeed = (WorldFacePortalPolicy.SpeedCeiling(definition: local) + WorldFacePortalPolicy.SpeedCeiling(definition: neighbour));
+
+        // Tape latency (1 / slowest rate), ceiling-rounded: a floor-rounded (truncated) latency would understate how
+        // long the slower side may go without hearing about the other. A rate <= 0 (a resident, non-stepping world;
+        // see WorldFacePortalPolicy.CrossingFloor) never advances anybody on that side, so it is floored at 1 Hz
+        // rather than dividing by zero or a negative rate.
+        //
+        // This term assumes phase-aligned observation and zero transport delay beyond the one tick period —
+        // optimistic by up to 2x, and false for a genuinely remote neighbour. The honest shape is a declared
+        // border-latency budget once a tape substrate exists; deferred rather than inventing a document field for a
+        // transport this engine does not carry yet.
+        var slowest = Math.Min(val1: Math.Max(val1: local.SimulationRateHz, val2: 1), val2: Math.Max(val1: neighbour.SimulationRateHz, val2: 1));
+
+        if (!FixedDirectedRounding.TryCeilingQuotient(numerator: FixedQ4816.One.Value, fractionBitsNumerator: FixedQ4816.FractionBitCount, denominator: slowest, fractionBitsDenominator: 0, fractionBitsOut: FixedQ4816.FractionBitCount, result: out var tapeLatencyRaw)) {
+            unreadableReason = "the tape-latency term overflowed the fixed-point range";
+
+            return false;
+        }
+
+        if (!FixedDirectedRounding.TryCeilingProductSum(a: closingSpeed.Value, fractionBitsA: FixedQ4816.FractionBitCount, b: tapeLatencyRaw, fractionBitsB: FixedQ4816.FractionBitCount, addend: reach.Value, fractionBitsAddend: FixedQ4816.FractionBitCount, fractionBitsOut: FixedQ4816.FractionBitCount, result: out var floorRaw)) {
+            unreadableReason = "the derived floor overflowed the fixed-point range";
+
+            return false;
+        }
+
+        floor = new FixedQ4816(Value: floorRaw);
+
+        return true;
+    }
+
+    // The declared collider reach: the largest extent any kit's collider can present at a border, in world units —
+    // the analytic counterpart to WorldFacePortalPolicy.SpeedCeiling, dispatching over the same closed WorldCollider
+    // union every kit's own collider uses. Returns false, naming the offending kit, when a collider this walk cannot
+    // measure statically appears (e.g. FromCreation, whose compound geometry resolves from a different document) —
+    // silently folding an unreadable arm to zero would under-derive a safety floor while still claiming to be
+    // derived from declared data.
+    private static bool TryColliderReach(WorldDefinition definition, out FixedQ4816 reach, out string? unreadableKitName) {
+        reach = FixedQ4816.Zero;
+        unreadableKitName = null;
+
+        foreach (var kit in definition.Kits) {
+            if ((kit?.Collider) is not { } collider) {
+                continue;
+            }
+
+            FixedQ4816 candidate;
+
+            switch (collider) {
+                case WorldCollider.Sphere sphere:
+                    candidate = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: sphere.Radius));
+
+                    break;
+                case WorldCollider.Capsule capsule:
+                    candidate = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: capsule.Radius));
+
+                    break;
+                case WorldCollider.Box box: {
+                    // The box's own center-to-corner distance, FIXED-POINT end to end — never
+                    // System.Numerics.Vector3.Length() (an intrinsified float square root: nearest-rounded, and
+                    // in the cross-machine float-ordering class a validation VERDICT must not ride) and rounded UP
+                    // (ceiling), never nearest, for the same reason every other term in the floor is.
+                    var x = FixedQ4816.FromDouble(value: box.HalfExtents.X).Value;
+                    var y = FixedQ4816.FromDouble(value: box.HalfExtents.Y).Value;
+                    var z = FixedQ4816.FromDouble(value: box.HalfExtents.Z).Value;
+
+                    if (!FixedDirectedRounding.TryCeilingMagnitude(x: x, y: y, z: z, result: out var boxRaw)) {
+                        unreadableKitName = kit!.Name;
+
+                        return false;
+                    }
+
+                    candidate = new FixedQ4816(Value: boxRaw);
+
+                    break;
+                }
+                default:
+                    unreadableKitName = kit!.Name;
+
+                    return false;
+            }
+
+            reach = FixedQ4816.Max(x: reach, y: candidate);
+        }
+
+        return true;
     }
 
     // The WorldAnchor union: the shared pose-target vocabulary a camera and speaker ride.
@@ -3438,8 +4067,8 @@ public static class WorldDefinitionValidator {
     // in range (a mutation can carry an out-of-range cast the JSON converter alone would not catch), and the surface
     // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace) — unlike storage.endpoint (nothing yet
     // consumes it), genlock IS wired at boot into the external-clock election, which tolerates an unknown source id.
-    /// <summary>Refuses, AT AUTHORING, any token the backend site could emit that names no backend. Left to the
-    /// settle-time parse alone this would be a COIN-FLIP refusal: a weighted table carrying one bad token boots fine
+    /// <summary>Refuses, at authoring, any token the backend site could emit that names no backend. Left to the
+    /// settle-time parse alone this would be a coin-flip refusal: a weighted table carrying one bad token boots fine
     /// on every seed that does not draw it, so whether the world starts would move with the world seed and the
     /// instance identity. Every reachable token is checked instead — the same reason a numeric site's distribution is
     /// narrowed against its domain rather than against what it happened to roll.</summary>
@@ -3523,10 +4152,10 @@ public static class WorldDefinitionValidator {
         RequirePositive(value: motion.MaxSmoothError, name: $"{path}.maxSmoothError", errors: errors);
     }
 
-    /// <summary>The tuning facets a body motion program's SELECTED operations read from a kit's declared
+    /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
     /// <see cref="WorldMotionModel"/> — the validator's own mapping (never convention; see
     /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation or a new
-    /// model arm must extend. A declared model missing a facet an operation still reads refuses BY NAME at
+    /// model arm must extend. A declared model missing a facet an operation still reads refuses by name at
     /// validation instead of the operation reading a silent zero at runtime.</summary>
     [Flags]
     private enum MotionTuningFacet : ushort {
@@ -3536,7 +4165,7 @@ public static class WorldDefinitionValidator {
         Speed = 1,
 
         /// <summary>RiseGravity/FallGravity/MaxFallSpeed, the full gravity arc (<see cref="BodyMotionOp.ApplyVerticalGravity"/>) —
-        /// the SAME op <see cref="CompiledBodyMotionProgram.OwnsVerticalContactState"/> keys off, at runtime, to decide
+        /// the same op <see cref="CompiledBodyMotionProgram.OwnsVerticalContactState"/> keys off, at runtime, to decide
         /// whether contact resolution may write back into a body's vertical channel.</summary>
         GravityArc = 2,
 
@@ -3619,11 +4248,10 @@ public static class WorldDefinitionValidator {
         _ => MotionTuningFacet.None,
     };
 
-    /// <summary>The ONE authority document validation (<see cref="ValidateMotionModel"/>, at boot) and a runtime
-    /// body-motion-program switch (the <c>player.motion</c> door) share to decide whether <paramref name="model"/>
-    /// supplies every tuning facet <paramref name="program"/>'s selected operations read. A document-legal kit must
-    /// not be able to runtime-switch into a program its declared model cannot back — the two callers reading the
-    /// same mapping is what keeps that true.</summary>
+    /// <summary>Determines whether <paramref name="model"/> supplies every tuning facet <paramref name="program"/>'s
+    /// selected operations read — the one check <see cref="ValidateMotionModel"/> (at boot) and the runtime
+    /// body-motion-program switch (the <c>player.motion</c> door) share, so a document-legal kit can never
+    /// runtime-switch into a program its declared model cannot back.</summary>
     /// <param name="model">The kit's declared locomotion model.</param>
     /// <param name="program">The compiled body motion program the switch targets.</param>
     /// <param name="reason">On failure, the refusal detail naming the missing facet(s) and the program; <c>""</c> on success.</param>
@@ -3679,9 +4307,26 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // A kit's vehicle drive tuning: every convergence rate positive (a zero rate never converges), the steering
-    // authority curve well-formed, and the held drift/boost channel names resolving to declared channels — a
-    // misspelled name would otherwise be a silent, permanent no-op (the sprintChannel rationale, identically).
+    // A kit's vehicle drive tuning: every convergence rate positive, the steering authority curve well-formed, and
+    // the held drift/boost channel names resolving to declared channels (a misspelled name is otherwise a silent,
+    // permanent no-op). An owned world's identity-carried locomotion state rows feed WorldIdentity's live speed
+    // reads RAW at construction — no verb door runs on a document load — so a non-positive persisted value is
+    // refused here; identity.motion refuses the same range live.
+    private static void ValidateIdentityMotionState(WorldIdentityDefinition? identity, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (identity is null) {
+            return;
+        }
+
+        RequirePositiveFixedSlot(stateRows: stateRows, name: identity.MoveSpeedState, path: "identity.moveSpeedState", errors: errors);
+        RequirePositiveFixedSlot(stateRows: stateRows, name: identity.TurnSpeedState, path: "identity.turnSpeedState", errors: errors);
+    }
+
+    private static void RequirePositiveFixedSlot(IReadOnlyDictionary<string, WorldStateRow> stateRows, string name, string path, List<string> errors) {
+        if (stateRows.TryGetValue(key: name, value: out var row) && (row is { Kind: CellKind.Fixed, IsSlot: true }) && (row.Cells![0].Value <= 0L)) {
+            errors.Add(item: $"{path} row '{name}' carries {(double)FixedQ4816.FromRawBits(value: row.Cells[0].Value):0.####} — a locomotion rate must be positive.");
+        }
+    }
+
     private static void ValidateVehicleMotion(WorldMotionModel.Vehicle tuning, string path, ISet<string> channelNames, List<string> errors) {
         RequirePositive(value: tuning.TopSpeed, name: $"{path}.topSpeed", errors: errors);
         RequireNonNegative(value: tuning.ReverseTopSpeed, name: $"{path}.reverseTopSpeed", errors: errors);
@@ -3716,14 +4361,12 @@ public static class WorldDefinitionValidator {
             errors.Add(item: $"{path}.boostChannel '{boostChannel}' names no declared composition channel.");
         }
 
-        // The racing-integrity clamp: well-formedness only (finite min/max, min <=
-        // max — the SAME shape gate the grounded arm's moveSpeedEnvelope walks), deliberately NOT the sibling
-        // own-value-in-range check ValidateScalarEnvelope also applies to grounded's moveSpeed. Grounded's baseline
-        // is a profileless FALLBACK the live-clamped read (Profile's own speed) can legitimately diverge from — the
-        // own-value check keeps that fallback sane. The vehicle arm has no such second channel: topSpeed itself IS
-        // the live-clamped read (world.row.set kits retunes it in place), so requiring it to already sit inside its own
-        // envelope would refuse the exact retune-past-the-cap this envelope exists to catch, making the clamp in
-        // WorldBody.ResolveMoveSpeed unreachable. A malformed envelope (min > max, non-finite) still refuses.
+        // Well-formedness only (finite min/max, min <= max) — deliberately NOT the own-value-in-range check
+        // ValidateScalarEnvelope also applies to grounded's moveSpeed. Grounded's baseline is a profileless fallback
+        // the live-clamped read (Profile's own speed) can diverge from, so an own-value check keeps that fallback
+        // sane. The vehicle arm has no such second channel: topSpeed itself IS the live-clamped read (world.row.set
+        // retunes it in place), so requiring it inside its own envelope would refuse the exact retune-past-the-cap
+        // this envelope exists to catch. A malformed envelope (min > max, non-finite) still refuses.
         if (tuning.TopSpeedEnvelope is { } topSpeedEnvelope) {
             ValidateEnvelopeShape(envelope: topSpeedEnvelope, path: $"{path}.topSpeedEnvelope", errors: errors);
         }
@@ -3751,17 +4394,17 @@ public static class WorldDefinitionValidator {
             errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
         }
 
-        // The seat-time speed clamp (owner-ratified profile-motion envelope, 2026-08-06): absent is wide-open
-        // (today's unclamped behavior, byte-identical). A future arm's own overridable scalar walks the SAME gate.
+        // Absent, this envelope is wide-open (unclamped). Another arm's own overridable scalar walks the same gate.
         if (tuning.MoveSpeedEnvelope is { } moveSpeedEnvelope) {
             ValidateScalarEnvelope(envelope: moveSpeedEnvelope, ownValue: tuning.MoveSpeed, ownValueName: "moveSpeed", path: $"{path}.moveSpeedEnvelope", errors: errors);
         }
     }
 
-    // The shape every authored envelope must have regardless of arm: min/max finite, min <= max
-    // (FixedQ4816.Clamp's own precondition — refused HERE so it never throws at seat-resolve time). Returns
-    // whether the shape held, so a caller layering its own additional check (ValidateScalarEnvelope's own-value
-    // check) can skip it once the bound itself is already malformed.
+    // The shape every authored envelope must have regardless of arm: min/max finite, min <= max (FixedQ4816.Clamp's
+    // own precondition, refused here so it never throws at seat-resolve time), min non-negative — every consumer
+    // bounds a speed magnitude, and reverse travel is its own positive scalar (reverseTopSpeed), so a negative
+    // endpoint would only widen the clamp past the bound's apparent intent. Returns whether the shape held, so a
+    // caller layering an additional check can skip it once the bound is already malformed.
     private static bool ValidateEnvelopeShape(MotionScalarEnvelope envelope, string path, List<string> errors) {
         if (!float.IsFinite(f: envelope.Min) || !float.IsFinite(f: envelope.Max)) {
             errors.Add(item: $"{path} must have a finite min and max.");
@@ -3775,15 +4418,20 @@ public static class WorldDefinitionValidator {
             return false;
         }
 
+        if (envelope.Min < 0f) {
+            errors.Add(item: $"{path}.min ({envelope.Min}) is negative — an envelope bounds a speed magnitude, so a negative endpoint admits magnitudes past the bound's own max; reverse travel is authored as its own positive scalar, never a negative speed.");
+
+            return false;
+        }
+
         return true;
     }
 
-    // A reusable authored-scalar-bound check LAYERED over ValidateEnvelopeShape: the kit's own authored value for
-    // the bounded scalar must also sit inside its own declared envelope — a world that pins a scalar narrower than
-    // the baseline it authors for profileless stand-ins is self-contradictory, and a silent clamp there would be a
-    // surprise no refusal ever explained. Meaningful only where the bounded value is a FALLBACK a separate,
-    // unvalidated live read (a seated profile) can diverge from — see ValidateVehicleMotion's remarks for the arm
-    // that deliberately does NOT layer this on top of the shape check.
+    // Layered over ValidateEnvelopeShape: the kit's own authored value for the bounded scalar must also sit inside
+    // its own declared envelope — a world that pins a scalar narrower than the baseline it authors for profileless
+    // stand-ins is self-contradictory. Meaningful only where the bounded value is a fallback a separate, unvalidated
+    // live read (a seated profile) can diverge from — see ValidateVehicleMotion's remarks for the arm that
+    // deliberately skips this layer.
     private static void ValidateScalarEnvelope(MotionScalarEnvelope envelope, float ownValue, string ownValueName, string path, List<string> errors) {
         if (!ValidateEnvelopeShape(envelope: envelope, path: path, errors: errors)) {
             return;
@@ -3964,12 +4612,207 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The references section: null names nothing, no required-section sweep. Each row's Name already crossed the
-    // WorldSafeName door at JSON parse (or programmatic construction), so this pass owns only what that type cannot:
-    // uniqueness within the section, and a non-empty Document. No boot-time file-existence check — resolving a
-    // reference's Document is a future consumer's job, not this validator's. Returns the validated name set so a
-    // later pass (a placement face's portal facet) can refuse an undeclared destination BY NAME rather than
-    // re-walking the section a second time.
+    // The market section: null IS today's no-market world. A declared section validates its config (formats/fee/
+    // duration bounds/admission tiers) and its live listing ledger. A listing's item/currency rows must already be
+    // declared, Int-kind, capacity-bounded (keyed-table intent) state rows — the same rows the compose-time doors in
+    // Server.WorldServer re-check before every escrow move, so an authored (or engine-composed) listing can never
+    // outlive the row it depends on without this pass catching it first.
+    private static void ValidateMarket(WorldMarketSection? market, Dictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (market is null) {
+            return;
+        }
+
+        if ((market.FeeBasisPoints < 0) || (market.FeeBasisPoints > WorldMarketCapacity.MaxFeeBasisPoints)) {
+            errors.Add(item: $"market.feeBasisPoints {market.FeeBasisPoints} is outside 0..{WorldMarketCapacity.MaxFeeBasisPoints}.");
+        }
+
+        var minDuration = market.MinDurationSeconds;
+        var maxDuration = market.MaxDurationSeconds;
+
+        if (!float.IsFinite(f: minDuration) || (minDuration < WorldMarketCapacity.MinDurationFloorSeconds) || (minDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)) {
+            errors.Add(item: $"market.minDurationSeconds {minDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
+        }
+
+        if (!float.IsFinite(f: maxDuration) || (maxDuration < WorldMarketCapacity.MinDurationFloorSeconds) || (maxDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)) {
+            errors.Add(item: $"market.maxDurationSeconds {maxDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
+        }
+
+        if (float.IsFinite(f: minDuration) && float.IsFinite(f: maxDuration) && (minDuration > maxDuration)) {
+            errors.Add(item: $"market.minDurationSeconds {minDuration} exceeds market.maxDurationSeconds {maxDuration}.");
+        }
+
+        var retention = market.RetentionSeconds;
+
+        if (!float.IsFinite(f: retention) || (retention < WorldMarketCapacity.MinRetentionSeconds) || (retention > WorldMarketCapacity.MaxRetentionSeconds)) {
+            errors.Add(item: $"market.retentionSeconds {retention} is outside {WorldMarketCapacity.MinRetentionSeconds}..{WorldMarketCapacity.MaxRetentionSeconds}.");
+        }
+
+        if (market.Formats is { } formats) {
+            var seenFormats = new HashSet<WorldMarketFormat>();
+
+            for (var index = 0; (index < formats.Count); index++) {
+                if (!seenFormats.Add(item: formats[index])) {
+                    errors.Add(item: $"market.formats[{index}] '{formats[index]}' is duplicated.");
+                }
+            }
+        }
+
+        if (market.AdmissionTiers is { } tiers) {
+            if (tiers.Count > WorldMarketCapacity.MaxAdmissionTiers) {
+                errors.Add(item: $"market.admissionTiers count {tiers.Count} exceeds the maximum of {WorldMarketCapacity.MaxAdmissionTiers}.");
+            }
+
+            var seenTierNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < tiers.Count); index++) {
+                var tier = tiers[index];
+                var path = $"market.admissionTiers[{index}]";
+
+                if (string.IsNullOrWhiteSpace(value: tier.Name)) {
+                    errors.Add(item: $"{path}.name is required.");
+                } else if (tier.Name.Length > WorldStateCapacity.MaxTextValueLength) {
+                    errors.Add(item: $"{path}.name length {tier.Name.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
+                } else if (!seenTierNames.Add(item: tier.Name)) {
+                    errors.Add(item: $"{path}.name '{tier.Name}' is duplicated.");
+                }
+            }
+        }
+
+        var listings = (market.Listings ?? []);
+
+        if (listings.Count > WorldMarketCapacity.MaxListings) {
+            errors.Add(item: $"market.listings count {listings.Count} exceeds the maximum of {WorldMarketCapacity.MaxListings}.");
+        }
+
+        var seenIds = new HashSet<long>();
+        var maxSeenId = 0L;
+
+        for (var index = 0; (index < listings.Count); index++) {
+            var listing = listings[index];
+            var path = $"market.listings[{index}]";
+
+            if (listing is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!seenIds.Add(item: listing.Id)) {
+                errors.Add(item: $"{path}.id {listing.Id} is duplicated.");
+            }
+
+            maxSeenId = Math.Max(val1: maxSeenId, val2: listing.Id);
+
+            if ((listing.Seller.Kind != PrincipalKind.Seat) && (listing.Seller.Kind != PrincipalKind.Peer)) {
+                errors.Add(item: $"{path}.seller {listing.Seller.Describe()} must be a seat or peer.");
+            }
+
+            if (listing.Quantity <= 0) {
+                errors.Add(item: $"{path}.quantity {listing.Quantity} must be positive.");
+            }
+
+            ValidateMarketRow(path: $"{path}.itemRow", rowName: listing.ItemRow, stateRows: stateRows, errors: errors);
+            ValidateMarketRow(path: $"{path}.currencyRow", rowName: listing.CurrencyRow, stateRows: stateRows, errors: errors);
+
+            switch (listing.Format) {
+                case WorldMarketFormat.English:
+                    if (listing.StartPrice <= 0) {
+                        errors.Add(item: $"{path}.startPrice {listing.StartPrice} must be positive for an English listing.");
+                    }
+
+                    break;
+                case WorldMarketFormat.Buyout:
+                    if (listing.CurrentBid != 0) {
+                        errors.Add(item: $"{path} is a buyout listing but carries a nonzero currentBid — buyout takes no incremental bids.");
+                    }
+
+                    if (listing.CurrentBidder is not null) {
+                        errors.Add(item: $"{path} is a buyout listing but carries a currentBidder — buyout takes no incremental bids.");
+                    }
+
+                    // startPrice is the English minimum-opening-bid field; a buyout listing never reads it (see
+                    // WorldMarketListing.StartPrice's remarks), but it is still a carried long, not an omittable
+                    // one — refused by name to its documented inert value (market.list's own help text: "unused by
+                    // buyout, pass 0") rather than left representable-but-meaningless, the same door-not-type
+                    // instinct currentBid/currentBidder above already apply to this arm.
+                    if (listing.StartPrice != 0) {
+                        errors.Add(item: $"{path}.startPrice {listing.StartPrice} is nonzero but buyout takes no incremental bids — startPrice is unused and must be 0.");
+                    }
+
+                    break;
+            }
+
+            if ((listing.BuyoutPrice is { } buyoutPrice) && (buyoutPrice <= 0)) {
+                errors.Add(item: $"{path}.buyoutPrice {buyoutPrice} must be positive.");
+            }
+
+            if ((listing.Format == WorldMarketFormat.Buyout) && (listing.BuyoutPrice is null)) {
+                errors.Add(item: $"{path} is a buyout listing but declares no buyoutPrice.");
+            }
+
+            if (listing.DeadlineTick < 0) {
+                errors.Add(item: $"{path}.deadlineTick {listing.DeadlineTick} must be non-negative.");
+            }
+
+            if (listing.CurrentBid < 0) {
+                errors.Add(item: $"{path}.currentBid {listing.CurrentBid} must be non-negative.");
+            }
+
+            if ((listing.CurrentBid > 0) != (listing.CurrentBidder is not null)) {
+                errors.Add(item: $"{path}.currentBid and .currentBidder must be set together.");
+            }
+
+            if ((listing.CurrentBidder is { } bidder) && (bidder.Kind != PrincipalKind.Seat) && (bidder.Kind != PrincipalKind.Peer)) {
+                errors.Add(item: $"{path}.currentBidder {bidder.Describe()} must be a seat or peer.");
+            }
+
+            // The retention sweep's own age basis: a terminal row must carry the tick it resolved at (so the sweep
+            // has a basis to age it from), and an active row must carry none (it has not resolved yet).
+            if ((listing.Status == WorldMarketListingStatus.Active) != (listing.ResolvedTick is null)) {
+                errors.Add(item: $"{path}.resolvedTick must be set exactly when .status is not active (status={listing.Status}).");
+            }
+
+            if ((listing.ResolvedTick is { } resolvedTick) && (resolvedTick < 0)) {
+                errors.Add(item: $"{path}.resolvedTick {resolvedTick} must be non-negative.");
+            }
+        }
+
+        if (market.NextListingId <= maxSeenId) {
+            errors.Add(item: $"market.nextListingId {market.NextListingId} must exceed every listing's id (highest seen: {maxSeenId}).");
+        }
+
+        if (market.NextListingId < 1) {
+            errors.Add(item: $"market.nextListingId {market.NextListingId} must be positive.");
+        }
+
+        if (market.FeeReserve < 0) {
+            errors.Add(item: $"market.feeReserve {market.FeeReserve} must be non-negative.");
+        }
+    }
+
+    // A listing's item/currency row must already be a declared, Int-kind, capacity-bounded state row — the SAME
+    // "declaring a capacity is declaring table intent" rule WorldStateRow's own remarks state, since a listing
+    // always writes a per-holder cell, never a slot.
+    private static void ValidateMarketRow(string path, WorldCellName rowName, Dictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (!stateRows.TryGetValue(key: rowName, value: out var row)) {
+            errors.Add(item: $"{path} '{rowName}' names no declared state row.");
+
+            return;
+        }
+
+        if (row.Kind != CellKind.Int) {
+            errors.Add(item: $"{path} '{rowName}' is kind {row.Kind}, not int.");
+        }
+
+        if (row.Capacity is null) {
+            errors.Add(item: $"{path} '{rowName}' declares no capacity — a market row must be an explicitly keyed table (declaring capacity is declaring table intent).");
+        }
+    }
+
+    // The references section: null names nothing. Each row's Name already crossed WorldSafeName at JSON parse, so
+    // this pass owns only uniqueness within the section and a non-empty Document — no boot-time file-existence
+    // check (resolving a reference's Document is a future consumer's job). Returns the validated name set so a
+    // later pass (a placement face's portal facet) can refuse an undeclared destination by name.
     private static HashSet<string> ValidateReferences(IReadOnlyList<WorldReference>? references, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -3997,6 +4840,83 @@ public static class WorldDefinitionValidator {
         }
 
         return names;
+    }
+
+    // The destinations section: null names nothing. Each row's Name already crossed WorldSafeName; Durability/Scope
+    // already crossed their strict-token converters; an unrecognized Selector $type already failed JSON parse. This
+    // pass owns uniqueness within the section, a destinations section with no references section to name, each
+    // row's Reference resolving to a declared references row, and the scope/selector pairing (ValidateGroupSelector).
+    // Returns the validated name set so a later pass can refuse an undeclared destination by name.
+    private static HashSet<string> ValidateDestinations(IReadOnlyList<WorldDestination>? destinations, IReadOnlyList<WorldReference>? references, HashSet<string> referenceNames, HashSet<string> groupIds, List<string> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (destinations is not { Count: > 0 } rows) {
+            return names;
+        }
+
+        if (references is not { Count: > 0 }) {
+            errors.Add(item: "destinations declares rows, but the world declares no references section for them to name.");
+        }
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"destinations[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!names.Add(item: row.Name)) {
+                errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: row.Reference) || !referenceNames.Contains(item: row.Reference)) {
+                errors.Add(item: (referenceNames.Count > 0)
+                    ? $"{path}.reference '{row.Reference}' names no references row; the world declares: {string.Join(separator: ", ", values: referenceNames)}."
+                    : $"{path}.reference '{row.Reference}' names no references row; the world declares none.");
+            }
+
+            if (row.Scope == WorldDestinationScope.Group) {
+                if (row.Selector is null) {
+                    errors.Add(item: $"{path}.scope is '{WorldDestinationTokens.ScopeGroup}', which requires a selector.");
+                } else {
+                    ValidateGroupSelector(selector: row.Selector, groupIds: groupIds, path: $"{path}.selector", errors: errors);
+                }
+            } else if (row.Selector is not null) {
+                errors.Add(item: $"{path}.selector is admitted only when scope is '{WorldDestinationTokens.ScopeGroup}' (this row declares scope '{WorldDestinationTokens.ScopeToken(scope: row.Scope)}').");
+            }
+        }
+
+        return names;
+    }
+
+    // A scope=group destination's selector: a `named` arm must resolve to a declared groups.groups[].id (the
+    // named/tagged split docs/world-model.md "Durability, scope and generation" describes); a `tagged` arm names no
+    // particular group up front — resolution walks the ACTING traveler's own memberships at transfer time (a later
+    // lane's job), so this pass only holds the tag itself to the same non-empty discipline WorldGroup.Tags entries
+    // already carry.
+    private static void ValidateGroupSelector(WorldGroupSelector selector, HashSet<string> groupIds, string path, List<string> errors) {
+        switch (selector) {
+            case WorldGroupSelector.Named named:
+                if (string.IsNullOrWhiteSpace(value: named.Group) || !groupIds.Contains(item: named.Group)) {
+                    errors.Add(item: (groupIds.Count > 0)
+                        ? $"{path} names group '{named.Group}', which names no groups.groups row; the world declares: {string.Join(separator: ", ", values: groupIds)}."
+                        : $"{path} names group '{named.Group}', which names no groups.groups row; the world declares none.");
+                }
+                break;
+
+            case WorldGroupSelector.Tagged tagged:
+                if (string.IsNullOrWhiteSpace(value: tagged.Tag)) {
+                    errors.Add(item: $"{path}.tag must be non-empty.");
+                }
+                break;
+
+            default:
+                errors.Add(item: $"{path} is an unrecognized selector kind.");
+                break;
+        }
     }
 
     // A lane binding: both trigger channels are optional, but a present trigger's latch must be non-negative and its
@@ -4222,18 +5142,32 @@ public static class WorldDefinitionValidator {
 
                 if (!IsFinite(value: impulse.BodyDirection) || (impulse.BodyDirection.LengthSquared() <= MinimumBasisLengthSquared)) {
                     errors.Add(item: $"{path}.bodyDirection must be finite and non-zero.");
+                } else {
+                    // The runtime rides BodyDirection AS AUTHORED — it is never normalized, only rotated and scaled by
+                    // Speed (WorldBody's PlanarImpulse op) — so an unnormalized direction silently rescales the impulse:
+                    // an author who typo'd (3, 0, 4) meaning +X gets a 5x speed, not a refusal.
+                    var magnitude = impulse.BodyDirection.Length();
+
+                    if (MathF.Abs(magnitude - 1f) > PlanarImpulseUnitDirectionTolerance) {
+                        errors.Add(item: $"{path}.bodyDirection {impulse.BodyDirection} has magnitude {magnitude}, not 1 — PlanarImpulse rides BodyDirection as authored (never normalized), so a non-unit direction silently rescales Speed ({impulse.Speed}).");
+                    }
                 }
 
                 break;
             case ActionEffect.SetState set:
                 RefuseKey(key: set.Key, verb: "setState");
                 RefuseFromOperand(fromState: set.FromState, fromKey: set.FromKey, verb: "setState");
+                RefuseValueSeconds(valueSeconds: set.ValueSeconds, verb: "setState");
                 ValidateCounterState(name: set.State, value: set.Value);
                 break;
             case ActionEffect.AddState add:
                 RefuseKey(key: add.Key, verb: "addState");
                 RefuseFromOperand(fromState: add.FromState, fromKey: add.FromKey, verb: "addState");
+                RefuseValueSeconds(valueSeconds: add.ValueSeconds, verb: "addState");
                 ValidateCounterState(name: add.State, value: add.Value);
+                break;
+            case ActionEffect.CountdownState:
+                errors.Add(item: $"{path} authors a WORLD state-row countdown, which has no body-scope meaning — admissible only inside a world rule's own effects.");
                 break;
             case ActionEffect.StartTimer timer:
                 if (!stateSlots.TryGetValue(key: timer.State, value: out var timerSlot)) {
@@ -4289,6 +5223,15 @@ public static class WorldDefinitionValidator {
             }
         }
 
+        // 'valueSeconds' authors an engine-tick countdown against a WORLD state row a companion countdownState effect
+        // consumes once per tick — a per-body action-state slot has no such row, so it is refused here on the same
+        // terms RefuseFromOperand already refuses a per-body live copy source.
+        void RefuseValueSeconds(decimal? valueSeconds, string verb) {
+            if (valueSeconds is not null) {
+                errors.Add(item: $"{path}.valueSeconds is refused at body scope — '{verb}' writes a per-body action-state slot via 'value', or starts a proper timer via 'startTimer'; 'valueSeconds' is legitimate only in a world rule.");
+            }
+        }
+
         void ValidateCounterState(string name, float? value) {
             if (!stateSlots.TryGetValue(key: name, value: out var slot)) {
                 errors.Add(item: $"{path}.state '{name}' names no declared action state.");
@@ -4337,7 +5280,7 @@ public static class WorldDefinitionValidator {
 
     }
 
-    /// <summary>Validates the <c>rules</c> section by COMPILING it — <see cref="WorldRuleCompiler"/> owns which
+    /// <summary>Validates the <c>rules</c> section by compiling it — <see cref="WorldRuleCompiler"/> owns which
     /// predicate/effect kinds are admissible at world scope and which names resolve, so this pass calls it and
     /// reports its by-name refusal rather than restating the rule set (the exact division
     /// <c>BodyMotionProgramException</c> already has for kit programs).</summary>
@@ -4373,7 +5316,7 @@ public static class WorldDefinitionValidator {
     }
 
     /// <summary>Validates the <c>properties</c> section — the group-kind-name validated-vocabulary pattern
-    /// (<see cref="ValidateGroups"/>) applied to a carrier PROPERTY name: unique, a legitimate identifier, and backed
+    /// (<see cref="ValidateGroups"/>) applied to a carrier property name: unique, a legitimate identifier, and backed
     /// by a declared keyed <c>int</c> <c>state</c> row of the same name (see
     /// <see cref="WorldPropertyRegistrySection"/>'s remarks for why storage rides the state substrate rather than a
     /// second one).</summary>
@@ -4420,7 +5363,7 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    /// <summary>Validates the <c>interactions</c> section by COMPILING it — <see cref="WorldRuleCompiler.CompileAllInteractions"/>
+    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions"/>
     /// owns which co-occurrence/effect kinds are admissible and which names resolve (the property registry, a region
     /// placement), so this pass calls it and reports its by-name refusal, mirroring <see cref="ValidateRules"/>'s own
     /// division against <see cref="WorldRuleCompiler.CompileAll"/>.</summary>
@@ -4472,7 +5415,7 @@ public static class WorldDefinitionValidator {
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldScreenSource source, string path, HashSet<string> cameras, List<string> errors) {
+    private static bool ValidateScreenSource(WorldScreenSource source, string path, HashSet<string> cameras, HashSet<string> destinationNames, List<string> errors) {
         switch (source) {
             case null:
                 errors.Add(item: $"{path} is required.");
@@ -4536,8 +5479,75 @@ public static class WorldDefinitionValidator {
                 ValidateQr(qr: qr, path: path, errors: errors);
 
                 return false;
+            case WorldScreenSource.Session session:
+                // No placement face reaches here (a top-level screens row or magazine entry) — portal:null makes
+                // ValidateSessionSource refuse Window unconditionally, which is correct: there is no face for a
+                // portal facet to sit on, so no counterpart can ever pair with a window authored at this position.
+                ValidateSessionSource(session: session, destinationNames: destinationNames, portal: null, path: path, errors: errors);
+
+                return false;
             default:
                 return false;
+        }
+    }
+
+    // The session-source gate, shared by a declared/magazine-entry source (which carries the current document's
+    // destinationNames) and a placement face override (ValidateFaceSources, which already threads destinationNames
+    // for the PORTAL facet on the same row). Destination must name a declared destinations row — the row's own
+    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/world-model.md).
+    // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
+    // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
+    private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {
+        if (string.IsNullOrWhiteSpace(value: session.Destination) || !destinationNames.Contains(item: session.Destination)) {
+            errors.Add(item: (destinationNames.Count > 0)
+                ? $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares: {string.Join(separator: ", ", values: destinationNames)}."
+                : $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares none.");
+        }
+
+        if ((session.CameraName is { } camera) && string.IsNullOrWhiteSpace(value: camera)) {
+            errors.Add(item: $"{path}.session.camera must be non-empty when present.");
+        }
+
+        // WINDOW needs the SAME face's own portal facet: the aperture (WorldFaceCatalog) and the isometry that maps
+        // the viewer's eye through it both come from the SAME mapped border pair, so a face with no counterpart has
+        // no destination-space frame to fit an off-axis frustum against. A top-level screens row or magazine entry
+        // passes portal:null unconditionally (see the two call sites) and is refused here for the identical reason.
+        if (session.Projection == WorldScreenProjection.Window) {
+            if (portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: not null }) {
+                errors.Add(item: $"{path}.session.projection 'window' requires THIS SAME face's portal facet to author arrival 'mapped' with a counterpart — a window has no destination-space aperture to fit a frustum against without a mapped border pair.");
+            }
+        }
+
+        if (session.Resolution is { } resolution) {
+            if ((resolution.Width <= 0) || (resolution.Height <= 0) ||
+                (resolution.Width > MaxSurfaceDimension) || (resolution.Height > MaxSurfaceDimension)) {
+                errors.Add(item: $"{path}.session.resolution [{resolution.Width}, {resolution.Height}] must be within 1..{MaxSurfaceDimension} on each axis.");
+            }
+        }
+    }
+
+    // Document-wide: the simultaneous-window ceiling (WorldSessionWindowCapacity.MaxSimultaneousWindows), refused BY
+    // NAME rather than silently degrading — a window is an UNBUDGETED render (Puck.SdfVm.Views.WorldSessionView pays
+    // a full offscreen submit every produced frame for one), so the count is a real, additive per-frame GPU cost the
+    // engine cannot absorb past that ceiling. A standalone pass (not folded into ValidateFaceSources) because it
+    // needs the WHOLE document's placements at once, not one placement's own rows.
+    private static void ValidateSessionWindowBudget(IReadOnlyList<WorldPlacement> placements, List<string> errors) {
+        var windows = new List<string>();
+
+        foreach (var placement in placements) {
+            if (placement is null) {
+                continue;
+            }
+
+            foreach (var face in (placement.FaceSources ?? [])) {
+                if ((face is not null) && (face.Source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window })) {
+                    windows.Add(item: $"{placement.Id}/{face.Face}");
+                }
+            }
+        }
+
+        if (windows.Count > WorldSessionWindowCapacity.MaxSimultaneousWindows) {
+            errors.Add(item: $"placements author {windows.Count} 'window'-projection session face(s) ({string.Join(separator: ", ", values: windows)}), exceeding the simultaneous-window budget of {WorldSessionWindowCapacity.MaxSimultaneousWindows} — a window renders every produced frame regardless of whether anyone is looking through it, so this ceiling is a real GPU cost bound, not a taste one. Drop a window to a plain 'camera' projection or remove a face.");
         }
     }
 
@@ -4567,15 +5577,12 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The engage-route policy: a finite non-negative radius, plus the authored channel names (kebab-case, non-empty; a channel on a
-    // non-engageable route is an authoring mistake, not a configuration), plus the context-routes widening's two
-    // route-row fields: the channel MASK (channelNames must resolve — a mask that names nothing declared reaches
-    // nothing by accident) and the authored TRANSLATION table (each row's channel must resolve and its element must be
-    // a defined WorldPadElement). engageChannel is CONSUMED (WorldServer.ResolveEngageProbes resolves it against the
-    // SAME declared-channel ordinal table the mask/translation rows resolve against), so it is held to the identical
-    // "must resolve" bar as those two — a misspelled name would otherwise be a silent, permanent no-op (the button
-    // always jumps, never engages, and nothing here would have said why). cycleChannel stays unconsumed (no reader
-    // exists yet) and keeps its lighter kebab-case-only bar.
+    // The engage-route policy: a finite non-negative radius, plus authored channel names (kebab-case, non-empty),
+    // plus the context-routes widening's two route-row fields: the channel MASK (channelNames must resolve) and the
+    // authored TRANSLATION table (each row's channel must resolve to a defined WorldPadElement). engageChannel is
+    // CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel ordinal table), so it
+    // is held to the same "must resolve" bar — a misspelled name is otherwise a silent, permanent no-op. cycleChannel
+    // stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only bar.
     private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, List<string> errors) {
         if (!float.IsFinite(f: route.EngageRadius) || (route.EngageRadius < 0f)) {
             errors.Add(item: $"{path}.engageRadius {route.EngageRadius} must be finite and non-negative.");
@@ -4628,7 +5635,7 @@ public static class WorldDefinitionValidator {
 
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
-    private static void ValidateMagazine(WorldScreenMagazine? magazine, string path, HashSet<string> cameras, List<string> errors) {
+    private static void ValidateMagazine(WorldScreenMagazine? magazine, string path, HashSet<string> cameras, HashSet<string> destinationNames, List<string> errors) {
         if (magazine is not { } value) {
             return;
         }
@@ -4644,7 +5651,7 @@ public static class WorldDefinitionValidator {
         }
 
         for (var index = 0; (index < value.Entries.Count); index++) {
-            _ = ValidateScreenSource(source: value.Entries[index], path: $"{path}.entries[{index}]", cameras: cameras, errors: errors);
+            _ = ValidateScreenSource(source: value.Entries[index], path: $"{path}.entries[{index}]", cameras: cameras, destinationNames: destinationNames, errors: errors);
         }
     }
 

@@ -1,9 +1,9 @@
 namespace Puck.World.Protocol;
 
-/// <summary>Which live presentation knob a <see cref="WorldSessionLever"/> writes. A new knob adds a MEMBER here and a
-/// switch arm at the applier — never a new record type, so the lever vocabulary grows as DATA exactly like the grant
+/// <summary>Which live presentation knob a <see cref="WorldSessionLever"/> writes. A new knob adds a member here and a
+/// switch arm at the applier — never a new record type, so the lever vocabulary grows as data exactly like the grant
 /// model's subjects do.</summary>
-/// <remarks>A preset is a COMPOSITION of levers, never a lever with more lanes; otherwise every preset earns another
+/// <remarks>A preset is a composition of levers, never a lever with more lanes; otherwise every preset earns another
 /// payload shape and the two-lane vocabulary stops being closed.</remarks>
 public enum WorldLeverKind : byte {
     /// <summary>The audio mix master gain (<c>world.volume</c>); folds into <c>audio.masterGain</c>.</summary>
@@ -45,29 +45,29 @@ public enum WorldLeverKind : byte {
 }
 
 /// <summary>
-/// A LIVE SESSION LEVER — one write to a presentation knob that the server grant-checks and the client applies, the
+/// A live session lever — one write to a presentation knob that the server grant-checks and the client applies, the
 /// same shape <see cref="WorldComposition"/> already uses for live composition overrides (server-gated, client-applied,
 /// pushed back through <see cref="IClientSink"/>, synchronous over the loopback, never journaled).
 /// </summary>
 /// <remarks>
-/// <para><b>Why this exists.</b> These knobs used to be written by console modules straight onto an injected service —
-/// no principal, no server, no check — so revoking <c>Mutate</c> over the section a lever folds into refused that
-/// section's real mutations while the lever still wrote the same values live AND persisted them through
-/// <c>world.save</c>. A verb that never reaches <c>Server.WorldServer</c> never reaches the check; routing the
-/// WRITE (not the parsing, not the echo) through the server is what closes that.</para>
+/// <para><b>Why this exists.</b> Writing these knobs directly onto an injected presentation service, bypassing the
+/// server, skips the principal check entirely: revoking <c>Mutate</c> over the section a lever folds into would
+/// refuse that section's real mutations while the lever still wrote the same values live and persisted them
+/// through <c>world.save</c>. Routing the write (not the parsing, not the echo) through <c>Server.WorldServer</c>
+/// is what closes that gap.</para>
 /// <para><b>A lever is not a mutation.</b> It changes live state only: the document still owns boot, nothing enters the
 /// journal, and no undo entry is minted for a slider. That asymmetry is the point of a lever and is preserved here — the
 /// server checks it like a command (exactly as <c>ApplyCommand</c> checks <see cref="WorldCapability.Drive"/>) rather
 /// than applying it like a <see cref="WorldMutation"/>.</para>
-/// <para><b>PRESENTATION STATE ONLY — this is a hard constraint on what may become a lever.</b> The
-/// <see cref="A"/>/<see cref="B"/> lanes are IEEE doubles, so a knob the SIMULATION reads would put a float inside the
+/// <para><b>Presentation state only — a hard constraint on what may become a lever.</b> The
+/// <see cref="A"/>/<see cref="B"/> lanes are IEEE doubles, so a knob the simulation reads would put a float inside the
 /// determinism boundary. Every knob carried here writes render, present-pacing, or audio-mix state that no server type
 /// reads: <c>WorldRenderSettings</c> has no consumer under <c>Server/</c>, and <c>PresentPacingControl</c> documents
 /// itself as presentation pacing only while the fixed step runs at its own constant rate. <b>A knob the simulation
 /// reads is a document mutation, not a lever</b>, and belongs in <see cref="WorldMutation"/> where it is journaled and
 /// fixed-point.</para>
 /// </remarks>
-/// <param name="Section">The document section this lever FOLDS INTO — and therefore the
+/// <param name="Section">The document section this lever folds into — and therefore the
 /// <see cref="WorldCapability.Mutate"/> subject the server checks it against, so the check subject is a field of the
 /// payload rather than something each call site must remember to pass.</param>
 /// <param name="Kind">Which knob to write.</param>

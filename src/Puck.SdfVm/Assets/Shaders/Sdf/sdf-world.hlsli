@@ -15,7 +15,9 @@ struct ViewportData {
     float4 forward;     // xyz = forward basis, w = debug view mode (0 = final)
     float4 region;      // xy = normalized origin, zw = normalized size (of the output image)
     // x = the RENDER-SCALE numerator q (1..255; 255 = native): the view renders at worldRenderDims(rectDims, q) and
-    // Stage 2 upsamples back into the full region (bilinear; q == 255 takes the exact-copy path). yzw spare.
+    // Stage 2 upsamples back into the full region (bilinear; q == 255 takes the exact-copy path). yz = the off-axis
+    // (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric
+    // camera, consumed by cameraRayDirection below. w spare.
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row) and BuildCompositePush's scaleQPacked.
     float4 renderScale;
 };
@@ -211,6 +213,28 @@ static const uint SdfShadowProxyParams = 38u;
 // light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
 // lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's DisableFarBound field.
 static const uint SdfFarFieldParams = 39u;
+
+// The LIGHTING rows: the scene's directional sun and its ambient as PER-FRAME data, replacing what used to be the
+// pinned sdf-vm.hlsli constants (SdfSunDirection/SdfSunTangent/SdfSunBitangent) and this file's AmbientBase/
+// AmbientHemisphere/SunWeight. The whole frame — direction AND both disc tangents — is derived host-side in double
+// precision and uploaded (SdfWorldEngine.PackSunFrame): a shader-side cross/normalize would constant-fold on DXIL and
+// run on the driver under SPIR-V, which is exactly the asymmetry the pasted literals existed to dodge. Uniforms have
+// no such asymmetry. A frame that sets no lighting uploads the pinned values bit-exactly, so the default sun is
+// unchanged. KEEP IN SYNC with SdfWorldEngine.PackSunFrame.
+static const uint SdfSunFrameA = 40u;   // xyz = sun direction (unit, surface -> light), w = sun diffuse weight
+static const uint SdfSunFrameB = 41u;   // xyz = sun disc tangent, w = ambient base
+static const uint SdfSunFrameC = 42u;   // xyz = sun disc bitangent, w = ambient hemisphere (scales normal.y)
+static const uint SdfSunColorRow = 43u; // rgb = sun linear color, w unused
+static const uint SdfAmbientColor = 44u; // rgb = ambient linear color, w unused
+
+float3 worldSunDirection() { return sdfScreenLights[SdfSunFrameA].xyz; }
+float worldSunWeight() { return sdfScreenLights[SdfSunFrameA].w; }
+float3 worldSunTangent() { return sdfScreenLights[SdfSunFrameB].xyz; }
+float worldAmbientBase() { return sdfScreenLights[SdfSunFrameB].w; }
+float3 worldSunBitangent() { return sdfScreenLights[SdfSunFrameC].xyz; }
+float worldAmbientHemisphere() { return sdfScreenLights[SdfSunFrameC].w; }
+float3 worldSunColor() { return sdfScreenLights[SdfSunColorRow].rgb; }
+float3 worldAmbientColor() { return sdfScreenLights[SdfAmbientColor].rgb; }
 static const float GridFadeDistance = 32.0;                       // the world grid fades to flat past this (far-field anti-moire)
 static const float GridGrazeCos = 0.30;                           // bands vanish as the view flattens against the plane
 static const float3 GridWorldLineColor = float3(0.34, 0.56, 0.95);  // cool — the world floor lattice
@@ -432,6 +456,20 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
 
     return true;
 }
+#else
+// The lighting accessors' NO-SCREEN-SOURCES half. The rows they read live in the screen-light buffer, which only a
+// kernel compiled with SDF_SCREEN_SOURCES binds — but the sun/ambient shading below is compiled in BOTH shapes (a beam
+// or cull kernel shades nothing, yet still parses this file). Falling back to the pinned literals keeps those kernels
+// compiling and, because SdfFrame's defaults ARE these values, keeps both halves agreeing whenever a world authors no
+// lighting. KEEP IN SYNC with SdfFrame's SunWeight/AmbientBase/AmbientHemisphere defaults.
+float3 worldSunDirection() { return SdfSunDirection; }
+float worldSunWeight() { return 0.85; }
+float3 worldSunTangent() { return SdfSunTangent; }
+float worldAmbientBase() { return 0.25; }
+float3 worldSunBitangent() { return SdfSunBitangent; }
+float worldAmbientHemisphere() { return 0.25; }
+float3 worldSunColor() { return float3(1.0, 1.0, 1.0); }
+float3 worldAmbientColor() { return float3(1.0, 1.0, 1.0); }
 #endif
 
 static const int MaxSteps = 160;
@@ -484,10 +522,9 @@ static const float SlopeCap = 0.8;   // omega <= 2 / (1 - 0.8) = 10
 // #define SDF_STRICT_MARCH
 // WorldTileSize / TileEmpty / worldTileIndex live in sdf-tile.hlsli — shared with sdf-world-composite.comp.
 
-// Shading weights of the world's one directional-sun-plus-hemisphere model.
-static const float AmbientBase = 0.25;
-static const float AmbientHemisphere = 0.25; // scales normal.y: sky above, darker below
-static const float SunWeight = 0.85;
+// Shading weights of the world's one directional-sun-plus-hemisphere model. The ambient base, its hemisphere
+// gradient, and the sun weight moved to the per-frame lighting rows (worldAmbientBase / worldAmbientHemisphere /
+// worldSunWeight, SdfSunFrameA..) so a world can author them; their pinned values live on as SdfFrame's defaults.
 static const float FogDensity = 0.015;       // exponential distance fog toward skyColor
 // The procedural test-card face (an unbound screen): its own emitter, tinted faintly by the sun.
 static const float ScreenCardBase = 0.85;
@@ -679,7 +716,10 @@ float3 materialPalette(int material) {
 }
 
 // The perspective ray for a viewport-local UV (pixel centers in [0,1] within the viewport's region; screen-up maps
-// to the camera's +up).
+// to the camera's +up). SYMMETRIC by construction: `direction`'s defining expression below is untouched from before
+// the off-axis branch existed, so a camera that never sets renderScale.yz (every camera but a border window) takes
+// the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
+// branch not taken needs to prove byte-identity against a build without it at all.
 float3 cameraRayDirection(ViewportData view, float2 localUv) {
     float2 ndc = ((localUv * 2.0) - 1.0);
 
@@ -688,11 +728,21 @@ float3 cameraRayDirection(ViewportData view, float2 localUv) {
     float tanHalfFov = view.right.w;
     float aspect = view.up.w;
 
-    return normalize(
+    float3 direction = (
         view.forward.xyz +
         (((ndc.x * aspect) * tanHalfFov) * view.right.xyz) +
         ((ndc.y * tanHalfFov) * view.up.xyz)
     );
+
+    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the render-
+    // scale row's two always-zero spares carry the frustum's tangent-space center offset, appended as a TRAILING
+    // term so the symmetric sum above is never reassociated (float addition is not associative — computing the
+    // offset into a fresh accumulator first, then adding, can round differently than one flat left-to-right sum).
+    if ((view.renderScale.y != 0.0) || (view.renderScale.z != 0.0)) {
+        direction += ((view.renderScale.y * view.right.xyz) + (view.renderScale.z * view.up.xyz));
+    }
+
+    return normalize(direction);
 }
 
 struct TileCone {
@@ -1911,8 +1961,8 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         }
 
         if (needsLitColor) {
-            float sunDiffuse = max(dot(normal, SdfSunDirection), 0.0);
-            float ambient = (AmbientBase + (AmbientHemisphere * normal.y));
+            float sunDiffuse = max(dot(normal, worldSunDirection()), 0.0);
+            float ambient = (worldAmbientBase() + (worldAmbientHemisphere() * normal.y));
 
             // The environment scales dim the room so the diegetic screen glow dominates. They default to 1 outside the
             // world-views path (every other path shades exactly as before); the overworld sets them low per frame.
@@ -1943,7 +1993,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // few-instance program and keeps the grid toggle render-invariant). The cull OFF marches flat
                 // all-instances — the ground-truth reference the A/B lever and the world-shadow-cull gate use.
                 bool cullOn = worldShadowCullEnabled();
-                uint gather = (cullOn ? (worldUseCameraTileShadowMask() ? 1u : sdfShadowGather((surfacePoint + (normal * ShadowBias)), SdfSunDirection, shadowReach)) : 0u);
+                uint gather = (cullOn ? (worldUseCameraTileShadowMask() ? 1u : sdfShadowGather((surfacePoint + (normal * ShadowBias)), worldSunDirection(), shadowReach)) : 0u);
                 bool culled = (gather == 2u);
                 uint shadowFallbackMask = ((cullOn && (gather == 1u)) ? instanceMaskBase : SDF_INSTANCE_MASK_ALL);
 
@@ -1984,7 +2034,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                     : (worldUseFastAmbientOcclusion()
                         ? calcFastAO(surfacePoint, normal, instanceMaskBase, stepScale)
                         : calcAO(surfacePoint, normal, instanceMaskBase, stepScale)));
-                float3 radiance = (float3(1.0, 1.0, 1.0) * (((ambient * ambientScale) * ambientOcclusion) + ((SunWeight * sunDiffuse) * sunScale)));
+                // Ambient and sun each carry their own linear color now (a sunset is a warm sun over a cool ambient,
+                // not a second code path). Both default to white, so the pinned-era expression is the same arithmetic.
+                float3 radiance = ((worldAmbientColor() * ((ambient * ambientScale) * ambientOcclusion)) + (worldSunColor() * ((worldSunWeight() * sunDiffuse) * sunScale)));
 
 #ifdef SDF_SCREEN_SOURCES
                 // Every BOUND diegetic screen is a colored area light: its position/orientation come from the
@@ -2026,7 +2078,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                     shadeMaterial.albedo = lerp(shadeMaterial.albedo, sdfMaterialAlbedo(materialBlendOther), materialBlendWeight);
                 }
 
-                color = sdfMaterialShade(shadeMaterial, radiance, normal, rayDirection, SdfSunDirection, sunScale);
+                color = sdfMaterialShade(shadeMaterial, radiance, normal, rayDirection, worldSunDirection(), sunScale);
                 // Stylized curvature enrichment (cavity darken / rim light / ink outline). The compile-time guard strips
                 // it (and the extra center tap upstream) from the shipped build on both backends.
                 if (CurvatureShadingEnabled) {

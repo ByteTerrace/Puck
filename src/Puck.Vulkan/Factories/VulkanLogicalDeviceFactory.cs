@@ -68,9 +68,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const uint StructureTypePhysicalDeviceShaderFloat16Int8Features = 1000082000;
     private const uint StructureTypePhysicalDevice16BitStorageFeatures = 1000083000;
     // 1000225002 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES (verified against the Vulkan SDK
-    // 1.4.350 header). ⚠ NOT 1000225001 — that is VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
-    // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES support
-    // the feature (caught at runtime on the RTX 4070, which reported it "unavailable" until this was corrected).
+    // 1.4.350 header). NOT 1000225001 — that is VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+    // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES
+    // support the feature.
     private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
 
     // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a

@@ -99,7 +99,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         StageBlackFrame();
     }
 
-    /// <summary>Gets whether a core is attached.</summary>
+    /// <summary>Gets a value indicating whether a core is attached.</summary>
     public bool IsAssigned => (m_core is not null);
 
     /// <summary>Gets the native image-view handle of the published framebuffer, or 0 before the first publish (or after a
@@ -227,7 +227,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePadState input) =>
         EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: false);
 
-    /// <summary>Drains buffered audio from the worker's OWN ring — filled on the worker thread from the attached
+    /// <summary>Drains buffered audio from the worker's own ring — filled on the worker thread from the attached
     /// core's presentation-side ring after each completed segment — into <paramref name="destination"/>, so a
     /// consumer reading off-thread never touches the emulation thread. The neutral <see cref="IAudioMachine.ReadSamples"/>
     /// surface. Always returns 0 when this worker was built with no audio consumer (<see cref="AudioSampleRate"/> 0).</summary>

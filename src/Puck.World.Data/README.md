@@ -35,12 +35,14 @@ screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, links, grants, hud, state, input hold, rules,
 groups, properties, interactions). Worlds live as data
-under `../Puck.World/Assets/worlds/` — four checked-in documents, the
-four-world charter's whole roster (2026-08-06): `play` (the overworld hub —
+under `../Puck.World/Assets/worlds/` — five checked-in documents. Four are the
+four-world charter's whole game roster (2026-08-06): `play` (the overworld hub —
 the game's first main city, and the shipped boot default; carries the
 optional `references` section naming the other three by document path, and a
 wall-mounted picture-frame portal placement per named world), `dive`
-(underwater), `kart` (racing), `jump` (platformer). The movement platform
+(underwater), `kart` (racing), `jump` (platformer). The fifth, `studio`, is a
+non-game dev canvas for character work (neutral floor, no scenery or crowd,
+four anchored camera eyes and a `sheet` layout) reached only with `--world`. The movement platform
 every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
 row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`) and
 `WorldCameraRig.SmoothRate`. The motion-model union's second arm is
@@ -50,9 +52,7 @@ flight) read by the `ResolveVehicleFrame`/`ShapeVehicleVelocity` operations;
 `kart.world.json` is its worked example. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
-before the world itself was retired) is documented as history in
-`docs/capability-channels-STATE.md`'s blank-slate lane C2 entry and the
-HUD/placement-effect ruling; no shipped world exercises the `rules` section
+before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
 today. The loader resolves an explicit `--world` file or the shipped default
 document and refuses a missing, unreadable, or invalid file by name;
 `WorldDefinitionLoader.cs` in `Puck.World` owns that boundary.

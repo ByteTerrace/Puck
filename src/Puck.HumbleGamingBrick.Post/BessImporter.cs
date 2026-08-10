@@ -17,7 +17,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <param name="Ime">The restored interrupt-master-enable flag.</param>
 /// <param name="Ie">The restored IE register.</param>
 /// <param name="If">The IF register read back after import (from the register page, not separately restorable —
-/// see <see cref="BessImporter"/>'s remarks).</param>
+/// see <see cref="BessImporter"/>'s summary).</param>
 /// <param name="Lcdc">The LCDC register read back after import.</param>
 /// <param name="Stat">The STAT register read back after import.</param>
 /// <param name="Ly">The LY register read back after import.</param>
@@ -60,7 +60,7 @@ internal static class BessImporter {
     ];
 
     /// <summary>Imports a BESS-compliant file into a machine. The whole block graph and buffer table are parsed and
-    /// validated against the file's bounds AND the destination machine's region capacities before anything is
+    /// validated against the file's bounds and the destination machine's region capacities before anything is
     /// applied — a malformed file is rejected wholesale and the machine is left exactly as it was; nothing here
     /// mutates on a path that can still fail.</summary>
     /// <param name="instance">The machine to restore into.</param>
@@ -175,16 +175,9 @@ internal static class BessImporter {
         );
     }
     // Parses and fully validates a BESS file's block graph, CORE buffer table, and optional MBC payload — against
-    // both the file's bounds and the destination machine's region capacities — before any machine state is touched
-    // (M-08): block headers/payloads used to be sliced unchecked, and the buffer-table offsets/sizes
-    // ApplyBuffer/ApplyMbcRam/ApplyPalette read were trusted while the importer was ALREADY mutating CPU/register
-    // state, so a truncated or malformed file could throw an incidental range exception mid-restore and leave the
-    // machine partially applied, or (worse) an oversized entry could sail past a source-bounds check that only ever
-    // looked at the FILE and wrap through `(ushort)(destinationStart + index)` into an unrelated bus region.
-    // Similarly, the optional MBC block's records used to be walked into `bus.WriteByte` with no length or address
-    // check, so a trailing fragment was silently dropped and an out-of-domain address (e.g. 0xC000) landed an
-    // unintended write in imported work RAM. This pass touches only `file` — no service lookups, no writes — so any
-    // InvalidDataException it throws leaves the machine byte-for-byte as it was.
+    // both the file's bounds and the destination machine's region capacities — before any machine state is touched.
+    // This pass touches only `file` — no service lookups, no writes — so any InvalidDataException it throws leaves
+    // the machine byte-for-byte as it was.
     private static (string Name, byte[] Core, byte[]? Mbc) ParseAndValidate(byte[] file, ConsoleModel model) {
         if (!Bess.TryReadFooter(file: file, firstBlockOffset: out var cursor)) {
             throw new InvalidDataException(message: "The file has no BESS footer.");
@@ -211,8 +204,8 @@ internal static class BessImporter {
             switch (tag) {
                 case "NAME": name = System.Text.Encoding.ASCII.GetString(bytes: payload); break;
                 case "CORE":
-                    // (H-11) BESS spec (Validation and Failures): "Duplicate CORE block" is listed among SameBoy's
-                    // own fatal conditions.
+                    // BESS spec (Validation and Failures): "Duplicate CORE block" is listed among SameBoy's own
+                    // fatal conditions.
                     if (sawCore) {
                         throw new InvalidDataException(message: "the file has more than one CORE block; the spec makes a duplicate CORE block fatal.");
                     }
@@ -222,7 +215,7 @@ internal static class BessImporter {
 
                     break;
                 case "MBC ":
-                    // (H-11) BESS spec (Validation and Failures): "A known block, other than NAME, appearing before
+                    // BESS spec (Validation and Failures): "A known block, other than NAME, appearing before
                     // CORE" is a SameBoy fatal condition; the CORE block section itself grants the one further
                     // exemption this importer honors ("This block must be the first block, unless the NAME or INFO
                     // blocks exist then it must come directly after them"). NAME is handled above unconditionally,

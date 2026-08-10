@@ -11,13 +11,13 @@ namespace Puck.World;
 /// than naming <see cref="WorldDefaultBindings"/>/<see cref="WorldAffordances"/> directly.
 /// <see cref="BindingVocabularyHook.DefaultDocument"/> is wired unconditionally (a pure, always-available function);
 /// <see cref="BindingVocabularyHook.VocabularyCheck"/> forwards to <see cref="WorldAffordances.Validate"/>,
-/// whose COMMAND half keeps its own separate absent-tolerant contract (a no-op until
-/// <see cref="WorldAffordances.Install"/> runs) and whose CHANNEL half needs no install at all — the caller hands it
+/// whose command half keeps its own separate absent-tolerant contract (a no-op until
+/// <see cref="WorldAffordances.Install"/> runs) and whose channel half needs no install at all — the caller hands it
 /// the table compiled from the very document under validation.
 /// <see cref="WorldExtensionVocabularyHook.ScreenMachineEngineCheck"/> is wired against a fresh
-/// <see cref="WorldExtensionRegistry{TExtension}"/> built from <see cref="WorldScreenMachineEngines.All"/> — the SAME
+/// <see cref="WorldExtensionRegistry{TExtension}"/> built from <see cref="WorldScreenMachineEngines.All"/> — the same
 /// list <c>WorldBootComposition</c> registers into DI, so a document-declared engine key and the DI-resolvable set can
-/// never disagree. Unlike the vocabulary check, that hook is REQUIRED: leaving it unwired does not degrade the
+/// never disagree. Unlike the vocabulary check, that hook is required: leaving it unwired does not degrade the
 /// registered-key refusal, it fails the document (see the hook's own remarks), which is why it is installed here with
 /// the unconditional pair rather than anywhere later.
 /// </summary>

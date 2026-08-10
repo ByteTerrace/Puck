@@ -13,7 +13,7 @@ namespace Puck.Scripting;
 /// crashes the run. Takes ownership of the engine and disposes it (with every instance's store) on
 /// <see cref="Dispose"/>.
 /// <para><b>Loading is not admitting.</b> <see cref="Add"/>, <see cref="Reload"/>, and
-/// <see cref="SetEnabled"/> all produce instances in the UNADMITTED phase of the two-phase mount (see
+/// <see cref="SetEnabled"/> all produce instances in the unadmitted phase of the two-phase mount (see
 /// <see cref="AddonInstance"/>): the consumer runs its own mount gates and calls
 /// <see cref="AddonInstance.Admit"/> before the first tick. A live-reload surface therefore owes the whole
 /// admit sequence, not just this call — <c>Puck.World</c>'s <c>WorldAddonRuntime.Reload</c>/<c>SetEnabled</c> are that

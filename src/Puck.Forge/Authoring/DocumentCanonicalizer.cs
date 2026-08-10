@@ -35,9 +35,9 @@ public sealed class DocumentValidationException : Exception {
 
 /// <summary>
 /// The canonical bytes of a validated, normalized document and their identity hash — the exact payload a caller
-/// should persist, embed, or pin. THIS pair is the identity contract every family's inline-canonical row pins: two
-/// documents hash equal if and only if their canonical bytes are equal, and a consumer embedding a document MUST
-/// obtain both <c>doc</c> and <c>hash</c> from the SAME result — never hash a document by any other route and never
+/// should persist, embed, or pin. This pair is the identity contract every family's inline-canonical row pins: two
+/// documents hash equal if and only if their canonical bytes are equal, and a consumer embedding a document must
+/// obtain both <c>doc</c> and <c>hash</c> from the same result — never hash a document by any other route and never
 /// accept a hash the pipeline did not itself compute.
 /// </summary>
 /// <typeparam name="TDocument">The document family's record type.</typeparam>
@@ -55,15 +55,15 @@ public record CanonicalDocument<TDocument>(TDocument Document, byte[] Bytes, str
 /// The document-neutral canonicalize+hash core every family canonicalizer rides (<see cref="CreationCanonicalizer"/>,
 /// <c>AudioCanonicalizer</c>, <c>SynthPatchCanonicalizer</c>): one serializer configuration produces the
 /// canonical bytes, one hash routine produces the identity, one schema rule gates recognition, and one extensions rule
-/// guards the unknown-member bag — so no family can fork the mechanism. A family adapter owns its CONTENT rules
+/// guards the unknown-member bag — so no family can fork the mechanism. A family adapter owns its content rules
 /// (which members are structural invariants, what normalization self-heals) and calls down here for everything
 /// document-neutral; the strict pipeline shape (Validate → Normalize → Canonicalize, never silently relabeling an
 /// absent/foreign schema) is the standard each adapter implements against this core.
 /// </summary>
 public static class DocumentCanonicalizer {
     /// <summary>Serializes an already-validated, already-normalized document to canonical UTF-8 bytes (deterministic
-    /// member order and formatting via the ONE <see cref="DocumentJsonOptions.Shared"/> instance) and hashes them.
-    /// Family adapters call this LAST — after their own validate + normalize — so the bytes always describe a
+    /// member order and formatting via the one <see cref="DocumentJsonOptions.Shared"/> instance) and hashes them.
+    /// Family adapters call this last — after their own validate + normalize — so the bytes always describe a
     /// document its family vouches for.</summary>
     /// <typeparam name="TDocument">The document family's record type.</typeparam>
     /// <param name="document">The validated, normalized document.</param>
@@ -76,7 +76,7 @@ public static class DocumentCanonicalizer {
         return new CanonicalDocument<TDocument>(Bytes: bytes, Document: document, Hash: Puck.Assets.ContentAddressedStore.ComputeHash(content: bytes));
     }
 
-    /// <summary>The ONE raise rule: an empty violation list is a pass and never throws; anything else becomes the
+    /// <summary>The one raise rule: an empty violation list is a pass and never throws; anything else becomes the
     /// family's <see cref="DocumentValidationException"/>, carrying every violation found in that one pass. Every
     /// family's <c>ValidateOrThrow</c> is this call over its own <c>Validate</c>, so no family can fork what
     /// "invalid" raises.</summary>
@@ -91,7 +91,7 @@ public static class DocumentCanonicalizer {
         }
     }
 
-    /// <summary>The ONE strict-schema rule: an exact ordinal match against the family's recognized tag, or a
+    /// <summary>The one strict-schema rule: an exact ordinal match against the family's recognized tag, or a
     /// standard violation message (an absent schema reads <c>"(absent)"</c> — never silently relabeled). A family's
     /// <c>Validate</c> short-circuits to this one violation, since no other check has a defined meaning against an
     /// unrecognized document shape.</summary>
@@ -110,7 +110,7 @@ public static class DocumentCanonicalizer {
         return $"declares '{schemaLabel}', not the recognized '{recognized}'.";
     }
 
-    /// <summary>The ONE extensions rule: an unknown-member bag entry whose key shadows a KNOWN document member is not
+    /// <summary>The one extensions rule: an unknown-member bag entry whose key shadows a known document member is not
     /// a real extension — it is a member the serializer failed to bind (a typo'd casing, a type mismatch) that would
     /// otherwise round-trip as silent data rot. Reports one violation per shadowing key through
     /// <paramref name="addError"/> (path <c>"extensions.&lt;key&gt;"</c>).</summary>
@@ -132,7 +132,7 @@ public static class DocumentCanonicalizer {
         }
     }
 
-    /// <summary>Formats a validation error list into the ONE exception-message shape every family's validation
+    /// <summary>Formats a validation error list into the one exception-message shape every family's validation
     /// exception carries (<c>'source' failed validation: path: message; path: message</c>).</summary>
     /// <typeparam name="TError">The error record type (its <see cref="object.ToString"/> renders one violation).</typeparam>
     /// <param name="errors">The violations (never empty on a real failure).</param>

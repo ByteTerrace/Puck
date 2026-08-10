@@ -93,9 +93,9 @@ public readonly record struct QuadraticAlgebra<TScalar>
     /// factory exists to mirror the validated construction of the sibling structures and to give the discriminant a home.
     /// Whether the result is a field, a product of two lines, or has nilpotents is read from <see cref="Discriminant"/>
     /// rather than enforced here.
-    /// <para>Over the house scalar <see cref="FixedQ4816"/> the fused one-rounding discipline is UNCONDITIONAL — every
+    /// <para>Over the house scalar <see cref="FixedQ4816"/> the fused one-rounding discipline is unconditional — every
     /// algebra, whatever its coefficients, has <see cref="Multiply"/>, <see cref="Norm"/>, and <see cref="MobiusStep"/>
-    /// return each component as ONE ties-to-even rounding of the exact rational value of the ideal expression, wrapped to
+    /// return each component as one ties-to-even rounding of the exact rational value of the ideal expression, wrapped to
     /// the raw carrier. The coefficient shape only selects the lane: an integer relation enters the sums as a plain
     /// integer multiplier (so <c>Create(0, −1)</c>, <c>Create(0, +1)</c>, and <c>Create(0, 0)</c> reproduce
     /// <see cref="FixedComplex"/>, <see cref="FixedSplit"/>, and <see cref="FixedDual{TValue}"/> bit-for-bit over the full

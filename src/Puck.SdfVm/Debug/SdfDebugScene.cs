@@ -21,16 +21,16 @@ public enum SdfDebugShapeKind {
     Ellipse,
 }
 
-/// <summary>A modifier op pushed onto the debug subject's stack. POINT-class ops (folds/warps/transforms) apply BEFORE
-/// the primitive; FIELD-class ops (shell/inflate/relief) apply AFTER it (they act on the accumulated field) — see
+/// <summary>A modifier op pushed onto the debug subject's stack. Point-class ops (folds/warps/transforms) apply before
+/// the primitive; field-class ops (shell/inflate/relief) apply after it (they act on the accumulated field) — see
 /// <see cref="SdfDebugScene.IsFieldOp"/>. One record covers every op; each kind reads only the fields it needs.</summary>
 public readonly record struct SdfDebugOp(SdfDebugOpKind Kind, Vector3 V0, Vector3 V1, float A, float B, int I0, int I1, bool Flag);
 
-/// <summary>One runtime carve — a sphere the emitter SUBTRACTS from the assembled subject+floor field (a hard
+/// <summary>One runtime carve — a sphere the emitter subtracts from the assembled subject+floor field (a hard
 /// <see cref="SdfBlendOp.Subtraction"/>, or a <see cref="SdfBlendOp.SmoothSubtraction"/> with <see cref="SmoothK"/>
-/// when <see cref="Smooth"/>). Carves are pure DATA: a console <c>sdf.carve</c> and a pad-chord carve append the same
+/// when <see cref="Smooth"/>). Carves are pure data: a console <c>sdf.carve</c> and a pad-chord carve append the same
 /// record, and the frame source rebuilds the packed program on the <see cref="SdfDebugScene.Revision"/> bump — so a
-/// scripted carve sequence IS its own deterministic replay (there is no dynamic-write path; the rebuild is the model).</summary>
+/// scripted carve sequence is its own deterministic replay (there is no dynamic-write path; the rebuild is the model).</summary>
 public readonly record struct SdfCarve(Vector3 Center, float Radius, bool Smooth, float SmoothK);
 
 /// <summary>The op kinds the debug stack supports (a superset spanning the point-fold and field families of
@@ -58,7 +58,7 @@ public enum SdfDebugOpKind {
 
 /// <summary>
 /// The presentation-only state of the fullscreen SDF debug subject: one primitive (with its numeric params + the shared
-/// 2D-family lift), a stackable list of modifier ops, and an optional ground plane. It is PURE PRESENTATION — the
+/// 2D-family lift), a stackable list of modifier ops, and an optional ground plane. It is pure presentation — the
 /// deterministic simulation never learns it exists; the overworld frame source composes it (through
 /// <c>SdfDebugMode</c>) and rebuilds its program on a <see cref="Revision"/> bump. The op stack is capped at
 /// <see cref="MaxOps"/> so the frame source's
@@ -102,8 +102,8 @@ public sealed class SdfDebugScene {
     /// <summary>The subject's numeric params (per-shape meaning — see <see cref="DefaultParams"/>).</summary>
     public IReadOnlyList<float> Params => m_params;
 
-    /// <summary>The OPTIONAL second shape (the blend-debugging partner), or null for a single-subject program. The op
-    /// stack applies to shape 1 ONLY (a per-shape stack is a later increment); shape 2 composes against shape 1's
+    /// <summary>The optional second shape (the blend-debugging partner), or null for a single-subject program. The op
+    /// stack applies to shape 1 only (a per-shape stack is a later increment); shape 2 composes against shape 1's
     /// finished field through <see cref="Blend"/>.</summary>
     public SdfDebugShapeKind? Shape2 { get; private set; }
 
@@ -119,8 +119,8 @@ public sealed class SdfDebugScene {
     /// <summary>The smooth/chamfer radius the smooth/chamfer blend families use (the hard blends ignore it).</summary>
     public float BlendSmooth { get; private set; } = 0.25f;
 
-    /// <summary>The SLICE debug view's plane selector: 0 = camera-locked through the world origin (the default),
-    /// 1/2/3 = a world X/Y/Z axis plane at <see cref="SliceOffset"/>. A PER-FRAME channel (it rides the frame's
+    /// <summary>The slice debug view's plane selector: 0 = camera-locked through the world origin (the default),
+    /// 1/2/3 = a world X/Y/Z axis plane at <see cref="SliceOffset"/>. A per-frame channel (it rides the frame's
     /// screen-light env lanes into the shader) — it never changes the program, so it does not bump <see cref="Revision"/>.</summary>
     public int SliceAxis { get; private set; }
 
@@ -133,31 +133,31 @@ public sealed class SdfDebugScene {
     /// <summary>The 2D-family lift amount (revolve offset, or extrude half-height).</summary>
     public float LiftAmount { get; private set; } = 0.5f;
 
-    /// <summary>Whether a ground plane sits under the subject (default OFF — it contaminates the slice/iteration views).</summary>
+    /// <summary>Whether a ground plane sits under the subject (default off — it contaminates the slice/iteration views).</summary>
     public bool Floor { get; private set; }
 
-    /// <summary>Whether the subject is emitted inside a SCOPED field accumulator (<see cref="SdfProgramBuilder.PushField"/>/
-    /// <see cref="SdfProgramBuilder.PopField"/>) — default ON. When ON, the stack's FIELD ops (onion/dilate/displace)
-    /// shell the SUBJECT alone and the floor stays solid; when OFF the whole program shares one flat accumulator, so a
-    /// field op shells EVERYTHING (the floor's zero-contour included) — the exact "a field op shells the whole scene"
-    /// pathology the scoped accumulator fixes. The contrast between the two IS the debugging tool. Bumps the revision.</summary>
+    /// <summary>Whether the subject is emitted inside a scoped field accumulator (<see cref="SdfProgramBuilder.PushField"/>/
+    /// <see cref="SdfProgramBuilder.PopField"/>) — default on. When on, the stack's field ops (onion/dilate/displace)
+    /// shell the subject alone and the floor stays solid; when off the whole program shares one flat accumulator, so a
+    /// field op shells everything (the floor's zero-contour included) — the exact "a field op shells the whole scene"
+    /// pathology the scoped accumulator fixes. The contrast between the two is the debugging tool. Bumps the revision.</summary>
     public bool Scope { get; private set; } = true;
 
     /// <summary>The op stack (push order; point ops emit before the shape, field ops after — both in push order).</summary>
     public IReadOnlyList<SdfDebugOp> Ops => m_ops;
 
     /// <summary>The carve pool (append order) — each carve subtracts from the assembled subject+floor field, emitted
-    /// LAST (higher segment indices than everything it bites; see <see cref="SdfDebugRenderer.Emit"/>).</summary>
+    /// last (higher segment indices than everything it bites; see <see cref="SdfDebugRenderer.Emit"/>).</summary>
     public IReadOnlyList<SdfCarve> Carves => m_carves;
 
     /// <summary>Bumped on every content change; the frame source rebuilds the program when it moves while the mode is up.</summary>
     public int Revision { get; private set; }
 
-    /// <summary>The carve-bake settle planner watching this pool (carve-bake plan §4) — the seam <c>sdf.bake status</c>/
+    /// <summary>The carve-bake settle planner watching this pool — the seam <c>sdf.bake status</c>/
     /// <c>sdf.bake now</c> (via <see cref="SdfDebugMode.CarveBake"/>) inspect and the renderer emits through.</summary>
     public SdfCarveBakePlanner CarvePlanner => m_carvePlanner;
 
-    /// <summary>Whether an op kind is a FIELD op (Onion/Dilate/Displace) — emitted AFTER the primitive.</summary>
+    /// <summary>Whether an op kind is a field op (Onion/Dilate/Displace) — emitted after the primitive.</summary>
     public static bool IsFieldOp(SdfDebugOpKind kind) =>
         (kind is SdfDebugOpKind.Onion or SdfDebugOpKind.Dilate or SdfDebugOpKind.Displace);
 
@@ -333,9 +333,9 @@ public sealed class SdfDebugScene {
     /// mode's per-frame advance drains them through <see cref="TickMeteor"/> into the ordinary carve pool.</summary>
     public int MeteorsRemaining => m_meteorsRemaining;
 
-    /// <summary>Starts (or extends) a METEOR SHOWER: <paramref name="count"/> impacts land one per produced frame, each
+    /// <summary>Starts (or extends) a meteor shower: <paramref name="count"/> impacts land one per produced frame, each
     /// an ordinary pool carve at a deterministic low-discrepancy point — mostly floor craters around the subject, every
-    /// third biting the subject itself, every seventh a smooth "molten" impact. The impact sequence rides a PERSISTENT
+    /// third biting the subject itself, every seventh a smooth "molten" impact. The impact sequence rides a persistent
     /// index (never reset), so consecutive showers continue the pattern instead of restacking the same craters, and a
     /// scripted <c>sdf.meteors</c> replays bit-for-bit (no RNG, no wall clock — the whole shower is pool data).</summary>
     /// <returns>How many impacts were scheduled (clamped to the pool capacity left).</returns>
@@ -398,8 +398,8 @@ public sealed class SdfDebugScene {
         return (AddCarve(carve: carve) ? carve : null);
     }
 
-    /// <summary>Formats one carve as the shared echo fragment <c>@(x,y,z) r=… [smooth k=…]</c> — used by BOTH the
-    /// <c>sdf.carve</c> verb and the pad-chord echo so a scripted carve and a pad carve read (and ARE) the same data.</summary>
+    /// <summary>Formats one carve as the shared echo fragment <c>@(x,y,z) r=… [smooth k=…]</c> — used by both the
+    /// <c>sdf.carve</c> verb and the pad-chord echo so a scripted carve and a pad carve read (and are) the same data.</summary>
     public static string FormatCarve(SdfCarve carve) =>
         string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"@({carve.Center.X:0.##},{carve.Center.Y:0.##},{carve.Center.Z:0.##}) r={carve.Radius:0.###}{(carve.Smooth ? $" smooth k={carve.SmoothK:0.###}" : "")}");
 

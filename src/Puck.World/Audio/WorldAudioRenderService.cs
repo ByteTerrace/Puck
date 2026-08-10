@@ -15,7 +15,7 @@ namespace Puck.World.Audio;
 /// <see cref="RebindPeriodMilliseconds"/> until stop. A null factory (non-Windows) parks the service as
 /// <c>unsupported</c> — it never starts a thread. <see cref="StopAsync"/> is a deterministic bounded join —
 /// one dedicated bounded-join worker owns the device lifecycle, so a stalled device cannot wedge shutdown:
-/// stop signal → governor drains (device dispose joins ITS pump thread
+/// stop signal → governor drains (device dispose joins its pump thread
 /// bounded, then the mixer detaches) → join.
 /// </summary>
 internal sealed class WorldAudioRenderService : IHostedService {

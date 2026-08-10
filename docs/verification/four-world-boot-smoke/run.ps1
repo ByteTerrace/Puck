@@ -27,12 +27,13 @@ would pass vacuously on a run where the bind never fired) and the whole
 binding-vocabulary narration at once: the boot sweep's findings, the
 unregistered-command skips, and both recompose-rejection forms).
 
-These runs are WINDOWED on purpose — no `--headless`. `editor.status` is
-registered only in the windowed composition (editor verbs are
-presentation-only), so a headless run would answer the bind with
-`'editor.status' names no registered command` and force this battery to pick a
-weaker destination. That refusal is asserted FORBIDDEN so the windowed
-requirement cannot silently erode.
+These runs are WINDOWED on purpose — no `--headless`. `editor.status` is now
+CORE-registered (2026-08-09: the whole editor/sculpt verb surface moved into
+`AddWorldAuthoritativeCore` for command-vocabulary parity — every boot shape
+must see the SAME vocabulary the document validators check against), so it
+answers identically in both shapes today; the destination stays `editor.status`
+regardless, and `'names no registered command'` stays asserted FORBIDDEN as a
+general health check on this recompose, not a windowed-vs-headless probe.
 
 Each world is a fresh process with its own `--state-dir`, small window, and its
 own stdout/stderr capture — this battery's claims are stream-specific, so the
@@ -179,7 +180,7 @@ world.save $savedPath
     # result to stderr and an accepted one to stdout, so every refusal below lands on stderr and a forbidden-on-
     # stdout assertion for one of them could never fire. Measured — a deliberate --headless control run answered
     # the bind with "names no registered command" on stderr with stdout carrying no player.bind line at all.
-    Test-Assertion -Name "$id (stderr): FORBIDDEN — 'names no registered command' (what a --headless run answers, editor verbs being presentation-only)" `
+    Test-Assertion -Name "$id (stderr): FORBIDDEN — 'names no registered command' (editor.status is core-registered in every boot shape; this must never fire windowed or headless)" `
         -Matched ([regex]::IsMatch($stderr, 'names no registered command')) -Require $false
     Test-Assertion -Name "$id (stderr): FORBIDDEN — world.save 'could not write'" `
         -Matched ([regex]::IsMatch($stderr, 'could not write')) -Require $false

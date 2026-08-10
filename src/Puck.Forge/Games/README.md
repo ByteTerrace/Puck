@@ -31,9 +31,8 @@ byte live off the booted machine every tick (`WorldServer.Machines.TryPeek`),
 so the document's own `rules` section reacted to the win edge with no addon
 involved. `arcade.world.json` was retired under the 2026-08-06 four-world
 charter (`play`/`dive`/`kart`/`jump` are the whole shipped roster now); the
-ROM and its `WorldRule`-driven reaction-ladder pattern are unaffected — see
-`docs/capability-channels-STATE.md`'s "arcade example" entry for the pattern
-this cart demonstrated. No shipped world hosts it today.
+ROM and its `WorldRule`-driven reaction-ladder pattern are unaffected; the pattern
+this cart demonstrated survives in git history. No shipped world hosts it today.
 
 Build + self-verify (no committed runner — see `ArcadeQuestVerify`, which
 mirrors `Puck.Forge.Tune.TuneVerify`'s shape: a real `Puck.HumbleGamingBrick`

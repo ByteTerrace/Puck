@@ -143,18 +143,13 @@ internal static class ReferencesCommand {
 
     // ---- symbol discovery -------------------------------------------------------------------
 
-    // The declarations the name selects, ordered by display string then documentation-comment id — a
-    // stable identity key, so the groups come out in the same order on every run.
+    // Declarations ordered by display string then documentation-comment id, so groups are stable across runs.
     //
-    // Two properties the search has to hold, and how each is bought:
-    //   * An exact name answers a subset of the same query spelled --contains. The name-keyed search
-    //     overload reads a declaration index built from the syntax, which omits source symbols the
-    //     compiler creates rather than the file spelling out — a record's positional properties and the
-    //     entry-point type of a top-level-statements file among them. The predicate overload walks the
-    //     symbols themselves and sees both, so the exact match is a predicate too.
-    //   * A narrower --kind only ever removes records. The kind categories reach the search as a filter
-    //     that also selects which symbol sets it enumerates, so a narrow filter is not a subset of a wide
-    //     one. The search therefore always runs at the widest filter and --kind is applied to its result.
+    // FindSourceDeclarationsAsync's predicate overload (used even for an exact-name query) walks symbols
+    // directly and sees source symbols the compiler synthesizes — record positional properties, a top-level-
+    // statements file's entry-point type — that the name-keyed overload's syntax-based index omits.
+    // --kind only narrows results after the fact: the search always runs at the widest filter first, since a
+    // kind filter also changes which symbol sets get enumerated.
     private static async Task<List<ISymbol>> FindTargetsAsync(Solution solution, ReferencesOptions options) {
         var found = new HashSet<ISymbol>(comparer: SymbolEqualityComparer.Default);
         var comparison = (options.IgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -190,13 +185,10 @@ internal static class ReferencesCommand {
             .ThenBy(keySelector: static symbol => (symbol.GetDocumentationCommentId() ?? string.Empty), comparer: StringComparer.Ordinal)];
     }
 
-    // The entry point of every project that has one, when the query can select it. A file of top-level
-    // statements declares no type, so the compiler synthesizes one — named `Program`, holding `<Main>$`,
-    // both carrying real source locations. The declaration index is built from what the files spell, and
-    // it carries that pair for some projects and not others, which is why the same construct answered
-    // differently per project. Asking each compilation for its own entry point is exact and uniform.
-    // The name gate keeps the sweep off every query that could not match it anyway, since it forces each
-    // project's compilation.
+    // The entry point of every project that has one, when the query can select it. A top-level-statements
+    // file declares no type, so the compiler synthesizes `Program`/`<Main>$` with real source locations that
+    // the syntax-based declaration index does not reliably carry; asking each compilation for its entry point
+    // directly is exact. The name gate skips the compile for queries that could not match anyway.
     private static async Task AddEntryPointsAsync(Solution solution, Func<string, bool> selects, HashSet<ISymbol> found) {
         if (!selects(arg: "Program") && !selects(arg: "<Main>$")) {
             return;

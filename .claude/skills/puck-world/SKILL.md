@@ -63,7 +63,10 @@ deliberately does not duplicate.
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;
 use fixed point from `Puck.Maths` and exact engine-tick durations throughout; the
-fixed simulation rate is 240 Hz. Every entity is advanced on the server from
+simulation rate is an authored per-world document field
+(`WorldDefinition.Simulation.RateHz`, MUST divide `FixedTickConversion.TicksPerSecond`
+50400 exactly), defaulting to 240 Hz — the fixed rate every world ran before
+that field existed — for a world that authors none. Every entity is advanced on the server from
 a `PlayerIntent` — poses are never accepted from outside the simulation;
 drivers only produce inputs, poses flow out through the tick snapshot. The
 guarantee pins the MAPPING, not the values: a deliberate correction to math
@@ -111,9 +114,7 @@ beside an existing one:
 4. **Sweep every shipped world** in the same change (strict parse, above).
 5. **Add the read-back verb** (above) — the decision must be echoable.
 
-**Doc hygiene, same commit.** `docs/capability-channels-STATE.md` must be
-updated in the SAME commit as any landing that changes its truth (its own
-maintenance rule). Component READMEs are developer references (no doctrine
+**Doc hygiene, same commit.** [`docs/campaign.md`](../../../docs/campaign.md) is the one document that says what we are collectively building; correct it in the SAME commit as any landing that changes its truth. NEVER write a status column — a status claim duplicates what the code answers better, so record the DECISION and let the code answer "is it done". Component READMEs are developer references (no doctrine
 prose); if a change stales one, or stales a comment, fix it in the same
 change. A doc that would produce wrong behavior today is hostile, not stale —
 delete it.

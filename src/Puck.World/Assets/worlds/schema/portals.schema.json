@@ -10,7 +10,12 @@
       "type": "object",
       "properties": {
         "travel": {
-          "description": "The default travel scope (see WorldPortalTravel)."
+          "description": "The default travel scope (see WorldPortalTravel).",
+          "type": "string",
+          "enum": [
+            "party",
+            "body"
+          ]
         }
       },
       "required": [

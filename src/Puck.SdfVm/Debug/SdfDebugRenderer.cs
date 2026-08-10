@@ -4,34 +4,34 @@ using Puck.Maths;
 namespace Puck.SdfVm.Debug;
 
 /// <summary>
-/// Emits the fullscreen SDF debug subject into an <see cref="SdfProgramBuilder"/>. The subject is WORLD-level (no
+/// Emits the fullscreen SDF debug subject into an <see cref="SdfProgramBuilder"/>. The subject is world-level (no
 /// instance, no dynamic transform) — one pair needs neither. The <see cref="SdfDebugScene.Scope"/> toggle chooses
-/// between the two emission orders below; their contrast IS the debugging tool for the scoped field accumulator.
+/// between the two emission orders below; their contrast is the debugging tool for the scoped field accumulator.
 /// <para>
-/// COMMON to both: point-class ops (stack order) warp shape 1's evaluation point and emit FIRST — the op stack is
-/// shape 1's (shape 2 re-anchors with its own ResetPoint). SHAPE 2 (optional) is translated by its offset and blended
+/// Common to both: point-class ops (stack order) warp shape 1's evaluation point and emit first — the op stack is
+/// shape 1's (shape 2 re-anchors with its own ResetPoint). Shape 2 (optional) is translated by its offset and blended
 /// against the accumulator, which at that moment is exactly shape 1's field, so even the intersection/xor families
-/// compose exactly the authored pair ("author an intersection pair FIRST, against the empty accumulator" holds by
+/// compose exactly the authored pair ("author an intersection pair first, against the empty accumulator" holds by
 /// construction — the pair is the whole subject so far). The ground plane is always a plain Union.
 /// </para>
 /// <para>
-/// SCOPED (default, <see cref="SdfDebugScene.Scope"/> ON): point ops → <c>PushField(Union)</c> → SHAPE 1 → field-class
-/// ops (onion/dilate/displace) → SHAPE 2 → <c>PopField</c> → floor. The field ops sit INSIDE the scope, so they shell
-/// the SUBJECT alone; the floor, emitted after the Pop, stays solid. This is the correct authoring form — a field op
+/// Scoped (default, <see cref="SdfDebugScene.Scope"/> on): point ops → <c>PushField(Union)</c> → shape 1 → field-class
+/// ops (onion/dilate/displace) → shape 2 → <c>PopField</c> → floor. The field ops sit inside the scope, so they shell
+/// the subject alone; the floor, emitted after the Pop, stays solid. This is the correct authoring form — a field op
 /// bounded to its subtree.
 /// </para>
 /// <para>
-/// FLAT (<see cref="SdfDebugScene.Scope"/> OFF): point ops → SHAPE 1 → SHAPE 2 → floor → field-class ops LAST. Every
-/// field op runs on the ONE shared accumulator after the whole scene (subject AND floor) is assembled, so an onion
+/// Flat (<see cref="SdfDebugScene.Scope"/> off): point ops → shape 1 → shape 2 → floor → field-class ops last. Every
+/// field op runs on the one shared accumulator after the whole scene (subject and floor) is assembled, so an onion
 /// doubles the floor's zero-contour and a dilate fattens it — the "a field op shells the whole scene" pathology the
 /// scoped accumulator exists to fix. (Onion/Dilate are point-independent; a flat-mode Displace reads the floor's
-/// point context — an accepted debug quirk, since the point of flat mode is to EXHIBIT the flat behavior, and the
+/// point context — an accepted debug quirk, since the point of flat mode is to exhibit the flat behavior, and the
 /// scoped path is the correct authoring form.)
 /// </para>
-/// CARVES (the runtime subtraction pool) always emit LAST, after the subject/floor and any flat-mode field ops — one
+/// Carves (the runtime subtraction pool) always emit last, after the subject/floor and any flat-mode field ops — one
 /// static <see cref="SdfBlendOp.Subtraction"/> (or <see cref="SdfBlendOp.SmoothSubtraction"/>) instance per carve, so
-/// each bites the already-unioned subject+floor. <see cref="EmitProbe"/> emits the worst case (max stack + the TWO
-/// wordiest shapes + floor + scoped Push/Pop + a FULL pool of <see cref="SdfDebugScene.MaxCarves"/> carves) so the
+/// each bites the already-unioned subject+floor. <see cref="EmitProbe"/> emits the worst case (max stack + the two
+/// wordiest shapes + floor + scoped Push/Pop + a full pool of <see cref="SdfDebugScene.MaxCarves"/> carves) so the
 /// capacity probe covers any live state.
 /// </summary>
 public sealed class SdfDebugRenderer {
@@ -53,7 +53,7 @@ public sealed class SdfDebugRenderer {
     // Internal: the meteor shower (SdfDebugScene.TickMeteor) lands floor craters relative to this surface height.
     internal const float FloorDrop = 1.3f;
 
-    /// <summary>Emits the debug subject (+ optional floor) for a LIVE render.</summary>
+    /// <summary>Emits the debug subject (+ optional floor) for a live render.</summary>
     /// <param name="builder">The program builder (the program is only this subject while the mode is up).</param>
     /// <param name="scene">The debug scene state.</param>
     public void Emit(SdfProgramBuilder builder, SdfDebugScene scene) {
@@ -169,12 +169,12 @@ public sealed class SdfDebugRenderer {
         return chain;
     }
 
-    /// <summary>Emits the WORST-CASE debug program (a full <see cref="SdfDebugScene.MaxOps"/> stack of single-word ops
-    /// plus the wordiest shapes, the floor, AND the scoped Push/Pop pair — the wordier of the two emission orders) so
+    /// <summary>Emits the worst-case debug program (a full <see cref="SdfDebugScene.MaxOps"/> stack of single-word ops
+    /// plus the wordiest shapes, the floor, and the scoped Push/Pop pair — the wordier of the two emission orders) so
     /// the frame source's capacity probe reserves an envelope every live push fits inside. Never rendered.
-    /// <para>This probe ALSO bounds every GALLERY exhibit (<see cref="EmitGallery"/>): the largest INSTANCE exhibit is
+    /// <para>This probe also bounds every gallery exhibit (<see cref="EmitGallery"/>): the largest instance exhibit is
     /// the carve-ceiling (a subject sphere + floor + 256 carve instances), and 256 &lt; the full <see cref="SdfDebugScene.MaxCarves"/>
-    /// (4096) carve pool this probe already reserves; the largest WORD exhibit is the drift monolith
+    /// (4096) carve pool this probe already reserves; the largest word exhibit is the drift monolith
     /// (<see cref="SdfDriftMonolith"/>, ~50 world-level instructions across ten materials, zero instances), still far
     /// under the 12-op stack + two lifted Stars + scope + 4096-carve pool below — so no exhibit can outgrow the frozen
     /// envelope and none needs its own probe.</para></summary>
@@ -413,7 +413,7 @@ public sealed class SdfDebugRenderer {
     private const float BenchCarveFloorDrop = 2.2f; // the floor sits below the subject so grounded scatter carves can bite it
     private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
 
-    /// <summary>Emits ONE bench configuration's workload into <paramref name="builder"/> (a takeover — the room is
+    /// <summary>Emits one bench configuration's workload into <paramref name="builder"/> (a takeover — the room is
     /// replaced). Dispatched by <see cref="SdfBenchWorkload"/>. A <paramref name="carvePlanner"/> (the bench's settle-0
     /// planner) routes the <see cref="SdfBenchWorkload.Carves"/> workload through the carve-bake pipeline — adopted bins
     /// emit as bricks, the rest analytic (carve-bake plan §4); null keeps carves fully analytic.</summary>
@@ -466,8 +466,8 @@ public sealed class SdfDebugRenderer {
     }
 
     /// <summary>Advances a carve-bake planner one produced frame for a <see cref="SdfBenchWorkload.Carves"/> config — the
-    /// HEADLESS synthetic bench's brick-advance hook (the interactive <c>sdf.bench</c> ladder uses the equivalent
-    /// <see cref="SdfBenchScene.AdvanceCarveBake"/>). It feeds the planner the IDENTICAL deterministic carve list
+    /// headless synthetic bench's brick-advance hook (the interactive <c>sdf.bench</c> ladder uses the equivalent
+    /// <see cref="SdfBenchScene.AdvanceCarveBake"/>). It feeds the planner the identical deterministic carve list
     /// <see cref="EmitBench"/> emits (<see cref="BuildBenchCarves"/> is a pure function of family/count), so the planner's
     /// binning matches the emission exactly; any non-carves config feeds an empty pool so a stale brick is released.
     /// Returns whether the adopted set changed (the caller rebuilds + re-arms its takeover program).</summary>
@@ -487,7 +487,7 @@ public sealed class SdfDebugRenderer {
         return planner.Advance(carves: carves, carveRevision: carveRevision, bakes: bakes);
     }
 
-    /// <summary>Emits <paramref name="count"/> DYNAMIC instances of a compact sphere, each on its OWN dynamic-transform
+    /// <summary>Emits <paramref name="count"/> dynamic instances of a compact sphere, each on its own dynamic-transform
     /// slot (instance i rides slot i), so all move per produced frame purely through the frame's dynamic-transform buffer
     /// — no program rebuild. The ring-local frame grid resolves and bins their moving centers; this workload exposes the
     /// per-frame grid-build/upload and moving-instance mask cost. Its per-frame
@@ -508,12 +508,12 @@ public sealed class SdfDebugRenderer {
         }
     }
 
-    /// <summary>Emits the DYNAMIC MATRIX bench workload (Phase 3 L1 ceiling-measurement arc, 2026-08-02):
+    /// <summary>Emits the dynamic-matrix bench workload:
     /// <paramref name="count"/> compact spheres laid out by <paramref name="placement"/>
-    /// (<see cref="SdfBenchScene.DynamicMatrixBasePosition"/>), either baked STATIC (a plain <c>BeginInstance</c> at
-    /// its base position — grid-INVARIANT, no per-frame CPU rebuild) or MOVING (one dynamic-transform slot per
+    /// (<see cref="SdfBenchScene.DynamicMatrixBasePosition"/>), either baked static (a plain <c>BeginInstance</c> at
+    /// its base position — grid-invariant, no per-frame CPU rebuild) or moving (one dynamic-transform slot per
     /// instance, orbiting its base position every produced frame via <see cref="SdfBenchScene.TryPackStormTransforms"/>
-    /// — forces <see cref="SdfProgram.RequiresFrameInstanceGridRebuild"/>). Every op stays CORE (Sphere + Translate/
+    /// — forces <see cref="SdfProgram.RequiresFrameInstanceGridRebuild"/>). Every op stays core (Sphere + Translate/
     /// TransformDynamic only), so <see cref="SdfViewsKernelVariants.FirstExoticTouch"/> selects the CoreOps views
     /// kernel variant regardless of N/placement/moving.</summary>
     public void EmitDynamicMatrix(SdfProgramBuilder builder, SdfBenchPlacement placement, bool moving, int count, int material) {
@@ -621,7 +621,7 @@ public sealed class SdfDebugRenderer {
         };
     }
 
-    /// <summary>Emits <paramref name="count"/> REAL instances of <paramref name="shape"/> in a centred 3D grid (each a
+    /// <summary>Emits <paramref name="count"/> real instances of <paramref name="shape"/> in a centred 3D grid (each a
     /// BeginInstance/EndInstance pair with a covering bound, Active=true), sized so neighbours don't overlap and the
     /// whole grid fits the render range. The bench camera (see <see cref="SdfBenchScene.CameraFrame"/>) pulls back to
     /// frame it.</summary>
@@ -649,16 +649,16 @@ public sealed class SdfDebugRenderer {
         }
     }
 
-    /// <summary>Folds the bench WORST CASE into the frame source's capacity probe: <see cref="SdfProgramBuilder.MaxInstances"/>
-    /// instances of the WORDIEST single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
+    /// <summary>Folds the bench worst case into the frame source's capacity probe: <see cref="SdfProgramBuilder.MaxInstances"/>
+    /// instances of the wordiest single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
     /// always fits the frozen program/instance envelope. Never rendered.
-    /// <para>STORM does NOT grow this probe. Its worst rung is 4096 DYNAMIC spheres
+    /// <para>Storm does not grow this probe. Its worst rung is 4096 dynamic spheres
     /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 16384 (MaxInstances) on the instance axis, and a
-    /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is FEWER words than a
+    /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is fewer words than a
     /// lifted Star, so 16384 Stars dominates both the word and instance dimensions this probe already reserves. The one
-    /// axis storm DOES grow is DYNAMIC-TRANSFORM capacity — 4096 moving slots vs the room's few dozen — but that floor
-    /// is a SEPARATE render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
-    /// SdfWorldRenderSpec.DynamicTransformCapacity), NOT this word/instance probe, so nothing here changes for it.</para></summary>
+    /// axis storm does grow is dynamic-transform capacity — 4096 moving slots vs the room's few dozen — but that floor
+    /// is a separate render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
+    /// SdfWorldRenderSpec.DynamicTransformCapacity), not this word/instance probe, so nothing here changes for it.</para></summary>
     public void EmitBenchProbe(SdfProgramBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
 
@@ -672,12 +672,12 @@ public sealed class SdfDebugRenderer {
         SdfCarveBakePlanner.EmitWorstCaseBricks(builder: builder, material: material);
     }
 
-    /// <summary>Emits the CARVE bench workload: a fixed ~2-unit subject sphere + a floor (world-level), then
+    /// <summary>Emits the carve bench workload: a fixed ~2-unit subject sphere + a floor (world-level), then
     /// <paramref name="count"/> carves in the given <paramref name="family"/> — <see cref="SdfBenchCarveFamily.Clustered"/>
     /// (packed on the subject surface, densely overlapping the same tiles: the honest views-cost worst case),
     /// <see cref="SdfBenchCarveFamily.Scattered"/> (spread through empty space + the floor, mostly masking out: the
     /// beam-wall control where beam grows O(n) while views stays flat), or <see cref="SdfBenchCarveFamily.Smooth"/>
-    /// (clustered SmoothSubtraction — halo × mask-width pressure). Placement is DETERMINISTIC (golden-angle /
+    /// (clustered SmoothSubtraction — halo × mask-width pressure). Placement is deterministic (golden-angle /
     /// low-discrepancy, no RNG), so a run reproduces bit-for-bit across sessions.</summary>
     public void EmitBenchCarves(SdfProgramBuilder builder, SdfBenchCarveFamily family, int count, int material, SdfCarveBakePlanner? carvePlanner = null) {
         ArgumentNullException.ThrowIfNull(builder);
@@ -700,8 +700,8 @@ public sealed class SdfDebugRenderer {
         }
     }
 
-    /// <summary>Builds the DETERMINISTIC carve list one <see cref="SdfBenchWorkload.Carves"/> rung bites its subject with
-    /// (golden-angle clustered / R2-scattered placement, no RNG) — the SHARED source of truth both this emitter and the
+    /// <summary>Builds the deterministic carve list one <see cref="SdfBenchWorkload.Carves"/> rung bites its subject with
+    /// (golden-angle clustered / R2-scattered placement, no RNG) — the shared source of truth both this emitter and the
     /// bench's carve-bake planner (<see cref="SdfBenchScene"/>) read, so the planner's binning matches the emission. The
     /// count is clamped to <see cref="SdfDebugScene.MaxCarves"/>.</summary>
     /// <param name="family">The placement family (clustered / scattered / smooth).</param>
@@ -778,13 +778,13 @@ public sealed class SdfDebugRenderer {
 /// <summary>Adapts <see cref="SdfDebugMode"/> — the composition facade that already owns the "which takeover is live"
 /// dispatch (a bench workload, a gallery exhibit, or the plain debug subject — see <see cref="SdfDebugMode.Emit"/>) —
 /// onto the <see cref="ISdfSceneEmitter"/> contract, so a composition host can register the whole SDF-debug surface as
-/// ONE emitter without re-deriving that dispatch. The gallery/bench emitters
+/// one emitter without re-deriving that dispatch. The gallery/bench emitters
 /// (<see cref="SdfDebugRenderer.EmitGallery"/>/<see cref="SdfDebugRenderer.EmitBench"/>) stay ordinary methods
 /// <see cref="SdfDebugMode.Emit"/> calls internally — this type adds nothing beyond the two probe branches and the
 /// dynamic-transform/revision plumbing every emitter needs.
 /// <para>
-/// A TAKEOVER, NOT A COMPOSABLE LAYER: the debug mode REPLACES the rest of a scene while active (see
-/// <see cref="SdfDebugMode.Active"/>) — a composition host swaps this emitter into an ALTERNATE emitter list for the
+/// A takeover, not a composable layer: the debug mode replaces the rest of a scene while active (see
+/// <see cref="SdfDebugMode.Active"/>) — a composition host swaps this emitter into an alternate emitter list for the
 /// takeover rather than mixing it into the room's own list (see <see cref="ISdfSceneEmitter"/>'s takeover remarks).
 /// </para></summary>
 /// <param name="mode">The debug mode facade this emitter wraps.</param>

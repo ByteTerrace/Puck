@@ -3,17 +3,17 @@ using Puck.Maths.Research;
 namespace Puck.Maths;
 
 /// <summary>
-/// The continued-fraction expansion of an exact quadratic irrational, computed in pure integer arithmetic. By Lagrange's
-/// theorem the expansion of every quadratic irrational is eventually periodic, and that period is the symbolic coding of a
-/// closed geodesic on the modular surface: the golden ratio <c>(1 + √5) / 2</c> codes to the all-ones period <c>[1; 1, 1, …]</c>
-/// and the silver ratio <c>1 + √2</c> to the all-twos period <c>[2; 2, 2, …]</c> — the two shortest closed geodesics, the same
-/// two units that drive the golden and silver cases of <see cref="MetallicQuasicrystal"/>.
+/// Computes the eventually periodic continued-fraction expansion of an exact quadratic irrational, in pure integer
+/// arithmetic.
 /// </summary>
 /// <remarks>
 /// The input is the quadratic irrational <c>(p + q·√d) / r</c>. The expansion is produced by the classical surd recurrence on a
 /// canonical <c>(P + √N) / Q</c> form (with <c>N = q²·d</c>), normalized so that <c>Q</c> divides <c>N − P²</c> and every
-/// subsequent step divides exactly; the state <c>(P, Q)</c> is finite, so a repeated state marks the start of the period. All
-/// coefficients are exact integers — there is no approximate seam here at all.
+/// subsequent step divides exactly; the state <c>(P, Q)</c> is finite, so a repeated state marks the start of the period. By
+/// Lagrange's theorem the expansion is eventually periodic; the golden ratio <c>(1 + √5) / 2</c> codes to the all-ones
+/// period <c>[1; 1, 1, …]</c> and the silver ratio <c>1 + √2</c> to the all-twos period <c>[2; 2, 2, …]</c>, the same two
+/// units that drive the golden and silver cases of <see cref="MetallicQuasicrystal"/>. All coefficients are exact
+/// integers — there is no approximate seam here at all.
 /// </remarks>
 public static class ContinuedFraction {
     /// <summary>Expands the quadratic irrational <c>(p + q·√d) / r</c> into its eventually periodic continued fraction.</summary>

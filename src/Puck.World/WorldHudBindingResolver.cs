@@ -12,7 +12,7 @@ namespace Puck.World;
 /// and <c>population.active</c>. Presentation-only: every normalization here is cosmetic (which fraction of a gauge
 /// fills), never simulation state, and is free to change without a determinism concern.
 /// </summary>
-internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldPerceptionAnchor anchor) : IHudBindingResolver {
+internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldPerceptionAnchor anchor, WorldSeatInstanceRouter seatRouter) : IHudBindingResolver {
     // world.tick has no natural ceiling (it grows for the life of the session), so its gauge fraction cycles at this
     // period instead of saturating at 1 forever after the first few seconds — a visibly moving fill, which is the
     // point of binding a gauge to it at all.
@@ -27,6 +27,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     private readonly FrameRateMonitor m_frameRate = frameRate;
     private readonly WorldPopulation m_population = population;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
+    private readonly WorldSeatInstanceRouter m_seatRouter = seatRouter;
 
     /// <inheritdoc/>
     public bool TryResolve(string binding, out float fraction, out string text) {
@@ -88,8 +89,22 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     // resolves which body that seat perceives from (its bound body, slot == body index, or the routed body while
     // possessing), so this binding family follows a possession anchor swap together with the camera and the
     // listener.
+    //
+    // HUD GUARD: a seat WorldSeatInstanceRouter currently routes AWAY has no body in BOOT's own population any
+    // more — m_population.EntryBody would read a vacated/reused index rather than that seat's own traveling body.
+    // Rather than build a full away-mirror read (see docs/world-model.md), an away seat draws a NEUTRAL gauge:
+    // empty fraction, blank text. Never boot's vacated body — that is the one outcome this guard exists to rule out.
     private void ResolveSeatPosition(HudBindingKind kind, int seatIndex, out float fraction, out string text) {
-        var position = (m_population.EntryBody(index: m_anchor.PerceivedBody(slot: (seatIndex - 1)))?.Position ?? System.Numerics.Vector3.Zero);
+        var slot = (seatIndex - 1);
+
+        if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+            fraction = 0f;
+            text = string.Empty;
+
+            return;
+        }
+
+        var position = (m_population.EntryBody(index: m_anchor.PerceivedBody(slot: slot))?.Position ?? System.Numerics.Vector3.Zero);
         var component = kind switch {
             HudBindingKind.SeatPositionX => position.X,
             HudBindingKind.SeatPositionY => position.Y,

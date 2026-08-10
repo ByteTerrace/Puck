@@ -1,20 +1,22 @@
 namespace Puck.Forge.Framework;
 
 /// <summary>
-/// The real APU sound driver: a compact SM83 register pump over the <see cref="SoundTables"/> catalog. Three
-/// independent sequencer voices tick once per frame from the main loop — a pulse-1 SFX voice, a noise SFX voice, and
-/// a pulse-2 music voice — each holding a read pointer + wait counter in the framework's sound work-RAM block
-/// (<see cref="FrameworkMemoryMap.SoundMusicPointer"/>…). A step is a duration byte followed by the voice's raw APU
-/// register bytes; the tick writes them straight to the ports and waits the duration out, an effect stream's zero
-/// terminator silences its channel (envelope zero, DAC off), and the music pattern's terminator rewinds to the
-/// pattern start — the short loop. <see cref="ISoundDriver.EmitEffect"/> resolves an effect id to its ROM stream at
-/// BUILD time and emits a three-store trigger (pointer + zeroed wait), so triggering is race-free with the tick that
-/// runs later in the same frame. The streams themselves are MANIFEST tables: the game declares them with
-/// <see cref="SoundTables.DefineIn"/> beside its other data, links, then hands the linked manifest to
-/// <see cref="Bind"/> — so games consume the catalog through the table layer. Everything the driver plays is
-/// deterministic work-RAM state driven by the frame counter and inputs
-/// — replay-identical like the rest of the framework.
+/// The real APU sound driver: a compact SM83 register pump over the <see cref="SoundTables"/> catalog.
 /// </summary>
+/// <remarks>
+/// Three independent sequencer voices tick once per frame from the main loop — a pulse-1 SFX voice, a noise SFX
+/// voice, and a pulse-2 music voice — each holding a read pointer + wait counter in the framework's sound work-RAM
+/// block (<see cref="FrameworkMemoryMap.SoundMusicPointer"/>…). A step is a duration byte followed by the voice's
+/// raw APU register bytes; the tick writes them straight to the ports and waits the duration out, an effect
+/// stream's zero terminator silences its channel (envelope zero, DAC off), and the music pattern's terminator
+/// rewinds to the pattern start — the short loop. <see cref="ISoundDriver.EmitEffect"/> resolves an effect id to
+/// its ROM stream at build time and emits a three-store trigger (pointer + zeroed wait), so triggering is
+/// race-free with the tick that runs later in the same frame. The streams themselves are manifest tables: the game
+/// declares them with <see cref="SoundTables.DefineIn"/> beside its other data, links, then hands the linked
+/// manifest to <see cref="Bind"/> — so games consume the catalog through the table layer. Everything the driver
+/// plays is deterministic work-RAM state driven by the frame counter and inputs — replay-identical like the rest
+/// of the framework.
+/// </remarks>
 internal sealed class ApuSoundDriver : ISoundDriver {
     private readonly Dictionary<byte, (SoundVoice Voice, RomTable Table)> m_effects = [];
     private RomTable? m_musicLoop;

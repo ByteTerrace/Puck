@@ -766,7 +766,7 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <returns>The pair <c>(cosh, sinh)</c>. Both saturate to <see cref="MaxValue"/> once the true value leaves the
     /// carrier — the cosine always positively, the sine carrying <paramref name="argument"/>'s sign.</returns>
     /// <remarks>
-    /// Built from <see cref="Exp2"/> with the halving folded INTO the exponent: for <c>s = φ·log2 e</c>,
+    /// Built from <see cref="Exp2"/> with the halving folded into the exponent: for <c>s = φ·log2 e</c>,
     /// <c>cosh φ = 2^(s−1) + 2^(−s−1)</c> and <c>sinh φ = 2^(s−1) − 2^(−s−1)</c>. Halving after the sum would cap the
     /// pair at <c>2⁴⁶</c>, discarding the representable band up to <see cref="MaxValue"/> and answering half the
     /// saturated value beyond it. The scaled exponent is formed at <see cref="Int128"/> width and clamped to ±48
@@ -796,7 +796,7 @@ public readonly partial record struct FixedQ4816(long Value)
     }
     /// <summary>Returns the base-2 logarithm of <paramref name="value"/>.</summary>
     /// <param name="value">The value whose logarithm is returned.</param>
-    /// <returns>The base-2 logarithm rounded to the nearest representable value, in the CLOSED range <c>[−16, 47]</c> — both ends are attained exactly, <see cref="Epsilon"/> at −16 and <see cref="MaxValue"/> at 47; non-positive inputs yield <see cref="MinValue"/>.</returns>
+    /// <returns>The base-2 logarithm rounded to the nearest representable value, in the closed range <c>[−16, 47]</c> — both ends are attained exactly, <see cref="Epsilon"/> at −16 and <see cref="MaxValue"/> at 47; non-positive inputs yield <see cref="MinValue"/>.</returns>
     /// <remarks>Pure integer arithmetic (a 128-interval mantissa table plus a quartic residual polynomial); bit-identical across machines. Maximum observed error is 0.50 ULP.</remarks>
     public static FixedQ4816 Log2(FixedQ4816 value) {
         if (value.Value <= 0L) {
@@ -811,19 +811,19 @@ public readonly partial record struct FixedQ4816(long Value)
         return new(Value: ((((long)(integerPart - FractionBitCount)) << 16) + ((fraction + (1L << 44)) >> 45)));
     }
     /// <summary>Returns <paramref name="x"/> raised to the power <paramref name="y"/>.</summary>
-    /// <param name="x">The base. A negative base is supported at every WHOLE exponent, where the parity of the
+    /// <param name="x">The base. A negative base is supported at every whole exponent, where the parity of the
     /// exponent carries the sign; at a non-whole exponent it yields <see cref="Zero"/>, because the real power is not
     /// a real number and this carrier has no not-a-number to report that with.</param>
     /// <param name="y">The exponent.</param>
     /// <returns><c>x^y</c>. A zero base yields <see cref="One"/>, <see cref="Zero"/>, or <see cref="MaxValue"/> for a
     /// zero, positive, or negative exponent respectively. Every base — negative included — yields <see cref="One"/> at
-    /// a zero exponent and itself at an exponent of one. An overflowing result saturates WITH its sign, to
+    /// a zero exponent and itself at an exponent of one. An overflowing result saturates with its sign, to
     /// <see cref="MinValue"/> rather than <see cref="MaxValue"/> when the mathematical value is negative.</returns>
     /// <remarks>Whole-number exponents of zero and ±1 answer exactly: <see cref="One"/>, the base itself, and the
-    /// single correctly-rounded inverse. Other whole exponents within ±32 compute by squaring the base's MAGNITUDE
-    /// (a negative exponent squares its correctly-rounded inverse) ON the carrier, so every ladder multiply rounds
+    /// single correctly-rounded inverse. Other whole exponents within ±32 compute by squaring the base's magnitude
+    /// (a negative exponent squares its correctly-rounded inverse) on the carrier, so every ladder multiply rounds
     /// once to Q16 with ties to even and the accumulated error grows with the exponent's binary weight — an exponent
-    /// of two carries the one rounded squaring, higher weights round more, and the result is NOT in general the
+    /// of two carries the one rounded squaring, higher weights round more, and the result is not in general the
     /// single correct rounding of the true power. Overflow on that path is decided exactly, by the ladder's own
     /// rounded magnitude leaving the carrier: near the top of the range a power whose correctly rounded value is
     /// representable can therefore still saturate when the ladder's accumulated rounding carries it past
@@ -1014,10 +1014,36 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <param name="from">The value returned when <paramref name="amount"/> is zero.</param>
     /// <param name="to">The value returned when <paramref name="amount"/> is one.</param>
     /// <param name="amount">The interpolation fraction; values outside <c>[0, 1]</c> extrapolate.</param>
-    /// <returns><c><paramref name="from"/> + (<paramref name="to"/> − <paramref name="from"/>)·<paramref name="amount"/></c> — exactly <paramref name="from"/> at zero and <paramref name="to"/> at one, wrapping on overflow like the operators.</returns>
+    /// <returns><c><paramref name="from"/> + (<paramref name="to"/> − <paramref name="from"/>)·<paramref name="amount"/></c>, formed as one exact wide
+    /// intermediate — <c>from·2¹⁶ + (to·amount − from·amount)</c>, at raw scale 2³², and rounded to the Q48.16 grid exactly once, to nearest with
+    /// ties to even. The standalone difference <c>to − from</c> is never computed (and therefore never wrapped or saturated) as its own
+    /// <see cref="FixedQ4816"/> value, so this is exact whenever the true mathematical result is representable, even where <c>to − from</c> alone
+    /// would not be. Exactly <paramref name="from"/> at zero and exactly <paramref name="to"/> at one. When the true result itself is not
+    /// representable, the final sum wraps to the signed 64-bit carrier — the same policy every other unchecked operator on this type states; there is
+    /// no checked or saturating sibling.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ4816 Lerp(FixedQ4816 from, FixedQ4816 to, FixedQ4816 amount) =>
-        (from + ((to - from) * amount));
+    public static FixedQ4816 Lerp(FixedQ4816 from, FixedQ4816 to, FixedQ4816 amount) {
+        // from·2^16 (exact, scale 2^32) plus (to·amount − from·amount) (exact, scale 2^32) — the same (to − from)·amount
+        // term, just formed as a difference of two products rather than a product of a difference, so it never routes
+        // through a standalone raw subtraction that could leave FixedQ4816's range before the multiply even runs. One
+        // combine, one round-and-shift back to Q48.16 (ScaleProductSum), so the whole expression rounds once.
+        var scaledFrom = FusedArithmetic.Product(left: from.Value, right: RawOne);
+        var delta = FusedArithmetic.AddProducts(
+            firstLeft: to.Value,
+            firstRight: amount.Value,
+            secondLeft: from.Value,
+            secondRight: amount.Value,
+            subtractSecond: true
+        );
+        var sum = FusedArithmetic.CombineSigned(
+            firstNegative: scaledFrom.Negative,
+            firstMagnitude: scaledFrom.Magnitude,
+            secondNegative: delta.Negative,
+            secondMagnitude: delta.Magnitude
+        );
+
+        return new(Value: FusedArithmetic.ScaleProductSum(value: sum, shift: -FractionBitCount));
+    }
     /// <summary>Returns the greater of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>

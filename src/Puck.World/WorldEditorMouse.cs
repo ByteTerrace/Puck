@@ -9,12 +9,12 @@ namespace Puck.World;
 
 /// <summary>
 /// The editor's mouse manipulation policy: with the editor active for the pointer's seat, a left-click selects the
-/// row the drawn cursor is hovering (dispatching the EXISTING <c>editor.select</c> verb through the console door, so
+/// row the drawn cursor is hovering (dispatching the existing <c>editor.select</c> verb through the console door, so
 /// the act narrates and refuses exactly like a typed line), a click on empty space clears the selection the same
-/// way, and a left-press on a draggable row (screens, placements, fixed/bed speakers) grabs it into the EXISTING
+/// way, and a left-press on a draggable row (screens, placements, fixed/bed speakers) grabs it into the existing
 /// <see cref="WorldEditorDrag"/> pending-row channel — while held, the pending pre-snap intent follows the cursor's
 /// world point on the horizontal plane through the row's grabbed position, and a real in-viewport release commits
-/// through the channel's release path: ONE whole-row mutation under the seat's own acting principal
+/// through the channel's release path: one whole-row mutation under the seat's own acting principal
 /// (<see cref="PlayerRoster.PrincipalOf"/> — the same identity discipline <see cref="WorldEditorSession.Enter"/>
 /// applies, never a laundered Console), coalesced exactly as a stick drag is. Everything here is
 /// presentation/session policy: it composes the cursor feed's published decision, the pointer store's
@@ -22,15 +22,15 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// <para>Ticked once per produced frame from the overlay's <c>FeedTick</c>, immediately after
-/// <see cref="WorldCursorFeed.Tick"/>, so every decision reads the SAME frame's cursor verdict and hover target the
+/// <see cref="WorldCursorFeed.Tick"/>, so every decision reads the same frame's cursor verdict and hover target the
 /// player saw — and runs on the launcher's window-pump thread with every other editor mutator (the
 /// <see cref="WorldSeatViewports"/>/<see cref="WorldEditorSession"/> single-thread contract), so no lock guards any
 /// of this state.</para>
-/// <para>Button EDGES are derived here by comparing the store's held state across frames — per-slot memory, never a
+/// <para>Button edges are derived here by comparing the store's held state across frames — per-slot memory, never a
 /// drain and never a store mutation, so the seat-look arming read and every other button consumer stay whole. The
 /// derivation is honest about its resolution: a press and release that both land between two produced frames
 /// collapse in the store and are never observed — a sub-frame click does nothing.</para>
-/// <para>A release commits only when it is REAL and the cursor still stands in the seat's viewport. A synthetic
+/// <para>A release commits only when it is real and the cursor still stands in the seat's viewport. A synthetic
 /// release (the store's force-release on focus loss — observed as the seat's
 /// <see cref="WorldPointer.SystemReleaseCount"/> advancing since the press) cancels: an alt-tab mid-drag must never
 /// commit an edit. A release with the cursor outside the viewport (or otherwise hidden) cancels too: nothing valid
@@ -38,7 +38,7 @@ namespace Puck.World;
 /// choose. A release that never moved the snapped position cancels silently — that is a click, already answered by
 /// its selection. The channel's own cancel acts (<c>editor.cancel</c>, its chord, editor exit) retire the drag
 /// externally; the next tick here simply observes the channel idle and stands down.</para>
-/// <para>The follow is ABSOLUTE, in position space: each frame re-maps the cursor through the live client→frame
+/// <para>The follow is absolute, in position space: each frame re-maps the cursor through the live client→frame
 /// mapping (<see cref="WorldCursorFeed"/>'s published <see cref="WorldCursorStatus.Local"/>) and re-casts
 /// <see cref="WorldCursorFeed.RayDirection"/> against the grab plane, anchored only in the world space the channel
 /// already holds (the grabbed row's position) — never in cached frame pixels, so a window resize mid-drag lands the

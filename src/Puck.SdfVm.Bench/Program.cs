@@ -15,10 +15,10 @@ using Puck.SdfVm.Bench;
 using Puck.SdfVm.Debug;
 using Puck.Vulkan.Presentation;
 
-// Puck.SdfVm.Bench — a real GPU/CPU ceiling-measurement harness for contributed dynamic geometry (Phase 3 L1,
-// 2026-08-02 mission). Boots the SAME generic Launcher + SdfWorldRenderBuilder assembly Puck.World composes (no game
-// glue), drives DynamicMatrixBenchFrameSource through SdfBenchScene's DynamicMatrix ladder, and exits when it
-// finishes. --backend vulkan|directx (default vulkan), --width/--height (default 1920x1080, pinned across the whole
+// Puck.SdfVm.Bench — a GPU/CPU ceiling-measurement harness for contributed dynamic geometry. Boots the same
+// generic Launcher + SdfWorldRenderBuilder assembly Puck.World composes (no game glue), drives
+// DynamicMatrixBenchFrameSource through SdfBenchScene's DynamicMatrix ladder, and exits when it finishes.
+// --backend vulkan|directx (default vulkan), --width/--height (default 1920x1080, pinned across the whole
 // matrix), --warm/--samples (default 20/300) per configuration.
 var hostsOnDirectX = string.Equals(a: ReadOption(args: args, name: "--backend", fallback: "vulkan"), b: "directx", comparisonType: StringComparison.OrdinalIgnoreCase);
 var width = uint.Parse(s: ReadOption(args: args, name: "--width", fallback: "1920"));

@@ -40,7 +40,7 @@ Now, when `definition.Population.ReconnectGraceTicks` is positive (the
 authored document field; default 720 = 3s at 240 Hz; `0` keeps the exact
 pre-park immediate-teardown behavior), the SAME call instead:
 
-1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick + reconnectGraceTicks`
+1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick + ReconnectGraceTicks` (derived at compile from the document-authored `reconnectGraceSeconds`)
    (`tick` is `WorldServer.NextInputTick` at the synchronous call site, or the
    `Step`-local `tick` inside the tick loop — both name the same instant).
 2. Leaves `Entry.Body`, `Entry.Active`, and (for a peer) `Entry.IsRemoteHuman`
@@ -72,7 +72,7 @@ Park state is **population state, not a mutation** — it carries no
 `WorldMutation` ordinal (the catalog is 64/64 full; this was never a candidate
 for a 65th kind) and is never journaled. It IS replay-deterministic on its own
 terms: `ParkedUntilTick` is a pure function of the tick the disconnect landed
-on (itself replay-reproduced) plus the document-authored `reconnectGraceTicks`,
+on (itself replay-reproduced) plus the document-authored `reconnectGraceSeconds`,
 so `ReclaimExpiredParks` fires identically on replay with no separate tape
 entry, the same way `ReclaimExpiredEscrows`'s mutation-shaped reclaim needs
 none.
@@ -148,7 +148,7 @@ LIVE remaining-grace value, not just its parked/unparked boolean. Nothing
 here is a new predicate, effect, or reserved channel — it is the SAME
 substrate `combat.world.json`'s `mob-target-mirror`/`mob-attacks-p1` rules
 already exercise, aimed at `$parked:` instead of `$distance:`/`$argmax:`
-alone. `reconnectGraceTicks: 0` is the standing break-once control: the
+alone. `reconnectGraceSeconds: 0` is the standing break-once control: the
 SAME document with that one field zeroed tears the body down immediately on
 `player.leave`, with `world.parked` staying empty the whole time — proving
 the grace window (not merely the leave itself) is what the rules above ride.
@@ -175,7 +175,7 @@ the grace window (not merely the leave itself) is what the rules above ride.
   document).
 - **Grace-expiry teardown is population-internal, not a mutation** — `world.status`'s
   `dirty`/journal length does not move when `ReclaimExpiredParks` fires.
-- Default `reconnectGraceTicks` (720) is small enough that `world.wait 721`
+- Default `reconnectGraceSeconds` (3.0, which is 720 ticks at 240 Hz) is small enough that `world.wait 721`
   after a leave reliably crosses the deadline in a scripted verification run;
   `world.wait <2` plus `world.parked` reads the remaining-ticks countdown
   mid-window.

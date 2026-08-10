@@ -13,7 +13,7 @@ namespace Puck.Abstractions.Machines;
 /// </summary>
 /// <remarks>Backend-neutral: the framebuffer publishes through the <see cref="Puck.Abstractions.Gpu"/> device/compute
 /// seams the host resolves, never a concrete GPU backend. Single-producer by contract, not single-threaded: a host calls
-/// <see cref="Step"/>, <see cref="PublishFrame"/>, and the state reads from one producer thread, but an implementation MAY
+/// <see cref="Step"/>, <see cref="PublishFrame"/>, and the state reads from one producer thread, but an implementation may
 /// run an internal worker (see <see cref="IQueuedScreenMachine"/>) and publish under its own synchronization. On such an
 /// implementation <see cref="Step"/> is a submit-and-drain convenience for generic callers that do not opt into the queued
 /// capability.</remarks>

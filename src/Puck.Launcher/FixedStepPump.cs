@@ -25,15 +25,29 @@ public sealed class FixedStepTimingAccumulator {
 /// → <c>IFixedStepSimulation.Step</c>, in that EXACT order, every step — so a boot-shape swap can never reorder it (the
 /// headless verification runner's sabotage case swaps the order deliberately to prove the order is load-bearing).
 /// </summary>
-/// <remarks>Wall-clock PACING is the caller's job (a window's present cadence, or a headless waitable-timer loop);
-/// this type only turns an already-sampled wall-clock delta into whole simulation steps. Not thread-safe: driven from
-/// one pump thread per boot shape, same as the state it wraps.</remarks>
+/// <remarks><para>Wall-clock PACING is the caller's job (a window's present cadence, or a headless waitable-timer
+/// loop); this type only turns an already-sampled wall-clock delta into whole simulation steps. Not thread-safe:
+/// driven from one pump thread per boot shape, same as the state it wraps.</para>
+/// <para><b><see cref="Advance"/> is safe across a change of <c>stepTicks</c> between calls</b> (e.g. a portal
+/// crossing into a differently-rated world, per the four-world charter's "no restart" contract) — a design necessity
+/// once the simulation rate stops being <c>SimulationRate</c>'s compile-time constant. <see cref="ElapsedTicks"/> and
+/// <see cref="AccumulatorTicks"/> are already expressed in engine ticks, the rate-independent unit, so they need no
+/// special handling. <see cref="FixedStepContext.Tick"/> is a step ORDINAL — "the zero-based simulation tick being
+/// advanced" per its own doc, i.e. how many steps this pump has run, never a time coordinate — so it is tracked as
+/// its own monotonic counter rather than re-derived from <c>ElapsedTicks / stepTicks</c>, which silently assumes
+/// <c>stepTicks</c> never changed. This makes the pump's OWN bookkeeping correct across a rate change; it does not
+/// make a tick number a shared coordinate ACROSS worlds running different rates at once — <c>WorldInstanceHost</c>'s
+/// own "Per-instance scheduling" remark now advances each non-boot instance on its OWN authored <c>simulation.rateHz</c>,
+/// banking this pump's master-timeline delta (the boot-derived cadence it drives) into each instance's own accumulator
+/// and stepping it on its own width, so every instance keeps its own tick ordinal. This pump drives only that master
+/// cadence they bank against, never one rate they all share.</para></remarks>
 public sealed class FixedStepPump {
     private readonly CommandRegistry m_registry;
     private readonly InputRouter m_inputRouter;
     private readonly IFixedStepSimulation m_simulation;
     private ulong m_accumulatorTicks;
     private ulong m_elapsedTicks;
+    private ulong m_completedStepCount;
 
     /// <summary>Initializes the pump over one simulation/router/registry triple and wires the Simulation-phase console
     /// drain — the ONE place either boot shape registers it, so neither can wire it differently.</summary>
@@ -75,7 +89,8 @@ public sealed class FixedStepPump {
     /// <paramref name="stepTicks"/>-sized step now due — snapshot, apply, step, in that order, every time.</summary>
     /// <param name="deltaTicks">The sampled wall-clock delta since the previous call.</param>
     /// <param name="maxFrameTicks">The runaway-frame clamp.</param>
-    /// <param name="stepTicks">The fixed step size in engine ticks.</param>
+    /// <param name="stepTicks">The step size in engine ticks for steps run by THIS call. May differ from the value
+    /// a previous call used (see remarks) — the pump's own bookkeeping stays correct either way.</param>
     /// <param name="timing">An optional accumulator for the [frame-timing] sub-bucket breakdown; <see langword="null"/>
     /// skips the per-phase <see cref="Stopwatch"/> sampling entirely.</param>
     /// <returns>The number of whole steps run.</returns>
@@ -99,11 +114,16 @@ public sealed class FixedStepPump {
         m_elapsedTicks += consumedTicks;
 
         var stepCount = (consumedTicks / stepTicks);
-        var firstTick = (previousElapsedTicks / stepTicks);
+        var firstTick = m_completedStepCount;
+
+        m_completedStepCount += stepCount;
 
         for (var stepIndex = 0UL; (stepIndex < stepCount); stepIndex++) {
             var tick = (firstTick + stepIndex);
-            var stepElapsedTicks = ((tick + 1UL) * stepTicks);
+            // Derived from the running elapsed-tick total (already rate-independent), never from `tick * stepTicks`
+            // — that product is only valid while `stepTicks` has been constant for every step `tick` counts, which a
+            // step-size change between Advance calls breaks.
+            var stepElapsedTicks = (previousElapsedTicks + ((stepIndex + 1UL) * stepTicks));
             var windowEndTick = (CaptureOriginTicks + stepElapsedTicks);
             var snapshotStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
             var commands = m_inputRouter.SnapshotForTick(tick: tick, windowEndTick: windowEndTick);

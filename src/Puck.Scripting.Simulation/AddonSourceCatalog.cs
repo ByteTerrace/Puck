@@ -11,25 +11,21 @@ namespace Puck.Scripting.Simulation;
 /// (<see cref="Puck.Input.InputSources"/>) and reports the record value shape it carries. The vocabulary itself
 /// is open — <see cref="Puck.Input.InputSources"/> is the engine's single home for physical-control names, not
 /// something this catalog forks. It lives in the Simulation adapter rather than the scripting core because the
-/// source-id vocabulary is Simulation-lane knowledge (vocabulary is per-lane —
-/// docs/capability-channels-plan.md's assembly split). The addon wasm ABI's own input channel no longer routes
+/// source-id vocabulary is Simulation-lane knowledge, and vocabulary is scoped per lane by assembly. The addon
+/// wasm ABI's own input channel no longer routes
 /// through this catalog — it speaks a small, closed, host-owned channel-name vocabulary instead (see
 /// <c>Puck.World.Server.WorldAddonChannelResolver</c>) — so today's one consumer is the binding-vocabulary check
 /// (<c>Puck.World.WorldAffordances</c>), called directly by static method rather than through an injected seam.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Resolution is DERIVED, not hand-transcribed. <see cref="Puck.Input.InputSources"/> members carry
+/// Resolution is derived from attributes, not hand-transcribed. <see cref="Puck.Input.InputSources"/> members carry
 /// <see cref="Puck.Input.InputSourceValueAttribute"/> (declaring their <see cref="CommandValueKind"/>) and,
 /// where the ABI cannot carry them for a reason beyond that kind, <see cref="Puck.Input.InputSourceUnaddressableAttribute"/>
 /// too — that is the single declaration site. <see cref="BuildTables"/> reads every attribute once, by
 /// reflection, and caches the result; a new physical control needs only the one-line attribute added at its
-/// declaration in <see cref="InputSources"/>, never a second edit here. Forgetting the attribute entirely USED to be
-/// caught: a <c>scripting-determinism</c> battery stage enumerated every <see cref="Puck.Input.InputSources"/> id by
-/// reflection and failed, naming the id, if neither <see cref="TryResolve"/> nor <see cref="IsUnaddressable"/>
-/// accounted for it. That stage left the build on 2026-08-02 with nothing in its place, so "one attribute there" is a
-/// promise a future edit can now quietly break, and a forgotten attribute degrades to an id that silently resolves as
-/// neither addressable nor unaddressable.
+/// declaration in <see cref="InputSources"/>, never a second edit here. A field carrying neither attribute
+/// resolves as neither addressable nor unaddressable, silently.
 /// </para>
 /// <para>
 /// Not every <see cref="InputSources"/> entry is declarable here. <see cref="InputSources.Keyboard.Text"/>
@@ -83,9 +79,7 @@ public static class AddonSourceCatalog {
     // on InputSources' two physical-control groups (Keyboard, Gamepad — named directly rather than
     // discovered via GetNestedTypes, so each typeof() flows straight into ClassifySource's DynamicallyAccessedMembers
     // annotation the way AddonAbiRustPort's AppendAbiConstants does for AddonAbi's nested offset classes). A
-    // future third group would need a line added here. An independent completeness leg used to walk InputSources by
-    // its own recursive reflection and catch a group this list failed to name; it left the build on 2026-08-02, so
-    // adding a group without adding it here now fails silently.
+    // future third group must add a line here, or it is silently never classified.
     //
     // A source id declared by two different members is an InputSources authoring defect, not addon-supplied
     // data — it cannot vary by which addon mounts — so it belongs here, at catalog-build time, thrown loud and
@@ -145,9 +139,9 @@ public static class AddonSourceCatalog {
     // unrepresentable). Otherwise, only Digital/Axis1D/Axis2D — the shapes a record's
     // (valueX, valueY) pair can hold — resolve; any other declared kind (Axis3D, Orientation — the three-/
     // four-component motion sources) is unaddressable by construction, with no separate marker needed. A field
-    // carrying neither attribute resolves as neither addressable nor unaddressable — the gap the departed
-    // completeness leg existed to catch, and which nothing catches today. ClassifyGroup has already proven sourceId
-    // unique across both tables before calling this, so neither Add below can observe a duplicate.
+    // carrying neither attribute resolves as neither addressable nor unaddressable, uncaught. ClassifyGroup
+    // has already proven sourceId unique across both tables before calling this, so neither Add below can
+    // observe a duplicate.
     private static void ClassifySource(Dictionary<string, AddonSourceShape> shapes, HashSet<string> unaddressable, FieldInfo field, string sourceId) {
         if (field.GetCustomAttribute<InputSourceUnaddressableAttribute>() is not null) {
             _ = unaddressable.Add(item: sourceId);

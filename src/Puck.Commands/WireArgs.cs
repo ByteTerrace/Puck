@@ -20,7 +20,7 @@ namespace Puck.Commands;
 /// text command uses on the System.CommandLine fallback path (quoted lines, help, parse-error text), so one wire handler
 /// serves both paths as a single source of truth.</description></item>
 /// </list>
-/// <see cref="Echo"/> carries the registry's per-dispatch acknowledgement decision so a handler can SKIP building a
+/// <see cref="Echo"/> carries the registry's per-dispatch acknowledgement decision so a handler can skip building a
 /// success echo string when acks are quiet — the branch that makes a flooded quiet wire path allocate nothing.
 /// </remarks>
 public readonly ref struct WireArgs {
@@ -70,7 +70,7 @@ public readonly ref struct WireArgs {
         : m_line[m_ranges[index]]);
 
     /// <summary>
-    /// Whether a SUCCESS echo produced by this dispatch will actually be surfaced (acks on, or a query verb). A wire
+    /// Whether a success echo produced by this dispatch will actually be surfaced (acks on, or a query verb). A wire
     /// handler should gate its success-string construction on this — <c>args.Echo ? new CommandResult(...) : CommandResult.None</c>
     /// — so that in quiet mode the string is never even built. Errors ignore this flag: a handler always builds its error
     /// string and marks the result <see cref="CommandResult.IsError"/>, and errors are never suppressed.
@@ -86,7 +86,7 @@ public readonly ref struct WireArgs {
     public bool Is(int index, string value) => (((uint)index < (uint)Count) &&
         this[index].Equals(other: value, comparisonType: StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Joins the tokens from <paramref name="start"/> onward with single spaces — the ONE place a verb whose
+    /// <summary>Joins the tokens from <paramref name="start"/> onward with single spaces — the one place a verb whose
     /// argument is free text (a path, a name, a message) or a whitespace-split inline-JSON payload rebuilds its tail.
     /// Reproduces <c>string.Join(' ', args[start..])</c>: interior whitespace runs collapse to one space, exactly as
     /// the token-array form always did.</summary>

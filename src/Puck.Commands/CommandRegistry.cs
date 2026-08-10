@@ -230,7 +230,7 @@ public sealed class CommandRegistry {
     // Fails loudly when a command name or alias is claimed by more than one owner — a module, or the registry's
     // own built-ins (see BuiltInOwnerName). A name is a unique identity — construction is a composition-root
     // error, so a second claim (even by the same module registering itself twice) is a bug in how modules were
-    // assembled, never the silent last-writer-wins `m_byName[name] = definition` used to allow.
+    // assembled.
     private static void ClaimName(string name, string owner, Dictionary<string, string> claimedBy) {
         if (claimedBy.TryGetValue(key: name, value: out var existingOwner)) {
             throw new InvalidOperationException(message: $"Command name '{name}' is registered by both {existingOwner} and {owner}.");
@@ -274,7 +274,7 @@ public sealed class CommandRegistry {
     /// <summary>Gets the distinct registered commands' declared facts, ordinal-sorted by name — the affordance manifest
     /// source a listing verb (e.g. <c>world.affordances</c>) emits as data. Excludes the registry's own text-path
     /// built-ins (<c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>), which are never bindable.</summary>
-    /// <remarks>METADATA, never a handler. A caller that could reach a definition's handler could invoke an authority
+    /// <remarks>Metadata only, never a handler. A caller that could reach a definition's handler could invoke an authority
     /// verb with a context of its own making, which would be a dispatch door beside the stamped ones; describing the
     /// vocabulary must not confer the ability to drive it.</remarks>
     public IReadOnlyList<CommandMetadata> Definitions => m_metadata;
@@ -390,7 +390,7 @@ public sealed class CommandRegistry {
         return new CommandResult(Output: $"[wire.errors: {rejected} rejected]");
     }
 
-    /// <summary>Counts one refusal that a submitted line's own dispatch could not report — a DEFERRED rejection, raised
+    /// <summary>Counts one refusal that a submitted line's own dispatch could not report — a deferred rejection, raised
     /// after the line was accepted (a host queued the work and refused it later).</summary>
     /// <remarks>
     /// Call this only from a host's rejection tap, and only for an outcome no handler returned as
@@ -489,10 +489,10 @@ public sealed class CommandRegistry {
     /// active command maps. The <see cref="InputRouter"/> owns held-folding, so this never touches held state, and
     /// each entry's <see cref="CommandEntry.Principal"/> — stamped by the mixer or by the injecting sink — becomes
     /// the handler's <see cref="CommandContext.Principal"/> verbatim.
-    /// <para>This stays PUBLIC (the launcher's fixed-step pump is a different assembly) because the argument is what
-    /// is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
+    /// <para>This method stays public — the launcher's fixed-step pump is a different assembly — because the
+    /// argument is what is closed, not the method: <see cref="CommandSnapshot"/>, <see cref="CommandLane"/>, and
     /// <see cref="CommandEntry"/> are all internal to construct, so the only snapshot a caller can obtain is one the
-    /// mixer built. Narrowing this method instead would have left the forgeable value type in a caller's hands.</para>
+    /// mixer built. Narrowing this method instead would leave the forgeable value type in a caller's hands.</para>
     /// </summary>
     /// <param name="snapshot">The tick's input snapshot to apply.</param>
     public void ApplySnapshot(in CommandSnapshot snapshot) {
@@ -632,8 +632,8 @@ public sealed class CommandRegistry {
     /// <param name="sink">The console text door's sink (<see cref="InputRouter.ConsoleTextSink"/>), folded-into per
     /// tick; <see langword="null"/> restores inline execution.</param>
     /// <remarks>Wire this only on the host's live console-driving registry; an unwired registry runs every submitted
-    /// command inline. The sink's principal is fixed at ITS construction, so nothing here (or at a call site) chooses
-    /// what a submitted line acts as.</remarks>
+    /// command inline. The sink's principal is fixed at its own construction, so nothing here (or at a call site)
+    /// chooses what a submitted line acts as.</remarks>
     public void RouteSimulationTo(CommandInjectionSink? sink) {
         m_injectionSink = sink;
     }

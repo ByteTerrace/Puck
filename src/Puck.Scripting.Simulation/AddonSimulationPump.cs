@@ -237,7 +237,7 @@ public sealed class AddonSimulationPump {
         return true;
     }
     // The request vocabulary: a pinned ordinal within the guest's declared range. BodyPose carries every payload
-    // lane zero, as before. SubmitMutation carries a memory payload: A names the declared mutation-
+    // lane zero. SubmitMutation carries a memory payload: A names the declared mutation-
     // kind ordinal (structurally bounded to a byte, the wire-level ceiling — WorldMutationKindCatalog.MaxOrdinal's
     // own 0..63 bound is a WORLD-side rule this lane-neutral pump cannot see and does not enforce), B is the
     // guest-memory pointer and C is the payload byte length, BOTH reinterpreted unsigned — a "negative" signed i64

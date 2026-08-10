@@ -1,16 +1,16 @@
 namespace Puck.Commands;
 
 /// <summary>
-/// One chord row of a binding profile: <c>(group, ordered chord) → meaning</c>. The chord is the ORDERED sequence
+/// One chord row of a binding profile: <c>(group, ordered chord) → meaning</c>. The chord is the ordered sequence
 /// of held modifier ids — <c>["lt", "rt"]</c> and <c>["rt", "lt"]</c> are distinct rows — and the meaning is a
 /// discriminated union carried by exactly one of <paramref name="Page"/> (an entry table the chord selects) or
 /// <paramref name="Command"/> (a command the chord fires directly). Page switching is not privileged: it is one
 /// meaning a chord can carry, declared through the same authoring layers as every other binding.
 /// </summary>
 /// <remarks>
-/// A seat resolves within its ACTIVE group only: the deepest page row whose chord is a press-order prefix of the
+/// A seat resolves within its active group only: the deepest page row whose chord is a press-order prefix of the
 /// held modifiers answers the seat's sources, and a command row fires its press edge on the very signal that
-/// completes its chord (release when any member releases). The empty chord names the group's RESTING page —
+/// completes its chord (release when any member releases). The empty chord names the group's resting page —
 /// exactly one per group, and it must be a page (an empty chord has no completion edge to fire a command with).
 /// <see cref="BindingProfile.Compile"/> rejects a row carrying both meanings, neither meaning, or a
 /// <c>(group, chord)</c> pair another row already claims.
@@ -32,7 +32,7 @@ public sealed record BindingChordDefinition(
 );
 
 /// <summary>
-/// The command meaning of a <see cref="BindingChordDefinition"/>: a direct chord-to-DESTINATION binding — exactly one
+/// The command meaning of a <see cref="BindingChordDefinition"/>: a direct chord-to-destination binding — exactly one
 /// of <paramref name="Command"/> or <paramref name="Channel"/>, the same two-kind split
 /// <see cref="BindingPageEntryDefinition"/> carries — with the full entry semantics a page entry carries — the
 /// hold/release shape, an optional constant activation value or scale, and the display metadata an on-screen binding
@@ -44,7 +44,7 @@ public sealed record BindingChordDefinition(
 /// carries a <paramref name="Command"/> destination instead.</param>
 /// <param name="Scale">The channel destination's scale (raw <c>[-1, 1]</c>); see
 /// <see cref="BindingPageEntryDefinition.Scale"/>.</param>
-/// <param name="HoldRelease">Whether the command dispatches on BOTH edges — the press when the chord completes and
+/// <param name="HoldRelease">Whether the command dispatches on both edges — the press when the chord completes and
 /// the release when any member releases (the handler reads the phase to hold-or-free, the page-entry HoldRelease
 /// convention). The default dispatches the press edge only; the release still clears the carried held state.</param>
 /// <param name="Label">An optional display label for the UI layer; opaque to the engine.</param>

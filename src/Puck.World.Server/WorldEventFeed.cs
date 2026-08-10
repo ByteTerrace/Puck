@@ -3,9 +3,9 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The closed world-events vocabulary — FOUR of the five families the blank-slate campaign's senses lane
-/// ships (the fifth, machine-memory watches, is ADDON-scoped — each mounted guest declares its own watch rows, so
-/// it is computed inside <see cref="WorldAddonRuntime"/> directly rather than here; see that type's remarks). Mirrors
+/// <summary>The closed world-events vocabulary — four event families; the fifth, machine-memory watches, is
+/// addon-scoped — each mounted guest declares its own watch rows, so it is computed inside
+/// <see cref="WorldAddonRuntime"/> directly rather than here; see that type's remarks. Mirrors
 /// <see cref="Scripting.AddonAbi.ObservationVerbs"/>'s event verbs one-for-one.</summary>
 public enum WorldEventFamily : byte {
     /// <summary>A body entered a named region.</summary>
@@ -16,7 +16,7 @@ public enum WorldEventFamily : byte {
     SeatJoin,
     /// <summary>A seat stopped being human-occupied.</summary>
     SeatLeave,
-    /// <summary>Two bodies began overlapping (a PROXIMITY edge — see <see cref="WorldEventFeed"/>'s own remarks;
+    /// <summary>Two bodies began overlapping (a proximity edge — see <see cref="WorldEventFeed"/>'s own remarks;
     /// this is not the physical contact resolver).</summary>
     CollisionBegin,
     /// <summary>Two bodies stopped overlapping.</summary>
@@ -27,9 +27,9 @@ public enum WorldEventFamily : byte {
     RouteDisengaged,
 }
 
-/// <summary>One world-scoped event edge for THIS tick, in pinned iteration order. <see cref="GateA"/> (and,
+/// <summary>One world-scoped event edge for this tick, in pinned iteration order. <see cref="GateA"/> (and,
 /// for the two-body families, <see cref="GateB"/>) name the <see cref="GrantSubject"/>(s) an addon must hold an
-/// event-budgeted <see cref="WorldCapability.Observe"/> grant over to receive it — EITHER gate suffices when both
+/// event-budgeted <see cref="WorldCapability.Observe"/> grant over to receive it — either gate suffices when both
 /// are present (the collision/route families' own "subject-filtered by the grant" rule).</summary>
 /// <param name="Family">The event family.</param>
 /// <param name="GateA">The first gating subject.</param>
@@ -40,28 +40,28 @@ public enum WorldEventFamily : byte {
 public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubject GateA, GrantSubject? GateB, long A, long B);
 
 /// <summary>
-/// Computes the four WORLD-scoped event families once per tick — collision pairs, region enter/exit, seat
+/// Computes the four world-scoped event families once per tick — collision pairs, region enter/exit, seat
 /// join/leave, and route/engagement transitions — as a flat, pinned-order edge list every mounted addon's
-/// <see cref="WorldAddonRuntime"/> filters by its own grants. Deterministic BY CONSTRUCTION: every input (body
+/// <see cref="WorldAddonRuntime"/> filters by its own grants. Deterministic by construction: every input (body
 /// positions, seat occupancy, the document's region rows, route commands) is already sim-lane state, so replay
-/// covers this feed by RE-EXECUTION — nothing here is taped.
+/// covers this feed by re-execution — nothing here is taped.
 /// </summary>
 /// <remarks>
-/// <para><b>Collision pairs are a PROXIMITY test, not the physical contact resolver.</b>
+/// <para><b>Collision pairs are a proximity test, not the physical contact resolver.</b>
 /// <see cref="IContactField"/> resolves a body against static solid scene rows, screens, and creation placements — there is no
 /// body-vs-body physical resolution in this engine today, and adding one is a physics feature far outside this
-/// lane's mission. This feed instead runs a cheap, honest OVERLAP test over every pair of the two bodies' collider
-/// volumes in FULL 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
+/// lane's mission. This feed instead runs a cheap, honest overlap test over every pair of the two bodies' collider
+/// volumes in full 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
 /// box-involving pair by an oriented per-axis extent test on X, Y, and Z. A kit with no collider has no event volume
-/// and therefore emits no collision pair. It is deliberately NOT a claim about physical contact response.</para>
+/// and therefore emits no collision pair. It is deliberately not a claim about physical contact response.</para>
 /// <para><b>Region containment</b> re-reads the document's placements every tick (a linear scan, cheap at
 /// authoring scale) rather than caching a derived structure keyed to the Placements section's install cadence —
 /// simpler and correct; revisit only if profiling ever shows the scan matters.</para>
-/// <para><b>Route edges are PUSHED, not diffed.</b> <see cref="WorldGrants"/> reports changes from the Control-route
+/// <para><b>Route edges are pushed, not diffed.</b> <see cref="WorldGrants"/> reports changes from the Control-route
 /// storage every producer shares, including engagement, repair, and direct grant/revoke outcomes. The server resolves
 /// a Seat/Peer principal to its body index and queues the corresponding edge; principals that drive no body produce no
 /// fabricated source. <see cref="Collect"/> drains the queue at the pinned collection point so a route transition and
-/// this tick's other edges arrive in the SAME batch.</para>
+/// this tick's other edges arrive in the same batch.</para>
 /// </remarks>
 public sealed class WorldEventFeed {
     private readonly List<WorldEventEdge> m_edges = [];
@@ -81,7 +81,7 @@ public sealed class WorldEventFeed {
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
 
     /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
-    /// recent <see cref="Collect"/> — the SAME per-(region, body) occupancy the region pass already tracks for the
+    /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the
     /// addon events feed, read directly for a world rule's <c>$region:&lt;id&gt;</c> reserved channel (see
     /// <see cref="WorldRuleFacts"/>) rather than duplicated.</summary>
     /// <param name="placementId">The region-carrying placement's stable id.</param>
@@ -133,7 +133,7 @@ public sealed class WorldEventFeed {
         ));
     }
 
-    /// <summary>Computes this tick's edge list — the ONE call site, from <see cref="WorldServer.Step"/> after the
+    /// <summary>Computes this tick's edge list — the one call site, from <see cref="WorldServer.Step"/> after the
     /// population advances (so positions/occupancy reflect this tick's settled state) and before the addon runtime's
     /// read pump stages them for delivery.</summary>
     /// <param name="definition">The live world definition (its placements, for region rows).</param>

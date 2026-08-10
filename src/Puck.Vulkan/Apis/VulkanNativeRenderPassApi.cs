@@ -22,9 +22,9 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         m_allocator = allocator;
     }
 
-    // Color attachments are referenced in COLOR_ATTACHMENT_OPTIMAL during the subpass; this
-    // is structural to "these are color attachments", not policy — the per-attachment
-    // initial/final layouts come from the caller's VkAttachmentDescription.
+    // Color attachments are referenced in COLOR_ATTACHMENT_OPTIMAL during the subpass — structural to being a
+    // color attachment, not a policy choice. Per-attachment initial/final layouts come from the caller's
+    // VkAttachmentDescription.
     private const uint ColorAttachmentOptimalLayout = 2;
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint StructureTypeRenderPassCreateInfo = 38;

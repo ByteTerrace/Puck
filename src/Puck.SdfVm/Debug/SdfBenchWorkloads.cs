@@ -1,9 +1,9 @@
 namespace Puck.SdfVm.Debug;
 
 /// <summary>The synthetic-ladder workload program builders shared between <see cref="SdfBenchScene"/>'s
-/// <c>sdf.bench</c> battery and any other caller that wants ONE named workload at ONE explicit rung — e.g. a demo
+/// <c>sdf.bench</c> battery and any other caller that wants one named workload at one explicit rung — e.g. a demo
 /// bench-scene adapter that swaps a single program into the SDF debug engine and lets an outside harness sample
-/// through the ordinary per-pass timing seams, rather than running the whole ladder. Every method here is a PURE
+/// through the ordinary per-pass timing seams, rather than running the whole ladder. Every method here is a pure
 /// <see cref="SdfBenchConfig"/> builder — it describes what to emit; the actual GPU-program emission lives in
 /// <see cref="SdfDebugRenderer.EmitBench"/>. Extracted verbatim from <see cref="SdfBenchScene"/> so the ladder's
 /// construction constants and labels stay byte-identical — <c>sdf.bench</c>'s behavior does not change.</summary>
@@ -24,14 +24,13 @@ public static class SdfBenchWorkloads {
     // stay well framed while the pose sweeps a full revolution).
     private const int StormCameraRung = 1024;
 
-    // The DYNAMIC MATRIX ladder (Phase 3 L1 ceiling-measurement arc, 2026-08-02): N=0 is the per-cell baseline
-    // control (see the mission protocol), the rest is the requested N sweep. Tops out at
-    // SdfVm.SdfProgramBuilder.MaxInstances (16384) — unlike Storm's motion rungs (capped at MaxStormInstances=4096),
-    // DynamicMatrix is the workload this ceiling arc measures TO the full instance cap, moving or static.
+    // The DYNAMIC MATRIX ladder: N=0 is the per-cell baseline control, the rest is the requested N sweep. Tops out
+    // at SdfVm.SdfProgramBuilder.MaxInstances (16384) — unlike Storm's motion rungs (capped at
+    // MaxStormInstances=4096), DynamicMatrix measures to the full instance cap, moving or static.
     private static readonly int[] DynamicMatrixLadder = [0, 256, 1024, 4096, 16384];
 
-    /// <summary>Builds the SHAPES ladder — one config per catalogued <see cref="SdfDebugShapeKind"/> (fullscreen, no
-    /// modifier). This IS <c>sdf.bench shapes</c>' battery.</summary>
+    /// <summary>Builds the shapes ladder — one config per catalogued <see cref="SdfDebugShapeKind"/> (fullscreen, no
+    /// modifier). This is <c>sdf.bench shapes</c>' battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildShapesLadder() {
         var configs = new List<SdfBenchConfig>();
 
@@ -42,14 +41,14 @@ public static class SdfBenchWorkloads {
         return configs;
     }
 
-    /// <summary>A single SHAPES config for one <paramref name="shape"/> (fullscreen, no modifier) — the named
-    /// workload a caller (e.g. a demo bench-scene adapter) swaps in directly at ONE explicit selection, without
+    /// <summary>A single shapes config for one <paramref name="shape"/> (fullscreen, no modifier) — the named
+    /// workload a caller (e.g. a demo bench-scene adapter) swaps in directly at one explicit selection, without
     /// running the whole ladder.</summary>
     public static SdfBenchConfig Shape(SdfDebugShapeKind shape) =>
         new(Label: shape.ToString(), Workload: SdfBenchWorkload.Shapes, Shape: shape, Op: SdfBenchOp.Baseline, InstanceCount: 0);
 
-    /// <summary>Builds the OPS ladder — a fixed torus plus exactly one modifier per row (the first row is the bare
-    /// subject), so each row's marginal cost reads against the baseline. This IS <c>sdf.bench ops</c>' battery.</summary>
+    /// <summary>Builds the ops ladder — a fixed torus plus exactly one modifier per row (the first row is the bare
+    /// subject), so each row's marginal cost reads against the baseline. This is <c>sdf.bench ops</c>' battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildOpsLadder() {
         var configs = new List<SdfBenchConfig>();
 
@@ -60,7 +59,7 @@ public static class SdfBenchWorkloads {
         return configs;
     }
 
-    /// <summary>A single OPS config for one <paramref name="op"/> against the fixed torus subject (the label reads
+    /// <summary>A single ops config for one <paramref name="op"/> against the fixed torus subject (the label reads
     /// "baseline (torus)" for <see cref="SdfBenchOp.Baseline"/>, the op name otherwise).</summary>
     public static SdfBenchConfig Op(SdfBenchOp op) {
         var label = ((op == SdfBenchOp.Baseline) ? "baseline (torus)" : op.ToString());
@@ -68,8 +67,8 @@ public static class SdfBenchWorkloads {
         return new SdfBenchConfig(Label: label, Workload: SdfBenchWorkload.Ops, Shape: SdfDebugShapeKind.Torus, Op: op, InstanceCount: 0);
     }
 
-    /// <summary>A single INSTANCES config — <paramref name="count"/> real instances of <paramref name="shape"/> in a
-    /// 3D grid, clamped to [1, <see cref="SdfVm.SdfProgramBuilder.MaxInstances"/>]. This IS the rung a caller (e.g. a
+    /// <summary>A single instances config — <paramref name="count"/> real instances of <paramref name="shape"/> in a
+    /// 3D grid, clamped to [1, <see cref="SdfVm.SdfProgramBuilder.MaxInstances"/>]. This is the rung a caller (e.g. a
     /// demo bench-scene adapter) requests directly (the 1024 rung).</summary>
     public static SdfBenchConfig Instances(SdfDebugShapeKind shape, int count) {
         var n = Math.Clamp(value: count, min: 1, max: SdfVm.SdfProgramBuilder.MaxInstances);
@@ -85,8 +84,8 @@ public static class SdfBenchWorkloads {
         return new SdfBenchConfig(Label: $"rigs x{n}", Workload: SdfBenchWorkload.Rigs, Shape: SdfDebugShapeKind.Box, Op: SdfBenchOp.Baseline, InstanceCount: n);
     }
 
-    /// <summary>Builds the INSTANCES SWEEP ladder — the default ladder (64/256/1024/4096/16384) of
-    /// <paramref name="shape"/>, one config per rung. This IS <c>sdf.bench sweep</c>'s battery.</summary>
+    /// <summary>Builds the instances sweep ladder — the default ladder (64/256/1024/4096/16384) of
+    /// <paramref name="shape"/>, one config per rung. This is <c>sdf.bench sweep</c>'s battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildInstancesSweepLadder(SdfDebugShapeKind shape) {
         var configs = new List<SdfBenchConfig>();
 
@@ -97,15 +96,15 @@ public static class SdfBenchWorkloads {
         return configs;
     }
 
-    /// <summary>A single CARVES config — <paramref name="count"/> carves of <paramref name="family"/> against the
-    /// fixed sphere subject. This IS the rung a caller (e.g. a demo bench-scene adapter) requests directly (the 1024
+    /// <summary>A single carves config — <paramref name="count"/> carves of <paramref name="family"/> against the
+    /// fixed sphere subject. This is the rung a caller (e.g. a demo bench-scene adapter) requests directly (the 1024
     /// rung, clustered family).</summary>
     public static SdfBenchConfig Carve(SdfBenchCarveFamily family, int count) =>
         new(Label: $"carves {family.ToString().ToLowerInvariant()} x{count}", Workload: SdfBenchWorkload.Carves, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: count, CarveFamily: family);
 
-    /// <summary>Builds the CARVES ladder — a fixed ~2-unit subject + floor bitten by the carve ladder (16/64/256/
-    /// 1024/4096) in TWO families (clustered = the honest views-cost worst case; scattered = the beam-wall control),
-    /// plus ONE smooth rung (256 clustered SmoothSubtraction carves). This IS <c>sdf.bench carves</c>'s battery.</summary>
+    /// <summary>Builds the carves ladder — a fixed ~2-unit subject + floor bitten by the carve ladder (16/64/256/
+    /// 1024/4096) in two families (clustered = the honest views-cost worst case; scattered = the beam-wall control),
+    /// plus one smooth rung (256 clustered SmoothSubtraction carves). This is <c>sdf.bench carves</c>'s battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildCarvesLadder() {
         var configs = new List<SdfBenchConfig>();
 
@@ -122,9 +121,9 @@ public static class SdfBenchWorkloads {
         return configs;
     }
 
-    /// <summary>A single STORM config for one <paramref name="mode"/> at <paramref name="count"/> instances — the
+    /// <summary>A single storm config for one <paramref name="mode"/> at <paramref name="count"/> instances — the
     /// label mirrors the ladder's own (<c>storm x{n}</c>, <c>storm rebuild x{n}</c>, <c>storm camera x{n}</c>). This
-    /// IS the rung a caller (e.g. a demo bench-scene adapter) requests directly (the 1024 rung).</summary>
+    /// is the rung a caller (e.g. a demo bench-scene adapter) requests directly (the 1024 rung).</summary>
     public static SdfBenchConfig StormRung(SdfBenchStormMode mode, int count) {
         var suffix = mode switch {
             SdfBenchStormMode.Rebuild => " rebuild",
@@ -135,10 +134,10 @@ public static class SdfBenchWorkloads {
         return new SdfBenchConfig(Label: $"storm{suffix} x{count}", Workload: SdfBenchWorkload.Storm, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: count, StormMode: mode);
     }
 
-    /// <summary>Builds the STORM ladder — the motion/churn ladder. Three families, one battery: the MOTION ladder
-    /// (64/256/1024/4096 DYNAMIC instances all moving per frame — the always-list cliff), the REBUILD ladder (the
-    /// same counts STATIC but a full program rebuild every frame — the upload/pack ceiling), and one CAMERA rung (a
-    /// mid-size static workload under a pose sweeping a full revolution across the sample window). This IS
+    /// <summary>Builds the storm ladder — the motion/churn ladder. Three families, one battery: the motion ladder
+    /// (64/256/1024/4096 dynamic instances all moving per frame — the always-list cliff), the rebuild ladder (the
+    /// same counts static but a full program rebuild every frame — the upload/pack ceiling), and one camera rung (a
+    /// mid-size static workload under a pose sweeping a full revolution across the sample window). This is
     /// <c>sdf.bench storm</c>'s battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildStormLadder() {
         var configs = new List<SdfBenchConfig>();
@@ -156,9 +155,9 @@ public static class SdfBenchWorkloads {
         return configs;
     }
 
-    /// <summary>A single DYNAMIC MATRIX config — <paramref name="count"/> spheres placed by <paramref name="placement"/>,
-    /// either baked STATIC (grid-invariant, no per-frame CPU rebuild) or MOVING (dynamic slots orbiting per produced
-    /// frame — forces the per-frame instance-grid rebuild). This IS the rung a caller (e.g. the ceiling-measurement
+    /// <summary>A single dynamic matrix config — <paramref name="count"/> spheres placed by <paramref name="placement"/>,
+    /// either baked static (grid-invariant, no per-frame CPU rebuild) or moving (dynamic slots orbiting per produced
+    /// frame — forces the per-frame instance-grid rebuild). This is the rung a caller (e.g. the ceiling-measurement
     /// harness) requests directly.</summary>
     public static SdfBenchConfig DynamicMatrixRung(SdfBenchPlacement placement, bool moving, int count) {
         var n = Math.Clamp(value: count, min: 0, max: SdfVm.SdfProgramBuilder.MaxInstances);
@@ -172,9 +171,9 @@ public static class SdfBenchWorkloads {
         return new SdfBenchConfig(Label: $"matrix {placementToken} {movingToken} x{n}", Workload: SdfBenchWorkload.DynamicMatrix, Shape: SdfDebugShapeKind.Sphere, Op: SdfBenchOp.Baseline, InstanceCount: n, Placement: placement, Moving: moving);
     }
 
-    /// <summary>Builds the DYNAMIC MATRIX ladder — N ∈ {0, 256, 1024, 4096, 16384} × <see cref="SdfBenchPlacement"/>
+    /// <summary>Builds the dynamic matrix ladder — N ∈ {0, 256, 1024, 4096, 16384} × <see cref="SdfBenchPlacement"/>
     /// {Clustered, Uniform, FarCorners} × {static, moving}, one config per cell (30 rows). The N=0 rung of every
-    /// (placement, moving) pair is that cell's baseline control. This IS <c>sdf.bench matrix</c>'s battery.</summary>
+    /// (placement, moving) pair is that cell's baseline control. This is <c>sdf.bench matrix</c>'s battery.</summary>
     public static IReadOnlyList<SdfBenchConfig> BuildDynamicMatrixLadder() {
         var configs = new List<SdfBenchConfig>();
 

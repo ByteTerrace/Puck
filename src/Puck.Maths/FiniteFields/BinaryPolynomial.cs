@@ -51,9 +51,9 @@ public readonly record struct BinaryPolynomial :
     public ulong Bits { get; }
     /// <summary>Gets the largest exponent carrying a non-zero coefficient, or minus one for the zero polynomial.</summary>
     public int Degree => (MaximumDegree - BitOperations.LeadingZeroCount(value: Bits));
-    /// <summary>Gets whether this is the constant polynomial one.</summary>
+    /// <summary>Gets a value indicating whether this is the constant polynomial one.</summary>
     public bool IsOne => (1UL == Bits);
-    /// <summary>Gets whether this is the zero polynomial.</summary>
+    /// <summary>Gets a value indicating whether this is the zero polynomial.</summary>
     public bool IsZero => (0UL == Bits);
 
     /// <summary>Adds two binary polynomials; subtraction is the same operation.</summary>
@@ -222,7 +222,7 @@ public readonly record struct BinaryPolynomial :
 
         return left;
     }
-    /// <summary>Gets whether this non-constant polynomial is irreducible over the two-element field.</summary>
+    /// <summary>Returns a value indicating whether this non-constant polynomial is irreducible over the two-element field.</summary>
     /// <returns><see langword="true"/> when the polynomial is irreducible; otherwise <see langword="false"/>.</returns>
     /// <remarks>
     /// Every degree-one polynomial is irreducible and is reported so directly. Above degree one a zero constant term
@@ -237,7 +237,7 @@ public readonly record struct BinaryPolynomial :
 
         return BinaryField<ulong>.FromModulus(modulus: this).IsIrreducible();
     }
-    /// <summary>Gets whether this polynomial is primitive over the two-element field.</summary>
+    /// <summary>Returns a value indicating whether this polynomial is primitive over the two-element field.</summary>
     /// <returns><see langword="true"/> when the polynomial is irreducible and its root generates the whole multiplicative group of the quotient field; otherwise <see langword="false"/>. A polynomial with a zero constant term is never primitive, the indeterminate <c>t</c> included.</returns>
     /// <remarks>
     /// <para>

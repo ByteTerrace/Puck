@@ -3,7 +3,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-beam.comp</c> (tile-cull
 /// cone-march prepass), <c>sdf-instance-cull.comp</c> (the per-tile instance-mask pass — its own kernel so its cell
-/// walk's register footprint never taxes the cone march's occupancy), <c>sdf-cull-args.comp</c> (GPU-written INDIRECT
+/// walk's register footprint never taxes the cone march's occupancy), <c>sdf-cull-args.comp</c> (GPU-written indirect
 /// dispatch args: the surviving-tile bbox), <c>sdf-world-views.comp</c> (per-view render, dispatched indirectly from
 /// those args) plus its core-ops compiled variant <c>sdf-world-views-core.comp</c> (the exotic-ISA strip
 /// <see cref="SdfWorldEngine.UploadProgram"/> selects per program — see <see cref="SdfViewsKernelVariant"/>), and

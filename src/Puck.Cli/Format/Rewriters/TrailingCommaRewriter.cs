@@ -4,15 +4,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Puck.Cli.Format.Rewriters;
 
-// The trailing-comma normalizer (the `trailing-comma` pass): a MULTI-LINE initializer (object /
-// collection / array, where the last element and the closing brace sit on different source lines) gets a
-// trailing comma after its last element, so adding or reordering a member later is a one-line diff —
-//   new SomeOptions {
-//       Count = count,
-//       Kind = kind,
-//   }
-// Single-line initializers (`{ A = 1, B = 2 }`) are left alone — a trailing comma there reads oddly —
-// and an initializer that already ends with a comma is untouched, so the pass is idempotent.
+// The `trailing-comma` pass: a multi-line initializer (last element and closing brace on different source
+// lines) gets a trailing comma after its last element, so a later add/reorder is a one-line diff. Single-line
+// initializers are left alone, and an initializer that already ends with a comma is untouched (idempotent).
 internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node) {
         var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!;

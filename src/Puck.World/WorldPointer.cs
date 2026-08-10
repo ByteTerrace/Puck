@@ -5,8 +5,8 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// Every local seat's live POINTER state — where the cursor is, how far it moved, which buttons are down, and how
-/// far the wheel turned — one slot per <see cref="PlayerRoster.MaxSlots"/> entry. This is BROWSING state, the
+/// Every local seat's live pointer state — where the cursor is, how far it moved, which buttons are down, and how
+/// far the wheel turned — one slot per <see cref="PlayerRoster.MaxSlots"/> entry. This is browsing state, the
 /// pointer's twin of <see cref="WorldCameraOrbit"/>: session-only, never persisted, never authored on a document,
 /// and never an input the deterministic simulation reads. A pointer act reaches the simulation only when a consumer
 /// of this state dispatches an ordinary console verb, through the same door a typed line uses.
@@ -15,14 +15,14 @@ namespace Puck.World;
 /// <para>Written by <see cref="WorldPointerSink"/> alone (the window-pump thread) and read by any number of
 /// consumers, so cross-thread safety is the only contract. Position and button state are plain
 /// <see cref="Volatile"/> reads/writes on independent per-slot scalars — no lock, exactly as
-/// <see cref="WorldCameraOrbit"/> reasons — while the two ACCUMULATORS (motion and wheel) are interlocked, because
+/// <see cref="WorldCameraOrbit"/> reasons — while the two accumulators (motion and wheel) are interlocked, because
 /// each is a read-modify-write a concurrent producer could otherwise lose an increment from.</para>
-/// <para>Motion and wheel DRAIN on read (<see cref="TakeMotion"/>, <see cref="TakeWheel"/>): they answer "what
+/// <para>Motion and wheel drain on read (<see cref="TakeMotion"/>, <see cref="TakeWheel"/>): they answer "what
 /// happened since you last asked", so two consumers of the same seat's motion would each see part of it. That is
 /// deliberate and is why a drained accumulator is not a general read-back — position and buttons, which every
 /// consumer may read freely, are the non-destructive half.</para>
 /// <para>The mouse carries no <see cref="Puck.Commands.InputDeviceId"/> of its own, so it rides whichever seat the
-/// KEYBOARD currently owns; <see cref="WorldPointerSlot.Resolve"/> resolves that slot at every use rather than
+/// keyboard currently owns; <see cref="WorldPointerSlot.Resolve"/> resolves that slot at every use rather than
 /// caching it.</para>
 /// </remarks>
 internal sealed class WorldPointer {
@@ -48,7 +48,7 @@ internal sealed class WorldPointer {
     /// <see cref="Vector2.Zero"/> before the platform has reported one.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <remarks>X and Y are independent <see cref="Volatile"/> scalars, so a read racing a concurrent
-    /// <see cref="SetPosition"/> can observe a TORN pair — one axis from the new report, the other still from the
+    /// <see cref="SetPosition"/> can observe a torn pair — one axis from the new report, the other still from the
     /// prior one. Acceptable here: this is presentation-only browsing state (see the class remarks), the tear is at
     /// most one frame's worth of drift, and the very next read is consistent again — no consumer accumulates
     /// position across reads the way <see cref="TakeMotion"/>'s callers do.</remarks>
@@ -73,16 +73,16 @@ internal sealed class WorldPointer {
         return (InRange(slot: slot) && ((uint)button < 3) && ((Volatile.Read(location: ref m_buttons[slot]) & (1 << button)) != 0));
     }
 
-    /// <summary>Gets a seat's SYSTEM-RELEASE generation — a monotonic count of how many times this store has
-    /// force-cleared the seat's held buttons WITHOUT a genuine release event (<see cref="ReleaseButtons"/>, and so
+    /// <summary>Gets a seat's system-release generation — a monotonic count of how many times this store has
+    /// force-cleared the seat's held buttons without a genuine release event (<see cref="ReleaseButtons"/>, and so
     /// <see cref="ReleaseAllButtons"/>'s two triggers: OS focus loss, a keyboard seat reassignment). Non-destructive,
     /// like <see cref="Position"/> and <see cref="IsButtonDown"/>.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <remarks>The consumer contract: capture this value when a press arms something, and compare it again when a
     /// later frame's diff observes the matching release edge. If the count advanced in between, that release is
-    /// SYNTHETIC — the button state was force-cleared by the store, never genuinely lifted by the user — and an
-    /// edge-deriving consumer (a drag-drop gesture reading held-state diffs, say) must treat it as a CANCEL, never a
-    /// COMMIT: composing a real release-triggered action (a drop, at wherever the cursor happens to sit) onto a
+    /// synthetic — the button state was force-cleared by the store, never genuinely lifted by the user — and an
+    /// edge-deriving consumer (a drag-drop gesture reading held-state diffs, say) must treat it as a cancel, never a
+    /// commit: composing a real release-triggered action (a drop, at wherever the cursor happens to sit) onto a
     /// focus-loss or seat reassignment the user never intended as a release would author state they never asked
     /// for.</remarks>
     public int SystemReleaseCount(int slot) {
@@ -90,7 +90,7 @@ internal sealed class WorldPointer {
     }
 
     /// <summary>Takes and clears a seat's accumulated relative motion in client pixels — everything the platform
-    /// reported since the last call. DRAINS: a second call with no intervening motion answers
+    /// reported since the last call. Drains: a second call with no intervening motion answers
     /// <see cref="Vector2.Zero"/>.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public Vector2 TakeMotion(int slot) {
@@ -100,7 +100,7 @@ internal sealed class WorldPointer {
     }
 
     /// <summary>Takes and clears a seat's accumulated wheel rotation in notches (positive away from the user) —
-    /// everything the platform reported since the last call. DRAINS, exactly as <see cref="TakeMotion"/> does.</summary>
+    /// everything the platform reported since the last call. Drains, exactly as <see cref="TakeMotion"/> does.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <exception cref="InvalidOperationException">No <see cref="IWorldWheelConsumer"/> is registered. While that is
     /// true, <see cref="WorldPointerSink"/> drains this accumulator itself on arrival (see its <c>Observe</c>
@@ -198,7 +198,7 @@ internal sealed class WorldPointer {
         } while (Interlocked.CompareExchange(location1: ref m_buttons[slot], value: updated, comparand: held) != held);
     }
 
-    /// <summary>Drops every held button for a seat WITHOUT a genuine release event — the OS-focus-loss primitive,
+    /// <summary>Drops every held button for a seat without a genuine release event — the OS-focus-loss primitive,
     /// also reused by <see cref="ReleaseAllButtons"/> for a keyboard seat reassignment. A press whose release is
     /// delivered to another window (or whose seat the mouse no longer rides) would otherwise leave the button held
     /// forever, arming a drag that the user has already let go of. Advances <see cref="SystemReleaseCount"/> so a
@@ -211,13 +211,13 @@ internal sealed class WorldPointer {
         }
     }
 
-    /// <summary>Drops every held button for EVERY seat (each seat's own <see cref="SystemReleaseCount"/> advances by
+    /// <summary>Drops every held button for every seat (each seat's own <see cref="SystemReleaseCount"/> advances by
     /// one). The mouse carries no device identity of its own and always rides whichever seat currently owns the
     /// keyboard (see the class remarks), so only that one seat's button state is ever live; every other seat's bits
     /// are already leftover from whenever it last owned the keyboard. Clearing all of them can therefore never
     /// disturb a real in-progress drag, which is what makes this safe to use for a trigger where pinpointing the one
     /// stale seat is not worth it: OS focus loss, and the keyboard itself changing seats (the latter would otherwise
-    /// strand the OLD seat's held bit forever — the mouse event stream has already moved to the new seat, so no
+    /// strand the old seat's held bit forever — the mouse event stream has already moved to the new seat, so no
     /// ordinary button-up can ever reach it again).</summary>
     public void ReleaseAllButtons() {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {

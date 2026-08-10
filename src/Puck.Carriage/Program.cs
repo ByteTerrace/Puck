@@ -27,7 +27,7 @@ internal static class Program {
     /// <remarks>
     /// The exit-code contract is normative (§17): <b>0</b> when every check passed, <b>1</b> when at least
     /// one failed, <b>2</b> when the command line was not understood. Terminating any other way — an
-    /// unhandled exception above all — is NOT a permitted way to report a failed check, because a crash and
+    /// unhandled exception above all — is not a permitted way to report a failed check, because a crash and
     /// a refusal are different verdicts and a cross-checking implementer cannot tell them apart from a stack
     /// trace. Both verbs are already guarded internally; the catch here is the backstop that makes the
     /// contract unconditional.
@@ -576,13 +576,12 @@ internal static class Program {
 
         ExpectRefuse(scenario: "depth zero: bindings attached to a directly-pinned claim are refused, never ignored", result: directWithChainResult, reasonMustContain: "no bindings");
 
-        // The domain check compares the claim's domain against the PINNED ENTRY'S domain, never against
-        // itself (§11 step 3). Read as "the domain the claim expects" the check is a tautology, and it was
-        // implemented as one in the other implementation. This is the discriminating case, and it differs
-        // from the depth control at the top of this method in exactly ONE field: the same subject, the same
-        // signing key, the same two bindings, the same trust list, a genuine signature — and a header naming
-        // a domain nothing pins. A tautological check compares that field with itself and accepts; a check
-        // against the pin finds no entry addressing that domain and refuses before any signature work.
+        // The domain check compares the claim's domain against the pinned entry's domain, never against itself
+        // (§11 step 3) — read as "the domain the claim expects", the check would be a tautology that always
+        // accepts. This scenario differs from the depth control at the top of this method in exactly one field:
+        // the same subject, key, bindings, trust list, and a genuine signature — but a header naming a domain
+        // nothing pins. A check against the pin finds no entry addressing that domain and refuses before any
+        // signature work.
         var foreignDomainKeys = MintDomainKeys(subject: keys.Subject);
         var foreignDomainClaim = CarriageSigner.SignClaim(
             codec: codec,
@@ -638,11 +637,10 @@ internal static class Program {
             messageMustContain: "twice in the same mode"
         );
 
-        // The collision rule is SLOT identity, not key identity — the XML used to say the latter while the
-        // code did the former, so a reader could conclude a rotation overlap was legal. It is not: the
-        // lookups match on (domain, subject, mode) and return the first hit, so a second entry in one slot
-        // could never be reached and its reach could never govern. Two DIFFERENT keys for one subject is
-        // therefore the collision, and refusing it is refusing a list with an inert entry in it.
+        // The collision rule is slot identity, not key identity: lookups match on (domain, subject, mode) and
+        // return the first hit, so a second entry in one slot could never be reached and its reach could never
+        // govern. Two different keys for one subject is therefore the collision, and refusing it is refusing a
+        // list with an inert entry in it.
         using var rotatedKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
 
         var rotatedSpki = rotatedKey.ExportSubjectPublicKeyInfo();
@@ -676,7 +674,7 @@ internal static class Program {
 
     /// <summary>
     /// The window's boundaries and the sequence mark's real scope. The interesting case is the last pair:
-    /// a DIRECTED claim carrying a sequence is checked against the mark exactly as a bearer claim is,
+    /// a directed claim carrying a sequence is checked against the mark exactly as a bearer claim is,
     /// because binding an audience defends against replay elsewhere and never against replay at the
     /// audience itself.
     /// </summary>
@@ -732,10 +730,9 @@ internal static class Program {
         ExpectRefuse(scenario: "directed claim + sequence: the SECOND presentation is refused — audience and sequence are independent, not exclusive", result: VerifyAt(envelope: directedWithSequence, store: directedStore), reasonMustContain: "sequence replay");
         ExpectRefuse(scenario: "directed claim + sequence: no store supplied, so the declared replay defence cannot be honoured", result: VerifyAt(envelope: directedWithSequence, store: null), reasonMustContain: "no sequence store");
 
-        // The sequence check is ONE atomic store call, so the same bearer claim presented concurrently is
-        // accepted exactly once. The seam used to be TryGetMark -> compare -> Advance, and this scenario is
-        // the reason it is not: a store that lets every caller read before any caller writes turns the race
-        // from intermittent into certain, and under the old shape BOTH presentations were accepted.
+        // The sequence check is one atomic store call, so the same bearer claim presented concurrently is
+        // accepted exactly once: a store that let every caller read before any caller wrote would turn the race
+        // from intermittent into certain, accepting both presentations.
         var bearerOnce = SignTestClaim(codec: codec, keys: keys, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 42UL, text: "one bearer claim, two receivers");
         var contendedStore = new LockstepSequenceStore(participants: 4);
         var contendedResults = new CarriageVerifyResult[4];
@@ -773,11 +770,9 @@ internal static class Program {
         );
 
         // A store that cannot decide — unreachable, unreadable, or unable to record the advance durably —
-        // REFUSES the claim (§8). "Accept because the store is down" is the reading that inverts the one
-        // check whose purpose is to make a claim usable once, and it is a reading somebody takes: the
-        // sentence "durable before admission" implies refuse without ever saying so. Note what this is NOT:
-        // the failure must not propagate out of the verifier either, or a receiver whose database blinked
-        // stops producing verdicts at all.
+        // refuses the claim (§8): accepting instead would invert the one check whose purpose is to make a claim
+        // usable once. The failure must not propagate out of the verifier either, or a receiver whose database
+        // blinked stops producing verdicts at all.
         var unavailable = SignTestClaim(codec: codec, keys: keys, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 99UL, text: "presented while the store is down");
 
         ExpectRefuse(
@@ -842,7 +837,7 @@ internal static class Program {
     // ---- Parser laxity ---------------------------------------------------------------------------------
 
     /// <summary>
-    /// What the two decoders do with bytes nobody honest produced. Everything here runs against BOTH
+    /// What the two decoders do with bytes nobody honest produced. Everything here runs against both
     /// codecs, because "the byte layout is all that must agree" is only true if each side refuses the same
     /// non-shapes.
     /// </summary>
@@ -1103,8 +1098,8 @@ internal static class Program {
     // ---- Signature-level attacks -----------------------------------------------------------------------
 
     /// <summary>
-    /// What the signature field itself will and will not accept. The malleability case is a NEGATIVE
-    /// result recorded on purpose: it passes by ACCEPTING, which is the property ECDSA actually has, and
+    /// What the signature field itself will and will not accept. The malleability case is a negative
+    /// result recorded on purpose: it passes by accepting, which is the property ECDSA actually has, and
     /// the harness records it so nobody later builds replay defence on signature bytes.
     /// </summary>
     private static void RunSignatureLevelScenarios() {
@@ -1355,12 +1350,10 @@ internal static class Program {
                 : $"nonce differs: {nonceDiffers}, ephemeral key differs: {ephemeralDiffers}")
         );
 
-        // The whole sealed ENVELOPE, under both codecs: a sealed payload riding inside an ordinary signed
-        // envelope, encoded, decoded, chain-verified, and opened. This is the shape the interchange fixture
-        // exports, and until it existed §14's key derivation was never exercised end to end by anything —
-        // the five interchange files carried no ciphertext at all, so an implementation could disagree
-        // about the salt, the info label, the output length, the tag length, or raw-versus-hashed agreement
-        // and find out only from a tag mismatch indistinguishable from tampering.
+        // The whole sealed envelope, under both codecs: a sealed payload riding inside an ordinary signed
+        // envelope, encoded, decoded, chain-verified, and opened — the shape the interchange fixture exports,
+        // exercising §14's key derivation (salt, info label, output length, tag length, raw-versus-hashed
+        // agreement) end to end rather than only through a tag-mismatch check indistinguishable from tampering.
         foreach (var envelopeCodec in new ICarriageCodec[] { new FixedLayoutCarriageCodec(), new CborCarriageCodec() }) {
             RunSealedEnvelopeRoundTrip(codec: envelopeCodec);
         }
@@ -1437,12 +1430,12 @@ internal static class Program {
 
     /// <summary>
     /// Exports the cross-implementation fixture and verifies it back, which is the only thing that proves
-    /// the fixture the OTHER implementation is handed actually round-trips. It had never been exercised by
+    /// the fixture the other implementation is handed actually round-trips. It had never been exercised by
     /// the harness at all: <c>export</c> and <c>verify</c> were reachable only as command-line modes, so a
     /// fixture that could not be verified would have been discovered by the other team.
     /// </summary>
     /// <remarks>
-    /// The broken-fixture cases below are the §17 tool protocol's obligation, and they check the EXIT CODE
+    /// The broken-fixture cases below are the §17 tool protocol's obligation, and they check the exit code
     /// rather than the console text: 0 means every check passed and non-zero means at least one did not, and
     /// a crash is not a permitted third answer. A corrupt <c>claim.envelope</c> used to escape
     /// <see cref="CarriageInterchange.Verify"/> as an unhandled <see cref="FormatException"/> and take the
@@ -1555,7 +1548,7 @@ internal static class Program {
         }
     }
 
-    /// <summary>Copies a fixture, breaks it, and requires <see cref="CarriageInterchange.Verify"/> to report a non-zero exit WITHOUT throwing.</summary>
+    /// <summary>Copies a fixture, breaks it, and requires <see cref="CarriageInterchange.Verify"/> to report a non-zero exit without throwing.</summary>
     /// <param name="scenario">The case's name.</param>
     /// <param name="directory">The intact fixture to copy.</param>
     /// <param name="break_">What to do to the copy.</param>
@@ -1626,7 +1619,7 @@ internal static class Program {
     // ---- Bytes that arrived, versus bytes re-derived -----------------------------------------------------
 
     /// <summary>
-    /// The class of defect that comes from verifying a RE-ENCODING of a decoded model rather than the bytes
+    /// The class of defect that comes from verifying a re-encoding of a decoded model rather than the bytes
     /// that actually arrived. Every case here was an acceptance before
     /// <see cref="SignedCarriageEnvelope.SignedPortion"/> existed: the fixed layout read a presence flag as
     /// "non-zero means present", so flipping the subject flag at offset 33 from <c>0x01</c> to <c>0x02</c>

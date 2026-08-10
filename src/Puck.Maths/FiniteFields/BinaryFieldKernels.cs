@@ -29,7 +29,7 @@ internal static class BinaryFieldKernels {
     /// <remarks>
     /// Building the transform matrix costs eight scalar field multiplies and sixty-four bit placements. A rung whose
     /// vector loop cannot complete a single iteration pays all of that and then hands the whole region back to the
-    /// scalar loop, so widest-first is the right order only AMONG RUNGS THAT CAN ACTUALLY RUN: a thirty-byte region on a
+    /// scalar loop, so widest-first is the right order only among rungs that can actually run: a thirty-byte region on a
     /// machine carrying the 512-bit transform belongs on the scalar loop, not on a 512-bit rung that vectorizes nothing.
     /// Two vectors is where the arithmetic turns over — thirty-two elements the vector loop covers against a setup worth
     /// something under that many multiplies. Like <see cref="SplitTableAmortizationVectors"/> this is a throughput
@@ -39,7 +39,7 @@ internal static class BinaryFieldKernels {
     private const int AffineMatrixAmortizationVectors = 2;
     /// <summary>The number of whole vectors a region must span before a sixteen-bit affine rung is preferred to the next rung down.</summary>
     /// <remarks>
-    /// This width needs FOUR matrices rather than one — the sixteen-by-sixteen bit matrix in eight-by-eight blocks — so
+    /// This width needs four matrices rather than one — the sixteen-by-sixteen bit matrix in eight-by-eight blocks — so
     /// its setup is thirty-two field multiplies, exactly what the nibble-split tables cost, which is why the threshold is
     /// the same number of vectors <see cref="SplitTableAmortizationVectors"/> asks for. It is a throughput tuning value
     /// on the same terms.
@@ -241,11 +241,8 @@ internal static class BinaryFieldKernels {
     /// <remarks>
     /// The Itoh–Tsujii Frobenius addition chain: <c>value^(2^degree - 2)</c> is assembled from the doubling identity
     /// <c>a^(2^2i - 1) = (a^(2^i - 1))^(2^i) * a^(2^i - 1)</c>, walked over the binary expansion of <c>degree - 1</c>.
-    /// The chain's shape therefore depends only on the degree and never on the value; the reduction inside each product
-    /// still folds until its remainder clears, so the invariant is the operation sequence, not the running time. It
-    /// replaces roughly half of a naive Fermat exponentiation's general multiplies with repeated squarings; on the
-    /// hardware tier a squaring is itself a carryless multiply, so the saving is a factor near two rather than the
-    /// order of magnitude a "squarings are free" framing would suggest.
+    /// The chain's shape depends only on the degree, never on the value, so the invariant is the operation sequence,
+    /// not the running time; the reduction inside each product still folds until its remainder clears.
     /// </remarks>
     /// <exception cref="DivideByZeroException"><paramref name="value"/> is zero.</exception>
     internal static T Inverse<T>(T value, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
@@ -279,7 +276,7 @@ internal static class BinaryFieldKernels {
         // `result` is value^(2^(degree - 1) - 1); one further Frobenius step lands on value^(2^degree - 2).
         return Multiply(left: result, right: result, degree: degree, tail: tail);
     }
-    /// <summary>Gets whether the modulus <c>t^degree + tail</c> is irreducible over the two-element field.</summary>
+    /// <summary>Determines whether the modulus <c>t^degree + tail</c> is irreducible over the two-element field.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
     /// <param name="degree">The field's degree.</param>
     /// <param name="tail">The modulus tail.</param>
@@ -305,7 +302,7 @@ internal static class BinaryFieldKernels {
 
         return (power == indeterminate);
     }
-    /// <summary>Gets whether the instruction set a region-scaling rung is built on is available on the current machine.</summary>
+    /// <summary>Determines whether the instruction set a region-scaling rung is built on is available on the current machine.</summary>
     /// <param name="tier">The rung to test.</param>
     /// <returns><see langword="true"/> when the rung may be executed; otherwise <see langword="false"/>.</returns>
     /// <remarks>

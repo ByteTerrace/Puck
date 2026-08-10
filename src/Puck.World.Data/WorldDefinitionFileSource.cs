@@ -3,24 +3,48 @@ using System.Text;
 
 namespace Puck.World;
 
-/// <summary>Loads and validates a world document from a file, ALWAYS alongside the canonical content-address pin of
+/// <summary>Loads and validates a world document from a file, always alongside the canonical content-address pin of
 /// the exact bytes read — the one implementation both the console's <c>world.load</c>/<c>world.reload</c> handlers
-/// (<c>Puck.World.WorldMutationCommandModule</c>, via <c>WorldDefinitionLoader.TryLoadFile</c>) and the replay tape's
-/// offline re-drive (<c>Puck.World.WorldReplaySnapshot.Drive</c>, through <c>WorldServer.ApplyRebuild</c>) share, so a
-/// live read and a re-drive's later re-read of the SAME path compute the hash the SAME way. Puck.World.Server depends
-/// on Puck.World.Data already, so this is the lowest layer both can reach without a new project reference.</summary>
+/// (<c>Puck.World.WorldMutationCommandModule</c>, via <c>WorldDefinitionLoader.TryLoadFile</c>) and the replay
+/// tape's offline re-drive (<c>Puck.World.WorldReplaySnapshot.Drive</c>, through <c>WorldServer.ApplyRebuild</c>)
+/// share, so a live read and a re-drive's later re-read of the same path compute the hash the same way.
+/// Puck.World.Server depends on Puck.World.Data already, so this is the lowest layer both can reach without a new
+/// project reference.</summary>
 public static class WorldDefinitionFileSource {
-    /// <summary>Loads and validates a world document from <paramref name="path"/>, returning the canonical
-    /// <c>sha256-64/{hex}</c> content-address pin of the EXACT bytes consumed — never a re-serialization of the
-    /// parsed document, so a byte the parse ignores (whitespace, member order) still moves the pin. Mirrors
-    /// <c>WorldDefinitionLoader.TryLoadFile</c>'s three-class failure reporting (absent, unreadable, invalid); a
-    /// broad catch is deliberate — a load boundary must never throw out of this method.</summary>
+    /// <summary>Loads, migrates, and validates a world document from <paramref name="path"/>, returning the
+    /// canonical <c>sha256-64/{hex}</c> content-address pin of the exact bytes consumed — never a re-serialization
+    /// of the parsed document, so a byte the parse ignores (whitespace, member order) still moves the pin, and
+    /// never a re-serialization of a migrated document either: <see cref="WorldDefinitionMigrations.Apply"/> runs
+    /// on the in-memory parse only, between parsing and validating, so a pre-field save on disk still hashes to
+    /// what its bytes actually are. Mirrors <c>WorldDefinitionLoader.TryLoadFile</c>'s three-class failure
+    /// reporting (absent, unreadable, invalid); a broad catch is deliberate — a load boundary must never throw out
+    /// of this method.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
     /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="neighbours">The injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/>
+    /// reads for a cross-document border-margin check — see its own remarks. Optional here (unlike
+    /// <see cref="WorldDefinitionValidator.Validate"/>'s own required parameter): this method loads arbitrary files
+    /// for purposes that mostly have nothing to do with border margins (catalog scans, replay re-reads, tests), so
+    /// <see langword="null"/> (the default) is the ordinary case. A caller that does have a reachable resolver at
+    /// hand should pass it.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason) {
+    public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null) =>
+        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: neighbours, validateMarginClaims: true);
+
+    /// <summary>Loads a file while validating only the facts owned by that document. Used before the composition root
+    /// can supply a neighbour resolver, and by replay to obtain the bytes whose recorded content hash is compared by
+    /// the caller; a live first-load boundary must use <see cref="TryLoad"/> and prove cross-document claims.</summary>
+    /// <param name="path">The file to load.</param>
+    /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
+    /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
+    /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the file loaded and its document-local facts validated.</returns>
+    public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason) =>
+        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: null, validateMarginClaims: false);
+
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateMarginClaims) {
         definition = null;
         contentHash = string.Empty;
 
@@ -68,7 +92,13 @@ public static class WorldDefinitionFileSource {
                 return false;
             }
 
-            WorldDefinitionValidator.Validate(definition: parsed);
+            parsed = WorldDefinitionMigrations.Apply(definition: parsed);
+
+            if (validateMarginClaims) {
+                WorldDefinitionValidator.Validate(definition: parsed, neighbours: neighbours);
+            } else if (!WorldDefinitionValidator.TryValidateLocally(definition: parsed, reason: out var localReason)) {
+                throw new InvalidOperationException(message: localReason);
+            }
             definition = parsed;
             contentHash = ComputeContentHash(content: bytes);
             reason = "";

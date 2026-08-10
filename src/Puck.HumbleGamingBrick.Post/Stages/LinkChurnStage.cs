@@ -5,21 +5,21 @@ using ITimer = Puck.HumbleGamingBrick.Interfaces.ITimer;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-C stage: the serial link cable under a longer multi-round exchange AND a mid-exchange churn — the
-/// replay-through-churn proof the M5 link story otherwise lacks. A DMG master and a Color slave boot the gapped
+/// Tier-C stage: the serial link cable under a longer multi-round exchange and a mid-exchange churn — a
+/// replay-through-churn proof a plain replay alone does not cover. A DMG master and a Color slave boot the gapped
 /// <see cref="SerialLinkRom.CreateChurn"/> protocol (sixteen transfers each way with a deliberate idle gap between them)
 /// and are advanced together through a <see cref="SerialLinkSession"/> on a fixed schedule of small T-cycle budgets.
 /// Every completed transfer on both ports is folded into a per-side FNV-1a traffic fingerprint (the same idiom
 /// <see cref="LinkReplay"/> uses); the trace is anchored by the connect phase — both machines' raw DIV counter and SC
-/// register at the instant the cable was joined. There is NO resync at connect (a cable does not touch DIV): the
-/// canonical phase IS each profile's deterministic post-boot phase, so recording it pins the no-resync decision into the
+/// register at the instant the cable was joined. There is no resync at connect (a cable does not touch DIV): the
+/// canonical phase is each profile's deterministic post-boot phase, so recording it pins the no-resync decision into the
 /// gate.
 /// <para>
 /// Two proofs. (a) Determinism: two fresh runs on the identical budget schedule produce a bit-identical connect phase,
 /// per-side traffic fingerprint, and final snapshots — the exchange and its pair-stepping interleave add no
-/// nondeterminism. (b) Churn: at the first transfer-idle budget boundary mid-exchange (SC bit 7 clear on BOTH ports,
+/// nondeterminism. (b) Churn: at the first transfer-idle budget boundary mid-exchange (SC bit 7 clear on both ports,
 /// asserted), the session is <see cref="SerialLinkSession.Suspend">suspended</see> for its resume token, both machines
-/// are snapshotted, restored into FRESH machines, and reconnected WITH the token; the remaining identical budgets then
+/// are snapshotted, restored into fresh machines, and reconnected with the token; the remaining identical budgets then
 /// produce a traffic tail and final snapshots bit-identical to the unchurned run. The token is what makes this exact: a
 /// naive reconnect re-anchors targets at the current instant and discards each machine's instruction-overshoot credit,
 /// running extra cycles and diverging by construction.

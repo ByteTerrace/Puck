@@ -8,13 +8,15 @@ namespace Puck.World;
 /// host-section authors: an endpoint (the world doc's storage-section <c>endpoint</c> or the <c>--storage-uri</c> reflection)
 /// and a resolved user identity (the container the platform provisioned for the user). Either absence leaves the
 /// catalog local-only, and <see cref="Disposition"/> says which one declined — <c>storage.status</c> echoes it either
-/// way.
+/// way. Also carries <see cref="Neighbours"/> — a second, read-only capability riding the same resolved target and
+/// container: whatever wires push/pull also wires whether a border-margin cross-document proof can reach a
+/// neighbour, since both need the identical (target, containerId) pair and neither exists without it.
 /// </summary>
 /// <remarks>
-/// Wiring is a BOOT decision and stays one: both halves are authored values (a document field or its CLI reflection),
+/// Wiring is a boot decision and stays one: both halves are authored values (a document field or its CLI reflection),
 /// so neither can move mid-session, and the engine is never re-pointed at a second container in place. That is the
 /// safe shape as well as the reachable one — the tracked cloud version tokens in <c>owned-worlds/sync-state.json</c>
-/// are keyed by world id and scoped to ONE container, so re-pointing would carry a container's ETags into a container
+/// are keyed by world id and scoped to one container, so re-pointing would carry a container's ETags into a container
 /// that never issued them and turn the clobber guard into a coin flip. A different identity wants a fresh boot.
 /// </remarks>
 internal sealed class WorldStorageSyncHandle {
@@ -32,10 +34,10 @@ internal sealed class WorldStorageSyncHandle {
         ArgumentNullException.ThrowIfNull(argument: worlds);
 
         if (settings.Endpoint is not { Length: > 0 } endpoint) {
-            return new WorldStorageSyncHandle(disposition: "cloud unwired — no endpoint (local-only)", engine: null);
+            return new WorldStorageSyncHandle(disposition: "cloud unwired — no endpoint (local-only)", engine: null, neighbours: null);
         }
         if (!identity.TryResolve(containerId: out var containerId, reason: out var reason)) {
-            return new WorldStorageSyncHandle(disposition: $"cloud unwired — {reason}", engine: null);
+            return new WorldStorageSyncHandle(disposition: $"cloud unwired — {reason}", engine: null, neighbours: null);
         }
 
         // A service URI is the platform edge (credentialed, the /private namespace); a connection string is a
@@ -65,17 +67,24 @@ internal sealed class WorldStorageSyncHandle {
                 store: store,
                 target: target,
                 worlds: worlds
-            )
+            ),
+            neighbours: new WorldStorageNeighbourResolver(store: store, target: target, containerId: containerId)
         );
     }
 
-    private WorldStorageSyncHandle(string disposition, WorldOwnedWorldSync? engine) {
+    private WorldStorageSyncHandle(string disposition, WorldOwnedWorldSync? engine, IWorldNeighbourResolver? neighbours) {
         Disposition = disposition;
         Engine = engine;
+        Neighbours = neighbours;
     }
 
     /// <summary>The sync engine, or <see langword="null"/> when the cloud is unwired.</summary>
     public WorldOwnedWorldSync? Engine { get; }
+    /// <summary>The cloud-backed neighbour resolver a mapped portal facet's border-margin proof reads, or
+    /// <see langword="null"/> when the cloud is unwired — the same condition <see cref="Engine"/> is null under, read
+    /// only at document-load moments (see <c>WorldServer.Neighbours</c>' own remarks), never on a live per-mutation
+    /// path.</summary>
+    public IWorldNeighbourResolver? Neighbours { get; }
     /// <summary>One line of truth about the wiring for <c>storage.status</c>.</summary>
     public string Disposition { get; }
 }

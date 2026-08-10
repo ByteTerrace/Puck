@@ -12,7 +12,8 @@
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section, the UpsertWorldRule/RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the SAME validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused BY NAME (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state ROW name, and for the same reason: $ marks what the ENGINE mints, and nothing mints a rule."
+        "description": "The rule\u0027s stable name \u2014 unique within the section, the UpsertWorldRule/RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the SAME validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused BY NAME (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state ROW name, and for the same reason: $ marks what the ENGINE mints, and nothing mints a rule.",
+        "type": "string"
       },
       "effects": {
         "description": "The effects applied in order when the rule fires.",

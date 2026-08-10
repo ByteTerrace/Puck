@@ -79,17 +79,17 @@ public sealed class SdfProgram {
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
     /// is always evaluated.
-    /// <para>Deliberately a LARGE FINITE value rather than <see cref="float.PositiveInfinity"/>: DXC compiles the
+    /// <para>Deliberately a large, finite value rather than <see cref="float.PositiveInfinity"/>: DXC compiles the
     /// kernels with fast-math (<c>ninf</c>), so an infinity in that arithmetic would be undefined. 1e30 leaves ~8
     /// decades of headroom below <see cref="float.MaxValue"/> after the cull test's multiply, and no world extent comes
-    /// within 20 decades of it. Needs NO shader change: the existing cull arithmetic already always admits it, and it is
+    /// within 20 decades of it. Needs no shader change: the existing cull arithmetic already always admits it, and it is
     /// non-negative so neither the parked-slot skip in <c>collectInstanceMaskWord</c> nor the one in
     /// <c>sdfNextVisibleInstanceRange</c> misfires.</para></summary>
     private const float UnmaskableBoundRadius = 1.0e30f;
-    /// <summary>The per-instance SHADOW-TRANSPARENT flag (PATH B), OR'd into the HIGH bit of the instance meta's
-    /// segmentEnd lane (i1.w) for an instance whose compose only REMOVES material (a pure Subtraction-family carve). The
-    /// soft-shadow gather reads it under the <c>sdf.shadow-proxy</c> lever to OMIT the instance from the shadow occluder
-    /// set (marching the pre-carve union hull); mapCore masks it off with <see cref="SegmentEndMask"/>, so segmentEnd
+    /// <summary>The per-instance shadow-transparent flag, OR'd into the high bit of the instance meta's segmentEnd lane
+    /// (i1.w) for an instance whose compose only removes material (a pure Subtraction-family carve). The soft-shadow
+    /// gather reads it under the <c>sdf.shadow-proxy</c> lever to omit the instance from the shadow occluder set
+    /// (marching the pre-carve union hull); mapCore masks it off with <see cref="SegmentEndMask"/>, so segmentEnd
     /// stays the true directory range and every rendered pixel is byte-identical. Segment-directory indices are far below
     /// 2^31, so this high bit is free. KEEP IN SYNC with sdf-vm.hlsli's SDF_INSTANCE_SHADOW_TRANSPARENT_BIT / SDF_INSTANCE_SEGMENT_END_MASK.</summary>
     private const uint ShadowTransparentInstanceFlag = 0x80000000u;
@@ -116,10 +116,9 @@ public sealed class SdfProgram {
     /// <param name="screenSurfaces">Optional screen-surface frames referenced by screen materials.</param>
     /// <param name="buildInstanceGrid">Whether to pack the world-space uniform-grid instance cull (see
     /// <see cref="SdfInstanceGrid"/>). Default (and production) is <see langword="true"/>: the beam prepass walks the
-    /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a DISABLED grid so
-    /// the beam falls back to the flat per-instance loop over the SAME instances — the reference path grid==flat is
-    /// judged against. The <c>world-grid-cull</c> gate that made that comparison left the build on 2026-08-02;
-    /// nothing checks the equality automatically now.</param>
+    /// grid instead of testing every instance in every tile. Pass <see langword="false"/> to pack a disabled grid so
+    /// the beam falls back to the flat per-instance loop over the same instances, letting a caller compare the
+    /// grid-cull and flat-loop results against each other by hand.</param>
     /// <exception cref="ArgumentException">An instruction opcode is not declared by <see cref="SdfOp"/>.</exception>
     public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true) {
         ArgumentNullException.ThrowIfNull(instructions);
@@ -266,7 +265,7 @@ public sealed class SdfProgram {
 
     /// <summary>Gets the number of instructions in the program.</summary>
     public int InstructionCount { get; }
-    /// <summary>The per-(viewport, tile) instance-mask width in uints for THIS program: ceil(instance count / 32),
+    /// <summary>Gets the per-(viewport, tile) instance-mask width in uints for this program: ceil(instance count / 32),
     /// never below 1 (a zero-instance program keeps one all-zero word so the mask buffer indexing stays uniform).
     /// <see cref="SdfWorldEngine"/> sizes its mask buffer from it and pushes the live uploaded program's value per
     /// frame as the kernels' indexing width (CompositeParams.instanceMaskWordCount); the reader's inner word
@@ -274,46 +273,46 @@ public sealed class SdfProgram {
     /// Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
     public int InstanceMaskWordCount => InstanceMaskWordCountFor(instanceCount: m_instances.Length);
 
-    /// <summary>The per-(viewport, tile) instance-mask width in uints an <paramref name="instanceCount"/>-instance
+    /// <summary>Returns the per-(viewport, tile) instance-mask width in uints an <paramref name="instanceCount"/>-instance
     /// program derives (see <see cref="InstanceMaskWordCount"/>) — the one statement of the formula, also used by a
     /// host sizing an engine's mask buffer for a capacity envelope larger than its initial program.</summary>
     /// <param name="instanceCount">The instance count to derive the mask width for.</param>
     public static int InstanceMaskWordCountFor(int instanceCount) => Math.Max(val1: 1, val2: ((instanceCount + 31) / 32));
-    /// <summary>The physical uint stride of one tile's mask entry: primary instance bits plus one summary bit per
+    /// <summary>Returns the physical uint stride of one tile's mask entry: primary instance bits plus one summary bit per
     /// primary word. The summary lets mapCore jump across sparse 32-instance blocks in O(non-empty blocks) time.</summary>
     public static int InstanceMaskStorageWordCountFor(int instanceCount) {
         var words = InstanceMaskWordCountFor(instanceCount: instanceCount);
 
         return (words + ((words + 31) / 32));
     }
-    /// <summary>The minimum dynamic-transform slot capacity required to render this program without a shader reading
+    /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
     public int RequiredDynamicTransformCapacity { get; }
-    /// <summary>Whether this program's ring-local cull grid depends on a per-frame dynamic transform. Static,
-    /// unmaskable, parked, and grid-disabled programs have an invariant side table that the engine uploads once with
-    /// the program; an active maskable dynamic instance requires the existing per-frame rebuild.</summary>
+    /// <summary>Gets a value indicating whether this program's ring-local cull grid depends on a per-frame dynamic
+    /// transform. Static, unmaskable, parked, and grid-disabled programs have an invariant side table that the engine
+    /// uploads once with the program; an active maskable dynamic instance requires the existing per-frame rebuild.</summary>
     internal bool RequiresFrameInstanceGridRebuild { get; }
-    /// <summary>The typed instructions the program was built from, in order — the source the packed
+    /// <summary>Gets the typed instructions the program was built from, in order — the source the packed
     /// <see cref="Words"/> are compiled from. Retained so a consumer (e.g. a ray-tracing instance extractor that
     /// needs per-primitive world bounds) can read the scene structure without decoding the packed word layout.</summary>
     public IReadOnlyList<SdfInstruction> Instructions => m_instructions;
-    /// <summary>The per-object instances this program declared, in declaration order (matches the packed instance
+    /// <summary>Gets the per-object instances this program declared, in declaration order (matches the packed instance
     /// directory's index order — see the type-level remarks). Empty for a zero-instance (flat) program.</summary>
     public IReadOnlyList<SdfInstanceRange> Instances => m_instances;
-    /// <summary>The screen surfaces this program declared, in declaration order — the source
+    /// <summary>Gets the screen surfaces this program declared, in declaration order — the source
     /// <see cref="ScreenSurfaceWords"/> is packed from (at each surface's <see cref="SdfScreenSurface.ScreenIndex"/>
     /// slot, not its position in this list). Empty for a program with none.</summary>
     public IReadOnlyList<SdfScreenSurface> ScreenSurfaces => m_screenSurfaces;
-    /// <summary>The packed screen-surface side table (see the type-level remarks): always
+    /// <summary>Gets the packed screen-surface side table (see the type-level remarks): always
     /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> 3-uvec4 (48-byte) entries, each at its declared screen
     /// index's slot; an undeclared slot is all-zero and never addressed by a program-consistent material id.</summary>
     public ReadOnlySpan<uint> ScreenSurfaceWords => m_screenSurfaceWords;
-    /// <summary>The per-program Lipschitz STEP SCALE (1/L, in (0, 1]) baked into the packed words — read back here
+    /// <summary>Gets the per-program Lipschitz step scale (1/L, in (0, 1]) baked into the packed words — read back here
     /// from the segment-directory header's <c>.y</c> lane, which the packed stream makes the single source of truth.
     /// <c>mapCore</c> (sdf-vm.hlsli) multiplies its final returned distance by it so sphere tracing takes
     /// field-rate-safe steps through a non-1-Lipschitz warp (twist/bend) or an eccentric ellipsoid without
-    /// overstepping and holing. EXACTLY <c>1.0f</c> for a warp-free, eccentricity-free (isometric) program, so
+    /// overstepping and holing. Exactly <c>1.0f</c> for a warp-free, eccentricity-free (isometric) program, so
     /// isometric scenes stay byte-identical. See <see cref="AnalyzeLipschitz"/>. The <c>&gt; 0</c> guard mirrors the
     /// shader: an all-zero header lane reads as 1.0.</summary>
     public float StepScale {
@@ -1040,15 +1039,15 @@ public sealed class SdfProgram {
             m_words[((entryBase + WordsPerVector) + 3)] = segmentEndPacked;
         }
     }
-    /// <summary>Whether an instance is SHADOW-TRANSPARENT: omitting it from a soft-shadow march can only make the field
-    /// MORE solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow occluder
-    /// set. True iff the instance contains at least one shape and EVERY shape compose is a SUBTRACTION-family blend
-    /// (<see cref="SdfBlendOp.Subtraction"/> / <see cref="SdfBlendOp.SmoothSubtraction"/> /
-    /// <see cref="SdfBlendOp.ChamferSubtraction"/>) — subtraction only removes material — AND the instance carries no
+    /// <summary>Returns whether an instance is shadow-transparent: omitting it from a soft-shadow march can only make
+    /// the field more solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow
+    /// occluder set. True iff the instance contains at least one shape and every shape compose is a subtraction-family
+    /// blend (<see cref="SdfBlendOp.Subtraction"/> / <see cref="SdfBlendOp.SmoothSubtraction"/> /
+    /// <see cref="SdfBlendOp.ChamferSubtraction"/>) — subtraction only removes material — and the instance carries no
     /// accumulator-growing field op (<see cref="SdfOp.Onion"/> / <see cref="SdfOp.Dilate"/> / <see cref="SdfOp.Displace"/>)
-    /// nor a field scope (<see cref="SdfOp.PushField"/> / <see cref="SdfOp.PopField"/>), either of which could ADD
+    /// nor a field scope (<see cref="SdfOp.PushField"/> / <see cref="SdfOp.PopField"/>), either of which could add
     /// solidity and make the omission a light-leak. Anything else classifies as a normal occluder (today's behavior), so
-    /// the flag is conservative by default — it is set ONLY for instances provably safe to skip.</summary>
+    /// the flag is conservative by default — it is set only for instances provably safe to skip.</summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns><see langword="true"/> when every shape in the slice is a subtraction-family carve and no growth op appears.</returns>
@@ -1088,27 +1087,28 @@ public sealed class SdfProgram {
 
         return sawShape;
     }
-    /// <summary>The coupling HALO an instance's soft blends need on top of their geometry bound: past it, evaluating the
-    /// member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see PackInstances). 0 for an
-    /// instance that uses only hard blends, so its bound is unchanged and byte-identical. The INTERSECTION family is
-    /// deliberately absent: those instances are unmaskable, so no halo is computed for them (HasUnmaskableInfluence).
-    /// <para>The margin is NOT simply the blend radius for every family. Neutrality for a far candidate b >= a is:</para>
+    /// <summary>Returns the coupling halo an instance's soft blends need on top of their geometry bound: past it,
+    /// evaluating the member returns the accumulator bitwise, so a masked-out tile's skip stays exact (see
+    /// PackInstances). 0 for an instance that uses only hard blends, so its bound is unchanged and byte-identical. The
+    /// intersection family is deliberately absent: those instances are unmaskable, so no halo is computed for them
+    /// (HasUnmaskableInfluence).
+    /// <para>The margin is not simply the blend radius for every family. Neutrality for a far candidate b >= a is:</para>
     /// <para>SmoothUnion / SmoothSubtraction — <c>b >= a + k</c> saturates <c>blendSmoothUnion</c>'s far endpoint, which
     /// is bit-exact by construction. A chain of N smooth unions of radius k approaches sag k monotonically from below and
     /// never exceeds it, so <c>max(k)</c> really is the supremum, not a coincidence. Margin = k.</para>
     /// <para>ChamferSubtraction — <c>max(max(a, -b), (a - b + c)/sqrt(2))</c>. Both alternatives fall away for b >= c.
     /// Margin = c.</para>
-    /// <para>ChamferUnion — <c>min(min(a, b), (a + b - c)/sqrt(2))</c>. The bevel plane keeps SAGGING below the
+    /// <para>ChamferUnion — <c>min(min(a, b), (a + b - c)/sqrt(2))</c>. The bevel plane keeps sagging below the
     /// accumulator long after b passes c. Neutrality needs <c>(a + b - c)/sqrt(2) >= a</c>, whose worst case b == a gives
-    /// <c>a >= c*(2 + sqrt(2))/2 = 1.70711*c</c>. Verified: with c = 1, a = b = 1.700 evaluates to 1.697056 (sags) while
-    /// a = b = 1.710 is neutral. A margin of c under-inflates a ChamferUnion instance's halo by 0.71*c, so a masked-out
-    /// tile is NOT bit-exact. Margin = 1.70711*c.</para>
+    /// <c>a >= c*(2 + sqrt(2))/2 = 1.70711*c</c> — for example, with c = 1, a = b = 1.700 evaluates to 1.697056 (sags)
+    /// while a = b = 1.710 is neutral. A margin of c under-inflates a ChamferUnion instance's halo by 0.71*c, so a
+    /// masked-out tile is not bit-exact. Margin = 1.70711*c.</para>
     /// <para>Xor deliberately has zero halo, like the other hard blends:
-    /// <c>max(min(a, b), -max(a, b))</c> reduces to <c>min(a, b)</c> — the plain union — everywhere OUTSIDE the
+    /// <c>max(min(a, b), -max(a, b))</c> reduces to <c>min(a, b)</c> — the plain union — everywhere outside the
     /// candidate (b &gt; 0; the negated arm only wins when a + b &lt; 0, deeper inside than a first-hit march ever
     /// samples), so a far candidate returns the accumulator exactly. Do not add Xor here or to HasUnmaskableInfluence.
-    /// SIZING: an Xor member competes on the running min wherever it is nearest, so its authored cull bound needs the
-    /// UNION-style generous influence margin, never the subtraction-style tight bound.</para></summary>
+    /// An Xor member competes on the running min wherever it is nearest, so its authored cull bound needs the
+    /// union-style generous influence margin, never the subtraction-style tight bound.</para></summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns>The largest coupling halo among the slice's soft blends.</returns>
@@ -1143,26 +1143,26 @@ public sealed class SdfProgram {
 
         return margin;
     }
-    /// <summary>The outward SURFACE REACH an instance's SCOPED field ops (an <see cref="SdfOp.Onion"/>/
+    /// <summary>Returns the outward surface reach an instance's scoped field ops (an <see cref="SdfOp.Onion"/>/
     /// <see cref="SdfOp.Dilate"/>/<see cref="SdfOp.Displace"/> between a balanced <see cref="SdfOp.PushField"/>/
     /// <see cref="SdfOp.PopField"/>) add on top of its authored geometry bound — the cull-margin twin of
-    /// <see cref="MaxSmoothBlendRadius"/> for the scoped-accumulator payoff. A scoped field op is MASKABLE
-    /// (<see cref="HasUnmaskableInfluence"/> only trips on an unbounded shape, an UNSCOPED field op, or an
+    /// <see cref="MaxSmoothBlendRadius"/> for the scoped-accumulator payoff. A scoped field op is maskable
+    /// (<see cref="HasUnmaskableInfluence"/> only trips on an unbounded shape, an unscoped field op, or an
     /// intersection-family POP compose), so
-    /// it packs a FINITE bound instead of the 1e30 sentinel that would otherwise cover everything — but the op moves the
-    /// scope's zero-set OUTWARD past the packed radius, so that growth must be folded into the bound or the beam masks
+    /// it packs a finite bound instead of the 1e30 sentinel that would otherwise cover everything — but the op moves the
+    /// scope's zero-set outward past the packed radius, so that growth must be folded into the bound or the beam masks
     /// out the tiles the grown shell reaches and the surface holes at the tile seams. Each op's outward reach is exact:
     /// <list type="bullet">
-    /// <item><description><c>Onion(t)</c> — <c>abs(d) - t</c>: the shell's OUTER surface sits exactly <c>t</c> beyond the
+    /// <item><description><c>Onion(t)</c> — <c>abs(d) - t</c>: the shell's outer surface sits exactly <c>t</c> beyond the
     /// original surface, so reach grows by <c>|t|</c> (<c>Data0.x</c>).</description></item>
     /// <item><description><c>Dilate(r)</c> — <c>d - r</c>: the surface inflates by <c>r</c> everywhere, so reach grows by
     /// <c>|r|</c> (<c>Data0.x</c>).</description></item>
     /// <item><description><c>Displace(a)</c> — <c>d + a·sin·sin·sin</c>: the relief pushes the surface out by at most
     /// <c>|a|</c> (the basis bottoms at −1), so reach grows by <c>|a|</c> (<c>Data0.w</c>).</description></item>
     /// </list>
-    /// Field ops COMPOUND within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
-    /// SUM inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
-    /// sibling scopes union, so a max over scopes is a sound conservative cover). An UNSCOPED field op never contributes
+    /// Field ops compound within one scope (an Onion then a Dilate grows the surface by <c>t</c> then <c>r</c>), so they
+    /// sum inside a scope; the instance margin is the largest such per-scope sum (nesting is capped at depth 1, and
+    /// sibling scopes union, so a max over scopes is a sound conservative cover). An unscoped field op never contributes
     /// here — it makes the whole instance unmaskable, so the sentinel bound already covers it. 0 for an instance with no
     /// scoped field op, so its bound is byte-identical.</summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
@@ -1209,25 +1209,26 @@ public sealed class SdfProgram {
 
         return margin;
     }
-    /// <summary>Whether an instance's instruction slice has an influence no finite sphere can mask. Three families qualify.
-    /// <para>THE PLANE. Its zero set and negative half-space are unbounded, irrespective of its blend or field scope.
+    /// <summary>Returns whether an instance's instruction slice has an influence no finite sphere can mask. Three
+    /// families qualify.
+    /// <para>The plane. Its zero set and negative half-space are unbounded, irrespective of its blend or field scope.
     /// Any finite instance sphere would clip authored geometry even though the segment-level bound correctly declines
     /// to bound the shape.</para>
-    /// <para>THE INTERSECTION BLENDS. Every other blend family, evaluated against a candidate far beyond the accumulator,
+    /// <para>The intersection blends. Every other blend family, evaluated against a candidate far beyond the accumulator,
     /// returns the accumulator: <c>min(a, b) = a</c>, <c>max(a, -b) = a</c>, <c>blendSmoothUnion</c> is far-exact by
     /// construction, and the chamfer union/subtraction bevel planes fall away. So dropping a masked-out instance is exactly
     /// evaluating it. The intersection family inverts that — <c>max(a, b) = b</c> — so a masked-out intersection instance
-    /// does not vanish, it REPLACES the field with its own candidate. Measured with a floor at 0.001 and the instance's
-    /// shape 50 units away: skipping yields 0.001, evaluating yields 50.</para>
-    /// <para>THE FIELD OPS — <see cref="SdfOp.Onion"/>, <see cref="SdfOp.Dilate"/>, <see cref="SdfOp.Displace"/>. These
+    /// does not vanish, it replaces the field with its own candidate: for example, with a floor at 0.001 and the
+    /// instance's shape 50 units away, skipping yields 0.001 while evaluating yields 50.</para>
+    /// <para>The field ops — <see cref="SdfOp.Onion"/>, <see cref="SdfOp.Dilate"/>, <see cref="SdfOp.Displace"/>. These
     /// mutate the accumulator outright (<c>abs(d) - t</c>, <c>d - r</c>, <c>d + relief</c>), so a masked-out instance
-    /// silently omits a transformation of the WHOLE field, the ground plane included. Measured: an <c>Onion(0.05)</c>
+    /// silently omits a transformation of the whole field, the ground plane included: for example, an <c>Onion(0.05)</c>
     /// inside an instance turns a solid ground plane into a 0.05-thick shell — the solid fraction of a slice through the
-    /// scene falls from 51.3% to 6.3% — and masking the instance out restores it. This is the MORE visible of the two:
+    /// scene falls from 51.3% to 6.3% — and masking the instance out restores it. This is the more visible of the two:
     /// the beam prepass's cone march hides the intersection case (an intersection annihilates everything outside its own
     /// shape, so the tiles that would differ are already empty) but cannot hide this one. Creator mode emits <c>Onion</c>
-    /// inside <c>BeginInstanceDynamic</c>, so it is live. <see cref="SdfOp.DomainWarp"/> is deliberately NOT here: it is a
-    /// POINT op and never reads the accumulator. <see cref="SdfBlendOp.Xor"/> is deliberately not here either: it
+    /// inside <c>BeginInstanceDynamic</c>, so it is live. <see cref="SdfOp.DomainWarp"/> is deliberately not here: it is a
+    /// point op and never reads the accumulator. <see cref="SdfBlendOp.Xor"/> is deliberately not here either: it
     /// reads the accumulator, but <c>max(min(a, b), -max(a, b))</c> reduces to
     /// the plain union <c>min(a, b)</c> everywhere outside the candidate, and the extra surface it carves (the overlap
     /// hole) lives strictly inside the union hull — inside any covering bound — so masking an Xor instance with a
@@ -1236,8 +1237,7 @@ public sealed class SdfProgram {
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
-    /// already applies to a non-Union SEGMENT. The instance keeps working and simply stops being cullable. Gated by
-    /// <c>world-instanced</c>'s two unmaskable-compose guard scenes.</para></summary>
+    /// already applies to a non-Union segment. The instance keeps working and simply stops being cullable.</para></summary>
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>

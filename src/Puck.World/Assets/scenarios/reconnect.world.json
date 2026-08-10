@@ -65,7 +65,7 @@
   "cameras": [],
   "population": {
     "capacity": 4,
-    "reconnectGraceTicks": 720,
+    "reconnectGraceSeconds": 3.0,
     "seatActivation": [
       "Eager",
       "Eager",
@@ -135,9 +135,9 @@
     }
   },
   "inputHold": {
-    "ceilingTicks": 120,
-    "lowerAfterTicks": 60,
-    "defaultTicks": 0,
+    "ceilingSeconds": 0.5,
+    "lowerAfterSeconds": 0.25,
+    "defaultSeconds": 0.0,
     "equalizeByDefault": true,
     "participants": []
   },
@@ -782,10 +782,9 @@
       },
       "effects": [
         {
-          "$type": "addState",
+          "$type": "countdownState",
           "state": "mobAttackCooldown",
-          "key": "2",
-          "value": -1
+          "key": "2"
         }
       ]
     },
@@ -821,7 +820,7 @@
           "$type": "setState",
           "state": "mobAttackCooldown",
           "key": "2",
-          "value": 10
+          "valueSeconds": 0.05
         }
       ]
     },
@@ -841,7 +840,7 @@
             "$type": "compareState",
             "state": "$parked:body:2",
             "comparison": "LessOrEqual",
-            "value": 700
+            "value": 120
           }
         ]
       },

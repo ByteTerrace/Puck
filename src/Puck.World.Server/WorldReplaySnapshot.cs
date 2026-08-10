@@ -8,31 +8,31 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The profile a seat was seated on at record-start: its catalog NAME, plus the locomotion rates the recorded
-/// run actually integrated with. The rates are pinned because they are simulation INPUT — <c>WorldBody.Advance</c> reads
+/// <summary>The profile a seat was seated on at record-start: its catalog name, plus the locomotion rates the recorded
+/// run actually integrated with. The rates are pinned because they are simulation input — <c>WorldBody.Advance</c> reads
 /// them off the seated handle every frame — and they are pinned as the simulation's own <see cref="FixedQ4816"/> values,
 /// so a re-drive consumes the recorded number rather than one re-derived from a float. Nothing about the profile that
-/// only PRESENTATION reads is here: not the color, and not <c>InvertLookX</c>, which the CLIENT applies at intent
+/// only presentation reads is here: not the color, and not <c>InvertLookX</c>, which the client applies at intent
 /// production, upstream of the link, so a recorded intent already carries it.</summary>
 /// <param name="Name">The profile the seat was seated on.</param>
 /// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded).</param>
 /// <param name="TurnSpeed">The pinned angular rate (<see cref="WorldIdentity.FixedTurnSpeed"/> as recorded).</param>
-internal readonly record struct WorldReplayProfilePin(string Name, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
+public readonly record struct WorldReplayProfilePin(string Name, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
 
 /// <summary>One local seat active at record-start — the seat slice of the captured starting state, re-joined into the
 /// replay's fresh world so its body exists to receive the recorded intent stream.</summary>
 /// <param name="Slot">The 0-based seat slot.</param>
-/// <param name="Profile">The seat's pinned profile, or <see langword="null"/> for a profileless seat. ONE nullable
+/// <param name="Profile">The seat's pinned profile, or <see langword="null"/> for a profileless seat. One nullable
 /// carries both the name and the rates deliberately: they are present or absent together, so there is no shape where a
 /// seat has a name but no pinned rates for a reader to have to rule on.</param>
-internal readonly record struct WorldReplaySeat(int Slot, WorldReplayProfilePin? Profile);
+public readonly record struct WorldReplaySeat(int Slot, WorldReplayProfilePin? Profile);
 
-/// <summary>One captured authority input — the closed, DISCRIMINATED set of synchronous writes that cross
+/// <summary>One captured authority input — the closed, discriminated set of synchronous writes that cross
 /// <see cref="IServerLink"/> inside a tick's command-apply window. One ordered stream rather than a list per kind,
 /// because the live order between a driving command and a grant change is stdin FIFO and position-within-tick is the
-/// coordinate every verdict in this campaign is pinned against: a grant that lands before a command in the live session
+/// coordinate every verdict is pinned against: a grant that lands before a command in the live session
 /// must land before it in the replay, and parallel per-kind lists have no relative order to preserve.</summary>
-internal abstract record WorldReplayEntry {
+public abstract record WorldReplayEntry {
     /// <summary>An authority command applied to one body (the <c>player.*</c> drive verbs).</summary>
     /// <param name="Value">The command, carrying its own acting principal and target entity.</param>
     internal sealed record Command(WorldCommand Value) : WorldReplayEntry;
@@ -40,7 +40,7 @@ internal abstract record WorldReplayEntry {
     /// <summary>A grant acquisition (<c>world.grant</c>) — the authority a later command or a guest's act is checked
     /// against, so a replay that skipped it would re-drive a differently-authorized world.</summary>
     /// <param name="Value">The grant row acquired.</param>
-    /// <param name="Actor">The principal that ASKED for it — distinct from the grant's own receiving principal, and the
+    /// <param name="Actor">The principal that asked for it — distinct from the grant's own receiving principal, and the
     /// identity the administration check runs against.</param>
     internal sealed record Grant(WorldGrant Value, WorldPrincipal Actor) : WorldReplayEntry;
 
@@ -66,7 +66,7 @@ internal abstract record WorldReplayEntry {
     internal sealed record PeerDisconnected(WorldServerEvent.PeerDisconnected Value) : WorldReplayEntry;
 
     /// <summary>A live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>) — P5:
-    /// lifecycle joins the ordered domain, so a replay re-executes a recorded mount/unmount through the SAME
+    /// lifecycle joins the ordered domain, so a replay re-executes a recorded mount/unmount through the same
     /// <c>Server.WorldServer.EnqueueAddonLifecycle</c> door the live session used, rather than the tape carrying no
     /// record of it at all (the taint-bitset posture this replaces).</summary>
     /// <param name="Value">The mount/unmount action.</param>
@@ -84,188 +84,185 @@ internal abstract record WorldReplayEntry {
     /// <param name="PathHint">The origin path for Load/Reload; <see langword="null"/> for Reset.</param>
     /// <param name="Force">Load's dirty-journal override, carried verbatim — the tape records what was submitted,
     /// never a normalization of it (the same convention <see cref="Revoke"/> follows for <c>Exclusive</c>).</param>
-    /// <param name="ContentHash">The CAS pin a re-drive refuses BY NAME against, on mismatch.</param>
+    /// <param name="ContentHash">The CAS pin a re-drive refuses by name against, on mismatch.</param>
     /// <param name="Actor">The principal that submitted the rebuild.</param>
     internal sealed record Rebuild(WorldRebuildKind Kind, string? PathHint, bool Force, string ContentHash, WorldPrincipal Actor) : WorldReplayEntry;
 
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
-    /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — the authoritative-machines campaign (2026-08-03): screen ops
-    /// join the ordered domain and the tape as their own authority entry kind, applying SYNCHRONOUSLY on re-drive
-    /// exactly as they do live (see <see cref="Server.WorldServer.ApplyScreenOp"/>).</summary>
+    /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join the ordered domain and the tape as their own
+    /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
+    /// <see cref="Server.WorldServer.ApplyScreenOp"/>).</summary>
     /// <param name="Value">The screen op.</param>
     /// <param name="ContentHash">The CAS pin (a real <c>sha256-64</c> hash, or
     /// <see cref="Server.WorldMachineHost.ContentAbsentSignature"/>) a recorded <see cref="WorldScreenOp.Insert"/> or
     /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (Select shares Insert's own CAS pin — a
     /// magazine entry's document-declared path is not immune to on-disk drift either) — <see langword="null"/> for
-    /// every other op kind, and this rides the tape REGARDLESS of whether the op succeeded (a failed insert/select
-    /// still pins whatever it read, or the absence sentinel when it could not read anything at all, INCLUDING an
+    /// every other op kind, and this rides the tape regardless of whether the op succeeded (a failed insert/select
+    /// still pins whatever it read, or the absence sentinel when it could not read anything at all, including an
     /// engine-resolution failure, since content is signed before engine resolution is even attempted and is never
     /// left null on that path).</param>
     /// <param name="Actor">The principal that submitted the op.</param>
     internal sealed record ScreenOp(WorldScreenOp Value, string? ContentHash, WorldPrincipal Actor) : WorldReplayEntry;
+
+    /// <summary>A pause or resume of the boot instance's own live schedule lever (<c>world.rate pause</c>/
+    /// <c>resume</c>) — recorded so a saved tape carries a legible history of when a pause/resume happened, alongside
+    /// the header's own <see cref="WorldReplaySnapshot.SimulationRate"/> (the initial authored rate). Purely
+    /// informational at re-drive: <see cref="WorldReplaySnapshot.Drive"/> takes no action on it, because the tape's
+    /// own tick-count invariant already reproduces the stepping effect — a paused span records zero ticks live
+    /// (<c>Puck.World.WorldServerStepShell.Step</c> is skipped outright while paused, so its <c>NoteTick</c> call
+    /// never fires for that span), so re-driving exactly <c>Ticks.Count</c> steps already reproduces the identical
+    /// cadence with no separate pause-state tracking needed on the replay side. Only the boot instance's own lever is
+    /// taped — a named instance's own pause/resume is not (the tape's own scope, see
+    /// <see cref="Puck.World.WorldReplayTape"/>'s class remarks).</summary>
+    /// <param name="Paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
+    internal sealed record RateLever(bool Paused) : WorldReplayEntry;
+
+    /// <summary>A same-process crossing's decided outcome — the local multi-authority tape contract — recorded by
+    /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> the moment <c>Puck.World.WorldInstanceHost.ApplyTransfer</c>
+    /// commits or aborts a transfer touching the boot instance. Acts on the departure half only, at re-drive:
+    /// <see cref="WorldReplaySnapshot.Drive"/> constructs one shadow <see cref="Server.WorldServer"/> for the boot
+    /// instance alone, so a member arriving from elsewhere is structurally unreachable (there is no source instance's
+    /// population to arrive from), but a member leaving boot's own population is a fact this shadow world can and
+    /// must reproduce — <see cref="DepartedBootSlots"/> is what makes that honest: without it, the live trace's pose
+    /// hash stops covering a departed body (an inactive index contributes nothing to
+    /// <see cref="WorldReplaySnapshot.HashState"/>) while the replay's shadow body would keep integrating right
+    /// through the crossing. <see cref="DestinationName"/>/<see cref="ScopeKey"/>/<see cref="GenerationId"/>/
+    /// <see cref="Outcome"/> remain narration only — proving the outcome reproducible by name, never re-deriving the
+    /// destination's own simulation. The entry's byte-level integrity (including <see cref="DepartedBootSlots"/>
+    /// itself) is enforced separately: this sits partly outside the pose hash's own coverage (the destination/scope/
+    /// generation/outcome text is never simulation state), so <see cref="WorldReplaySnapshot.ReadTransferEntry"/>
+    /// recomputes a content signature from every decoded field and refuses by name
+    /// (<see cref="ReplayRefusal.TransferEventTampered"/>) on a disagreement, never a plausible-looking ordinary
+    /// trajectory mismatch.</summary>
+    /// <param name="TransferId">The transfer id minted for this crossing.</param>
+    /// <param name="DestinationName">The resolved destinations row name.</param>
+    /// <param name="ScopeKey">The resolved scope key.</param>
+    /// <param name="GenerationId">The resolver-issued generation id the cohort resolved against.</param>
+    /// <param name="Outcome">A short canonical outcome summary — narration only.</param>
+    /// <param name="DepartedBootSlots">The 0-based boot local-seat slots this crossing actually removed from boot's
+    /// own population (empty for a refused or aborted transfer, or one whose source is not boot) — replayed against
+    /// the shadow world's own population at re-drive, see this entry's own remarks.</param>
+    internal sealed record Transfer(ulong TransferId, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedBootSlots) : WorldReplayEntry;
 }
 
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
 /// revokes, applied before the step exactly as the live command-apply window does) and the buffered per-entity
 /// <see cref="Intents"/> (drained at the step). Re-applying these to a fresh world in the same order reproduces the tick.
-/// <para>The tape carries the HUMAN/AUTHORITY stream only. A mounted addon's driving never crosses
+/// <para>The tape carries the human/authority stream only. A mounted addon's driving never crosses
 /// <see cref="IServerLink"/> — it applies inside <c>WorldServer.Step</c> — so guest-driven motion is not recorded here
-/// and is instead RE-DERIVED by re-running the same pinned guests in <see cref="WorldReplaySnapshot.Drive"/>, which is
+/// and is instead re-derived by re-running the same pinned guests in <see cref="WorldReplaySnapshot.Drive"/>, which is
 /// what makes it reproducible rather than merely replayed. That re-run is exactly why the grant changes belong in this
-/// stream: a re-run guest is checked against the replayed world's OWN grant table, so a tape that recorded the commands
+/// stream: a re-run guest is checked against the replayed world's own grant table, so a tape that recorded the commands
 /// but not the grants would re-drive a guest that holds nothing and never moves.</para></summary>
 /// <param name="Authority">The synchronous authority inputs applied this tick — commands, grants, revokes, and sessions
 /// interleaved in submission order.</param>
 /// <param name="Intents">The per-entity intent submissions buffered this tick (seat driving), in submission order.</param>
-internal readonly record struct WorldReplayTickInput(IReadOnlyList<WorldReplayEntry> Authority, IReadOnlyList<IntentSubmission> Intents);
+public readonly record struct WorldReplayTickInput(IReadOnlyList<WorldReplayEntry> Authority, IReadOnlyList<IntentSubmission> Intents);
 
 /// <summary>
-/// A deterministic world-state recording: the SERVER starting state captured at record-start plus the per-tick
+/// A deterministic world-state recording: the server starting state captured at record-start plus the per-tick
 /// server-input stream that drove the recorded span, so the recording replays through a fresh world. The starting state
 /// is the record-start <see cref="WorldDefinition"/> (embedded as its canonical JSON) and the active seats; the fresh
-/// world's starting body state is that definition's deterministic BOOT IMAGE (a fresh <see cref="WorldServer"/>
-/// reconstructs it exactly), not a per-body pose snapshot. The recording also carries the LIVE session's per-tick pose
+/// world's starting body state is that definition's deterministic boot image (a fresh <see cref="WorldServer"/>
+/// reconstructs it exactly), not a per-body pose snapshot. The recording also carries the live session's per-tick pose
 /// hash trace (<see cref="RecordedHashes"/>) so a replay's fresh re-drive is verified against the actual running
 /// session, tick by tick rather than only at the tail.
 /// </summary>
 /// <remarks>
-/// <para>THE SEAT'S PROFILE RATES ARE PINNED, NOT RE-RESOLVED. A seated profile's MoveSpeed/TurnSpeed are read live off
-/// the handle by <c>WorldBody.Advance</c> every frame, which makes them simulation INPUT — and they reach the catalog
+/// <para>The seat's profile rates are pinned, not re-resolved. A seated profile's MoveSpeed/TurnSpeed are read live off
+/// the handle by <c>WorldBody.Advance</c> every frame, which makes them simulation input — and they reach the catalog
 /// through <c>SetPlayerSection</c>, which never crosses the <see cref="WorldCommand"/>/grant/revoke union the tick
 /// stream records, so an edit to them is structurally invisible to that stream. Each <see cref="WorldReplaySeat"/>
 /// therefore carries the rates its profile actually ran at (<see cref="WorldReplayProfilePin"/>, in raw fixed-point),
 /// and <see cref="Drive"/> seats its bodies on those rather than on whatever the live catalog now holds. That makes a
 /// re-drive hermetic with respect to the catalog: an <c>identity.motion</c> between record and verify no longer moves the
-/// replayed trajectory. When the live values HAVE moved, <see cref="Drive"/> says so on stderr — naming the profile,
+/// replayed trajectory. When the live values have moved, <see cref="Drive"/> says so on stderr — naming the profile,
 /// the field, and both values — because a pin that silently disagreed with the running world would trade one
 /// unattributable verdict for another.</para>
-/// <para>HONEST SCOPE. The captured state is the authoritative SERVER simulation only — the world definition, the active
-/// seats, and the per-tick stream of HUMAN/AUTHORITY inputs (commands, grants, revokes) and intents. A mounted addon's
-/// driving is deliberately absent from that stream (it never crosses <see cref="IServerLink"/>) and is RE-DERIVED by
-/// re-running the document's own pinned guests during <see cref="Drive"/>. Grant changes made BEFORE record-start are
+/// <para>Honest scope. The captured state is the authoritative server simulation only — the world definition, the active
+/// seats, and the per-tick stream of human/authority inputs (commands, grants, revokes) and intents. A mounted addon's
+/// driving is deliberately absent from that stream (it never crosses <see cref="IServerLink"/>) and is re-derived by
+/// re-running the document's own pinned guests during <see cref="Drive"/>. Grant changes made before record-start are
 /// likewise absent — they were never submitted during the capture — which is the same mid-session-capture boundary the
-/// boot-image start already has, and it reports honestly as a MISMATCH rather than as a false MATCH. Screen machines
+/// boot-image start already has, and it reports honestly as a mismatch rather than as a false match. Screen machines
 /// and their pixels, camera rigs, overlays, and audio are
-/// PRESENTATION and are excluded: they are re-derived from the definition by the live client each frame and never feed
+/// presentation and are excluded: they are re-derived from the definition by the live client each frame and never feed
 /// back into simulation, so a replay reproduces the authoritative population trajectory (the hashed poses) but does not
 /// re-run the emulated cabinets or redraw the HUD. Because the fresh world starts from the definition boot image, a
-/// replayed tail MATCHES the live tail precisely when the live session was still at that boot image at record-start (a
+/// replayed tail matches the live tail precisely when the live session was still at that boot image at record-start (a
 /// boot-anchored capture); a mid-session capture — the session already moved from boot — faithfully re-drives its stream
-/// but from the boot image, so the verify honestly reports MISMATCH. Full per-body record-start rehydration (so a
-/// mid-session capture also MATCHes) is the identified next lever.</para>
-/// <para>DETERMINISM. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
-/// pose. The recorded INTENT currency is likewise fixed-point: a
+/// but from the boot image, so the verify honestly reports mismatch. Full per-body record-start rehydration (so a
+/// mid-session capture also matches) is the identified next lever.</para>
+/// <para>Determinism. The hashed state is fixed-point or an exact integer tick — no wall-clock, no float in the hashed
+/// pose. The recorded intent currency is likewise fixed-point: a
 /// <see cref="PlayerIntent"/> crosses as six raw <see cref="FixedQ4816"/> lanes, so the replay currency is the
 /// simulation's own numeric type rather than a conversion of it. (The serialized command stream carries the authored
-/// float fields of the recorded <see cref="WorldCommand"/>s verbatim; those are AUTHORED VALUES — the numbers an
+/// float fields of the recorded <see cref="WorldCommand"/>s verbatim; those are authored values — the numbers an
 /// operator typed — which round-trip bit-exactly through the shared command leaf and quantize deterministically at
-/// one apply site each. They never break the guarantee, but they are NOT absent from the on-disk form.) A
+/// one apply site each. They never break the guarantee, but they are not absent from the on-disk form.) A
 /// fresh world built from this recording and driven by the recorded stream produces a bit-identical per-tick pose hash
 /// on every run, machine, and backend at a fixed code version. <see cref="Drive"/> is the offline re-drive the
-/// replay/verify side runs; the record side samples the LIVE population instead, so a match proves the fresh re-drive
+/// replay/verify side runs; the record side samples the live population instead, so a match proves the fresh re-drive
 /// reproduces the running session, not merely another re-drive of itself.</para>
-/// <para>WIRE FORM. Every enum that reaches this codec crosses as an explicitly declared wire value, mapped by an
+/// <para>Wire form. Every enum that reaches this codec crosses as an explicitly declared wire value, mapped by an
 /// exhaustive switch in both directions and never by an ordinal cast — including the <see cref="WorldSection"/> ordinal
 /// nested inside a section <see cref="GrantSubject"/>'s value lane. The channel vector (<see cref="PlayerIntent"/>) and
 /// a channel press's ordinal cross as plain integers instead of a pinned bit set now that <c>ActionLanes</c> has
 /// dissolved. A member the set does not
-/// cover is refused BY NAME at write; a byte the set does not name is refused loudly at read. The header also carries
-/// the MOUNTED ADDON SET as recorded-at-mount receipts (<see cref="MountedAddons"/>): because the re-drive re-runs the
+/// cover is refused by name at write; a byte the set does not name is refused loudly at read. The header also carries
+/// the mounted addon set as recorded-at-mount receipts (<see cref="MountedAddons"/>): because the re-drive re-runs the
 /// document's guests rather than replaying their output, the identity of what mounts is part of what the tape pins, and
-/// <see cref="Drive"/> refuses a disagreement before the first tick. There is exactly ONE tape shape: the leading
-/// MAGIC is the opaque shape-identity value — re-keyed whenever the shape changes, never incremented — and the
+/// <see cref="Drive"/> refuses a disagreement before the first tick. The header also carries the recording's own
+/// <see cref="SimulationRate"/> — simulation input, not metadata, since it is what <see cref="Drive"/> derives the
+/// step size from — and <see cref="Drive"/> refuses a disagreement with the embedded definition's own
+/// <see cref="WorldDefinition.SimulationRateHz"/>, right after deserializing it, for the identical reason the mount
+/// pin does: a wrong step size re-drives a different trajectory that would otherwise report as an ordinary mismatch.
+/// There is exactly one tape shape: the leading
+/// magic is the opaque shape-identity value — re-keyed whenever the shape changes, never incremented — and the
 /// ShapeToken that follows it stays pinned at 1 permanently; a file carrying either the wrong magic or the wrong
 /// token is refused rather than read tolerantly.</para>
+/// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
+/// assembly) — every instance member here was already <c>public</c>; only the class declaration
+/// (and <see cref="WorldReplaySeat"/>/<see cref="WorldReplayProfilePin"/>/<see cref="WorldReplayTickInput"/>/the
+/// <see cref="WorldReplayEntry"/> base it composes with) had not caught up. Widened so
+/// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
+/// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
-internal sealed class WorldReplaySnapshot {
-    // THE FIELD THAT CARRIES SHAPE IDENTITY. An OPAQUE VALUE, not a version sequence: re-keyed to a new opaque value
-    // whenever the tape's BYTE LAYOUT changes, never incremented as a counter. ShapeToken (below) is pinned at 1
-    // permanently under the everything-stays-v1 owner ruling and so cannot, by itself, distinguish an older-shape file
-    // from a current one — which is exactly the collision each prior value hit: fourteen pre-unit-5 tapes on disk
-    // carry "PKRP" with ShapeToken == 1, in an OLDER byte layout, the SAME token this build also writes. Re-keying
-    // MAGIC — never ShapeToken — is what refuses those loudly instead of misparsing them (garbage counts, a wrong
-    // refusal wording, or a false MISMATCH). RETIREMENT CHAIN (each value opaque, never a sequence — read as "the
-    // Nth shape", not "newer than the last"; PKRM sorting BEFORE PKRW is the chain demonstrating its own point):
-    // PKRP (pre-unit-5) → PKRT (unit 5, the grants-recording fix) → PKRW (the grant row's Budget field) → PKRM (the
-    // seat row's pinned profile rates) → PKRC (the channel-model dissolution: PlayerIntent widened from six named
-    // fields to the full channel vector, and PressLane's lane byte became a channel ordinal) → PKRV (the pose hash
-    // widening to the FULL orientation: HashState folds all four raw FixedQuaternion lanes beside the yaw scalar, so
-    // every RecordedHashes entry a PKRC tape carries means something this build no longer computes) → PKRJ (the
-    // grant row's co-driving payload: WriteGrant/ReadGrant dropped Reach/Consent and Ceiling entirely, so a
-    // re-drive reconstructed Drive authority carrying no channel reach and no pool — the addon's contribution was
-    // dropped, the trajectories diverged, and replay.verify reported a MISMATCH the simulation never earned) → PKRE
-    // (this change, the engagement dissolution: WriteCommand/ReadCommand gained the Engage/Disengage discriminants
-    // 8/9 — a PKRJ tape's command union cannot represent either kind, so a session that engaged or disengaged a
-    // screen would silently re-drive with the engagement command simply missing from the stream, reproducing a
-    // DIFFERENT trajectory than the one recorded) → PKRL (P4-lean: command/grant/revoke bodies moved to the shared
-    // leaf codecs, grants gained the verb mask (KindMask today), Peer principals gained Generation, and peer lifecycle events joined the
-    // ordered tape stream) → PKRM (P5: addon lifecycle — world.addon.mount/.unmount — joined the ordered submission
-    // domain as its own leaf codec and authority-entry kind (WorldReplayEntry.AddonLifecycle, discriminant 5); a
-    // PKRL tape's authority union cannot represent it, so a session spanning a live mount/unmount would silently
-    // re-drive with the lifecycle change missing) → PKRP (context routes, merged with P5 in the same landing wave:
-    // WorldCommand.Engage's ScreenIndex became a GrantSubject Target union — screen OR body — plus a Capture bool;
-    // a PKRM tape's Engage leaf cannot represent either field, so a session that engaged/possessed anything would
-    // silently re-drive with a garbled or truncated command. The lanes re-keyed independently to PKRM and PKRN; the
-    // merged format holds BOTH changes, so it takes a value distinct from every intermediate) → PKRQ (CAS-REPLAY: the
-    // rebuild trio — world.reset/world.load/world.reload — joins the ordered domain and the tape as its own authority
-    // entry kind (WorldReplayEntry.Rebuild, discriminant 6), CAS-pinned by a sha256-64 content hash rather than
-    // carrying a document; a PKRP tape's authority union cannot represent it, so a session spanning a live rebuild
-    // would silently re-drive with the rebuild missing — and the trio's prior REFUSE-while-armed posture is gone with
-    // it, since a rebuild is now ordered, hash-pinned tape data like any other authority entry) → PKRG (the
-    // blank-slate campaign's senses lane: GrantSubjectKind gained Region/Seat (wire values 6/7, the world-events
-    // families' subjects) and WorldGrant gained EventBudget, a new optional field WriteGrant/ReadGrant serialize
-    // after the verb mask — a PKRQ tape's grant leaf cannot represent either, so a session that granted/revoked an
-    // event-bearing subject would silently re-drive with the row missing or truncated) → PKRX (the authoritative-
-    // machines campaign, 2026-08-03: screen ops — screen.insert/.eject/.select/.options/.link/.unlink — join the
-    // ordered domain and the tape as their own authority entry kind, WorldReplayEntry.ScreenOp, discriminant 7,
-    // CAS-pinned by an optional sha256-64 content hash exactly like Rebuild; a PKRG tape's authority union cannot
-    // represent it, so a session spanning a live screen op would silently re-drive with the machine-lifecycle
-    // change missing — and machine stepping itself moved from presentation-side WorldScreenBinder.AdvanceMachines
-    // into WorldServer.Step, so a re-drive now boots and steps real machines through the SAME WorldMachineHost the
-    // live session ran, off the SAME per-tick WorldEngagement.BuildPadSnapshot() fold) → PKRJ (the SnapPose command
-    // collapse changed the shared command leaf, reusing the earlier retired PKRJ value) → PKRY (session requests
-    // joined the authority union as discriminant 8, and the record-start player document joined the header so offline
-    // profile edits use a detached catalog) → PKRZ (IntentSubmission gained its measured input-hold tick count) →
-    // PKRU (designation joined the authority union as discriminant 9).
-    // Each magic was checked
-    // against committed history; each is opaque, never the previous value incremented.
-    // A SEMANTIC break re-keys exactly as a layout break does, and for the same reason: at PKRV the byte OFFSETS were
-    // untouched, so a PKRC tape would decode cleanly and then mismatch at tick 0 — a verdict blaming the simulation
-    // for a hash-definition change. "PKRS" is also spent — it belonged to the retired SnapshotRecording codec, named
-    // in PKRP's own comment — so the picked value clears eight, not six. The next shape break re-keys this constant
-    // again to another opaque value, picked against the COMMITTED history of every prior value, never merely against
-    // the last one seen, for the identical reason, never by incrementing this one. (Picking against COMMITTED history
-    // is also what keeps two in-flight re-keys in sibling lanes from colliding on the same value.)
+public sealed class WorldReplaySnapshot {
+    // Opaque shape-identity value: re-keyed to a new opaque value whenever the tape's byte layout or hashed
+    // semantics change, never incremented as a counter. ShapeToken (below) is pinned at 1 permanently, so it cannot
+    // by itself distinguish an incompatible shape — Magic alone carries that distinction, and a file carrying either
+    // the wrong Magic or the wrong ShapeToken is refused rather than read tolerantly.
     //
-    // THIS IS ONE OF TWO INDEPENDENT RE-KEY BOUNDARIES, never one key covering both. The other is the guest ABI's
-    // artifact pins (Puck.Scripting.AddonAbi: regenerate the module, move the moduleHash pins). The coupling runs one
-    // way: MountedAddons below records what actually mounted, so an ABI break invalidates every existing tape through
-    // receipt mismatch without touching a byte offset here — but a tape shape change does NOT re-key the ABI. Move
-    // only one of the two and a stale artifact passes its own door and fails at the other's. One key for both would
-    // also make an unrelated guest rebuild silently invalidate every tape on disk.
+    // This is one of two independent re-key boundaries, never one key covering both. The other is the guest ABI's
+    // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
+    // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
+    // existing tape through receipt mismatch without a byte-offset change here.
+    private const uint Magic = 0x504B_4258u; // "PKBX" — puck replay tape.
 
-    private const uint Magic = 0x504B_5242u; // "PKRB" — puck replay tape; the grant leaf carries two typed masks.
-    // A SHAPE-IDENTITY TOKEN, not a version sequence, and it stays 1 permanently — see Magic's remarks above for why a
-    // same-token collision across an incompatible layout is possible, and how it is actually caught (by re-keying
-    // Magic, never this token). This build writes and reads exactly ONE tape shape; there is no older shape to be
-    // newer than and no consumer to negotiate with, so counting up would record a history nobody can act on. A token
-    // that is anything but this refuses the file loudly, naming found and expected, which is the whole job: a foreign
-    // or garbage file fails as unreadable instead of decoding as nonsense.
-    //
-    // A format change under this posture changes the SHAPE and re-keys Magic (never this token) to signal it. Stale
-    // local tapes are then deleted and re-recorded — they are owed nothing (greenfield, zero consumers) — though a
-    // session that does not own a given tape must not delete it out from under another session; the loud refusal is
-    // what tells that session to re-record its own. What catches a same-MAGIC shape drift, once Magic itself agrees,
-    // is the rest of the surface: the untrusted-length guards every count passes through, the pinned wire sets below
-    // (a byte no set names is refused by name), the mount pin, and replay.verify's own hash comparison, which is the
-    // honest end of it — a tape that decodes but means something else does not match.
+    // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
+    // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
+    // (found vs. expected) instead of decoding it as nonsense.
     private const uint ShapeToken = 1u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
 
-    /// <summary>Gets the guests MOUNTED at record-start, in mount order — the recorded-at-mount receipts (name, module
+    /// <summary>Gets the simulation rate (Hz) this recording was captured at — simulation input, not metadata:
+    /// <see cref="Drive"/> derives <c>stepTicks</c> from this value, never from the rate this build happens to run
+    /// some other world at, so a re-drive always runs at the granularity the tape actually recorded. The rate is now
+    /// authored per-world (<see cref="WorldSimulationDefaults"/>), so there is no longer one build-wide rate to check
+    /// this against — <see cref="Drive"/> instead refuses by name (<see cref="ReplayRefusal.RateMismatch"/>), right
+    /// after deserializing the embedded definition, when this disagrees with that definition's own
+    /// <see cref="WorldDefinition.SimulationRateHz"/> — an internal-consistency check in the same family as the mount
+    /// pin below: the header and the embedded document describe the same record-start world, so they must agree, and
+    /// a re-drive at the wrong step size would otherwise produce a genuinely different trajectory that reports as an
+    /// ordinary mismatch, sending the reader to hunt a determinism regression that is really a decode-time
+    /// inconsistency.</summary>
+    public required uint SimulationRate { get; init; }
+
+    /// <summary>Gets the guests mounted at record-start, in mount order — the recorded-at-mount receipts (name, module
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
@@ -278,7 +275,7 @@ internal sealed class WorldReplaySnapshot {
     /// <summary>Gets the per-tick server-input stream, in tick order from the recording's first tick.</summary>
     public required IReadOnlyList<WorldReplayTickInput> Ticks { get; init; }
 
-    /// <summary>Gets the LIVE session's per-tick pose hash trace — one entry per recorded tick, sampled off the live
+    /// <summary>Gets the live session's per-tick pose hash trace — one entry per recorded tick, sampled off the live
     /// population after each tick's server step, so the last entry is the state the running world actually reached. A
     /// replay recomputes the whole trace by re-driving this recording through a fresh world (<see cref="Drive"/>) and
     /// compares against this one, so a match is a genuine live-vs-replay fidelity proof rather than a fresh re-drive
@@ -286,14 +283,14 @@ internal sealed class WorldReplaySnapshot {
     /// keeping every entry rather than only the tail is what lets a mismatch name the tick it began at.</summary>
     public required ulong[] RecordedHashes { get; init; }
 
-    /// <summary>Gets the LIVE session's tail pose hash — the last entry of <see cref="RecordedHashes"/>, or <c>0</c> when
+    /// <summary>Gets the live session's tail pose hash — the last entry of <see cref="RecordedHashes"/>, or <c>0</c> when
     /// nothing was recorded.</summary>
     public ulong RecordedTailHash => ((RecordedHashes.Length > 0) ? RecordedHashes[^1] : 0UL);
 
     /// <summary>Gets the number of recorded ticks.</summary>
     public int TickCount => Ticks.Count;
 
-    /// <summary>Returns the deterministic per-tick state hash: every active body's fixed-point pose — position AND the full 6DOF
+    /// <summary>Returns the deterministic per-tick state hash: every active body's fixed-point pose — position and the full 6DOF
     /// attitude — folded in index order, so two runs with identical input produce identical traces regardless of
     /// wall-clock or backend. The hashed scope is the authoritative population pose — the honest boundary of what a
     /// replay reproduces.</summary>
@@ -311,13 +308,9 @@ internal sealed class WorldReplaySnapshot {
             }
 
             var position = body.FixedPosition;
-            // THE WHOLE ATTITUDE, AS ITS RAW LANES. Folding only an extracted YAW hashed a body's heading and threw its
-            // PITCH AND ROLL away, so two free-motion trajectories differing in nothing but those two axes collided —
-            // replay.verify printed MATCH for genuinely different 6DOF motion, a verification that could not fail on the
-            // axes the free model exists to move. The quaternion is the canonical orientation both models carry
-            // (WorldBody.FixedOrientation — a pure yaw rotation while grounded, an arbitrary body attitude while free),
-            // and its four FixedQ4816 lanes are folded RAW: never a float, never a re-derived Euler angle, so the hash
-            // stays bit-exact and machine-independent, which a decompose-then-hash would not be.
+            // The whole attitude, as its raw quaternion lanes — never a float, never a re-derived Euler angle, so the
+            // hash stays bit-exact and machine-independent. Hashing only an extracted yaw would leave pitch and roll
+            // uncovered: two free-motion trajectories differing in only those axes would hash identically.
             var orientation = body.FixedOrientation;
 
             hash.Add(value: (uint)index);
@@ -328,33 +321,59 @@ internal sealed class WorldReplaySnapshot {
             hash.Add(value: orientation.Y.Value);
             hash.Add(value: orientation.Z.Value);
             hash.Add(value: orientation.W.Value);
-            // The heading scalar rides BESIDE the quaternion rather than being replaced by it, because under the
-            // GROUNDED model m_yaw is the authoritative number and the quaternion is built FROM it — an edit too small
-            // to survive that construction would otherwise go unhashed. Under the free model this lane is that same
-            // quaternion's extracted yaw: redundant, and deterministically so (fixed-point throughout), which costs one
-            // fold and removes a case split from the honest answer to "what does this hash cover".
+            // The heading scalar rides beside the quaternion rather than being replaced by it: under the grounded
+            // model m_yaw is authoritative and the quaternion is built from it, so an edit too small to survive that
+            // construction would otherwise go unhashed. Under the free model this lane is redundant with the
+            // quaternion's own extracted yaw, but deterministically so, and costs only one fold.
             hash.Add(value: body.FixedYaw.Value);
         }
 
         return hash.Value;
     }
 
-    /// <summary>Rehydrates a FRESH authoritative world from this recording and re-drives the recorded server-input stream
+    /// <summary>Derives the engine-tick step width <see cref="Drive"/> re-runs each recorded tick at — the one place
+    /// <see cref="SimulationRate"/>'s "0 means a static world that never steps" contract and
+    /// <c>Puck.Hosting.EngineTicks.PerRate</c>'s "0 has no representable step width" contract meet. Extracted as its
+    /// own testable primitive because exercising it through a real <see cref="Drive"/> call requires an embedded
+    /// <see cref="WorldDefinition"/> that itself authors <c>simulation.rateHz</c> 0 — not buildable end to end through
+    /// the ordinary document pipeline until a separate <c>WorldDefinitionValidator</c> change admits that
+    /// value as legitimate authored input — while this logic needs
+    /// nothing but the two raw numbers a hand-built tape can supply directly.</summary>
+    /// <param name="simulationRate">The tape's own <see cref="SimulationRate"/> header.</param>
+    /// <param name="recordedTickCount">The recording's own <see cref="Ticks"/>.Count.</param>
+    /// <returns>The step width in engine ticks — <c>0</c> for a legitimate rate-0/zero-tick tape, since a rate-0
+    /// recording's own invariant is that its step-loop never runs and the value is therefore never consumed.</returns>
+    /// <exception cref="InvalidDataException">Rate 0 with a nonzero recorded tick count — the one shape that is
+    /// genuinely inconsistent (see <see cref="ReplayRefusal.RateZeroCarriesTicks"/>): a rate-0 tape's own invariant is
+    /// zero recorded ticks, because <c>NoteTick</c> never fires while the boot world never steps.</exception>
+    public static ulong ResolveStepWidth(uint simulationRate, int recordedTickCount) {
+        // Rate 0 is legitimate tape metadata: a durable stop that never steps. NoteTick never fires while boot never
+        // steps, so a rate-0 recording carries zero ticks and the step-loop never runs — deriving a step width
+        // unconditionally would turn an honest rate-0 recording into an unnamed exception instead of the named
+        // refusal below for the one shape that actually is inconsistent.
+        if ((simulationRate == 0U) && (recordedTickCount > 0)) {
+            throw ReplayRefusal.RateZeroCarriesTicks.Raise(message: $"This .puckreplay recording pins rateHz 0 (a static world with no step width) but carries {recordedTickCount} recorded tick(s) — a rate-0 tape's own invariant is zero recorded ticks; this tape is internally inconsistent, re-record it.");
+        }
+
+        return ((simulationRate == 0U) ? 0UL : EngineTicks.PerRate(ratePerSecond: simulationRate));
+    }
+
+    /// <summary>Rehydrates a fresh authoritative world from this recording and re-drives the recorded server-input stream
     /// through it, returning the per-tick pose-hash trace — the offline re-drive the replay/verify side runs (the record
     /// side samples the live population instead). A fresh <see cref="WorldServer"/>/<see cref="WorldPopulation"/> is built
-    /// from the embedded definition (its boot image is the starting body state), the recorded seats re-join AND are
+    /// from the embedded definition (its boot image is the starting body state), the recorded seats re-join and are
     /// re-seated on their pinned locomotion rates (so the catalog's current values cannot steer the re-drive), then each
-    /// tick's AUTHORITY entries apply in recorded order — commands, grants, revokes, and sessions interleaved exactly
+    /// tick's authority entries apply in recorded order — commands, grants, revokes, and sessions interleaved exactly
     /// as they were submitted, before the step, as the live command-apply window does — and its intents buffer and
     /// drain at the step.
     /// Exactly the live per-tick order, and re-applying the grant changes is what gives the re-driven world the same
     /// authority table the live one had.
-    /// <para><b>The embedded definition's addons re-mount and RE-RUN here.</b> Guest driving never crossed the loopback
+    /// <para><b>The embedded definition's addons re-mount and re-run here.</b> Guest driving never crossed the loopback
     /// and so was never recorded; re-running the same pinned modules (the same content-hash enforcement, from the same
     /// embedded document) is what reproduces it. That is the stronger property, not a weaker one: a replay that replayed
     /// recorded guest output would prove only that the tape was read back, while re-running proves the guests are
     /// themselves deterministic. Mount and disclosure lines print again during a drive; that is the honest cost.</para>
-    /// <para><b>The mount pin is checked BEFORE the first tick.</b> The fresh runtime's own receipts are compared,
+    /// <para><b>The mount pin is checked before the first tick.</b> The fresh runtime's own receipts are compared,
     /// index by index, against <see cref="MountedAddons"/> — the sequence recorded at record-start — and any
     /// disagreement (an addon this tape pins that did not mount, one that mounted and was never pinned, or a
     /// module-hash or fuel difference) refuses the drive outright, naming the addon and both sides. Without that gate a moved module or a
@@ -363,39 +382,40 @@ internal sealed class WorldReplaySnapshot {
     /// <param name="profiles">The profile catalog seats re-resolve their name against, and the drift report reads the
     /// current rates from (read-only here — the re-drive seats bodies on detached pinned handles instead of mutating
     /// this catalog's shared ones).</param>
-    /// <param name="engines">The registered screen-machine engines (the SAME DI-collected set the live session ran
+    /// <param name="engines">The registered screen-machine engines (the same DI-collected set the live session ran
     /// under) — the shadow world's own <see cref="WorldMachineHost"/> boots and steps machines off this exactly like
     /// the live one did, so a tape spanning a CAS-pinned <c>screen.insert</c> re-proves the pinned content still
-    /// matches (authoritative-machines campaign, 2026-08-03). Disposed at the end of this drive — the shadow
+    /// matches. Disposed at the end of this drive — the shadow
     /// machines exist only for the duration of the re-drive.</param>
     /// <returns>The per-tick state-hash trace, one entry per recorded tick.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="profiles"/> or <paramref name="engines"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The guests this recording pins are not the guests the fresh world would
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
-    /// below does not handle, which would silently DROP a recorded input from the re-drive.</exception>
+    /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
     public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: DefinitionJson);
+
+        // The header's SimulationRate must agree with the embedded definition's own SimulationRateHz — the same
+        // internal-consistency family as the mount pin below. A disagreement re-driven anyway would produce a
+        // different trajectory reporting as an ordinary MISMATCH rather than naming the real cause.
+        if (SimulationRate != (uint)definition.SimulationRateHz) {
+            throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — re-driving at the wrong step size would produce a different trajectory that reports as an ordinary MISMATCH rather than naming the real cause. This tape is internally inconsistent; re-record it.");
+        }
+
         var population = new WorldPopulation(definition: definition);
         using var machines = new WorldMachineHost(screens: definition.Screens, engines: engines);
         // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
         // authoritative simulation never consults GPU capacity, so no probe is needed offline.
         var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
 
-        // REPLAY VERIFICATION IS SIDE-EFFECT-FREE (owner ruling, 2026-08-06). A rule's 'save' effect re-derives
-        // deterministically like any other rule effect (see WorldServer.FireWorldRuleEffect's Save arm), but its tap
-        // is engine I/O — WorldPostBuildWiring's live closure writes the world's own loaded file. Left unwired here,
-        // that write is already skipped (WorldServer.SaveEffectTap defaults to null and a null tap is a silent
-        // no-op), but leaving the omission implicit means a future shared-wiring helper could accidentally attach
-        // the live closure to this shadow server too. Wire an EXPLICIT narration-only tap instead, so the
-        // side-effect-free contract is a decision this construction site states, not a side effect of what nobody
-        // got around to wiring — and so an operator watching a verify run sees why a save effect produced no file
-        // write rather than reading silence as "the rule never fired". No sim state depends on this: the tick after
-        // a fired save is bit-identical to a tick without one (see ActionEffect.Save's own remarks), so suppressing
-        // the write can never move the pose hash this drive compares.
+        // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
+        // other rule effect, but writing the world's own file is engine I/O. Wire an explicit narration-only tap
+        // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the pose hash
+        // this drive compares never depends on whether the write occurred.
         server.SaveEffectTap = tick => Console.Error.WriteLine(value: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]");
 
         foreach (var seat in Seats) {
@@ -407,14 +427,10 @@ internal sealed class WorldReplaySnapshot {
                 continue;
             }
 
-            // THE JOIN ABOVE RESOLVED A LIVE HANDLE, AND ITS RATES ARE FREE TO HAVE MOVED. WorldBody.Advance reads
-            // MoveSpeed/TurnSpeed off the seated profile every frame, so they are simulation INPUT — and an
-            // identity.motion or a hand edit of player.json between record and verify would otherwise re-drive a
-            // different world under
-            // the identical recorded stream, reported as a bare MISMATCH that nothing could attribute to the edit.
-            // Re-seat on a DETACHED handle carrying the recorded rates instead: a replay reproduces what was recorded,
-            // never what the machine currently prefers. The live catalog is only READ here (the drift report below) and
-            // is never mutated — every seat sharing a live handle would otherwise be retuned by an offline re-drive.
+            // The join above resolved a live handle, and MoveSpeed/TurnSpeed are simulation input (WorldBody.Advance
+            // reads them off the seated profile every frame), so re-seat on a detached handle carrying the recorded
+            // rates instead: a replay reproduces what was recorded, never what the live catalog currently holds. The
+            // live catalog is only read here (the drift report below), never mutated.
             ReportProfileDrift(profiles: profiles, pin: pin);
             population.SetSeatProfile(slot: seat.Slot, profile: WorldIdentity.Pinned(name: pin.Name, moveSpeed: pin.MoveSpeed, turnSpeed: pin.TurnSpeed, defaults: definition.PlayerDefaults));
         }
@@ -424,13 +440,12 @@ internal sealed class WorldReplaySnapshot {
         // Owns a Wasmtime engine, hence the using.
         using var addons = WorldAddonRuntime.Create(definition: definition, server: server);
 
-        // BEFORE the first tick, always. A guest that failed to mount, mounted from moved module bytes, or mounted
-        // under a different budget would otherwise re-drive a DIFFERENT world and report as an ordinary
-        // trajectory mismatch at some tick — a verdict that sends the reader to the simulation for a defect that is in
-        // the tree. The pin is what makes "re-run the guests" a stronger property than "replay their recorded output".
+        // Checked before the first tick: a guest that failed to mount, mounted from moved module bytes, or mounted
+        // under a different budget would otherwise re-drive a different world and surface as an ordinary trajectory
+        // mismatch at some arbitrary tick instead of naming the real cause.
         VerifyMountedAddons(recorded: MountedAddons, fresh: addons.Receipts);
 
-        var stepTicks = EngineTicks.PerRate(ratePerSecond: SimulationRate);
+        var stepTicks = ResolveStepWidth(simulationRate: SimulationRate, recordedTickCount: Ticks.Count);
         var hashes = new ulong[Ticks.Count];
 
         for (var tick = 0; (tick < Ticks.Count); tick++) {
@@ -496,6 +511,20 @@ internal sealed class WorldReplaySnapshot {
                         server.ApplyScreenOp(op: screenOp.Value, principal: screenOp.Actor, expectedContentHash: screenOp.ContentHash);
 
                         break;
+                    case WorldReplayEntry.RateLever:
+                        // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
+                        // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
+                        break;
+                    case WorldReplayEntry.Transfer transferEvent:
+                        // Acts on the departure half only: this shadow world is the boot instance alone, with no
+                        // destination instance to move a body into, so an arrival is structurally unreachable. A
+                        // departed body must stop contributing to HashState here exactly as it did live. A slot
+                        // already inactive is a no-op by TryDetachSeatForTransfer's own contract, never a throw.
+                        foreach (var departedSlot in transferEvent.DepartedBootSlots) {
+                            _ = population.TryDetachSeatForTransfer(slot: departedSlot, profile: out _);
+                        }
+
+                        break;
                     default:
                         // A new entry kind that reaches here unhandled would be silently DROPPED from the re-drive,
                         // which is a determinism hole wearing a robustness costume.
@@ -518,11 +547,9 @@ internal sealed class WorldReplaySnapshot {
         return hashes;
     }
 
-    // THE OTHER HALF OF THE PIN. Using the recorded rates makes the re-drive hermetic; saying so out loud is what turns
-    // a mystery verdict into a diagnosis. Without this line an operator who edited a profile between record and verify
-    // sees a verdict with no way to tell a profile edit from a genuine determinism regression — and now that the pin
-    // holds the trajectory steady, the surprising verdict is a MATCH that disagrees with the world they are looking at.
-    // A REPORT, NEVER A REFUSAL: a drifted profile is a perfectly replayable recording, so nothing here throws.
+    // Reports a live/pinned rate drift without refusing: a drifted profile is a perfectly replayable recording, so
+    // nothing here throws. Without this, an operator who edited a profile between record and verify would see a
+    // MATCH with no way to tell a profile edit from a genuine determinism regression.
     private static void ReportProfileDrift(WorldOwnedWorlds profiles, WorldReplayProfilePin pin) {
         if (profiles.Find(name: pin.Name) is not { } live) {
             // Drift all the way to absent. The re-drive is unaffected — the pinned handle needs no catalog entry — but
@@ -552,14 +579,10 @@ internal sealed class WorldReplaySnapshot {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(double)rate:0.####} (raw {rate.Value})");
     }
 
-    // THE MOUNT PIN, INDEX-BY-INDEX (Phase-3 plan L6, superseding the prior BY-NAME/reorder-tolerant comparison):
-    // mount order is document order (WorldAddonRuntime's own constructor doc), and the boot-anchored replay
-    // contract pins the WHOLE receipt sequence a session actually ran under — name, hash, AND fuel, at each
-    // POSITION — never merely "the same set of names showed up somewhere". A reorder is a different mount sequence
-    // even when every name/hash/fuel triple individually matches something on the other side (an addon-index-keyed
-    // completion field, PendingOp.Mutate's sourceAddonIndex among them, means POSITION is load-bearing state now,
-    // not a cosmetic ordering the tape could shrug off). Duplicates are refused first and separately, so a
-    // collision reports as itself rather than surfacing as a confusing index mismatch two lines later.
+    // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
+    // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
+    // state (e.g. PendingOp.Mutate's sourceAddonIndex addresses a guest by index), not a cosmetic ordering. Duplicates
+    // are refused first and separately, so a collision reports as itself rather than a confusing index mismatch.
     private static void VerifyMountedAddons(IReadOnlyList<WorldAddonReceipt> recorded, IReadOnlyList<WorldAddonReceipt> fresh) {
         // Read refuses a duplicate name in a TAPE'S OWN mounted set (a name identifies exactly one mounted guest), but
         // Drive can also run over an IN-PROCESS recording that never passed through Read at all —
@@ -625,14 +648,9 @@ internal sealed class WorldReplaySnapshot {
         }
     }
 
-    /// <summary>The fixed simulation rate (Hz) the recording assumes — the launcher's own <c>TargetUpdateRate</c>, a
-    /// divisor of <see cref="EngineTicks.PerSecond"/>. Both the record and replay drives use it, so the step duration is
-    /// identical on each side.</summary>
-    public const uint SimulationRate = 240U;
-
-    /// <summary>Serializes a recording to <paramref name="path"/> in ONE write: the whole tape is encoded to an
+    /// <summary>Serializes a recording to <paramref name="path"/> in one write: the whole tape is encoded to an
     /// in-memory buffer first (where every write-side throw in <see cref="Write"/> can still fire — an unmapped enum
-    /// member, a duplicate mounted-addon name, any host-side codec bug — see their remarks), and only a COMPLETE
+    /// member, a duplicate mounted-addon name, any host-side codec bug — see their remarks), and only a complete
     /// buffer ever reaches the destination file, via one <see cref="File.WriteAllBytes(string, byte[])"/> call. A throw
     /// during encoding therefore never truncates or creates a partial file on disk — the destination is untouched
     /// until the whole tape is ready to go, which is the property that matters (this is not a defense against the disk
@@ -669,6 +687,9 @@ internal sealed class WorldReplaySnapshot {
 
         writer.Write(value: Magic);
         writer.Write(value: ShapeToken);
+        // Right after the shape header, before anything else: the rate is simulation INPUT the same way the
+        // definition and seats are, and Drive needs it before it can honestly derive a step size.
+        writer.Write(value: recording.SimulationRate);
         writer.Write(value: recording.RecordedHashes.Length);
 
         foreach (var hash in recording.RecordedHashes) {
@@ -735,7 +756,7 @@ internal sealed class WorldReplaySnapshot {
     /// build does not read (refused outright — greenfield keeps no read-side tolerance for a foreign shape); is
     /// truncated/corrupt (including a truncated or malformed length-prefixed string, normalized here from the BCL's own
     /// <see cref="EndOfStreamException"/>/<see cref="FormatException"/> so every corruption this reader detects throws
-    /// the SAME exception type); carries a value no pinned wire set names; pins one addon name twice; or pins a seat
+    /// the same exception type); carries a value no pinned wire set names; pins one addon name twice; or pins a seat
     /// slot out of range or twice.</exception>
     public static WorldReplaySnapshot Read(Stream stream) {
         ArgumentNullException.ThrowIfNull(argument: stream);
@@ -750,6 +771,7 @@ internal sealed class WorldReplaySnapshot {
                 throw ReplayRefusal.ShapeMismatch.Raise(message: $"Not a Puck replay tape, or an older shape this build does not read — re-record it. (found magic 0x{magic:x8}, shape token {shapeToken}; this build reads magic 0x{Magic:x8}, shape token {ShapeToken} only)");
             }
 
+            var simulationRate = reader.ReadUInt32();
             var hashCount = ReadCount(reader: reader, minimumBytesEach: 8, what: "hash");
             var recordedHashes = new ulong[hashCount];
 
@@ -764,7 +786,7 @@ internal sealed class WorldReplaySnapshot {
                 throw new InvalidDataException(message: "Truncated .puckreplay recording (definition).");
             }
 
-            // 11 = the smallest possible receipt: two 1-byte string length prefixes, the u64 fuel, and the former-lane placeholder byte.
+            // 11 = the smallest possible receipt: two 1-byte string length prefixes, the u64 fuel, and the placeholder lane byte.
             var addonCount = ReadCount(reader: reader, minimumBytesEach: 11, what: "mounted addon");
             var mountedAddons = new List<WorldAddonReceipt>(capacity: addonCount);
 
@@ -812,9 +834,9 @@ internal sealed class WorldReplaySnapshot {
             var ticks = new List<WorldReplayTickInput>(capacity: tickCount);
 
             for (var index = 0; (index < tickCount); index++) {
-                // 12 = the smallest possible entry: the discriminant byte, a Command's minimal principal (kind + index +
-                // the absent-name flag), its entity index, and its own kind byte. A Grant/Revoke entry is strictly larger.
-                var entryCount = ReadCount(reader: reader, minimumBytesEach: 12, what: "authority entry");
+                // 2 = the smallest possible entry: RateLever's discriminant byte plus its one bool. Every other kind
+                // (Command's minimal principal, a Grant/Revoke leaf, ...) is strictly larger.
+                var entryCount = ReadCount(reader: reader, minimumBytesEach: 2, what: "authority entry");
                 var authority = new List<WorldReplayEntry>(capacity: entryCount);
 
                 for (var entry = 0; (entry < entryCount); entry++) {
@@ -844,6 +866,7 @@ internal sealed class WorldReplaySnapshot {
                 MountedAddons = mountedAddons,
                 RecordedHashes = recordedHashes,
                 Seats = seats,
+                SimulationRate = simulationRate,
                 Ticks = ticks,
             };
         } catch (Exception exception) when (exception is EndOfStreamException or FormatException) {
@@ -996,6 +1019,16 @@ internal sealed class WorldReplaySnapshot {
                 WritePrincipal(writer: writer, principal: screenOp.Actor);
 
                 break;
+            case WorldReplayEntry.RateLever rateLever:
+                writer.Write(value: (byte)10);
+                writer.Write(value: rateLever.Paused);
+
+                break;
+            case WorldReplayEntry.Transfer transfer:
+                writer.Write(value: (byte)11);
+                WriteTransferLeaf(writer: writer, transfer: transfer);
+
+                break;
             default:
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
@@ -1015,8 +1048,86 @@ internal sealed class WorldReplaySnapshot {
             7 => ReadScreenOpEntry(reader: reader),
             8 => new WorldReplayEntry.Session(Value: ReadSessionLeaf(reader: reader)),
             9 => new WorldReplayEntry.Designation(Value: ReadDesignationLeaf(reader: reader), Actor: ReadPrincipal(reader: reader)),
+            10 => new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean()),
+            11 => ReadTransferEntry(reader: reader),
             _ => throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}."),
         };
+    }
+
+    // The local-transfer leaf: five semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an
+    // FNV-1a content signature folded over those SAME five fields, length-prefixing every string so two distinct
+    // field sequences can never fold to the same signature regardless of what any one field contains (the identical
+    // netstring argument WorldSessionResolver.ScopedSegment already documents for the same reason). This entry sits
+    // OUTSIDE the pose hash's own coverage — a crossing's destination/scope/generation/outcome text is not
+    // simulation state — so this signature is the ONLY thing on the tape that would ever catch a tampered byte here;
+    // ReadTransferEntry recomputes it from the DECODED fields and refuses BY NAME on a disagreement.
+    private static void WriteTransferLeaf(BinaryWriter writer, WorldReplayEntry.Transfer transfer) {
+        writer.Write(value: transfer.TransferId);
+        writer.Write(value: transfer.DestinationName);
+        writer.Write(value: transfer.ScopeKey);
+        writer.Write(value: transfer.GenerationId);
+        writer.Write(value: transfer.Outcome);
+        writer.Write(value: transfer.DepartedBootSlots.Count);
+
+        foreach (var slot in transfer.DepartedBootSlots) {
+            writer.Write(value: slot);
+        }
+
+        writer.Write(value: ComputeTransferSignature(transfer: transfer));
+    }
+
+    private static WorldReplayEntry ReadTransferEntry(BinaryReader reader) {
+        var transferId = reader.ReadUInt64();
+        var destinationName = reader.ReadString();
+        var scopeKey = reader.ReadString();
+        var generationId = reader.ReadUInt64();
+        var outcome = reader.ReadString();
+        var departedCount = ReadCount(reader: reader, minimumBytesEach: 4, what: "transfer departed-slot");
+        var departedBootSlots = new int[departedCount];
+
+        for (var index = 0; (index < departedCount); index++) {
+            var slot = reader.ReadInt32();
+
+            if ((uint)slot >= WorldPopulation.LocalSeatCount) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer departed-slot {slot} is out of range (expected 0..{WorldPopulation.LocalSeatCount - 1}).");
+            }
+
+            departedBootSlots[index] = slot;
+        }
+
+        var storedSignature = reader.ReadUInt64();
+        var entry = new WorldReplayEntry.Transfer(TransferId: transferId, DestinationName: destinationName, ScopeKey: scopeKey, GenerationId: generationId, Outcome: outcome, DepartedBootSlots: departedBootSlots);
+        var recomputed = ComputeTransferSignature(transfer: entry);
+
+        if (recomputed != storedSignature) {
+            throw ReplayRefusal.TransferEventTampered.Raise(message: $"transfer {transferId} -> '{destinationName}' (scope '{scopeKey}', generation {generationId}): stored content signature 0x{storedSignature:x16} disagrees with the recomputed 0x{recomputed:x16} — the tape's transfer event bytes were corrupted or edited after recording (this entry sits outside the pose hash's own coverage, so nothing else on the tape would catch it)");
+        }
+
+        return entry;
+    }
+
+    private static ulong ComputeTransferSignature(WorldReplayEntry.Transfer transfer) {
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: transfer.TransferId);
+        AddLengthPrefixedUtf8(hash: ref hash, value: transfer.DestinationName);
+        AddLengthPrefixedUtf8(hash: ref hash, value: transfer.ScopeKey);
+        hash.Add(value: transfer.GenerationId);
+        AddLengthPrefixedUtf8(hash: ref hash, value: transfer.Outcome);
+        hash.Add(value: (uint)transfer.DepartedBootSlots.Count);
+
+        foreach (var slot in transfer.DepartedBootSlots) {
+            hash.Add(value: (uint)slot);
+        }
+
+        return hash.Value;
+    }
+
+    private static void AddLengthPrefixedUtf8(ref Fnv1aHash hash, string value) {
+        var bytes = Encoding.UTF8.GetBytes(s: value);
+
+        hash.Add(value: (ulong)bytes.Length);
+        hash.Add(values: bytes);
     }
 
     private static void WriteSessionLeaf(BinaryWriter writer, SessionRequest request) {
@@ -1209,6 +1320,8 @@ internal sealed class WorldReplaySnapshot {
             writer.Write(value: entry.Generation);
             WriteIntentSource(writer: writer, source: entry.Source);
             WritePrincipal(writer: writer, principal: entry.Identity);
+            writer.Write(value: entry.IdentityDomain);
+            writer.Write(value: entry.IdentitySubject);
         }
 
         writer.Write(value: grants.Count);
@@ -1219,7 +1332,7 @@ internal sealed class WorldReplaySnapshot {
     }
 
     private static (IReadOnlyList<WorldPeerEventEntry> Entries, IReadOnlyList<WorldGrant> Grants) ReadPeerEvent(BinaryReader reader, bool revoked) {
-        var entryCount = ReadCount(reader: reader, minimumBytesEach: 14, what: "peer event entry");
+        var entryCount = ReadCount(reader: reader, minimumBytesEach: 16, what: "peer event entry");
         var entries = new List<WorldPeerEventEntry>(capacity: entryCount);
 
         for (var index = 0; index < entryCount; index++) {
@@ -1227,12 +1340,14 @@ internal sealed class WorldReplaySnapshot {
             var generation = reader.ReadInt32();
             var source = ReadIntentSource(reader: reader);
             var identity = ReadPrincipal(reader: reader);
+            var identityDomain = reader.ReadString();
+            var identitySubject = reader.ReadString();
 
             if ((identity.Kind != PrincipalKind.Peer) || (identity.Index != bodyIndex) || (identity.Generation != generation)) {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: identity {identity.Describe()} does not match body {bodyIndex}, generation {generation}.");
             }
 
-            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity));
+            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity, IdentityDomain: identityDomain, IdentitySubject: identitySubject));
         }
 
         var grantCount = ReadCount(reader: reader, minimumBytesEach: 5, what: "peer event grant");
@@ -1259,20 +1374,13 @@ internal sealed class WorldReplaySnapshot {
 
 
     // ---------------------------------------------------------------------------------------------------------------
-    // THE PINNED WIRE SETS. Every enum that reaches this codec crosses as a value declared HERE, mapped by an
-    // exhaustive switch in both directions — never by a cast. A cast pins whatever ordinals the enum happened to have
-    // when the mapping was written: reorder a member, insert one, or delete one, and every saved tape's bytes change
-    // MEANING with no line here changing. The precedent is Puck.Scripting.AddonVerdict, which owns its own
-    // discriminant for exactly this reason; the sets below are this codec's, never that one's, because two independently
-    // frozen surfaces must not be welded together by reuse.
+    // The pinned wire sets. Every enum that reaches this codec crosses as a value declared here, mapped by an
+    // exhaustive switch in both directions — never by a cast, since a cast pins whatever ordinals the enum happens to
+    // have and a reorder/insert/delete would silently change every saved tape's meaning.
     //
-    // Every value is numerically identical to the enum's ordinal TODAY, deliberately — the first mapping is the
-    // identity, so this change moves no byte. The point is not the numbers, it is that from here on a divergence
-    // between an enum and its wire form is a visible edit in this file rather than a silent reinterpretation.
-    //
-    // FROZEN WIRE VALUES: changing one invalidates every saved tape. The write side throws by NAME on a member the set
-    // does not cover (a new enum member must be given a wire value here, not silently dropped); the read side throws
-    // InvalidDataException naming the value it found (a doctored or drifted tape is refused, never decoded as garbage).
+    // Frozen wire values: changing one invalidates every saved tape. The write side throws by name on a member the
+    // set does not cover; the read side throws InvalidDataException naming the value it found, so a doctored or
+    // drifted tape is refused rather than decoded as garbage.
     private static class Wire {
         // PrincipalKind
         public const byte PrincipalSeat = 0;
@@ -1285,11 +1393,8 @@ internal sealed class WorldReplaySnapshot {
         public const byte SourceIdle = 1;
         public const byte SourceProducer = 2;
 
-        // The former AddonLane receipt byte. The lane axis is deleted (owner ruling, 2026-08-02), but the tape SHAPE
-        // does not move here — that is the ONE re-key L7 owns — so the receipt writer keeps emitting a constant byte
-        // in this slot and the reader validates it as that constant. AddonLaneReceiptConstant reuses the retired
-        // Simulation wire value (1): every receipt this build ever wrote carries it already, so old tapes keep
-        // verifying unchanged.
+        // A fixed placeholder byte in the receipt's (now-unused) lane slot, kept constant so the receipt shape does
+        // not move: the writer always emits it and the reader validates it as this constant.
         public const byte AddonLaneReceiptConstant = 1;
 
         // WorldRebuildKind — this codec's OWN discriminant set, independent of WorldSubmissionCodec's identically-
@@ -1347,8 +1452,8 @@ internal sealed class WorldReplaySnapshot {
     }
 
 
-    // The receipt's former lane byte. TAPE SHAPE MUST NOT MOVE (the one re-key belongs to L7), so this slot keeps
-    // emitting and validating a byte even though WorldAddonReceipt no longer carries a Lane to encode.
+    // The receipt's former lane byte. The tape shape must not move for this alone, so this slot keeps emitting and
+    // validating a byte even though WorldAddonReceipt no longer carries a Lane to encode.
     private static void WriteAddonLanePlaceholder(BinaryWriter writer) {
         writer.Write(value: Wire.AddonLaneReceiptConstant);
     }

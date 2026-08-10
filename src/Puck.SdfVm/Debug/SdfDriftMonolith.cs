@@ -2,16 +2,14 @@ using System.Numerics;
 
 namespace Puck.SdfVm.Debug;
 
-/// <summary>The DRIFT MONOLITH — the one hand-authored scene that stacks every known cross-backend parity
-/// amplifier into a single frame (LogSphere Droste + P6M wallpaper fold + near-tie emissive material seam +
-/// deep smooth/chamfer chain + far grazing wall). It was shared verbatim by the drift-ceiling battery stage and
-/// the gallery's monolith exhibit so both paths exercised identical geometry; the stage left the build in the
-/// 2026-08-02 quarantine, and the exhibit (<see cref="SdfGalleryScene"/>) is now the only caller.</summary>
+/// <summary>The one hand-authored scene that stacks every known cross-backend parity amplifier into a single frame
+/// (LogSphere Droste + P6M wallpaper fold + near-tie emissive material seam + deep smooth/chamfer chain + far
+/// grazing wall). The gallery's monolith exhibit (<see cref="SdfGalleryScene"/>) is its only caller.</summary>
 public static class SdfDriftMonolith {
     /// <summary>Emits the monolith into an existing builder (the gallery path). Every region composes through the
-    /// UNION family (smooth/chamfer union, plain union) so nothing annihilates its neighbours (the accumulator
-    /// rule); the emissive seam is emitted LAST so its material-winner flip is always present regardless of what
-    /// precedes it. SUBTLETY: the two hex-stride materials are reached POSITIONALLY through the wallpaper
+    /// union family (smooth/chamfer union, plain union) so nothing annihilates its neighbours (the accumulator
+    /// rule); the emissive seam is emitted last so its material-winner flip is always present regardless of what
+    /// precedes it. The two hex-stride materials are reached positionally through the wallpaper
     /// <c>materialStride</c> — call this into a builder holding none of the caller's own materials yet.</summary>
     /// <param name="builder">The program builder to emit into (fresh, or holding only this scene's materials so far).</param>
     public static void Emit(SdfProgramBuilder builder) {

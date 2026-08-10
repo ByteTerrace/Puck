@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.Maths;
 
@@ -18,14 +17,14 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. A slab's <c>Round</c> and a creation's boolean carving, smoothing, rounded box corners, and non-box primitive
-/// surfaces are deliberately NOT modelled. An isotropically scaled sphere is exact; every other finite placement
+/// surfaces are deliberately not modelled. An isotropically scaled sphere is exact; every other finite placement
 /// primitive uses its world-axis bounding box, exact as a bound for an axis-aligned sharp box and conservative for
 /// rotated, rounded, or non-box geometry. No broadphase: O(bodies × colliders); a Y-sorted array with an AABB reject on
 /// the swept bounds is the cheap first cull if profiling ever demands one, behind this seam with no signature change.</para>
-/// <para>A placement carrying BOTH a solid AND an attach facet compiles no static collider here — its origin/yaw are
+/// <para>A placement carrying both a solid and an attach facet compiles no static collider here — its origin/yaw are
 /// not the row's authored transform, they are a live body's resolved pose. <see cref="RefreshAttached"/> recomputes
 /// those colliders once per tick, before any body advances, so every body's <see cref="Resolve"/> call this tick
-/// depenetrates against the SAME snapshot rather than repeating the recompute per body.</para>
+/// depenetrates against the same snapshot rather than repeating the recompute per body.</para>
 /// </remarks>
 internal sealed class WorldColliderSet : IContactField {
     private static readonly FixedVector3 s_unitY = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
@@ -126,41 +125,47 @@ internal sealed class WorldColliderSet : IContactField {
             }
 
             var margin = FixedQ4816.FromDouble(value: solid.Margin);
-            var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
+            // The authored yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
+            // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
+            // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
+            // This runs once per boot, but once per boot ON EVERY MACHINE: the compiled colliders are re-derived
+            // from the document by every process, never baked once and shared, which is why a non-portable
+            // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
+            var rotation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0))));
 
-            CreationStampLattice.ForEachInstance(
-                origin: placement.Position,
+            CreationStampLattice.ForEachFixedInstance(
+                origin: FixedVector3.FromVector3(value: placement.Position),
                 rotation: rotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-                visitor: instance => CreationStampEmitter.VisitPrimitiveCopies(
+                visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
                     document: creation.Document,
-                    transform: new CreationStampTransform(
+                    transform: new FixedCreationStampTransform(
                         Origin: instance.Origin,
                         Rotation: rotation,
-                        Scale: placement.Scale,
+                        Scale: FixedQ4816.FromDouble(value: placement.Scale),
                         ReflectionNormal: instance.ReflectionNormal
                     ),
                     visitor: copy => {
                         if (copy.Shape.Type == AvatarPrimitive.Plane) {
-                            var normal = FixedVector3.FromVector3(value: copy.PlaneNormal).Normalize();
+                            var normal = copy.PlaneNormal;
 
-                            colliders.Add(item: Collider.HalfSpace(point: (FixedVector3.FromVector3(value: copy.Center) + (normal * margin)), normal: normal));
+                            colliders.Add(item: Collider.HalfSpace(point: (copy.Center + (normal * margin)), normal: normal));
                             planes++;
                             placementPlanes++;
-                        } else if ((copy.Shape.Type == AvatarPrimitive.Sphere) && (copy.UniformScale > 0f)) {
+                        } else if ((copy.Shape.Type == AvatarPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero)) {
                             var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
 
                             colliders.Add(item: Collider.Sphere(
-                                center: FixedVector3.FromVector3(value: copy.Center),
-                                radius: (FixedQ4816.FromDouble(value: (sphereBounds.HalfExtents.X * copy.UniformScale)) + margin)
+                                center: copy.Center,
+                                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
                             ));
                             spheres++;
                             placementSpheres++;
                         } else {
                             colliders.Add(item: Collider.AxisAlignedBox(
-                                center: FixedVector3.FromVector3(value: copy.Center),
-                                halfExtents: (FixedVector3.FromVector3(value: copy.HalfExtents) + new FixedVector3(X: margin, Y: margin, Z: margin))
+                                center: copy.Center,
+                                halfExtents: (copy.HalfExtents + new FixedVector3(X: margin, Y: margin, Z: margin))
                             ));
                             boxes++;
                             placementBoxes++;
@@ -262,30 +267,36 @@ internal sealed class WorldColliderSet : IContactField {
 
             var margin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
             // The SAME creation-shape transform chain the static loop above (and the renderer) already runs, fed the
-            // resolved dynamic origin/yaw instead of the row's static authored Position/YawDegrees — float internally,
-            // like the static build, converted to fixed point only at the collider boundary below.
-            var origin = new Vector3(x: (float)(double)fixedPosition.X, y: (float)(double)fixedPosition.Y, z: (float)(double)fixedPosition.Z);
-            var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (float)(double)fixedYaw);
+            // resolved dynamic origin/yaw instead of the row's static authored Position/YawDegrees — and taken through
+            // the FIXED-POINT emitter, because this runs every tick on a live body's pose. The single-precision
+            // sibling would reach the platform libm's sin/cos here (Quaternion.CreateFromAxisAngle), which no
+            // determinism rule permits on a value that decides where a body stops.
+            var stampRotation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: fixedYaw);
 
-            CreationStampEmitter.VisitPrimitiveCopies(
+            CreationStampEmitter.VisitFixedPrimitiveCopies(
                 document: creation.Document,
-                transform: new CreationStampTransform(Origin: origin, Rotation: rotation, Scale: placement.Scale, ReflectionNormal: null),
+                transform: new FixedCreationStampTransform(
+                    Origin: fixedPosition,
+                    Rotation: stampRotation,
+                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                    ReflectionNormal: null
+                ),
                 visitor: copy => {
                     if (copy.Shape.Type == AvatarPrimitive.Plane) {
-                        var normal = FixedVector3.FromVector3(value: copy.PlaneNormal).Normalize();
+                        var normal = copy.PlaneNormal;
 
-                        m_attachedColliders.Add(item: Collider.HalfSpace(point: (FixedVector3.FromVector3(value: copy.Center) + (normal * margin)), normal: normal));
-                    } else if ((copy.Shape.Type == AvatarPrimitive.Sphere) && (copy.UniformScale > 0f)) {
+                        m_attachedColliders.Add(item: Collider.HalfSpace(point: (copy.Center + (normal * margin)), normal: normal));
+                    } else if ((copy.Shape.Type == AvatarPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero)) {
                         var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
 
                         m_attachedColliders.Add(item: Collider.Sphere(
-                            center: FixedVector3.FromVector3(value: copy.Center),
-                            radius: (FixedQ4816.FromDouble(value: (sphereBounds.HalfExtents.X * copy.UniformScale)) + margin)
+                            center: copy.Center,
+                            radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
                         ));
                     } else {
                         m_attachedColliders.Add(item: Collider.AxisAlignedBox(
-                            center: FixedVector3.FromVector3(value: copy.Center),
-                            halfExtents: (FixedVector3.FromVector3(value: copy.HalfExtents) + new FixedVector3(X: margin, Y: margin, Z: margin))
+                            center: copy.Center,
+                            halfExtents: (copy.HalfExtents + new FixedVector3(X: margin, Y: margin, Z: margin))
                         ));
                     }
                 }

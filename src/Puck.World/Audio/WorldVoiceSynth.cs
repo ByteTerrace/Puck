@@ -19,7 +19,7 @@ public enum WorldVoiceFilterMode {
 
 /// <summary>
 /// The flat runtime parameter block one trigger voices from — a post-<see cref="SynthPatchCanonicalizer.Normalize"/>
-/// <see cref="SynthPatchDocument"/> converted ONCE at registration (never per sample): duty is pre-scaled to a Q32
+/// <see cref="SynthPatchDocument"/> converted once at registration (never per sample): duty is pre-scaled to a Q32
 /// phase threshold with its DC term precomputed, and all frame/millihertz fields ride verbatim (they are already
 /// runtime units by the document's design). Filter parameters have no document fields yet — <see cref="FromDocument"/>
 /// sets <see cref="WorldVoiceFilterMode.Bypass"/>.
@@ -100,7 +100,7 @@ public readonly record struct WorldVoicePatch(
 /// Chamberlin state-variable filter: <c>low += f·band; high = x − low − q·band;
 /// band += f·high</c> per sample, tap selected by mode, integer Q16 throughout.
 /// The same pure <see cref="Render"/> executes on the audio thread and the offline proof.
-/// Voice allocation: a free voice first; otherwise steal the QUIETEST (lowest current envelope level), ties
+/// Voice allocation: a free voice first; otherwise steal the quietest (lowest current envelope level), ties
 /// broken oldest-first — the policy that never robs a fresh attack to keep a dying tail.
 /// </summary>
 public sealed class WorldVoiceSynth {
@@ -202,7 +202,7 @@ public sealed class WorldVoiceSynth {
         return slot;
     }
 
-    /// <summary>Renders every active voice, summed and saturated, into a MONO span — the pure surface both the
+    /// <summary>Renders every active voice, summed and saturated, into a mono span — the pure surface both the
     /// audio thread and the offline proof drive. Advances all voice state by <paramref name="frames"/>.</summary>
     /// <param name="destination">The mono s16 destination (at least <paramref name="frames"/> long).</param>
     /// <param name="frames">The frame count (at most <see cref="WorldAudioMixer.MaxBlockFrames"/>).</param>

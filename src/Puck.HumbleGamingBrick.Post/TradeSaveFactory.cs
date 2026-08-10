@@ -5,22 +5,25 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <summary>
 /// Crafts a byte-exact battery save for the cross-gen trade cart — a 32&#160;KiB SRAM image plus the 48-byte MBC3 RTC
 /// footer (<see cref="Mbc3Cartridge"/>'s de-facto save-file convention) — that boots straight to a CONTINUE-able game
-/// standing one tile below the Cable Club trade receptionist, ready to trade. Every field, offset, and invariant is a
-/// fixed byte in this cart's era-II save format; the party-mon stats are computed from the era's stat formula so current
-/// HP == max HP &gt; 0 holds by construction rather than by a hand-poked constant.
+/// standing one tile below the Cable Club trade receptionist, ready to trade.
+/// </summary>
+/// <remarks>
+/// Every field, offset, and invariant is a fixed byte in this cart's era-II save format; the party-mon stats are
+/// computed from the era's stat formula so current HP == max HP &gt; 0 holds by construction rather than by a
+/// hand-poked constant.
 /// <para>
-/// The two canned trainers (<see cref="SideA"/>, <see cref="SideB"/>) carry <b>distinct lead species</b> so a completed
+/// The two canned trainers (<see cref="SideA"/>, <see cref="SideB"/>) carry distinct lead species so a completed
 /// trade is observable as each side's lead species becoming the other's original. The factory is the harness input for
 /// the scripted two-machine trade and the exported <c>.sav</c> pair the demo's per-cabinet saves consume.
 /// </para>
 /// <para>
 /// This cart's link code never writes rKEY1/SC_SPEED, so its same-model trade always
-/// runs the normal (~8192&#160;Hz) serial clock — but that is a property of the GAME, not a licence to pin the emulator's
+/// runs the normal (~8192&#160;Hz) serial clock — a property of this game, not a licence to pin the emulator's
 /// serial to a real-time rate. KEY1 legitimately doubles the serial shift clock on hardware and in
 /// <see cref="SerialComponent"/> (the fast-clock bit taps DIV bit 3 instead of bit 8); this cart simply never arms it.
 /// Both machines are pinned to <see cref="ConsoleModel.Cgb"/> here.
 /// </para>
-/// </summary>
+/// </remarks>
 internal static class TradeSaveFactory {
     // --- File geometry (§2.1, §2.4) ---
     /// <summary>The SRAM image size: 4 banks × 8&#160;KiB (plain MBC3, not the 64&#160;KiB MBC30 variant).</summary>
@@ -53,22 +56,16 @@ internal static class TradeSaveFactory {
     private const int OffsetChecksum = 0x2D69;       // sChecksum — 16-bit LE over [0x2009, 0x2D68].
     private const int OffsetCheckValue2 = 0x2D6B;    // sCheckValue2 — must be 0x7F.
 
-    // The live overworld OBJECTS are part of the saved+restored block, NOT regenerated on CONTINUE (the crux a naive
-    // "object structs safe to zero — regenerated on map load" assumption gets WRONG for the continue path).
-    // The cart's MapSetupScript_Continue uses LoadMapAttributes_SkipObjects (ReadMapEvents skip=TRUE, so wMapObjects
-    // is NOT re-read from ROM) and HandleContinueMap (no SpawnPlayer / LoadMapObjects) — it TRUSTS the saved wObjectStructs
-    // + wMapObjects. A zeroed object region therefore boots into a live-but-empty overworld: no player object (every tile
-    // "bumps" because GetMovementPermissions samples collision at the player struct's stale wPlayerMapX/Y, and the object
-    // is inactive with sprite 0) and no NPCs (nothing to talk to). The MapSetupScript_Warp path DOES spawn from ROM, but
-    // CONTINUE only reaches it post-E4. So the crafted save must carry valid object structs, exactly as a real save does.
-    // The object-follow globals sit immediately BEFORE wObjectStructs and are saved+restored with it. A real save holds
-    // $FF/$FF (no follower); zero-filling them arms "object 0 follows object 0", which makes ApplyMovementToFollower
-    // record every player STEP into the 5-byte wFollowMovementQueue ($D1F8) with no consumer — the unbounded queue index
-    // then writes straight into wPlayerStruct ($D1FD), corrupting the object structs. The corruption fires on the 5th
-    // recorded step, which is exactly side A's TRADE_CENTER seat approach (Up, Up, Right, Right, Up): DoMovementFunction
-    // then dispatches a corrupted movement byte, overruns MovementPointers, and jumps into ROM padding ($7709) — the
-    // NOP-slide into video RAM that presented as an RST-38 storm (and as a mode-3 VRAM-lock crash before the PPU
-    // read-unlock fix, which is why the seat crash survived that fix).
+    // The live overworld OBJECTS are part of the saved+restored block, NOT regenerated on CONTINUE.
+    // MapSetupScript_Continue uses LoadMapAttributes_SkipObjects (wMapObjects is not re-read from ROM) and
+    // HandleContinueMap (no SpawnPlayer / LoadMapObjects) — it trusts the saved wObjectStructs + wMapObjects. A
+    // zeroed object region boots into a live-but-empty overworld: no player object (every tile "bumps" because
+    // GetMovementPermissions samples collision at the player struct's stale wPlayerMapX/Y) and no NPCs. The crafted
+    // save must carry valid object structs, exactly as a real save does.
+    // The object-follow globals sit immediately before wObjectStructs and are saved+restored with it. A real save
+    // holds $FF/$FF (no follower); zero-filling them arms "object 0 follows object 0", which makes
+    // ApplyMovementToFollower record every player step into the 5-byte wFollowMovementQueue with no consumer — the
+    // unbounded queue index then writes straight into wPlayerStruct, corrupting the object structs.
     private const int OffsetObjectFollowLeader = 0x205C;    // wObjectFollow_Leader ($D1F4) — $FF = none.
     private const int OffsetObjectFollowFollower = 0x205D;  // wObjectFollow_Follower ($D1F5) — $FF = none.
     private const int OffsetPlayerObjectStruct = 0x2065; // wObjectStructs / wPlayerStruct ($D1FD, sPlayerData1).
@@ -111,11 +108,10 @@ internal static class TradeSaveFactory {
 
     // The 6×5 saved metatile-block window for a POKECENTER_2F (group 20 / map 1) save standing at (X=5, Y=3), row-major
     // (row 0 = the border strip above the room, rows 1–4 = the room's block rows, columns 0–5 from the screen's left
-    // edge) — the shipping map's own block indices. NOTE: this is INERT on the actual CONTINUE path (traced against
-    // the cart's map code: MapSetupScript_Continue rebuilds the on-screen blocks via LoadBlockData + BufferScreen from
-    // wOverworldMapBlocks; wScreenSave/RestoreScreen is used only by MapSetupScript_Connection). The prior "blank
-    // overworld" symptom was NOT wScreenSave — it was the missing player object struct (see WriteObjects). This window is
-    // kept because a real save at (5,3) holds it and writing the true values is harmless; it is not load-bearing.
+    // edge) — the shipping map's own block indices. This is inert on the actual CONTINUE path
+    // (MapSetupScript_Continue rebuilds the on-screen blocks via LoadBlockData + BufferScreen from
+    // wOverworldMapBlocks; wScreenSave/RestoreScreen is used only by MapSetupScript_Connection). Kept because a real
+    // save at (5,3) holds it and writing the true values is harmless.
     private static ReadOnlySpan<byte> s_pokecenter2FScreenSaveAt5x3 =>
     [
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -160,7 +156,7 @@ internal static class TradeSaveFactory {
     }
 
     /// <summary>Overwrites the spawn map/coordinates in a crafted <c>.sav</c> and re-derives the primary checksum — a
-    /// debug affordance for the explorer to isolate whether a map-entry soft-lock is specific to POKECENTER_2F.</summary>
+    /// debug affordance for retargeting a crafted save's spawn point.</summary>
     /// <param name="saveFile">A crafted save file (mutated in place).</param>
     /// <param name="group">The map group.</param>
     /// <param name="map">The map number.</param>
@@ -181,7 +177,7 @@ internal static class TradeSaveFactory {
     }
 
     /// <summary>Recomputes and rewrites the primary checksum over a crafted <c>.sav</c> — the fix-up after any debug
-    /// patch to the checksummed region (e.g. the explorer's <c>wSpawnAfterChampion</c> capture route).</summary>
+    /// patch to the checksummed region.</summary>
     /// <param name="saveFile">A crafted save file (mutated in place).</param>
     public static void RewriteChecksum(byte[] saveFile) {
         var sram = saveFile.AsSpan(start: 0, length: SramByteCount);
@@ -257,15 +253,12 @@ internal static class TradeSaveFactory {
         sram[OffsetYCoord] = 3;
         sram[OffsetXCoord] = 5;
 
-        // wScreenSave is the 6×5 metatile-block window Gen 2 saves so CONTINUE can restore the exact on-screen view. The
-        // CONTINUE path RESTORES it (RestoreScreen, home/map.asm) OVER the freshly ROM-loaded wOverworldMapBlocks at the
-        // player's screen center — it is NOT redrawn on load. A zero-filled
-        // wScreenSave therefore overwrites the visible map with border block 0, which renders as a uniform tile and reads
-        // as impassable collision everywhere — the overworld looks blank and the player cannot move. These 30 bytes are
-        // the exact window a real save at POKECENTER_2F (5,3) holds: the map's own block indices for the 6-wide × 5-tall
-        // metatile region centered on the spawn (row 0 is the border strip above the room). Verified against the shipping
-        // ROM's POKECENTER_2F block data (group 20 / map 1, tileset 0x25) — restoring it is a no-op that leaves the loaded
-        // map intact, so the overworld is navigable.
+        // wScreenSave is the 6×5 metatile-block window Gen 2 saves so CONTINUE can restore the exact on-screen view.
+        // The CONTINUE path restores it (RestoreScreen, home/map.asm) over the freshly ROM-loaded wOverworldMapBlocks
+        // at the player's screen center — it is not redrawn on load. A zero-filled wScreenSave overwrites the
+        // visible map with border block 0 (impassable collision everywhere). These 30 bytes are the exact window a
+        // real save at POKECENTER_2F (5,3) holds, verified against the shipping ROM's block data (group 20 / map 1,
+        // tileset 0x25); restoring it is a no-op that leaves the loaded map intact.
         s_pokecenter2FScreenSaveAt5x3.CopyTo(destination: sram[OffsetScreenSave..(OffsetScreenSave + ScreenSaveLength)]);
 
         WriteObjects(sram: sram);
@@ -286,12 +279,11 @@ internal static class TradeSaveFactory {
     private const byte MapCoordBorder = 4;
     private const byte SpawnY = 3;
 
-    // A real, active standing-player object struct captured from a WARP spawn (--trade-capture), which the CONTINUE path
-    // does NOT build. Bytes are the object_struct layout (OBJECT_LENGTH 40): [0]=SPRITE_CHRIS, [3]=SPRITEMOVEDATA_
-    // PLAYER, [7]=Walking $FF (standing), [11]=Action $01 (OBJECT_ACTION_STAND), [16..21]=MapX/MapY/LastMapX/LastMapY/
-    // InitX/InitY (patched from the spawn), [23..24]=screen sprite X/Y (player is always screen-centred). Restoring this
-    // makes the player a live, movable object; without it GetMovementPermissions reads collision at a stale (0,0) map
-    // coord and every tile bumps.
+    // A real, active standing-player object struct (ObjectStructLength bytes), which the CONTINUE path does not
+    // build: [0]=SPRITE_CHRIS, [3]=SPRITEMOVEDATA_PLAYER, [7]=Walking $FF (standing), [11]=Action $01
+    // (OBJECT_ACTION_STAND), [16..21]=MapX/MapY/LastMapX/LastMapY/InitX/InitY (patched from the spawn),
+    // [23..24]=screen sprite X/Y (player is always screen-centred). Restoring this makes the player a live, movable
+    // object; without it GetMovementPermissions reads collision at a stale (0,0) map coord and every tile bumps.
     private static ReadOnlySpan<byte> s_playerObjectStructTemplate =>
     [
         0x01, 0x00, 0x00, 0x0B, 0x02, 0x00, 0x00, 0xFF, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
@@ -299,21 +291,21 @@ internal static class TradeSaveFactory {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
 
-    // The player's map object (map_object layout, MAPOBJECT_LENGTH 16): structId 0, SPRITE_CHRIS, Y/X coords (map
-    // units), SPRITEMOVEDATA_PLAYER, then radius/hours/type/sight $FF/0 and no script/event. wMapObjects is likewise not
+    // The player's map object (MapObjectLength bytes): structId 0, SPRITE_CHRIS, Y/X coords (map units),
+    // SPRITEMOVEDATA_PLAYER, then radius/hours/type/sight $FF/0 and no script/event. wMapObjects is likewise not
     // re-read on CONTINUE, so the player's map object must be present too (the movement code writes coords back to it).
     private static ReadOnlySpan<byte> s_playerMapObjectTemplate =>
     [
         0x00, 0x01, 0x00, 0x00, 0x0B, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
     ];
 
-    // The trade receptionist's live object struct (object 1), built from a real standing NPC captured with --trade-capture
-    // in the object_struct field order: [0]=Sprite SPRITE_LINK_RECEPTIONIST 0x38, [1]=MapObjectIndex 1 (-> wMap1Object,
-    // the map object whose script A runs — getting THIS wrong indexes wMapObjects out of bounds and crashes on interaction),
-    // [2]=SpriteTile 0x24, [3]=MovementType SPRITEMOVEDATA_STANDING_DOWN 0x06, [6]=Palette, [7]=Walking $FF (standing),
-    // [8]=Direction DOWN 0, [9]=StepType 0 (RESET, as a fresh spawn has), [11]=Action OBJECT_ACTION_STAND 1, [16..21]=
-    // Map/Last/Init X/Y (patched to the (5,2) attendant tile). SpriteTile/palette/screen X/Y self-correct via
-    // RefreshMapSprites, which DOES run on CONTINUE. This makes the attendant a real, interactable object at (5,2).
+    // The trade receptionist's live object struct (object 1), in object_struct field order: [0]=Sprite
+    // SPRITE_LINK_RECEPTIONIST 0x38, [1]=MapObjectIndex 1 (-> wMap1Object, the map object whose script A runs —
+    // getting this wrong indexes wMapObjects out of bounds and crashes on interaction), [2]=SpriteTile 0x24,
+    // [3]=MovementType SPRITEMOVEDATA_STANDING_DOWN 0x06, [6]=Palette, [7]=Walking $FF (standing), [8]=Direction
+    // DOWN 0, [9]=StepType 0 (RESET, as a fresh spawn has), [11]=Action OBJECT_ACTION_STAND 1, [16..21]=Map/Last/Init
+    // X/Y (patched to the (5,2) attendant tile). SpriteTile/palette/screen X/Y self-correct via RefreshMapSprites,
+    // which runs on CONTINUE. This makes the attendant a real, interactable object at (5,2).
     private static ReadOnlySpan<byte> s_receptionistObjectStructTemplate =>
     [
         0x38, 0x01, 0x24, 0x06, 0x00, 0x00, 0x02, 0xFF, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
@@ -321,12 +313,12 @@ internal static class TradeSaveFactory {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
 
-    // The trade receptionist's map object (wMap1Object), byte-for-byte the shipping POKECENTER_2F object_event
-    // as ReadObjectEvents would lay it into wMapObjects: [0]=StructID 1, [1]=SPRITE_LINK_
-    // RECEPTIONIST 0x38, [2]=Y+4 (2+4=6), [3]=X+4 (5+4=9), [4]=SPRITEMOVEDATA_STANDING_DOWN 0x06, [5]=radius 0,
-    // [6..7]=hours -1/-1, [8]=(PAL_NPC_GREEN<<4)|OBJECTTYPE_SCRIPT = 0xA0, [9]=sight 0, [10..11]=script pointer
-    // (LinkReceptionistScript_Trade = bank 0x5C : 0x4D6F, stored LE; the bank is the map-scripts bank the CONTINUE path
-    // loads), [12..13]=event flag -1 (always appears). This is what A-on-the-attendant jumps to.
+    // The trade receptionist's map object (wMap1Object), byte-for-byte the shipping POKECENTER_2F object_event as
+    // ReadObjectEvents would lay it into wMapObjects: [0]=StructID 1, [1]=SPRITE_LINK_RECEPTIONIST 0x38, [2]=Y+4
+    // (2+4=6), [3]=X+4 (5+4=9), [4]=SPRITEMOVEDATA_STANDING_DOWN 0x06, [5]=radius 0, [6..7]=hours -1/-1,
+    // [8]=(PAL_NPC_GREEN<<4)|OBJECTTYPE_SCRIPT = 0xA0, [9]=sight 0, [10..11]=script pointer
+    // (LinkReceptionistScript_Trade = bank 0x5C : 0x4D6F, stored LE), [12..13]=event flag -1 (always appears). This
+    // is what A-on-the-attendant jumps to.
     private static ReadOnlySpan<byte> s_receptionistMapObjectTemplate =>
     [
         0x01, 0x38, 0x06, 0x09, 0x06, 0x00, 0xFF, 0xFF, 0xA0, 0x00, 0x6F, 0x4D, 0xFF, 0xFF, 0x00, 0x00,
@@ -559,7 +551,7 @@ internal readonly record struct TradePartyMember(TradeSpecies Species, byte Leve
     private const byte TackleMoveId = 0x21; // move 33.
     private const byte TackleBasePp = 35;
 
-    /// <summary>A trivially-legal level-5 mon of a species: a single TACKLE at full PP.</summary>
+    /// <summary>Returns a trivially-legal level-5 mon of a species: a single TACKLE at full PP.</summary>
     /// <param name="species">The species.</param>
     /// <returns>The party mon.</returns>
     public static TradePartyMember Level5(TradeSpecies species) =>

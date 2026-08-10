@@ -217,12 +217,11 @@ internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldRe
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
 
-    // REFUSES (superseding the prior warn-and-proceed posture) every call while a recording is active — the
-    // boot-anchored arming contract's other half: replay.record already refuses to ARM once an addon has ever
-    // pumped, and this closes the matching gap on the OTHER side of that boundary — a live reload/enable/disable
-    // WHILE armed would change what is actually mounted (name/hash/fuel, the index-by-index pin
-    // WorldReplaySnapshot.VerifyMountedAddons now checks) without the tape, already committed to its record-start
-    // receipts, ever learning of it.
+    // REFUSES every call while a recording is active — the boot-anchored arming contract's other half:
+    // replay.record already refuses to ARM once an addon has ever pumped, and this closes the matching gap on the
+    // OTHER side of that boundary — a live reload/enable/disable WHILE armed would change what is actually mounted
+    // (name/hash/fuel, the index-by-index pin WorldReplaySnapshot.VerifyMountedAddons checks) without the tape,
+    // already committed to its record-start receipts, ever learning of it.
     private CommandResult? RefuseIfArmed(string verb, string name) {
         if (tape.Mode != WorldReplayMode.Recording) {
             return null;

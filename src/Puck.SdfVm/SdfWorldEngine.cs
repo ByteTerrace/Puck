@@ -7,12 +7,12 @@ using Puck.Maths;
 namespace Puck.SdfVm;
 
 /// <summary>Construction options for <see cref="SdfWorldEngine"/>.</summary>
-/// <param name="Program">The scene program; the GPU buffer is sized to it and it is uploaded ONCE at construction
+/// <param name="Program">The scene program; the GPU buffer is sized to it and it is uploaded once at construction
 /// (the "program uploaded once" seam the dynamic-transform channel rides). A host whose scene later changes calls
 /// <see cref="SdfWorldEngine.UploadProgram"/> — the new program must fit the constructed buffer.</param>
 /// <param name="ViewportCapacity">The number of viewport slots to provision (source textures + packed viewport rows).
 /// Frames may carry fewer views than the capacity, never more; the kernels' source array caps it at 5.</param>
-/// <param name="ChildMask">Bit <c>v</c> set means viewport <c>v</c> is backed by a hosted CHILD surface, not an SDF
+/// <param name="ChildMask">Bit <c>v</c> set means viewport <c>v</c> is backed by a hosted child surface, not an SDF
 /// camera: no source texture is allocated for it (the host binds the child's storage image each frame via
 /// <see cref="SdfWorldEngine.SetChildSource"/>), and the beam prepass + Stage 1 skip the slot.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
@@ -28,24 +28,24 @@ namespace Puck.SdfVm;
 /// <param name="TimingFactory">An optional GPU timing pool factory; with <paramref name="TimingRecorder"/>, enables
 /// the per-pass timestamp marks (gated on the device reporting usable timestamps).</param>
 /// <param name="TimingRecorder">An optional GPU timing recorder (see <paramref name="TimingFactory"/>).</param>
-/// <param name="LiveArmedTiming">When <see langword="true"/> (the live node path), the timing pools are created LAZILY
+/// <param name="LiveArmedTiming">When <see langword="true"/> (the live node path), the timing pools are created lazily
 /// on the first armed frame and each frame consults <see cref="GpuTimingControl.Shared"/> — a disarmed frame skips the
 /// timestamp writes/reads at near-zero cost, so timing arms and disarms mid-session with no rebuild. When
-/// <see langword="false"/> (the default, the waited harness/measure path), timing runs EAGERLY the moment a supported
+/// <see langword="false"/> (the default, the waited harness/measure path), timing runs eagerly the moment a supported
 /// factory + recorder are supplied — the pools are created at construction and every frame is timed, never consulting
 /// the shared arming control.</param>
-/// <param name="ProgramWordCapacity">An optional FLOOR on the program buffer's packed-word capacity (the engine
+/// <param name="ProgramWordCapacity">An optional floor on the program buffer's packed-word capacity (the engine
 /// always provisions at least <paramref name="Program"/>'s length). A host that hot-swaps programs via
 /// <see cref="SdfWorldEngine.UploadProgram"/> declares its envelope here instead of relying on every future program
 /// staying within the first one's size.</param>
-/// <param name="InstanceCapacity">An optional FLOOR on the instance count the per-tile mask buffer is sized for (the
+/// <param name="InstanceCapacity">An optional floor on the instance count the per-tile mask buffer is sized for (the
 /// engine always provisions at least <paramref name="Program"/>'s <see cref="SdfProgram.InstanceMaskWordCount"/>).
 /// The hot-swap counterpart of <paramref name="ProgramWordCapacity"/> for instanced programs.</param>
-/// <param name="BrickPoolVoxelCapacity">The carve-bake brick pool's voxel (f32 word) capacity, FROZEN at construction
-/// (carve-bake plan §3). Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (16.7M voxels = 64 MB —
+/// <param name="BrickPoolVoxelCapacity">The carve-bake brick pool's voxel (f32 word) capacity, fixed at construction.
+/// Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (16.7M voxels = 64 MB —
 /// <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full <see cref="SdfBrickPoolLayout.BrickDim"/><sup>3</sup>
-/// resolution). <c>0</c> provisions NO pool (a 4-byte filler keeps the always-present shader binding valid). A pool-less
-/// engine still ACCEPTS a program declaring a <see cref="SdfShapeType.SampledRegion"/> — baking and rendering are split:
+/// resolution). <c>0</c> provisions no pool (a 4-byte filler keeps the always-present shader binding valid). A pool-less
+/// engine still accepts a program declaring a <see cref="SdfShapeType.SampledRegion"/> — baking and rendering are split:
 /// the shader detects the filler (by its element count) and renders the region via the conservative uncarved-hull
 /// fallback (the Subtraction never bites), so a filming view (<c>SdfCameraView</c>/<c>NestedWorldView</c>) shows a
 /// SampledRegion world uncarved rather than a box-shaped hole. Only <see cref="SdfWorldEngine.RequestBrickBake"/> stays a
@@ -86,10 +86,10 @@ public enum SdfCadenceSpan {
     ScreenLights = (1 << 5),
 }
 
-/// <summary>The cadence gate's diagnostics for the most recently decided frame (STEP 1 instrumentation, perf plan Phase
-/// 6.1 follow-up) — read-only, never fed back into the skip decision. Exposed via <see cref="SdfWorldEngine.CadenceDiagnostics"/>
-/// and surfaced by the <c>sdf.info</c> verb's cadence section, so a live session names exactly which span keeps a
-/// static scene from skipping instead of guessing.</summary>
+/// <summary>The cadence gate's diagnostics for the most recently decided frame — read-only, never fed back into the
+/// skip decision. Exposed via <see cref="SdfWorldEngine.CadenceDiagnostics"/> and surfaced by the <c>sdf.info</c>
+/// verb's cadence section, so a live session names exactly which span keeps a static scene from skipping instead of
+/// guessing.</summary>
 /// <param name="GateEnabled">Whether the gate was armed (<see cref="SdfFrame.EnableCadenceGate"/>) for this frame.</param>
 /// <param name="Skipped">Whether this frame skipped the mask/beam/cull-args/views passes.</param>
 /// <param name="SkippedFrameCount">The cumulative skipped-frame count since the gate last armed (reset whenever the gate turns off).</param>
@@ -102,13 +102,12 @@ public enum SdfCadenceSpan {
 /// <param name="ScreenLightsHash">This frame's independent hash of the screen-light span.</param>
 /// <param name="ChangedSpans">Which spans' hashes differ from the previous decided frame's — the payload a human reads
 /// to find the never-skipping driver.</param>
-/// <param name="ScreenSourceBound">Whether ANY screen source slot is bound this frame (<c>m_screenSourceMask != 0</c>)
-/// — informational only (it does NOT gate the skip decision, and never has by rights: a live console booted anywhere in
-/// the engine binds this per-ENGINE mask independent of which program is uploaded, and sampleScreenSurface is
-/// unreachable without a ScreenSlab material — see <see cref="SdfWorldEngine.DecideCadenceSkip"/>'s coverage rationale
-/// for the false-block this used to cause before the fix).</param>
-/// <param name="ProgramDeclaresScreenSlab">Whether the LIVE uploaded program declares any ScreenSlab shape — the first
-/// of the two conditions NOT covered by any hashed span (see <see cref="SdfWorldEngine.DecideCadenceSkip"/>).</param>
+/// <param name="ScreenSourceBound">Whether any screen source slot is bound this frame (<c>m_screenSourceMask != 0</c>)
+/// — informational only: it does not gate the skip decision, because a live console booted anywhere in the engine
+/// binds this per-engine mask independent of which program is uploaded, and sampleScreenSurface is unreachable
+/// without a ScreenSlab material — see <see cref="SdfWorldEngine.DecideCadenceSkip"/>'s coverage rationale.</param>
+/// <param name="ProgramDeclaresScreenSlab">Whether the live uploaded program declares any ScreenSlab shape — the
+/// first of the two conditions not covered by any hashed span (see <see cref="SdfWorldEngine.DecideCadenceSkip"/>).</param>
 /// <param name="BrickBaking">Whether a carve-bake is in progress (the second uncovered condition).</param>
 public readonly record struct SdfCadenceDiagnostics(
     bool GateEnabled,
@@ -128,22 +127,22 @@ public readonly record struct SdfCadenceDiagnostics(
 );
 
 /// <summary>
-/// The device-explicit core of the compute SDF WORLD pipeline — the one truth for its buffer/push/binding layouts.
-/// One instance owns a scene program (uploaded to the GPU ONCE, at construction) plus every pipeline/buffer/image the
+/// The device-explicit core of the compute SDF world pipeline — the one truth for its buffer/push/binding layouts.
+/// One instance owns a scene program (uploaded to the GPU once, at construction) plus every pipeline/buffer/image the
 /// four kernels need, and runs the full chain per frame: <c>sdf-beam.comp</c> (tile-cull cone-march prepass) →
-/// <c>sdf-cull-args.comp</c> (GPU-written INDIRECT dispatch args: the surviving-tile bbox) →
-/// <c>sdf-world-views.comp</c> (per-view render, dispatched INDIRECTLY from those args) →
+/// <c>sdf-cull-args.comp</c> (GPU-written indirect dispatch args: the surviving-tile bbox) →
+/// <c>sdf-world-views.comp</c> (per-view render, dispatched indirectly from those args) →
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
 /// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
 /// <para>
-/// THREE submission models, and they must never blur — nor run against ONE engine instance at overlapping times, since
+/// Three submission models, and they must never blur — nor run against one engine instance at overlapping times, since
 /// all three re-record the shared per-slot command buffers: <see cref="RenderFrame"/> is the deterministic harness path —
 /// one submit-and-wait plus a readback (validation, headless render). <see cref="SubmitFrame"/> is the live node path —
 /// fire-and-forget behind the engine's own <see cref="FrameRingSize"/>-deep frame ring (each slot's fence orders that
-/// slot's rewrites against its previous submission, so a pipelining host needs NO per-frame device drain), plus the
+/// slot's rewrites against its previous submission, so a pipelining host needs no per-frame device drain), plus the
 /// export-mode queue drain when the output crosses a backend seam.
-/// <see cref="SubmitFramePipelined"/> is the DEMO-PREVIEW path — a non-blocking FENCED readback (submit fire-and-forget,
-/// poll <see cref="IsFramePixelsReady"/> on a LATER produced frame, then <see cref="AcquireFramePixels"/> maps it), so
+/// <see cref="SubmitFramePipelined"/> is the demo-preview path — a non-blocking fenced readback (submit fire-and-forget,
+/// poll <see cref="IsFramePixelsReady"/> on a later produced frame, then <see cref="AcquireFramePixels"/> maps it), so
 /// the live in-editor bake preview never idles the shared present queue mid-sculpt. It stays frame-count driven
 /// (determinism is a feature even here), and a single-in-flight guard forbids interleaving it with the other two on one
 /// engine — <see cref="RenderFrame"/>, <see cref="SubmitFrame"/>, and <see cref="SubmitFramePipelined"/> each throw while
@@ -167,8 +166,8 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + (sizeof(uint) * 2)); // 40-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the shadow estimator's deterministic net index), word 9 = the shadow accumulator's epoch + enable bit. Vulkan guarantees 128 bytes of push range, so this stays well inside the floor.
     /// <summary>The kernels' screen-source count — the most screen surfaces one program may declare (matches
-    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>). THIRTY-TWO SEPARATE combined-image-sampler bindings (not one
-    /// array binding): DXC's <c>vk::combinedImageSampler</c> only fuses a SCALAR Texture2D+SamplerState pair, so a
+    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>). 32 separate combined-image-sampler bindings (not one
+    /// array binding): DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a
     /// true single Vulkan combined-image-sampler array isn't expressible in the shared HLSL — see
     /// <see cref="ScreenSourceBindingIndices"/>. Capped at 32 because <c>screenMask</c> (the per-frame bound-slot
     /// bitmask, CompositeParams word 6) is a single <c>uint</c> — raising past 32 needs a second mask word on both
@@ -194,7 +193,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // (t39), DERIVED so it can never drift when the screen-source run grows. KEEP IN SYNC with sdf-world.hlsli's
     // sdfDecalCells (Vulkan binding 45).
     private static readonly uint DecalCellsBindingIndex = (GlyphAtlasBindingIndex + 1u);
-    /// <summary>The per-screen GLYPH DECAL cell budget: the most glyph cells one screen slot's decal grid may carry
+    /// <summary>The per-screen glyph decal cell budget: the most glyph cells one screen slot's decal grid may carry
     /// (columns × rows). The decal buffer partitions its cell region into <see cref="MaxScreenSurfaces"/> equal
     /// per-screen runs of this size, so a decal on one screen never collides with another's cells.</summary>
     public const int MaxScreenDecalCells = 1600; // e.g. up to a 48×32 or 53×30 terminal grid
@@ -204,15 +203,15 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 8)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4: world grid, object origin+pitchX, object frame quat, object pitchZ+patchRadius) + ONE engine-bench params row (+5: soft-shadow/AO/shadow-distance/screen-light levers) + ONE shadow-policy row (+6: carve proxy/camera-tile mask/fast march) + ONE F1 far-field row (+7: far-bound disable / F2 shadow-exit disable) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfFarFieldParams
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 13)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4: world grid, object origin+pitchX, object frame quat, object pitchZ+patchRadius) + ONE engine-bench params row (+5: soft-shadow/AO/shadow-distance/screen-light levers) + ONE shadow-policy row (+6: carve proxy/camera-tile mask/fast march) + ONE F1 far-field row (+7: far-bound disable / F2 shadow-exit disable) + FIVE lighting rows (+8..+12: sun direction+weight, sun tangent+ambient base, sun bitangent+ambient hemisphere, sun color, ambient color) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfAmbientColor
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     /// <summary>The frame-ring depth: how many produced frames may be in flight on the GPU at once. Every per-frame
-    /// MUTABLE resource — the command buffer, the host-visible per-frame buffers (viewport / dynamic-transform /
+    /// mutable resource — the command buffer, the host-visible per-frame buffers (viewport / dynamic-transform /
     /// screen-surface / screen-light / decal), the descriptor sets that bind them, and the per-submit fence — is
     /// duplicated per slot, so re-recording/rewriting slot <c>k</c> only requires frame <c>k − FrameRingSize</c> to
     /// have retired (the slot fence wait in <c>PrepareFrame</c>), never a whole-device drain. The GPU-written
     /// device-local scratch (tile / instance-mask / indirect-args / cull-bounds buffers, the per-view source
-    /// textures) stays SHARED: the top-of-frame barrier in <c>Record</c> orders each frame's GPU work after the
+    /// textures) stays shared: the top-of-frame barrier in <c>Record</c> orders each frame's GPU work after the
     /// previous frame's, which is the natural serialization anyway — the ring overlaps CPU production with GPU
     /// execution, not GPU frames with each other. Slot advance is keyed to the produced-frame count (deterministic;
     /// never wall clock).</summary>
@@ -444,9 +443,9 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private bool m_frameTimingActive;
     private ulong m_timingFrame;
     private bool m_useCoreViews;
-    // CADENCE GATE (perf plan Phase 6.1). Latched by PrepareFrame, read by Record: when true, Record skips the
-    // mask/beam/cull-args/views passes and re-composites from the retained (single, ring-shared) views output + tile
-    // buffer — pixel-identical because the change SIGNATURE below proved every input those passes consume is unchanged.
+    // Cadence gate, latched by PrepareFrame and read by Record: when true, Record skips the mask/beam/cull-args/views
+    // passes and re-composites from the retained (single, ring-shared) views output + tile buffer — pixel-identical
+    // because the change signature below proved every input those passes consume is unchanged.
     private bool m_skipThisFrame;
     // The previous RENDERED frame's change signature (a 64-bit hash of every packed span + revision the skipped passes
     // consume — see ComputeFrameSignature) and whether one exists yet. Reset whenever the gate is off, so re-enabling it
@@ -467,10 +466,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     private int m_shadowAccumulationResetFrames = ShadowAccumulationResetFrames;
     private ulong m_decalRevision;
-    // STEP 1 instrumentation (perf plan Phase 6.1 follow-up): the previous decided frame's INDEPENDENT per-span hashes
-    // (each starting fresh from the FNV basis — unlike m_previousFrameSignature's chained fold, so one span's hash never
-    // smears into another's), the cumulative skip/render counts since the gate last armed, and the latest published
-    // SdfCadenceDiagnostics. None of this feeds DecideCadenceSkip's skip decision.
+    // Diagnostics only: the previous decided frame's independent per-span hashes (each starting fresh from the FNV
+    // basis — unlike m_previousFrameSignature's chained fold, so one span's hash never smears into another's), the
+    // cumulative skip/render counts since the gate last armed, and the latest published SdfCadenceDiagnostics. None
+    // of this feeds DecideCadenceSkip's skip decision.
     private CadenceSpanHashes m_previousCadenceSpanHashes;
     private bool m_hasPreviousCadenceSpanHashes;
     private ulong m_cadenceSkippedFrameCount;
@@ -479,7 +478,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldEngine"/> class: builds the world pipelines
     /// (the five chain passes plus the Stage 1 core-ops variant), every buffer and image at the provisioned viewport
-    /// capacity, and uploads the scene program ONCE.</summary>
+    /// capacity, and uploads the scene program once.</summary>
     /// <param name="gpu">The neutral GPU compute services.</param>
     /// <param name="device">The GPU device the engine renders on.</param>
     /// <param name="kernels">The compiled world kernel set for the same backend as <paramref name="device"/>.</param>
@@ -1062,7 +1061,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// enabled at construction — the frame-start → composite-close bracket of the four per-pass marks — or
     /// <see langword="null"/> when timing is disabled or the timestamps were not yet readable.</summary>
     public double? LastFrameGpuMilliseconds => m_lastFrameGpuMilliseconds;
-    /// <summary>Gets the CPU wall-clock cost (milliseconds) of the MOST RECENT produced frame's per-frame instance-grid
+    /// <summary>Gets the CPU wall-clock cost (milliseconds) of the most recently produced frame's per-frame instance-grid
     /// rebuild (<see cref="SdfProgram.BuildFrameInstanceGrid"/> + the ring slot's buffer write), or <see langword="null"/>
     /// when the live program's grid is invariant (built once at <see cref="UploadProgram"/>) and this frame skipped the
     /// rebuild. The CPU-bound counterpart to <see cref="LastFrameGpuMilliseconds"/> — a per-frame-moving dynamic
@@ -1079,7 +1078,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     public string DebugLabel { get; set; } = "world";
     /// <summary>Gets the GPU timestamp capabilities when opt-in timing was enabled (period/valid-bits for digests).</summary>
     public GpuTimestampCapabilities TimingCapabilities => m_timingCapabilities;
-    /// <summary>Gets whether opt-in GPU timing is AVAILABLE (a supported factory + recorder were supplied). In eager
+    /// <summary>Gets whether opt-in GPU timing is available (a supported factory + recorder were supplied). In eager
     /// mode every frame is timed; in live-armed mode a frame is timed only while <see cref="GpuTimingControl.Shared"/>
     /// is armed — see <see cref="SdfWorldEngineOptions.LiveArmedTiming"/>.</summary>
     public bool TimingEnabled => m_timingAvailable;
@@ -1185,7 +1184,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 : $"[world-timing] {DebugLabel} views variant: full (program touches {exoticTouch})"));
         }
     }
-    /// <summary>Supplies the storage-image view a hosted CHILD produced for its viewport slot this frame; the next
+    /// <summary>Supplies the storage-image view a hosted child produced for its viewport slot this frame; the next
     /// frame binds it into the source arrays. The host owns this view's lifetime, so the binding is rewritten every
     /// frame rather than skipped on an unchanged handle value — a retired handle value can be re-issued for a
     /// different image, which a value-keyed skip would bind stale (see <c>BindScreenSources</c>).</summary>
@@ -1205,10 +1204,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     /// <summary>Supplies (or clears) the GPU image a declared screen surface (see <see cref="SdfProgramBuilder"/>'s
     /// screen-surface <c>ScreenSlab</c> overload) at <paramref name="screenIndex"/> samples this frame — a
     /// same-device storage-image view (General layout, shader-readable), typically a hosted child's or an emulator's
-    /// NATIVE framebuffer image (not a pane-resampled one: Stage 1 samples it directly, so any fit/scale is the
-    /// sampling itself). The next frame binds it into the screen-source array. The HOST owns this view's lifetime and
+    /// native framebuffer image (not a pane-resampled one: Stage 1 samples it directly, so any fit/scale is the
+    /// sampling itself). The next frame binds it into the screen-source array. The host owns this view's lifetime and
     /// may retire it between any two frames, so a bound slot's descriptor is rewritten every frame instead of being
-    /// skipped on an unchanged handle value: a handle value is unique only among LIVE objects, and a retired one can
+    /// skipped on an unchanged handle value: a handle value is unique only among live objects, and a retired one can
     /// come back naming a different image (see <c>BindScreenSources</c>). Passing 0 clears the slot: a screen surface
     /// with no source bound falls back to the flat/procedural screen material, and an unbound slot IS value-skipped
     /// (its filler is engine-owned).</summary>
@@ -1230,10 +1229,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             : m_screenSourceMask & ~(1u << screenIndex));
     }
     /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
-    /// distance-level field, replacing any previously set atlas. STATIC: unlike a screen source (an external per-frame
-    /// image-view handle), this copies the CPU pixels into a device image ONCE and holds the sampleable view for the
-    /// engine's lifetime; the next produced frame binds it. The atlas MUST carry the true single-channel signed
-    /// distance in the ALPHA channel (this engine's runtime generator, <c>Puck.Text.SdfCoverageAtlas</c>, replicates
+    /// distance-level field, replacing any previously set atlas. Static: unlike a screen source (an external per-frame
+    /// image-view handle), this copies the CPU pixels into a device image once and holds the sampleable view for the
+    /// engine's lifetime; the next produced frame binds it. The atlas must carry the true single-channel signed
+    /// distance in the alpha channel (this engine's runtime generator, <c>Puck.Text.SdfCoverageAtlas</c>, replicates
     /// its single channel into alpha; an atlas from the font-atlas bake pipeline (<c>tools/font-atlas</c>) already
     /// does). Passing an empty
     /// <paramref name="rgbaPixels"/> clears the atlas back to the neutral 1×1 filler.</summary>
@@ -1276,7 +1275,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // next frame in each slot rewrites the descriptor before anything samples it.
         Array.Clear(array: m_boundGlyphAtlasViews);
     }
-    /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the NEXT produced
+    /// <summary>Overwrites screen <paramref name="screenIndex"/>'s world-space sampling frame for the next produced
     /// frame — the per-frame counterpart of the screen-surface table <see cref="UploadProgram"/> otherwise writes only
     /// once, at program upload. A slab riding a moving rig must call
     /// this every frame its geometry moves, or its sampling frame goes stale relative to the geometry the dynamic
@@ -1310,7 +1309,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // ScreenSurfaceWords packing and sdf-world.hlsli's ScreenSurfaceData.
         var b = (screenIndex * 12);
         // SdfEngineNode polls this every frame via transform providers, often with an unchanged value (a static screen,
-        // or a rig sampled at the same pose) — only an actual change needs to dirty the ring (C5 perf plan Phase 1.2).
+        // or a rig sampled at the same pose) — only an actual change needs to dirty the ring.
         var changed =
             ((floats[(b + 0)] != unitRight.X) || (floats[(b + 1)] != unitRight.Y) || (floats[(b + 2)] != unitRight.Z) || (floats[(b + 3)] != halfWidth) ||
             (floats[(b + 4)] != unitUp.X) || (floats[(b + 5)] != unitUp.Y) || (floats[(b + 6)] != unitUp.Z) || (floats[(b + 7)] != halfHeight) ||
@@ -1344,8 +1343,8 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         m_screenLightColors[screenIndex] = color;
     }
-    /// <summary>Binds a GLYPH DECAL (the material-level text tier) to screen slot <paramref name="screenIndex"/> for the
-    /// NEXT produced frame: the screen's ScreenSlab face then samples this grid of glyph cells + colours at the hit
+    /// <summary>Binds a glyph decal (the material-level text tier) to screen slot <paramref name="screenIndex"/> for the
+    /// next produced frame: the screen's ScreenSlab face then samples this grid of glyph cells + colours at the hit
     /// instead of a bound image (dense reading text, resolution-independent at walk-up distance — see
     /// <c>sdfSampleGlyphDecal</c>). The carrier geometry is the same screen-surface frame the image path uses (declared
     /// by <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>);
@@ -1383,12 +1382,10 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         var distanceRangeBits = BitConverter.SingleToUInt32Bits(value: distanceRange);
         var cellDestination = m_decalScratch.AsSpan(start: ((int)cellBase * DecalWordsPerCell), length: cellWords.Length);
 
-        // CADENCE GATE ROOT CAUSE (found live via sdf.info's cadence diagnostics — the "revisions" span differed every
-        // frame with a fully static debug scene and an idle console): a provider that re-supplies the SAME decal every
-        // produced frame (e.g. the diegetic terminal mirroring an untouched console — DiegeticUiDirector.ComposeTerminalDecal
-        // returns a fresh SdfScreenDecalFrame wrapper every call even when its cell bytes are unchanged) must not look
-        // like new content. Change-detect BEFORE writing, exactly as an ease snaps to its target: a call that reproduces
-        // the bytes already stored is a no-op, not a revision bump.
+        // A provider that re-supplies the same decal every produced frame (e.g. the diegetic terminal mirroring an
+        // untouched console — DiegeticUiDirector.ComposeTerminalDecal returns a fresh SdfScreenDecalFrame wrapper every
+        // call even when its cell bytes are unchanged) must not look like new content. Change-detect before writing:
+        // a call that reproduces the bytes already stored is a no-op, not a revision bump.
         if (
             (m_decalScratch[(descriptorBase + 0)] == (uint)columns) &&
             (m_decalScratch[(descriptorBase + 1)] == (uint)rows) &&
@@ -1436,11 +1433,11 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_decalRevision++;
     }
 
-    /// <summary>Requests a SLICED background bake of a settled-carve bin's UNION distance field into brick pool slot
-    /// <paramref name="slot"/> (carve-bake plan §3). The carve list is copied into the slot's request buffer and the
-    /// bake begins slicing across subsequent produced frames (≤ 256K voxels each); it does NOT wait. Re-requesting a
+    /// <summary>Requests a sliced background bake of a settled-carve bin's union distance field into brick pool slot
+    /// <paramref name="slot"/>. The carve list is copied into the slot's request buffer and the
+    /// bake begins slicing across subsequent produced frames (≤ 256K voxels each); it does not wait. Re-requesting a
     /// slot cancels its in-flight bake and restarts it, bumping the slot's monotonic bake serial. The slot's word range
-    /// is the STATIC <see cref="SdfBrickPoolLayout.SlotWordOffset(int)"/> region, so a SampledRegion instruction the
+    /// is the fixed <see cref="SdfBrickPoolLayout.SlotWordOffset(int)"/> region, so a SampledRegion instruction the
     /// caller emits with that same offset samples exactly this brick once it reaches <see cref="BrickBakeState.Ready"/>
     /// (poll <see cref="GetBrickState"/>).</summary>
     /// <param name="slot">The brick pool slot, in <c>[0, <see cref="SdfBrickPoolLayout.MaxBricks"/>)</c>.</param>
@@ -1509,7 +1506,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_brickSerials[slot]++;
     }
 
-    /// <summary>Polls brick pool slot <paramref name="slot"/>'s current bake state and serial (carve-bake plan §3) —
+    /// <summary>Polls brick pool slot <paramref name="slot"/>'s current bake state and serial —
     /// the frame source reads this each produced frame to know when a bake has finished and it may swap the bin's
     /// analytic carves for the one SampledRegion instance sampling this slot. <see cref="BrickBakeState.Ready"/> means
     /// every slice has been recorded; the engine's cross-frame barrier orders those writes before any later frame's
@@ -1549,7 +1546,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     }
 
     /// <summary>Renders one frame — beam → cull-args → views (indirect) → composite in a single submit — against the
-    /// uploaded program, WAITS for completion, and returns the composited RGBA readback. The deterministic harness
+    /// uploaded program, waits for completion, and returns the composited RGBA readback. The deterministic harness
     /// path (validation stages, headless renders). Must not be called while a <see cref="SubmitFramePipelined"/> frame
     /// is outstanding on this engine (it would re-record the one shared command buffer under a live fence).</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
@@ -1581,11 +1578,11 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         return ReadPixels().ToArray();
     }
 
-    /// <summary>Records and submits one frame FIRE-AND-FORGET — the live node path. The submit arms the current ring
-    /// slot's fence: nothing waits here, and the ONLY wait a later frame pays is that slot fence in
+    /// <summary>Records and submits one frame fire-and-forget — the live node path. The submit arms the current ring
+    /// slot's fence: nothing waits here, and the only wait a later frame pays is that slot fence in
     /// <c>PrepareFrame</c>, <see cref="FrameRingSize"/> frames later — so a pipelining host overlaps this frame's GPU
     /// execution with the next frame's CPU production. In export mode the consumer lives on another backend with no
-    /// shared timeline, so this DOES drain the producer queue (<see cref="IGpuExportableStorageImage.FinalizeForExport"/>)
+    /// shared timeline, so this does drain the producer queue (<see cref="IGpuExportableStorageImage.FinalizeForExport"/>)
     /// before the shared handle is handed off.</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -1607,12 +1604,12 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         }
     }
 
-    /// <summary>Records and submits one frame FIRE-AND-FORGET, then issues a NON-BLOCKING FENCED readback of the
+    /// <summary>Records and submits one frame fire-and-forget, then issues a non-blocking fenced readback of the
     /// composited output — the demo bake-preview path. Neither the compute submit nor the readback copy waits: the
-    /// caller polls <see cref="IsFramePixelsReady"/> on a LATER produced frame and, once it is ready, collects the
+    /// caller polls <see cref="IsFramePixelsReady"/> on a later produced frame and, once it is ready, collects the
     /// pixels with <see cref="AcquireFramePixels"/>. This spreads the render + readback across produced frames so the
-    /// live in-editor preview never idles the shared present queue mid-sculpt. SINGLE-IN-FLIGHT: only one pipelined
-    /// frame may be outstanding, and this path must not be interleaved with <see cref="RenderFrame"/> or
+    /// live in-editor preview never idles the shared present queue mid-sculpt. Only one pipelined
+    /// frame may be outstanding at a time, and this path must not be interleaved with <see cref="RenderFrame"/> or
     /// <see cref="SubmitFrame"/> on one engine (all three re-record the single shared command buffer) — mixing them
     /// while a fence is live corrupts the in-flight submission.</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
@@ -1641,7 +1638,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_pipelinedFrameInFlight = true;
     }
 
-    /// <summary>Polls, WITHOUT blocking, whether the outstanding <see cref="SubmitFramePipelined"/>'s readback has
+    /// <summary>Polls, without blocking, whether the outstanding <see cref="SubmitFramePipelined"/>'s readback has
     /// landed. Fail-safe on a torn-down device (returns <see langword="false"/>, never throws into the render loop).</summary>
     /// <returns>Whether the pipelined frame's pixels are ready to <see cref="AcquireFramePixels"/>.</returns>
     public bool IsFramePixelsReady() =>
@@ -1677,8 +1674,8 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     }
 
     /// <summary>The render passes' labels, in submission order — the names a <see cref="TryReadPassTimings"/> read fills
-    /// alongside their milliseconds (pass <c>i</c> spans timing mark <c>i</c>..<c>i+1</c>). A FIXED-COLUMN consumer (the
-    /// bench) looks one up by name via <see cref="PassMilliseconds"/>; an ITERATING consumer (the <c>sdf.info</c> verb,
+    /// alongside their milliseconds (pass <c>i</c> spans timing mark <c>i</c>..<c>i+1</c>). A fixed-column consumer (the
+    /// bench) looks one up by name via <see cref="PassMilliseconds"/>; an iterating consumer (the <c>sdf.info</c> verb,
     /// the <c>[world-timing]</c> line) walks them in order, so a future pass surfaces everywhere with no consumer edit.</summary>
     public static ReadOnlySpan<string> PassTimingLabels => PassLabels;
     /// <summary>The number of render passes a <see cref="TryReadPassTimings"/> read reports — the width a caller sizes
@@ -1686,7 +1683,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     public static int PassTimingCount => PassLabels.Length;
 
     /// <summary>Reads frame N−<see cref="FrameRingSize"/>'s per-pass GPU times — the newest frame the ring's slot
-    /// fence PROVES retired, so a pipelining fire-and-forget host reads them complete with no added stall (the
+    /// fence proves retired, so a pipelining fire-and-forget host reads them complete with no added stall (the
     /// TimingPoolCount rotating pools). Fills <paramref name="passMilliseconds"/> with one entry per
     /// <see cref="PassTimingLabels"/> (same order) and reports the whole-frame span separately.</summary>
     /// <param name="passMilliseconds">Receives each pass's milliseconds, in <see cref="PassTimingLabels"/> order; must be
@@ -1730,7 +1727,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         return (frame > 0.0);
     }
     /// <summary>Looks up a named pass's milliseconds in a <see cref="TryReadPassTimings"/> result. Returns 0 when the
-    /// label is absent (a pass renamed or removed), so a FIXED-COLUMN consumer (the bench's beam/views/composite) keeps
+    /// label is absent (a pass renamed or removed), so a fixed-column consumer (the bench's beam/views/composite) keeps
     /// comparing across a pass-list change instead of hard-failing on a missing tuple element.</summary>
     /// <param name="passMilliseconds">A filled <see cref="TryReadPassTimings"/> result span.</param>
     /// <param name="passCount">The entry count that read reported.</param>
@@ -1758,8 +1755,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // left to drain): the host permits frames in flight, and this engine's resources can
         // be referenced by OTHER in-flight work this engine's own fences cannot see — a view engine released mid-run
         // (the reveal transition) is destroyed while the MAIN engine's in-flight frame still samples its output as a
-        // screen source. Pre-ring this was the host's job ("wait-free by contract"); now disposal is the one seam
-        // that knows a resource is about to vanish, so the drain lives here.
+        // screen source.
         m_deviceContext.TryWaitIdle();
 
         if (m_timingPools is not null) {
@@ -1928,23 +1924,22 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         return viewportCount;
     }
 
-    // CADENCE GATE (perf plan Phase 6.1) — latch whether Record may skip the mask/beam/cull-args/views passes and
-    // re-composite from the retained (ring-SHARED, single) views output + tile buffer. A skip is permitted ONLY when the
-    // gate is enabled AND this frame's change signature exactly matches the last RENDERED frame's AND the live program
-    // declares no ScreenSlab AND no carve bake is in progress.
+    // Cadence gate: latches whether Record may skip the mask/beam/cull-args/views passes and re-composite from the
+    // retained (ring-shared) views output + tile buffer. A skip is permitted only when the gate is enabled, this
+    // frame's change signature exactly matches the last rendered frame's, the live program declares no ScreenSlab,
+    // and no carve bake is in progress.
     //
-    // SIGNATURE COVERAGE — the signature (ComputeFrameSignature) folds in EVERYTHING the four skipped passes consume:
+    // Signature coverage — the signature (ComputeFrameSignature) folds in everything the four skipped passes consume:
     //   - m_programRevision  : the uploaded program (words, live instance-mask width, kernel variant, reseeded
     //                          screen-surface table, invariant instance grid) — bumped by UploadProgram.
     //   - m_pushConstant     : Stage 0/1 push — width/height/tileGrid (constant), viewportCount, childMask,
     //                          screenSourceMask (bound-slot bitmask), liveInstanceMaskWordCount.
     //   - m_viewportScratch  : per-view camera basis + fov/aspect, region, debug view mode, and the quantized
-    //                          render-scale numerator — EXCLUDING each row's presentation-TIME lane (PackViewports'
+    //                          render-scale numerator — excluding each row's presentation-time lane (PackViewports'
     //                          position.w; byte offset 12 of each 96-byte ViewportData row). Time free-runs every
-    //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing it
-    //                          would make the signature never repeat and the gate permanently inert — the defect this
-    //                          exclusion fixes (verified live: the static debug scene never skipped with the gate on).
-    //                          Any camera ease still counts (it changes the surrounding lanes in the same row).
+    //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing
+    //                          it would make the signature never repeat and the gate permanently inert. Any camera
+    //                          ease still counts (it changes the surrounding lanes in the same row).
     //   - m_dynamicTransformScratch : every moving entity's position/orientation + soft-shadow participation. Also
     //                          covers the frame instance grid (a pure function of these transforms + the program).
     //   - m_screenSurfaceScratch : the screen-surface sampling table (a slab riding a dynamic rig re-poses here).
@@ -1952,26 +1947,17 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     //                          rows + the engine-bench lever rows (soft-shadow/AO/shadow-distance/screen-lights) + the
     //                          shadow-proxy rows + the analytic-normal and shadow-cull toggles — every shading lever.
     //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
-    // DELIBERATELY EXCLUDED (composite-only inputs — composite runs EVERY frame, so a change to them is applied by this
-    // frame's composite and can never produce a stale pixel): the composite push's UpscaleSharpness lane and WarpAmount.
-    // The region layout IS covered (it rides m_viewportScratch, because Stage 1 renders into the region extent).
-    // NOT COVERED BY ANY PACKED SPAN — handled conservatively by forcing a render:
-    //   - m_programDeclaresScreenSlab (computed once at UploadProgram — see there): covers BOTH the declared-but-UNBOUND
-    //     case (the excluded time lane is the sole per-frame driver of screenContent's test-card — verified the sole
-    //     consumer of ViewportData.position.w — sdf-world.hlsli's renderView reads it into `time` at exactly one call
-    //     site, gated on `material >= SDF_SCREEN_MATERIAL`) AND the BOUND case (a live CRT's image content updates in
-    //     place each frame with the same view handle, unseen by any packed span) — force-renders on ANY declared
-    //     ScreenSlab regardless of binding, cheaper to reason about than tracking per-slab bound state here.
-    //     CADENCE GATE ROOT CAUSE (found live via sdf.info's cadence diagnostics — a fully static, zero-ScreenSlab
-    //     debug scene never skipped even after the signature repeated exactly): a raw `m_screenSourceMask != 0` check
-    //     used to ALSO force every render, regardless of whether the LIVE PROGRAM declares any ScreenSlab at all —
-    //     m_screenSourceMask is per-ENGINE state (which slots ANY program, including the room's booted consoles, has
-    //     ever bound), not per-program, so a live console booted underneath an unrelated fullscreen takeover kept
-    //     forcing that takeover to fully re-render every frame even though sampleScreenSurface is PROVABLY unreachable
-    //     without a ScreenSlab material (verified above). Removed: whenever !m_programDeclaresScreenSlab holds, no
-    //     shader invocation this frame can read ANY screen source, so the mask's value cannot affect the pixels — the
-    //     check was pure dead weight that only ever produced a false block, never a real one (m_screenSourceMask IS
-    //     still folded into m_pushConstant/the Push span, so a bind/unbind transition is still caught there).
+    // Deliberately excluded (composite-only inputs — composite runs every frame, so a change to them is applied by
+    // this frame's composite and can never produce a stale pixel): the composite push's UpscaleSharpness lane and
+    // WarpAmount. The region layout is covered (it rides m_viewportScratch, because Stage 1 renders into the region
+    // extent).
+    // Not covered by any packed span — handled conservatively by forcing a render:
+    //   - m_programDeclaresScreenSlab (computed once at UploadProgram — see there): covers both the declared-but-
+    //     unbound case (the excluded time lane is the sole per-frame driver of screenContent's test-card —
+    //     sdf-world.hlsli's renderView reads it into `time` at exactly one call site, gated on
+    //     `material >= SDF_SCREEN_MATERIAL`) and the bound case (a live CRT's image content updates in place each
+    //     frame with the same view handle, unseen by any packed span) — force-renders on any declared ScreenSlab
+    //     regardless of binding.
     //   - AnyBrickBaking() : an in-progress carve bake writing brick voxels each frame.
     // Refinement path: a per-source content revision the provider supplies (then a static bound source could skip),
     // and a "settled" flag once every bake completes.
@@ -2250,7 +2236,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             floats[(b + 8)] = camera.Up.X; floats[(b + 9)] = camera.Up.Y; floats[(b + 10)] = camera.Up.Z; floats[(b + 11)] = camera.AspectRatio;                   // up.xyz, aspect
             floats[(b + 12)] = camera.Forward.X; floats[(b + 13)] = camera.Forward.Y; floats[(b + 14)] = camera.Forward.Z; floats[(b + 15)] = DebugMode;           // forward.xyz, debug view mode
             floats[(b + 16)] = region.X; floats[(b + 17)] = region.Y; floats[(b + 18)] = region.Width; floats[(b + 19)] = region.Height;                           // region origin.xy, size.xy
-            floats[(b + 20)] = RenderScaleQ(view: view, slot: index); floats[(b + 21)] = 0f; floats[(b + 22)] = 0f; floats[(b + 23)] = 0f;                         // renderScale q, spares
+            floats[(b + 20)] = RenderScaleQ(view: view, slot: index); floats[(b + 21)] = view.AsymmetricFrustumOffset.X; floats[(b + 22)] = view.AsymmetricFrustumOffset.Y; floats[(b + 23)] = 0f; // renderScale q, off-axis offset xy, spare
         }
     }
 
@@ -2381,7 +2367,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
 
         floats[(shadowProxyBase + 0)] = (frame.EnableShadowProxy ? 1f : 0f); floats[(shadowProxyBase + 1)] = (frame.UseCameraTileShadowMask ? 1f : 0f); floats[(shadowProxyBase + 2)] = (frame.UseFastSoftShadowMarch ? 1f : 0f); floats[(shadowProxyBase + 3)] = (frame.UseFastAmbientOcclusion ? 1f : 0f);
 
-        // The F1/F2 far-field lever row (perf plan Phase 5.1): one reserved row AFTER the shadow-proxy row. x = disable the
+        // The F1/F2 far-field lever row: one reserved row AFTER the shadow-proxy row. x = disable the
         // beam-published per-tile far bound (F1 A/B "off" side — the fine march ignores plane 3 and runs to MaxDistance
         // exactly as pre-F1); y = disable the F2 shadow light-side early exit (softShadow runs its full budget/reach); zw
         // reserved. Both levers default 0, so a frame that sets neither uploads zeros = both features ON (the shipped
@@ -2389,6 +2375,56 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
 
         floats[(farFieldBase + 0)] = (frame.DisableFarBound ? 1f : 0f); floats[(farFieldBase + 1)] = (frame.DisableShadowEscapeExit ? 1f : 0f); floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
+
+        PackSunFrame(frame: frame, floats: floats);
+    }
+
+    // The lighting rows: the scene's directional sun and its ambient, as per-frame data (SdfSunDirection/
+    // SdfSunTangent/SdfSunBitangent/SunWeight/AmbientBase/AmbientHemisphere). Five rows AFTER the far-field row.
+    // KEEP IN SYNC with sdf-world.hlsli's SdfSunFrameA..SdfAmbientColor.
+    //
+    // The sun is a FRAME, not a vector: the area-light shadow estimator samples a disc around the direction, so it
+    // needs two tangents too. They are derived HERE, host-side: DXC's DXIL backend constant-folds normalize() while
+    // its SPIR-V backend emits a runtime call, so a shader-side cross/normalize would be one compile-time constant on
+    // DXIL and a driver rsqrt on SPIR-V. A uniform has no such asymmetry: both backends read these identical bits.
+    //
+    // The arithmetic is DOUBLE, rounded once at the end: a float32 Vector3.Normalize lands one ulp high in the
+    // bitangent's Z for the default sun, so double precision keeps the default-sun path bit-identical.
+    private static void PackSunFrame(SdfFrame frame, Span<float> floats) {
+        var sunBase = ((MaxScreenSurfaces + 8) * 4);
+        double[] sun = [frame.SunDirection.X, frame.SunDirection.Y, frame.SunDirection.Z];
+        var length = Math.Sqrt(d: (((sun[0] * sun[0]) + (sun[1] * sun[1])) + (sun[2] * sun[2])));
+
+        if (length <= 0d) {
+            // A zero/degenerate direction has no frame to build. Fall back to the pinned default rather than uploading
+            // NaNs into every shading term on the frame.
+            sun = [0.51343602f, 0.79349202f, 0.32673201f];
+            length = Math.Sqrt(d: (((sun[0] * sun[0]) + (sun[1] * sun[1])) + (sun[2] * sun[2])));
+        }
+
+        sun = [(sun[0] / length), (sun[1] / length), (sun[2] / length)];
+
+        // tangent = normalize(Z x sun), bitangent = normalize(sun x tangent) — the construction the pasted literals
+        // came from. A sun parallel to +Z degenerates the first cross, so fall back to the X axis there.
+        var reference = ((Math.Abs(value: sun[2]) > 0.9999d) ? new double[] { 1d, 0d, 0d } : [0d, 0d, 1d]);
+        var tangent = NormalizeDouble(vector: CrossDouble(left: reference, right: sun));
+        var bitangent = NormalizeDouble(vector: CrossDouble(left: sun, right: tangent));
+
+        floats[(sunBase + 0)] = (float)sun[0]; floats[(sunBase + 1)] = (float)sun[1]; floats[(sunBase + 2)] = (float)sun[2]; floats[(sunBase + 3)] = frame.SunWeight;
+        floats[(sunBase + 4)] = (float)tangent[0]; floats[(sunBase + 5)] = (float)tangent[1]; floats[(sunBase + 6)] = (float)tangent[2]; floats[(sunBase + 7)] = frame.AmbientBase;
+        floats[(sunBase + 8)] = (float)bitangent[0]; floats[(sunBase + 9)] = (float)bitangent[1]; floats[(sunBase + 10)] = (float)bitangent[2]; floats[(sunBase + 11)] = frame.AmbientHemisphere;
+        floats[(sunBase + 12)] = frame.SunColor.X; floats[(sunBase + 13)] = frame.SunColor.Y; floats[(sunBase + 14)] = frame.SunColor.Z; floats[(sunBase + 15)] = 0f;
+        floats[(sunBase + 16)] = frame.AmbientColor.X; floats[(sunBase + 17)] = frame.AmbientColor.Y; floats[(sunBase + 18)] = frame.AmbientColor.Z; floats[(sunBase + 19)] = 0f;
+    }
+    private static double[] CrossDouble(double[] left, double[] right) => [
+        ((left[1] * right[2]) - (left[2] * right[1])),
+        ((left[2] * right[0]) - (left[0] * right[2])),
+        ((left[0] * right[1]) - (left[1] * right[0])),
+    ];
+    private static double[] NormalizeDouble(double[] vector) {
+        var length = Math.Sqrt(d: (((vector[0] * vector[0]) + (vector[1] * vector[1])) + (vector[2] * vector[2])));
+
+        return [(vector[0] / length), (vector[1] / length), (vector[2] / length)];
     }
 
     // Stage 2's CompositeParams2 { uint2 imageExtent; uint viewportCount; uint tileGridPacked; float4 rects[5];
@@ -2472,7 +2508,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             sourceStageMask: GpuComputeStage.ComputeShader | GpuComputeStage.DrawIndirect
         );
 
-        // CARVE-BAKE: prepend this frame's background bake slices (carve-bake plan §3), BEFORE the frame-timing marks so
+        // CARVE-BAKE: prepend this frame's background bake slices BEFORE the frame-timing marks so
         // the render passes' per-pass budget excludes the background bake. Each baking slot advances one ≤ 256K-voxel
         // slice; when a slot's cursor reaches its total, it flips to Ready. A pool-write → pool-read barrier follows so
         // the beam/views marches see the just-written voxels this same frame (and the cross-frame barrier orders any
@@ -2505,7 +2541,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             m_timingRecorder.WriteTimestamp(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, poolHandle: timingPool, queryIndex: 0, stageFlags: GpuTimingStage.TopOfPipe);
         }
 
-        // CADENCE GATE (perf plan Phase 6.1): when this frame's inputs are byte-identical to the last RENDERED frame's
+        // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
         // (DecideCadenceSkip proved it), SKIP the four render passes and fall straight through to the composite below —
         // which re-reads the RETAINED (single, ring-shared) views source textures + tile buffer the previous frame wrote
         // and re-composites them into the swapchain-bound output. Pixel-identical to a full re-render of these inputs;

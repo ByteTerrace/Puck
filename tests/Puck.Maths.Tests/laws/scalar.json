@@ -920,8 +920,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Lerp \u2014 from \u002B ((to \u2212 from)\u00B7amount), whose one rounding lives inside the multiply",
-        "Against": "Oracles.WrapToRaw(from \u002B Oracles.RoundDyadic(WrapToRaw(to \u2212 from)\u00B7amount, 16)) in BigInteger. ENVELOPE: the subject wraps the difference to the carrier BEFORE multiplying, so an oracle that took the difference at arbitrary width would disagree wherever it leaves the carrier \u2014 the product\u0027s shift-16 rounding of a k\u00B72\u2076\u2074 difference moves the result by k\u00B72\u2074\u2078, which the final wrap does NOT erase. The oracle therefore reproduces the subject\u0027s WRAP ORDER explicitly; what it does not share is the rounding, which it re-derives in arbitrary width",
+        "Subject": "FixedQ4816.Lerp \u2014 from + (to \u2212 from) \u00D7 amount, computed as one exact wide intermediate (fromRaw\u00B72^16 plus a difference of two Q32 products) with no standalone difference or product rounded before the final combine, rounded to the Q48.16 grid exactly once",
+        "Against": "the true rational value re-derived independently in BigInteger with NO intermediate wrap at any width: fromRaw shifted left 16 bits plus the exact BigInteger difference (toRaw \u2212 fromRaw) times amountRaw, formed as one arbitrary-width integer, then Oracles.RoundDyadic at shift 16 \u2014 the ONE rounding, which would catch a subject that wraps (to \u2212 from) before multiplying even where every operand and the true result are representable",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -929,7 +929,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the two endpoints are EXACT at every swept pair: Lerp(from, to, Zero) is from and Lerp(from, to, One) is to, with no rounding anywhere \u2014 multiplying by the raw 2\u00B9\u2076 shifts left sixteen and the product\u0027s shift-16 rounding has no residue to decide",
+        "Subject": "the two endpoints are EXACT at every swept pair: Lerp(from, to, Zero) is from and Lerp(from, to, One) is to \u2014 at zero the wide intermediate is exactly from\u00B72^16 and at one it is exactly to\u00B72^16, so ScaleProductSum\u0027s shift-16 narrowing divides an exact multiple of 2^16 with no remainder to round in either case",
         "Against": "",
         "Shared": "",
         "Citation": "",

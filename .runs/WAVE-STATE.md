@@ -92,7 +92,7 @@ surface rather than getting a change of its own. Leave the text here for whoever
   `Puck.Cli`, `Puck.World.Data`, `Puck.World.Server` and still has `src/Puck.{Demo,Post,Bench}`
   in tree. `EnterWorktree`'s default `fresh` base lands you there. Sanity check: `ls src/` must
   show `Puck.Cli`. The live trunk is `features/maths-excursion`.
-- **`experimental/` is OFF LIMITS** by owner ruling — do not read, build, cite, or port from it.
+- **`experimental/` is quarantined for work, not reading** (owner ruling, 2026-08-08, superseding the 2026-08-02 ban) — read it and cite it as prior art, delete it as it is eclipsed; do not build, run, fix, or revive it in place.
 - **Never operate in the shared main checkout** — other sessions work there. Use a worktree.
 - **`tests/Puck.Maths.Tests/frontier.json` + `RESULTS.md` are a rolling ratchet.** Running the
   Maths suite advances one index per key and dirties them. That is the Maths lane's ledger, not

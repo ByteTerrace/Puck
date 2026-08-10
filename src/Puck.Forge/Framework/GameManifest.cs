@@ -34,11 +34,11 @@ internal readonly record struct RomRecords(RomTable Table, int Stride, int Count
 internal sealed record LinkedScreen(RomTable Map, RomTable? Attributes);
 
 /// <summary>
-/// The declarative game manifest — a game's identity as DATA. A game declares its tile segments, palettes, screens
+/// The declarative game manifest — a game's identity as data. A game declares its tile segments, palettes, screens
 /// (literal cells or a baked <c>PBAK</c> background, both with text overlays), rule tables, strings, input scripts,
 /// and sprite art up front; <see cref="Link"/> then drives <see cref="AssetLinker"/> and the data window once,
 /// returning a <see cref="LinkedManifest"/> the game's SM83 emission references by table address. Allocation follows
-/// DECLARATION ORDER (tiles into the bank, palettes into the slots), so <see cref="FontTileBase"/> is known the
+/// declaration order (tiles into the bank, palettes into the slots), so <see cref="FontTileBase"/> is known the
 /// moment the font is declared — before the framework is even constructed. Shared by every framework game: rules,
 /// layouts, and decks are manifest tables, never copies of another game's plumbing.
 /// </summary>

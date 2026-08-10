@@ -11,9 +11,9 @@ public interface ICartridge : ISnapshotable {
     CartridgeHeader Header { get; }
     /// <summary>Gets the populated external (save) RAM size in bytes; zero for a RAM-less cartridge.</summary>
     int ExternalRamByteCount { get; }
-    /// <summary>Gets whether the external RAM changed since the last <see cref="MarkExternalRamClean"/> /
+    /// <summary>Gets a value indicating whether the external RAM changed since the last <see cref="MarkExternalRamClean"/> /
     /// <see cref="ImportExternalRam"/> — the host's battery-save flush trigger. Set by every RAM store; snapshot
-    /// restores do NOT set it (a restore replicates a machine whose own writes already tracked).</summary>
+    /// restores do not set it (a restore replicates a machine whose own writes already tracked).</summary>
     bool ExternalRamDirty { get; }
 
     /// <summary>Copies the external RAM out — the host's battery-save read. Does not change

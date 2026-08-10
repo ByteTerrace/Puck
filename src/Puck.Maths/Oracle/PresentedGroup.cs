@@ -51,7 +51,7 @@ public readonly record struct GroupObstruction(ClosureOutcome Outcome, int Block
 /// <para>
 /// <b>It adds no product code.</b> Every statement here is made with the algebra's own <c>Multiply</c>: a witness is a
 /// product compared to the unit, an inverse is a product of witnesses that is then multiplied out and checked, and an
-/// orbit is a closure under multiplication by the generators. The compiled cells are read only as a FILTER, to skip the
+/// orbit is a closure under multiplication by the generators. The compiled cells are read only as a filter, to skip the
 /// candidates that cannot possibly work; every certificate this type issues rests on a product rather than on a table.
 /// </para>
 /// <para>
@@ -76,7 +76,7 @@ public readonly record struct GroupObstruction(ClosureOutcome Outcome, int Block
 /// basis, say — is answered rather than refused. Deriving proposes; the two-sided product still decides.
 /// </para>
 /// <para>
-/// <b>This is a LIMIT, in the boundary map's sense.</b> A finite basis is required because associativity must be proved,
+/// <b>This is a limit, in the boundary map's sense.</b> A finite basis is required because associativity must be proved,
 /// not inferred from invertible generators. Infinite and merely uncompiled word presentations therefore refuse;
 /// callers can present a finite multiplication table when they have an independently enumerated group.
 /// </para>
@@ -425,7 +425,7 @@ public sealed class PresentedGroup<TValue, TOps>
     /// <exception cref="InvalidOperationException">The presentation has no finite basis and a step outgrew its
     /// normalization budget or its key scheme, which is <see cref="PresentedAlgebra{TValue, TOps}.Multiply"/>'s own
     /// contract; a limit the key scheme can hold is the caller's to choose.</exception>
-    /// <remarks>The orbit is a set of KEYS. A step's charge is not part of it, so a Clifford basis whose products carry
+    /// <remarks>The orbit is a set of keys. A step's charge is not part of it, so a Clifford basis whose products carry
     /// a sign has the same orbit as one whose products do not.</remarks>
     public bool TryEnumerateOrbit(long seedKey, long searchLimit, out ReadOnlyMemory<long> orbit, out GroupObstruction obstruction) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: searchLimit, other: 1L);
@@ -484,7 +484,7 @@ public sealed class PresentedGroup<TValue, TOps>
     /// <para>
     /// The inverse of a product is the reversed product of the inverses, so the word <c>g₁…gₙ</c> inverts to
     /// <c>gₙ⁻¹…g₁⁻¹</c> through the unit witnesses. Admission has already proved associativity, but the candidate is
-    /// still MULTIPLIED OUT against the element on both sides before it is returned. A <see langword="true"/> is
+    /// still multiplied out against the element on both sides before it is returned. A <see langword="true"/> is
     /// therefore a checked answer, and a presentation whose rewriting cannot see the cancellation is refused rather
     /// than answered wrongly.
     /// </para>

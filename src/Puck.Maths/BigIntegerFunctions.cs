@@ -28,7 +28,7 @@ public static class BigIntegerFunctions {
     /// <remarks>
     /// A cycle walk finds a factor <c>p</c> in about <c>√p</c> steps, so this reaches factors up to roughly <c>2^41</c>
     /// — past the two near-<c>2^39</c> factors of the least strong pseudoprime to the witness set, which is
-    /// the case that makes the attempt worth making at all. It is a CAP, not a scaling budget: above the boundary the
+    /// the case that makes the attempt worth making at all. It is a cap, not a scaling budget: above the boundary the
     /// operand may be genuinely prime, and a budget that scaled with the operand would spend all of it proving nothing.
     /// </remarks>
     private static readonly BigInteger RefutationBudget = (1 << 21);

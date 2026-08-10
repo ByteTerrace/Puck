@@ -26,11 +26,11 @@ public static class BindingVocabularyHook {
     /// absent-tolerant contract (a <see langword="null"/> hook, or a hook that itself no-ops before the composition
     /// root finishes building its registry, skips the command half only; structural validation never depends on
     /// this).</summary>
-    /// <remarks>The channel table is a PARAMETER rather than something the hook resolves for itself, and that is
+    /// <remarks>The channel table is a parameter rather than something the hook resolves for itself, and that is
     /// load-bearing: channels are declared per world document, so the only table that can honestly judge a document's
     /// binding overlays is the one compiled from that same document. A hook resolving its own table would answer for
     /// whichever world happened to install one — refusing a self-consistent document under one boot world and
-    /// admitting a self-INCONSISTENT one under another.</remarks>
+    /// admitting a self-inconsistent one under another.</remarks>
     public static Action<BindingProfileDocument, WorldChannelTable, List<string>>? VocabularyCheck { get; set; }
 
     /// <summary>Builds the engine-default binding document through <see cref="DefaultDocument"/>.</summary>

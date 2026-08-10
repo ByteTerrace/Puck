@@ -1,0 +1,176 @@
+{
+  "description": "The market section (default null = no local auction house \u2014 every market.* verb refuses by name) \u2014 see WorldMarketSection. OPTIONAL, for the SAME reason Rules is. Trailing by design, after Admission, for the identical reason every optional section here is.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "formats": {
+      "description": "Which WorldMarketFormat values a listing may declare, or null to permit both.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "The trade shapes a WorldMarketListing may declare \u2014 authored rule shapes over the total-ordered bid journal, never a free-form auction engine.",
+        "enum": [
+          "English",
+          "Buyout"
+        ]
+      },
+      "default": null
+    },
+    "feeBasisPoints": {
+      "description": "The house fee, in basis points of a settled sale\u0027s price (0..MaxFeeBasisPoints), credited to FeeReserve at settlement \u2014 never destroyed, so escrow conservation holds across the fee too.",
+      "type": "integer",
+      "default": 0
+    },
+    "minDurationSeconds": {
+      "description": "The least authored listing duration this market admits.",
+      "type": "number",
+      "default": 60
+    },
+    "maxDurationSeconds": {
+      "description": "The greatest authored listing duration this market admits.",
+      "type": "number",
+      "default": 86400
+    },
+    "admissionTiers": {
+      "description": "The declared per-tier admission rules (see WorldMarketAdmissionTier) \u2014 validated and round-tripped, locally inert.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One per-tier admission rule a WorldMarketSection may declare. Validated and round-tripped today; not yet consulted by any listing/bid/buyout compose arm \u2014 LOCAL enforcement is admit-everyone (the trivial self-mint posture the fact vocabulary\u0027s Provenance also takes), and a federated authority is expected to consult this row before it enforces attestation.",
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "The tier\u0027s stable name, unique within the section.",
+            "type": "string"
+          },
+          "requireAttestation": {
+            "description": "Whether a participant must carry a ring attestation to trade under this tier \u2014 authored now, inert until federation reads it.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "default": null
+    },
+    "listings": {
+      "description": "The live listing ledger \u2014 engine- and player-mutated, never re-seeded from the document on boot the way Formats/AdmissionTiers are (matches groups\u0027 authored-vs-runtime split for its own WorldOwnership rows).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One listing on the market \u2014 an item escrowed out of its seller\u0027s spendable set the moment this row is created, resolved exactly once by a buyout, a cancel, or the deadline sweep. ItemRow/ CurrencyRow each name a keyed state row (see WorldStateCell\u0027s remarks) whose cells are addressed by a holder\u0027s 0-based Index \u2014 the item/currency fact vocabulary this listing moves quantity through, never a second inventory system.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The listing\u0027s engine-minted, monotonically increasing id (see NextListingId).",
+            "type": "integer"
+          },
+          "seller": {
+            "description": "The seller \u2014 always a Seat or Peer principal (a real player, never the console/world/an addon/a group)."
+          },
+          "itemRow": {
+            "description": "The keyed state row carrying the traded item\u0027s per-holder quantity.",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "How much of ItemRow this listing escrows \u2014 decremented from the seller\u0027s own cell at creation, credited to the winner\u0027s cell at settlement, or returned to the seller\u0027s cell on cancel/expiry.",
+            "type": "integer"
+          },
+          "currencyRow": {
+            "description": "The keyed state row carrying the price currency\u0027s per-holder balance.",
+            "type": "string"
+          },
+          "format": {
+            "description": "Which trade shape this listing runs.",
+            "enum": [
+              "English",
+              "Buyout"
+            ]
+          },
+          "startPrice": {
+            "description": "The minimum opening bid (English); unused by, and must be zero for, Buyout.",
+            "type": "integer"
+          },
+          "deadlineTick": {
+            "description": "The engine tick at or after which the deadline sweep (Server.WorldServer\u0027s per-tick market pass, the same shape as its own ReclaimExpiredEscrows) settles or expires this listing \u2014 derived once, at creation, from the authored duration seconds through DurationTicks; never re-derived.",
+            "type": "integer"
+          },
+          "buyoutPrice": {
+            "description": "The instant-win price, or null for an English listing carrying none. Required for Buyout.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "status": {
+            "description": "The listing\u0027s current lifecycle state.",
+            "enum": [
+              "Active",
+              "Settled",
+              "Cancelled",
+              "Expired"
+            ],
+            "default": "Active"
+          },
+          "currentBid": {
+            "description": "The highest accepted bid so far (English only); zero while unbid.",
+            "type": "integer",
+            "default": 0
+          },
+          "currentBidder": {
+            "description": "Who placed CurrentBid, or null while unbid.",
+            "default": null
+          },
+          "resolvedTick": {
+            "description": "The tick Status left Active at, or null while still active \u2014 the retention sweep\u0027s own age basis (Server.WorldServer\u0027s PruneMarketListings compose arm), never re-derived from DeadlineTick (a cancel or buyout resolves long before its deadline, so the deadline cannot stand in for \u0022when this row actually became terminal\u0022).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "seller",
+          "itemRow",
+          "quantity",
+          "currencyRow",
+          "format",
+          "startPrice",
+          "deadlineTick"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    },
+    "nextListingId": {
+      "description": "The next Id a CreateMarketListing mints \u2014 engine bookkeeping, monotonically increasing, never reused.",
+      "type": "integer",
+      "default": 1
+    },
+    "feeReserve": {
+      "description": "The house\u0027s accumulated fee take \u2014 engine bookkeeping; the fee sink escrow conservation balances against.",
+      "type": "integer",
+      "default": 0
+    },
+    "retentionSeconds": {
+      "description": "How long a terminal row (Settled/ Cancelled/Expired) stands, past its own ResolvedTick, before the engine\u0027s own per-tick retention sweep (Server.WorldServer\u0027s PruneMarketListings compose arm) archives it \u2014 the bound half of MaxListings: an active row is never eligible however old, so a market that never resolves anything still fills at exactly MaxListings live listings. Converted to ticks the same way a listing\u0027s own MinDurationSeconds/MaxDurationSeconds become its DeadlineTick (DurationTicks).",
+      "type": "number",
+      "default": 604800
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

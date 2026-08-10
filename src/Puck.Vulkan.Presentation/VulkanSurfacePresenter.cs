@@ -52,13 +52,11 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
             height: height,
             width: width
         );
-        // The frame-boundary gate, PIPELINED: wait only on the presentation ring slot's fence — the present two
-        // frames back — instead of draining the whole device, so this frame's CPU production overlaps the previous
-        // frame's GPU execution (wall interval → ~max(GPU, produce) when GPU-bound). Per-frame resource reuse is
-        // guarded by each SdfWorldEngine's own frame ring; this wait bounds host latency to the ring depth. The
-        // FULL drain remains the resize/device-loss/shutdown path (renderer BeginFrame recreation, RecoverFromDeviceLoss,
-        // the host's teardown WaitIdle). Folded behind the seam so the host loop stays backend-agnostic — the
-        // [frame-timing] "gpu-drain" bucket now measures this bounded wait.
+        // Waits only on the presentation ring slot's fence (the present two frames back) instead of draining the
+        // whole device, so this frame's CPU production overlaps the previous frame's GPU execution. Per-frame
+        // resource reuse is guarded by each SdfWorldEngine's own frame ring; this wait bounds host latency to the
+        // ring depth. Full drain remains the resize/device-loss/shutdown path (BeginFrame recreation,
+        // RecoverFromDeviceLoss, teardown WaitIdle).
         m_renderer.WaitForFrameSlot();
     }
     /// <inheritdoc/>

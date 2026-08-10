@@ -35,14 +35,29 @@ internal static class FusedArithmetic {
         long secondRight,
         bool subtractSecond = false
     ) {
-        var first = ((Int128)firstLeft * firstRight);
-        var second = ((Int128)secondLeft * secondRight);
-        var firstNegative = (first < Int128.Zero);
-        var secondProductNegative = (second < Int128.Zero);
-        var secondNegative = secondProductNegative ^ subtractSecond;
-        var firstMagnitude = (UInt128)(firstNegative ? -first : first);
-        var secondMagnitude = (UInt128)(secondProductNegative ? -second : second);
+        var first = Product(left: firstLeft, right: firstRight);
+        var second = Product(left: secondLeft, right: secondRight);
 
+        return CombineSigned(
+            firstNegative: first.Negative,
+            firstMagnitude: first.Magnitude,
+            secondNegative: (second.Negative ^ subtractSecond),
+            secondMagnitude: second.Magnitude
+        );
+    }
+
+    /// <summary>Combines two already-formed sign-plus-magnitude terms into their exact signed sum, at whatever scale the caller's two terms already share. The one sign-magnitude addition/subtraction tail every multi-term fused kernel in this file funnels through — <see cref="AddProducts"/> forms its two terms as fresh products and calls straight through; a caller whose terms are not both bare products (a shift, a pre-combined sub-sum) calls this directly rather than re-deriving the same tail.</summary>
+    /// <param name="firstNegative">Whether the first term is negative.</param>
+    /// <param name="firstMagnitude">The first term's magnitude.</param>
+    /// <param name="secondNegative">Whether the second term is negative.</param>
+    /// <param name="secondMagnitude">The second term's magnitude.</param>
+    /// <returns>The signed sum as sign plus magnitude. The caller is responsible for the two magnitudes not overflowing <see cref="UInt128"/> when added.</returns>
+    internal static (bool Negative, UInt128 Magnitude) CombineSigned(
+        bool firstNegative,
+        UInt128 firstMagnitude,
+        bool secondNegative,
+        UInt128 secondMagnitude
+    ) {
         if (firstNegative == secondNegative) {
             return (firstNegative, (firstMagnitude + secondMagnitude));
         }
@@ -155,6 +170,274 @@ internal static class FusedArithmetic {
         return ((high != 0UL)
             ? (128 - BitOperations.LeadingZeroCount(value: high))
             : (64 - BitOperations.LeadingZeroCount(value: ((ulong)value))));
+    }
+
+    /// <summary>Rounds <c>numeratorMagnitude / denominatorMagnitude · 2^fractionBitCount</c> to an exact unsigned
+    /// magnitude, once, ties to even — the same integer-quotient-plus-restoring-division shape
+    /// <see cref="DivideProductSumCore"/> runs at its own fixed count, generalized to an arbitrary
+    /// non-negative <paramref name="fractionBitCount"/> and returned WITHOUT narrowing to any carrier, so a caller
+    /// whose fraction count is not always 16 (<see cref="FixedSymmetricSolve"/>'s caller-supplied output scale) shares
+    /// this one loop instead of copying it.</summary>
+    /// <param name="numeratorMagnitude">The exact non-negative numerator.</param>
+    /// <param name="denominatorMagnitude">The exact non-negative denominator.</param>
+    /// <param name="fractionBitCount">The number of extra bits to generate below the integer quotient; zero rounds a
+    /// plain division to the nearest integer.</param>
+    /// <param name="quotient">The rounded magnitude on success; default on refusal.</param>
+    /// <returns><see langword="false"/> when <paramref name="fractionBitCount"/> is negative — checked FIRST, before
+    /// any shift or loop is set up, so a negative count can never reach the starting <see cref="UInt128"/> shift (which
+    /// would alias it modulo 128) or the restoring loop (which would count down from it, billions of iterations for a
+    /// large-magnitude negative count such as <see cref="int.MinValue"/>) — when <paramref name="denominatorMagnitude"/>
+    /// is zero (the caller's singularity signal), or when the integer quotient's bit length plus
+    /// <paramref name="fractionBitCount"/> would leave fewer than one clear bit below <see cref="UInt128"/>'s width —
+    /// the shift that builds the starting quotient would silently lose bits rather than compute the true value, so
+    /// this refuses instead of answering a wrapped one. A caller narrowing further (to a signed 64-bit raw) must
+    /// still check its own, tighter range.</returns>
+    internal static bool TryDivideMagnitudeRounded(UInt128 numeratorMagnitude, UInt128 denominatorMagnitude, int fractionBitCount, out UInt128 quotient) {
+        // Checked before anything else touches fractionBitCount: a negative count must never reach the starting
+        // shift or the loop below. The prior guard here was Debug.Assert alone, which is compiled out in Release and
+        // therefore enforced nothing outside Debug — int.MinValue reached the loop and counted down 2,147,483,648
+        // times before returning a wrapped "success". This is real refusal, not a debugging aid.
+        if (fractionBitCount < 0) {
+            quotient = default;
+            return false;
+        }
+
+        if (denominatorMagnitude == UInt128.Zero) {
+            quotient = default;
+            return false;
+        }
+
+        var integer = (numeratorMagnitude / denominatorMagnitude);
+
+        // The width check must run even when the integer quotient is zero: a zero integer still has a starting
+        // bit length of zero (BitLength's own zero case), and a fractionBitCount alone at or past 128 would still
+        // build a bit index the loop below cannot address without a CLR shift-count alias (count masked modulo
+        // 128) silently wrapping a high bit back onto a low one instead of refusing. The sum is widened to `long`
+        // BEFORE adding: `fractionBitCount` alone can be as large as `int.MaxValue`, and `BitLength(...) +
+        // fractionBitCount` computed in `int` wraps past `int.MaxValue` (e.g. `1 + int.MaxValue` becomes
+        // `int.MinValue`), which would slip under the `> 127` test and let the loop below run on an aliased shift
+        // count for billions of iterations before returning garbage as success. `long` has no such ceiling for any
+        // combination of a 0-128 bit length and an `int` fraction count, so this comparison can never wrap.
+        if ((((long)BitLength(value: integer)) + fractionBitCount) > 127L) {
+            quotient = default;
+            return false;
+        }
+
+        var remainder = (numeratorMagnitude - (integer * denominatorMagnitude));
+        var result = (integer << fractionBitCount);
+
+        // Overflow-safe restoring division: the compare is against `denominatorMagnitude - remainder`, never
+        // `2 * remainder`, so the remainder is only ever doubled when that doubling is already known to stay
+        // below the denominator (the invariant `remainder < denominatorMagnitude` holding on entry to each
+        // iteration). Doubling unconditionally first — the shape this loop replaces — can wrap `remainder` past
+        // UInt128's own ceiling when it is already in the top half of its range, corrupting the quotient silently.
+        for (var bit = (fractionBitCount - 1); (bit >= 0); --bit) {
+            var complement = (denominatorMagnitude - remainder);
+
+            if (remainder >= complement) {
+                remainder -= complement;
+                result |= (UInt128.One << bit);
+            } else {
+                remainder <<= 1;
+            }
+        }
+
+        var distanceToNext = (denominatorMagnitude - remainder);
+
+        if ((remainder > distanceToNext) || ((remainder == distanceToNext) && ((result & UInt128.One) != UInt128.Zero))) {
+            ++result;
+        }
+
+        quotient = result;
+        return true;
+    }
+
+    /// <summary>Rounds the exact magnitude <c>magnitude · 2^shift</c> to an integer magnitude, once, to nearest with
+    /// ties to even, for a <paramref name="shift"/> of either sign and any width.</summary>
+    /// <param name="magnitude">The exact non-negative magnitude to scale.</param>
+    /// <param name="shift">The signed power-of-two exponent; a negative value rounds the discarded low bits.</param>
+    /// <returns>The scaled magnitude — congruent to the true value modulo <c>2^128</c> — and whether a non-negative
+    /// shift carried that true value past <see cref="UInt128"/>'s width. A wrapping caller ignores the flag; a
+    /// refusing caller reads it before trusting the magnitude.</returns>
+    internal static (UInt128 Magnitude, bool Overflowed) ScaleMagnitudeToNearest(UInt128 magnitude, long shift) {
+        if (shift >= 0L) {
+            return ShiftLeftCongruent(magnitude: magnitude, shift: shift);
+        }
+
+        var split = SplitAtRightShift(magnitude: magnitude, rightShift: -shift);
+        var quotient = split.Quotient;
+
+        if (split.AboveHalf || (split.AtHalf && ((quotient & UInt128.One) != UInt128.Zero))) {
+            ++quotient;
+        }
+
+        return (quotient, false);
+    }
+
+    /// <summary>Rounds the exact magnitude <c>magnitude · 2^shift</c> to an integer magnitude, once, AWAY FROM ZERO —
+    /// the directed-up sibling of <see cref="ScaleMagnitudeToNearest"/>, for the conservative bounds a speculative
+    /// contact or time-of-impact test needs. A caller wanting an upper bound calls this rather than adding a unit in
+    /// the last place to a nearest result, which overshoots whenever the nearest result was already an upper bound and
+    /// undershoots nothing it would have caught.</summary>
+    /// <param name="magnitude">The exact non-negative magnitude to scale.</param>
+    /// <param name="shift">The signed power-of-two exponent; a negative value rounds the discarded low bits up.</param>
+    /// <returns>The scaled magnitude and the same overflow flag <see cref="ScaleMagnitudeToNearest"/> reports.</returns>
+    internal static (UInt128 Magnitude, bool Overflowed) ScaleMagnitudeToCeiling(UInt128 magnitude, long shift) {
+        if (shift >= 0L) {
+            return ShiftLeftCongruent(magnitude: magnitude, shift: shift);
+        }
+
+        var split = SplitAtRightShift(magnitude: magnitude, rightShift: -shift);
+
+        return ((split.AnyDiscarded ? (split.Quotient + UInt128.One) : split.Quotient), false);
+    }
+
+    /// <summary>Reads a sign-plus-magnitude value back as a raw <see cref="long"/>, wrapping the way every narrowing
+    /// in this file does.</summary>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="magnitude">The value's magnitude.</param>
+    /// <returns>The raw value, wrapped to the signed 64-bit carrier.</returns>
+    internal static long WrapSignedMagnitude(bool negative, UInt128 magnitude) {
+        var raw = unchecked((long)magnitude);
+
+        return (negative
+            ? unchecked(-raw)
+            : raw);
+    }
+
+    /// <summary>Reads a sign-plus-magnitude value back as a raw <see cref="long"/>, REFUSING rather than wrapping when
+    /// it does not fit — the one narrowing tail every checked kernel in the fixed-point family crosses back through.</summary>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="magnitude">The value's magnitude.</param>
+    /// <param name="result">The raw value on success; zero on refusal.</param>
+    /// <returns><see langword="false"/> when the magnitude exceeds what the signed 64-bit carrier holds for that sign
+    /// (<c>2^63</c> for a negative value, <c>2^63 − 1</c> for a non-negative one).</returns>
+    internal static bool TryNarrowSignedMagnitude(bool negative, UInt128 magnitude, out long result) {
+        var limit = (negative
+            ? (((UInt128)long.MaxValue) + UInt128.One)
+            : (UInt128)long.MaxValue);
+
+        if (magnitude > limit) {
+            result = 0L;
+            return false;
+        }
+
+        var raw = unchecked((long)(ulong)magnitude);
+
+        result = (negative
+            ? unchecked(-raw)
+            : raw);
+        return true;
+    }
+
+    /// <summary>Multiplies two raws carried at DIFFERENT fixed-point scales and rounds the result to a third scale
+    /// exactly once, to nearest with ties to even, wrapping on overflow.</summary>
+    /// <param name="a">The first factor's raw.</param>
+    /// <param name="fractionBitsA">The first factor's fraction bit count.</param>
+    /// <param name="b">The second factor's raw.</param>
+    /// <param name="fractionBitsB">The second factor's fraction bit count.</param>
+    /// <param name="fractionBitsOut">The result's fraction bit count.</param>
+    /// <returns>The raw product at <paramref name="fractionBitsOut"/>.</returns>
+    /// <remarks>The kernel an inverse mass at one scale and an impulse at another need: rounding either operand onto a
+    /// shared scale first would cost a rounding the mixed-scale caller does not have to pay. The whole product is
+    /// formed exactly (two 64-bit factors reach at most <c>2^126</c>, inside <see cref="UInt128"/>) and the single
+    /// rounding happens at <c>2^(fractionBitsOut − fractionBitsA − fractionBitsB)</c>. The three counts are combined in
+    /// <see cref="long"/> so no combination of <see cref="int"/> extremes can wrap the exponent.</remarks>
+    internal static long MixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut) {
+        var product = Product(left: a, right: b);
+        var scaled = ScaleMagnitudeToNearest(magnitude: product.Magnitude, shift: MixedScaleShift(fractionBitsOut: fractionBitsOut, first: fractionBitsA, second: fractionBitsB));
+
+        return WrapSignedMagnitude(negative: product.Negative, magnitude: scaled.Magnitude);
+    }
+
+    /// <summary>The refusing face of <see cref="MixedScaleProduct(long, int, long, int, int)"/>: the same single
+    /// rounding, declining rather than wrapping when the rounded result leaves the signed 64-bit raw.</summary>
+    /// <param name="a">The first factor's raw.</param>
+    /// <param name="fractionBitsA">The first factor's fraction bit count.</param>
+    /// <param name="b">The second factor's raw.</param>
+    /// <param name="fractionBitsB">The second factor's fraction bit count.</param>
+    /// <param name="fractionBitsOut">The result's fraction bit count.</param>
+    /// <param name="result">The raw product on success; zero on refusal.</param>
+    /// <returns><see langword="false"/> when the correctly rounded product does not fit the signed 64-bit raw;
+    /// <paramref name="result"/> is zero in that case.</returns>
+    internal static bool TryMixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut, out long result) {
+        var product = Product(left: a, right: b);
+        var scaled = ScaleMagnitudeToNearest(magnitude: product.Magnitude, shift: MixedScaleShift(fractionBitsOut: fractionBitsOut, first: fractionBitsA, second: fractionBitsB));
+
+        if (scaled.Overflowed) {
+            result = 0L;
+            return false;
+        }
+
+        return TryNarrowSignedMagnitude(negative: product.Negative, magnitude: scaled.Magnitude, result: out result);
+    }
+
+    /// <summary>Multiplies THREE raws carried at independent fixed-point scales and rounds the result to a fourth
+    /// scale exactly once, to nearest with ties to even, refusing rather than wrapping.</summary>
+    /// <param name="a">The first factor's raw.</param>
+    /// <param name="fractionBitsA">The first factor's fraction bit count.</param>
+    /// <param name="b">The second factor's raw.</param>
+    /// <param name="fractionBitsB">The second factor's fraction bit count.</param>
+    /// <param name="c">The third factor's raw.</param>
+    /// <param name="fractionBitsC">The third factor's fraction bit count.</param>
+    /// <param name="fractionBitsOut">The result's fraction bit count.</param>
+    /// <param name="result">The raw product on success; zero on refusal.</param>
+    /// <returns><see langword="false"/> when the exact triple product leaves <see cref="UInt128"/> — three 64-bit
+    /// factors reach <c>2^189</c>, far past what this width holds, and the check is the exact one (the third factor
+    /// against <see cref="UInt128.MaxValue"/> divided by the running pair) rather than a conservative bit-length
+    /// estimate — or when the correctly rounded result does not fit the signed 64-bit raw. There is no wrapping face:
+    /// a wrapped triple product is congruent to nothing a caller can use.</returns>
+    internal static bool TryMixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, long c, int fractionBitsC, int fractionBitsOut, out long result) {
+        var pair = Product(left: a, right: b);
+        var third = ((UInt128)RawMagnitude(value: c));
+        var negative = (pair.Negative ^ (c < 0L));
+
+        if ((pair.Magnitude != UInt128.Zero) && (third > (UInt128.MaxValue / pair.Magnitude))) {
+            result = 0L;
+            return false;
+        }
+
+        var shift = (MixedScaleShift(fractionBitsOut: fractionBitsOut, first: fractionBitsA, second: fractionBitsB) - fractionBitsC);
+        var scaled = ScaleMagnitudeToNearest(magnitude: (pair.Magnitude * third), shift: shift);
+
+        if (scaled.Overflowed) {
+            result = 0L;
+            return false;
+        }
+
+        return TryNarrowSignedMagnitude(negative: negative, magnitude: scaled.Magnitude, result: out result);
+    }
+
+    // The exponent every mixed-scale kernel rounds at, formed in long so no combination of int extremes wraps it.
+    internal static long MixedScaleShift(int fractionBitsOut, int first, int second) =>
+        (((long)fractionBitsOut - first) - second);
+
+    // A left shift that keeps the result congruent to the true value modulo 2^128 and reports whether the true value
+    // left that width. A count at or past 128 is answered directly: the CLR masks a UInt128 shift count modulo 128,
+    // which would fold a high bit back onto a low one instead of clearing the word.
+    private static (UInt128 Magnitude, bool Overflowed) ShiftLeftCongruent(UInt128 magnitude, long shift) {
+        if (magnitude == UInt128.Zero) { return (UInt128.Zero, false); }
+
+        if (shift >= 128L) { return (UInt128.Zero, true); }
+
+        return ((magnitude << ((int)shift)), ((BitLength(value: magnitude) + shift) > 128L));
+    }
+
+    // The one right-shift split both directed faces read: the truncated quotient, whether anything was discarded (the
+    // ceiling's whole decision), and whether the discarded part is above or exactly at half a discarded unit (the
+    // nearest face's). A count at or past 129 puts the half-unit strictly above every 128-bit magnitude, so it is
+    // answered without forming a half that would not fit.
+    private static (UInt128 Quotient, bool AnyDiscarded, bool AboveHalf, bool AtHalf) SplitAtRightShift(UInt128 magnitude, long rightShift) {
+        if (rightShift >= 129L) {
+            return (UInt128.Zero, (magnitude != UInt128.Zero), false, false);
+        }
+
+        var wide = (rightShift >= 128L);
+        var quotient = (wide ? UInt128.Zero : (magnitude >> ((int)rightShift)));
+        var remainder = (wide ? magnitude : (magnitude - (quotient << ((int)rightShift))));
+        var half = (UInt128.One << ((int)(rightShift - 1L)));
+
+        return (quotient, (remainder != UInt128.Zero), (remainder > half), (remainder == half));
     }
 
     /// <summary>Rounds a Q48-scaled product sum to raw Q16, once, to nearest with ties to even, wrapping to the signed 64-bit carrier.</summary>

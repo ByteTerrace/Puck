@@ -1,19 +1,57 @@
 ---
 name: teamwork
-description: Coordinates multi-session repository work through a lead and specialist lanes, using self-contained briefs, isolated worktrees, verified squash landings, adversarial review, and explicit ownership. Use when starting or resuming a distributed effort, briefing or monitoring another session, landing work that other lanes build on, reviewing a landing, resolving ownership, or diagnosing a silent or stalled lane.
+description: Coordinates multi-session repository work through a lead and cross-trained lanes. Defaults to a LIGHT posture — lanes build fast, verify by running, and hand the result to the owner to test — and treats briefs, pre-registered review, batteries, and serialized landings as an opt-in heavy posture the owner asks for. Use when starting or resuming a distributed effort, directing or monitoring another session, landing work that other lanes build on, resolving ownership, or diagnosing a silent or stalled lane. Also read it before adding any coordination step, because most coordination failures are process added under uncertainty.
 ---
 
 # Teamwork
 
-Coordinate distributed work as one lead session and several specialist lanes,
-with the owner directing the effort. Treat one verified, reviewed, and reported
-squash as the unit of work. Treat the brief as the unit of coordination.
-Integrate all lane work into the live trunk.
+Coordinate distributed work as one lead session and several lanes, with the
+owner directing the effort. Integrate all lane work into the live trunk.
 
 Use a mechanical control wherever one exists. Keep prose as the map to the
 control, not a substitute for it.
 
+## Start at the light posture
+
+**The default is speed. The apparatus below is OPT-IN, and the owner opts in.**
+Lanes build, verify by running, and hand the result to the owner to test. The
+owner testing it IS the acceptance. Roles are soft: every lane is cross-trained
+and builds.
+
+Escalate to the heavy posture — pre-registered checks, an adversary who does not
+build, batteries, serialized landings — only when the owner asks for it, when
+the work is irreversible, or when a defect already escaped. Announce the switch;
+never drift into it.
+
+Read a request for speed as binding until the owner lifts it. A stop order is
+not a pause: say "this is a stop order, do not pick up the next item," and
+expect one more report anyway from work already in flight.
+
+## Do not add process under uncertainty
+
+Every failure mode below is the same reflex — reaching for coordination when the
+cheaper move was to act narrowly or ask one question.
+
+- **When the owner names a lane, message that lane.** Broadcasting a specific
+  instruction to everyone wastes four contexts and buries the signal.
+- **Never brief an agent to fetch what another can read.** A lane reads the code
+  itself; inserting a courier adds a hop, a transcription risk, and a second
+  context for no new information.
+- **Do not assign confirmation work.** If a lane already established something,
+  re-tasking another to agree costs a lane and buys nothing.
+- **Do not escalate a decision that is yours.** Rulings, sequencing, and scope
+  are the lead's. Reserve the owner for taste and visual judgement — how
+  something LOOKS is theirs, and asking is expected — and for irreversible acts.
+- **Acknowledge, do not narrate.** When the owner gives a direction, act on it
+  and confirm in a line. Explaining the plan back is not progress.
+- **Prefer hot reload to fresh runs**, and one process to many, wherever the
+  system supports driving change into a running session.
+
 ## Assign roles
+
+These are the HEAVY-posture roles. Under the default light posture every lane
+builds and the distinctions below collapse; adopt them only when the owner opts
+in.
 
 - **Lead:** Route work, issue briefs and rulings, check for collisions between
   lanes, track the board, and record corrections. When a review confirms a

@@ -40,12 +40,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // "wave read while on" and "wave trigger while on" cases (1 starves the read window, 3 widens the corruption window one slot too far).
     private const int WaveFetchWindowDots = 2;
     private const int WaveRamSize = 16;
-    // Dots between a trigger and the wave channel's FIRST sample fetch, added on top of the freshly loaded period.
-    // The cross-reference disagreement (+6 vs +4) was swept as 0/2/4/6/8/10 against the hardware-accurate colour-brick
-    // "wave read while on" + "wave" cases and the wave-channel ff30 hardware verdicts: 8 is the UNIQUE
-    // value that passes "wave read while on" (every other value shifts the read-phase table by one slot), and "wave" passes at any value.
-    // In our countdown convention (a reload of N fires N dots later) 8 IS the +6 convention (its countdown
-    // fires one 2-dot APU step after reaching zero); the +4 convention loses outright.
+    // Dots between a trigger and the wave channel's first sample fetch, added on top of the freshly loaded period.
+    // In this countdown convention (a reload of N fires N dots later), 8 is the "+6 from trigger" formulation: the
+    // countdown fires one 2-dot APU step after reaching zero.
     private const int WaveTriggerFetchDelayDots = 8;
     // The monochrome CPU WRITE strobe reaches the wave-RAM port two dots ahead of where a READ samples it: a write
     // issued up to two dots before the fetch that a read would need to coincide with still lands on the byte that
@@ -108,7 +105,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // Whether the machine is Color hardware (the machine model, not the cartridge's compatibility mode): Color silicon
     // buffers the wave-RAM port, so CPU access while the channel plays always succeeds; monochrome access must hit the
     // window right after a fetch.
-    // Mutable so a LIVE device swap re-gates the warm-path color/mono APU rules (wave-RAM access window, powered-off
+    // Mutable so a live device swap re-gates the warm-path color/mono APU rules (wave-RAM access window, powered-off
     // length writes, power-off length clearing, retrigger corruption). The boot-beep frame-sequencer phase and wave-RAM
     // power-on pattern stay construction-only.
     private bool m_isColor;
@@ -628,10 +625,8 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             case 2:
                 // Retriggering the playing channel while its fetch is busy corrupts the head of wave RAM on monochrome
                 // hardware (the CPU's trigger and the fetch collide on the RAM port); Color hardware buffers the port
-                // and is immune. Predicate A/B (the hardware-accurate "wave trigger while on" case): the
-                // fetch-busy flag — inside the window a fetch opens, i.e. (m_waveFetchHold > 0) — PASSES; the
-                // fetch-imminent countdown alternatives (m_waveTimer == 2, == 1, <= 2) each fire one slot late and
-                // FAIL the test's wave-RAM table CRC.
+                // and is immune. The fetch-busy predicate is (m_waveFetchHold > 0) — inside the window a fetch
+                // opens — not a countdown check against m_waveTimer, which fires one slot late.
                 if (!m_isColor && m_channelEnabled[2] && (m_waveFetchHold > 0)) {
                     CorruptWaveRamOnRetrigger();
                 }

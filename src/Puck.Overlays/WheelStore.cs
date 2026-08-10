@@ -5,14 +5,14 @@ namespace Puck.Overlays;
 
 /// <summary>One ring of a presented wheel — the labels the writer draws for one concentric shell.</summary>
 /// <param name="Label">The ring's display label (drawn beside the hub while the ring is active).</param>
-/// <param name="Sectors">The ring's sector labels, sector 0 at twelve o'clock and the rest clockwise — the SAME
+/// <param name="Sectors">The ring's sector labels, sector 0 at twelve o'clock and the rest clockwise — the same
 /// convention the host's angle-to-sector selection uses, so what is drawn under the cursor is what commits.</param>
 public readonly record struct OverlayWheelRing(
     string Label,
     ReadOnlyMemory<string> Sectors
 );
 
-/// <summary>One seat's presented radial action menu, scoped to its viewport rect. Center and radii are PIXELS in
+/// <summary>One seat's presented radial action menu, scoped to its viewport rect. Center and radii are pixels in
 /// full-frame space; the seat's clip rect confines them, exactly as the drawn cursor's records are.</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
 /// <param name="CenterX">The wheel hub x, px — either the opening pointer position or the viewport center, as
@@ -24,7 +24,7 @@ public readonly record struct OverlayWheelRing(
 /// [InnerRadius + k·RingWidth, InnerRadius + (k+1)·RingWidth).</param>
 /// <param name="ActiveRing">The 0-based active ring (the one the cursor's angle selects within).</param>
 /// <param name="HoveredSector">The 0-based hovered sector within the active ring, or <c>-1</c> when the active
-/// selection input is in its dead zone, outside an authored hit-target ring, or nowhere known — the ACCENT
+/// selection input is in its dead zone, outside an authored hit-target ring, or nowhere known — the accent
 /// highlight.</param>
 /// <param name="RotationRadians">Sector-zero rotation clockwise from twelve o'clock.</param>
 /// <param name="Clockwise">Whether sector indices advance clockwise.</param>
@@ -42,7 +42,7 @@ public readonly record struct OverlayWheelSeat(
     ReadOnlyMemory<OverlayWheelRing> Rings
 );
 
-/// <summary>The per-frame wheel snapshot — one entry per seat whose wheel is currently OPEN (the host owns the
+/// <summary>The per-frame wheel snapshot — one entry per seat whose wheel is currently open (the host owns the
 /// open/close policy; an empty frame draws nothing, so closing is simply not publishing the seat).</summary>
 /// <param name="Seats">The wheel-presenting seats, in slot order.</param>
 public readonly record struct OverlayWheelFrame(

@@ -8,13 +8,13 @@ namespace Puck.Carriage;
 /// <c>[signedPortion: bstr, signature: bstr]</c>; wrapping the signed portion as an opaque byte string
 /// means the exact bytes that were signed travel verbatim and never need re-deriving by re-encoding a
 /// decoded model (definite-length CBOR arrays are canonical for a fixed field sequence, so re-encoding
-/// WOULD reproduce the same bytes regardless, but the wrapped form makes that a structural guarantee rather
+/// would reproduce the same bytes regardless, but the wrapped form makes that a structural guarantee rather
 /// than an encoder-implementation detail). The signed portion itself is a definite-length 11-element array,
-/// SAME field order as <see cref="FixedLayoutCarriageCodec"/>:
+/// same field order as <see cref="FixedLayoutCarriageCodec"/>:
 /// format version, domain, subject, algorithm, purpose, not-before, not-after, audience, sequence, payload
 /// kind, payload. A key binding payload is a 5-element array (target domain, target subject, target
 /// algorithm, target key-hash, public key SPKI); a sealed payload is a 4-element array (ephemeral SPKI,
-/// nonce, tag, ciphertext). Domain and key-hash fields are CBOR byte strings of EXACTLY 32 raw bytes, not
+/// nonce, tag, ciphertext). Domain and key-hash fields are CBOR byte strings of exactly 32 raw bytes, not
 /// hex text: the wire carries the fingerprint value rather than a rendering of it, and pinning the width
 /// is what stops one domain having several encodings (docs/signed-carriage-wire.md, §2 and §15 row 3).
 /// </summary>

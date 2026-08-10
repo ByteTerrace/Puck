@@ -43,7 +43,9 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             bindability: CommandBindability.Unbindable,
             name: "world.looks",
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
-            handler: (_, _) => new CommandResult(Output: DescribeLooks())
+            handler: (_, args) => (args.Count == 0
+                ? new CommandResult(Output: DescribeLooks())
+                : CommandResult.Error(output: $"[world.looks: unrecognized '{args[0]}' — expected no arguments]"))
         );
     }
 

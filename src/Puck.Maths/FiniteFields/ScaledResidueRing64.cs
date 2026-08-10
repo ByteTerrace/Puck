@@ -11,7 +11,7 @@ namespace Puck.Maths;
 /// A residue <c>a</c> is represented by <c>a * R mod n</c>, where the radix <c>R</c> is <c>2^64</c>. In that
 /// representation a product reduces by REDC — two widening multiplies, a truncated multiply by
 /// <see cref="ModulusInverse"/>, two additions, and one conditional subtraction — instead of by the <c>128 / 64</c>
-/// divide a direct <c>(a * b) % n</c> costs. The saving belongs to the CHAIN, not to
+/// divide a direct <c>(a * b) % n</c> costs. The saving belongs to the chain, not to
 /// one product: <see cref="Encode(ulong)"/> and <see cref="Decode(ulong)"/> each spend a REDC of their own, so a lone
 /// product is cheaper left on the divide. Convert once, stay in the ring, convert back once. The additive operations —
 /// <see cref="Add(ulong, ulong)"/>, <see cref="Subtract(ulong, ulong)"/>, and <see cref="Halve(ulong)"/> — are linear in

@@ -3,9 +3,8 @@ using Puck.Forge.Framework;
 namespace Puck.Forge.Games;
 
 /// <summary>
-/// The arcade-quest cartridge: the blank-slate campaign's winnable proof ROM (lane C2's crafted cart). One state,
-/// one mechanic — walk a counter from 0 to <see cref="ArcadeQuestProtocol.WinPosition"/> by pressing RIGHT — the
-/// Demo research report's "world-lens" precedent (a goal you steer to) kept deliberately small: no sprites, no
+/// A minimal winnable cartridge: one state, one mechanic — walk a counter from 0 to
+/// <see cref="ArcadeQuestProtocol.WinPosition"/> by pressing right — kept deliberately small: no sprites, no
 /// scrolling, no save data, just the framework's text printers over a flat background. Modeled directly on
 /// <c>Puck.Forge.Tune.TuneGame</c>'s shape (the smallest existing framework game): one manifest, one state, a
 /// <c>Build</c>/<c>Verify</c> facade pair.

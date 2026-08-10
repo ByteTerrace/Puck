@@ -32,8 +32,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.op_Multiply \u2014 sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2\u00B3\u2070 FixedVectorMath.RawMagnitude gate",
-        "Against": "Oracles.CayleyDicksonProduct at two floors \u2014 the same product reached from the other end of the theory: the twisted group algebra over (\u2124/2)\u00B2 whose target key is an exclusive-or and whose 2-cochain is Oracles.CayleyDicksonCharge, i.e. the doubling recursion (a,b)(c,d) = (a\u00B7c \u2212 d\u0304\u00B7b, d\u00B7a \u002B b\u00B7c\u0304) walked down to basis vectors. ONE Oracles.RoundDyadic at shift 16 per lane. NOTE on CayleyDicksonCharge\u0027s own transcription label: it is a transcription with respect to Presentations\u0027 sign rule, which it restates \u2014 FixedQuaternion has no doubling recursion, no charge and no basis indexing anywhere, so with respect to THIS subject the leg is classical. The only shared convention is the lane permutation (X,Y,Z,W) \u2194 (e\u2081,e\u2082,e\u2083,e\u2080), declared once in Subjects.QuaternionToDoublingLanes and checked by hand at e\u2081e\u2082 = \u002Be\u2083, e\u2082e\u2081 = \u2212e\u2083, e\u2081\u00B2 = e\u2083\u00B2 = \u2212e\u2080 and e\u2082e\u2083 = \u002Be\u2081",
+        "Subject": "FixedQuaternion.op_Multiply — sixteen hand-written signed products in four fixed term layouts, each lane one FixedQ4816.RoundProductSum of its four-term Q32 sum; both the narrow long lane and the Int128 lane, selected at the 2³⁰ FixedVectorMath.RawMagnitude gate",
+        "Against": "Oracles.CayleyDicksonProduct at two floors — the same product reached from the other end of the theory: the twisted group algebra over (ℤ/2)² whose target key is an exclusive-or and whose 2-cochain is Oracles.CayleyDicksonCharge, i.e. the doubling recursion (a,b)(c,d) = (a·c − d̄·b, d·a + b·c̄) walked down to basis vectors. ONE Oracles.RoundDyadic at shift 16 per lane. NOTE on CayleyDicksonCharge's own transcription label: it is a transcription with respect to Presentations' sign rule, which it restates — FixedQuaternion has no doubling recursion, no charge and no basis indexing anywhere, so with respect to THIS subject the leg is classical. The only shared convention is the lane permutation (X,Y,Z,W) ↔ (e₁,e₂,e₃,e₀), declared once in Subjects.QuaternionToDoublingLanes and checked by hand at e₁e₂ = +e₃, e₂e₁ = −e₃, e₁² = e₃² = −e₀ and e₂e₃ = +e₁",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -41,7 +41,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the Int128 accumulation may wrap, and the oracle\u0027s exact-then-round form still agrees: ties-to-even is an odd function, so the kernel computes round-half-to-even of the Q32 sum over 2\u00B9\u2076, and adding k\u00B72\u00B9\u00B2\u2078 moves that by the EVEN integer k\u00B72\u00B9\u00B9\u00B2, which cannot flip a tie and does not survive the final 64-bit wrap. The full-range operand stream reaches that wrap, so the argument is exercised rather than asserted",
+        "Subject": "the Int128 accumulation may wrap, and the oracle's exact-then-round form still agrees: ties-to-even is an odd function, so the kernel computes round-half-to-even of the Q32 sum over 2¹⁶, and adding k·2¹²⁸ moves that by the EVEN integer k·2¹¹², which cannot flip a tie and does not survive the final 64-bit wrap. The full-range operand stream reaches that wrap, so the argument is exercised rather than asserted",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -70,8 +70,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Dot \u2014 four products accumulated before one FixedQ4816.RoundProductSum, both gates",
-        "Against": "Oracles.LaneDotProduct \u2014 one Oracles.RoundDyadic at shift 16 of the exact four-product BigInteger sum",
+        "Subject": "FixedQuaternion.Dot — four products accumulated before one FixedQ4816.RoundProductSum, both gates",
+        "Against": "Oracles.LaneDotProduct — one Oracles.RoundDyadic at shift 16 of the exact four-product BigInteger sum",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -79,7 +79,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Dot is symmetric in its operands at every swept pair, and Dot(q, Identity) is exactly q.W \u2014 the projection onto the scalar axis, which pins the lane order against a rotated argument",
+        "Subject": "Dot is symmetric in its operands at every swept pair, and Dot(q, Identity) is exactly q.W — the projection onto the scalar axis, which pins the lane order against a rotated argument",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -128,8 +128,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.op_Multiply(value, scalar) \u2014 four independent FixedQ4816 multiplies",
-        "Against": "Oracles.RoundDyadic at shift 16 of each exact BigInteger product q\u1D62\u00B7s, inline in Subjects.QuaternionScaleExact",
+        "Subject": "FixedQuaternion.op_Multiply(value, scalar) — four independent FixedQ4816 multiplies",
+        "Against": "Oracles.RoundDyadic at shift 16 of each exact BigInteger product qᵢ·s, inline in Subjects.QuaternionScaleExact",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -146,7 +146,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "scaling by NegativeOne agrees with op_UnaryNegation at every swept quaternion \u2014 which ties the scalar operator to the group operator and is not implied by either alone",
+        "Subject": "scaling by NegativeOne agrees with op_UnaryNegation at every swept quaternion — which ties the scalar operator to the group operator and is not implied by either alone",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -212,7 +212,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQuaternion.op_Addition, all four lanes",
-        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger sum, inline in Subjects.QuaternionAdditiveGroupExact \u2014 exact both sides",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger sum, inline in Subjects.QuaternionAdditiveGroupExact — exact both sides",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -221,7 +221,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQuaternion.op_Subtraction, all four lanes",
-        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger difference, inline in the same body \u2014 exact both sides",
+        "Against": "Oracles.WrapToRaw of the exact componentwise BigInteger difference, inline in the same body — exact both sides",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -238,7 +238,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "AdditiveIdentity is default(FixedQuaternion), Identity is (Zero, Zero, Zero, One), and MultiplicativeIdentity equals Identity \u2014 one value read through two names, compared rather than assumed",
+        "Subject": "AdditiveIdentity is default(FixedQuaternion), Identity is (Zero, Zero, Zero, One), and MultiplicativeIdentity equals Identity — one value read through two names, compared rather than assumed",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -247,7 +247,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Identity is a two-sided identity for op_Multiply at every swept raw, EXACTLY: each lane\u0027s four-term sum collapses to a single product against 2\u00B9\u2076, so the rounding has no remainder \u2014 the group\u0027s unit is not a rounding accident",
+        "Subject": "Identity is a two-sided identity for op_Multiply at every swept raw, EXACTLY: each lane's four-term sum collapses to a single product against 2¹⁶, so the rounding has no remainder — the group's unit is not a rounding accident",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -301,7 +301,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "conj(a\u00B7b) == conj(b)\u00B7conj(a) \u2014 the ANTI-automorphism, with the operands REVERSED, which is the statement that separates the non-commutative quaternions from the three planar algebras where conjugation distributes in place. Exact on the bounded sublattice: every raw is a multiple of 2\u00B9\u2076 below 4093\u00B72\u00B9\u2076, so each four-term Q32 sum stays below 2\u2075\u2079, nothing rounds and nothing wraps. UNCERTAIN (sweep): a fused-substrate reading is arguable, since both sides run the same multiply",
+        "Subject": "conj(a·b) == conj(b)·conj(a) — the ANTI-automorphism, with the operands REVERSED, which is the statement that separates the non-commutative quaternions from the three planar algebras where conjugation distributes in place. Exact on the bounded sublattice: every raw is a multiple of 2¹⁶ below 4093·2¹⁶, so each four-term Q32 sum stays below 2⁵⁹, nothing rounds and nothing wraps. UNCERTAIN (sweep): a fused-substrate reading is arguable, since both sides run the same multiply",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -310,7 +310,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the reversal is load-bearing and is measured, not assumed: at the hand-listed non-commuting pair (i, j) the planar form conj(a)\u00B7conj(b) DISAGREES with conj(a\u00B7b) while the reversed form agrees, so the case cannot be satisfied by a commutative product",
+        "Subject": "the reversal is load-bearing and is measured, not assumed: at the hand-listed non-commuting pair (i, j) the planar form conj(a)·conj(b) DISAGREES with conj(a·b) while the reversed form agrees, so the case cannot be satisfied by a commutative product",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -319,7 +319,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Conjugate is an involution on the sublattice and at four hand-listed extremes including the two\u0027s-complement minimum, where double negation is a fixed point; and it fixes exactly the scalars \u2014 conj(q) == q iff the vector part is zero",
+        "Subject": "Conjugate is an involution on the sublattice and at four hand-listed extremes including the two's-complement minimum, where double negation is a fixed point; and it fixes exactly the scalars — conj(q) == q iff the vector part is zero",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -328,8 +328,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "q\u00B7conj(q) on the bounded sublattice",
-        "Against": "the exact BigInteger (Zero, Zero, Zero, \u27E8(x\u00B2 \u002B y\u00B2 \u002B z\u00B2 \u002B w\u00B2)/2\u00B9\u2076\u27E9) through Oracles.RoundDyadic, inline \u2014 the norm-form identity, exact on this domain, and the statement that the conjugate really is the reversal the norm factors through",
+        "Subject": "q·conj(q) on the bounded sublattice",
+        "Against": "the exact BigInteger (Zero, Zero, Zero, ⟨(x² + y² + z² + w²)/2¹⁶⟩) through Oracles.RoundDyadic, inline — the norm-form identity, exact on this domain, and the statement that the conjugate really is the reversal the norm factors through",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -366,7 +366,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQuaternion.TryLength",
-        "Against": "Oracles.NearestIntegerRoot of the exact BigInteger four-square sum \u2014 a bracketed integer search whose predicate is one exact squaring, no square root taken on the oracle side",
+        "Against": "Oracles.NearestIntegerRoot of the exact BigInteger four-square sum — a bracketed integer search whose predicate is one exact squaring, no square root taken on the oracle side",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -384,7 +384,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "the refusal predicate of both Try members",
-        "Against": "the exact BigInteger disjunction \u0027the four-square sum reaches 2\u00B9\u00B2\u2078\u0027 or \u0027the rounded result exceeds long.MaxValue\u0027. This is the FOUR-square case, where the sum genuinely can reach 2\u00B9\u00B2\u2078 \u2014 the two-square planar case cannot \u2014 so the subject\u0027s complete \u003E= firstThree carry test is a real branch and this leg is the only thing that reads it",
+        "Against": "the exact BigInteger disjunction 'the four-square sum reaches 2¹²⁸' or 'the rounded result exceeds long.MaxValue'. This is the FOUR-square case, where the sum genuinely can reach 2¹²⁸ — the two-square planar case cannot — so the subject's complete >= firstThree carry test is a real branch and this leg is the only thing that reads it",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -392,7 +392,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Length and LengthSquared each equal their Try member\u0027s value on success and FixedQ4816.MaxValue on refusal, so a saturation can never be read as a value",
+        "Subject": "Length and LengthSquared each equal their Try member's value on success and FixedQ4816.MaxValue on refusal, so a saturation can never be read as a value",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -401,7 +401,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the all-MinValue quaternion is the exact carry witness, checked outright rather than left to the sweep: its four-square sum is 2\u00B9\u00B2\u2078 on the nose, both Try members refuse, and both saturating readers return MaxValue",
+        "Subject": "the all-MinValue quaternion is the exact carry witness, checked outright rather than left to the sweep: its four-square sum is 2¹²⁸ on the nose, both Try members refuse, and both saturating readers return MaxValue",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -450,8 +450,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Inverse \u2014 FixedVectorMath.DivideBySquaredSum\u0027s UInt128 divide-and-repair on each lane, the overflowing four-square early-out included",
-        "Against": "Oracles.RoundDyadicRatio(numerator: \u2213q\u1D62, denominator: x\u00B2\u002By\u00B2\u002Bz\u00B2\u002Bw\u00B2, shift: 32) over exact BigInteger operands \u2014 one ties-to-even rounding per lane, with the vector lanes negated and the scalar lane not. The oracle side never overflows, so at S \u2265 2\u00B9\u00B2\u2078 (the all-MinValue witness) the same loop proves the kernel\u0027s shortcut answer, the zero quaternion, IS the correctly rounded inverse: every exact lane is at most 2\u207B\u00B3\u00B3 of a raw unit, far below the half-raw threshold",
+        "Subject": "FixedQuaternion.Inverse — FixedVectorMath.DivideBySquaredSum's UInt128 divide-and-repair on each lane, the overflowing four-square early-out included",
+        "Against": "Oracles.RoundDyadicRatio(numerator: ∓qᵢ, denominator: x²+y²+z²+w², shift: 32) over exact BigInteger operands — one ties-to-even rounding per lane, with the vector lanes negated and the scalar lane not. The oracle side never overflows, so at S ≥ 2¹²⁸ (the all-MinValue witness) the same loop proves the kernel's shortcut answer, the zero quaternion, IS the correctly rounded inverse: every exact lane is at most 2⁻³³ of a raw unit, far below the half-raw threshold",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -459,7 +459,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the two documented poles: the all-zero quaternion inverts to Identity, and Identity inverts to itself EXACTLY (the numerators become 2\u00B9\u2076\u00B72\u00B3\u00B2 over 2\u00B3\u00B2, so nothing rounds)",
+        "Subject": "the two documented poles: the all-zero quaternion inverts to Identity, and Identity inverts to itself EXACTLY (the numerators become 2¹⁶·2³² over 2³², so nothing rounds)",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -468,7 +468,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the overflow arm is a documented answer rather than a sentinel: zero is what the full computation rounds to at any four-square sum at or above 2\u00B9\u00B2\u2078, continuous with the documented sub-half-raw quantization at merely huge operands \u2014 so a zero result never encodes a failure",
+        "Subject": "the overflow arm is a documented answer rather than a sentinel: zero is what the full computation rounds to at any four-square sum at or above 2¹²⁸, continuous with the documented sub-half-raw quantization at merely huge operands — so a zero result never encodes a failure",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -477,7 +477,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the vector lanes are negated and the scalar lane is not, at every swept quaternion with a non-zero lane \u2014 the conjugate\u0027s sign pattern, read through the inverse, so a sign transposed between the two would fail here even where the magnitudes agree",
+        "Subject": "the vector lanes are negated and the scalar lane is not, at every swept quaternion with a non-zero lane — the conjugate's sign pattern, read through the inverse, so a sign transposed between the two would fail here even where the magnitudes agree",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -526,8 +526,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Normalize \u2014 FixedVectorMath.Normalize\u0027s power-of-two preconditioner, rounded square-root denominator and four restoring divisions",
-        "Against": "Oracles.FirstNonUnitLane at tolerance 1 raw over the four exact components: the ideal Q16 unit direction decided by surd comparisons a\u00B7\u221AS \u2264 b in BigInteger, squaring once with the signs read off first \u2014 no square root, no preconditioner and no division on the oracle side",
+        "Subject": "FixedQuaternion.Normalize — FixedVectorMath.Normalize's power-of-two preconditioner, rounded square-root denominator and four restoring divisions",
+        "Against": "Oracles.FirstNonUnitLane at tolerance 1 raw over the four exact components: the ideal Q16 unit direction decided by surd comparisons a·√S ≤ b in BigInteger, squaring once with the signs read off first — no square root, no preconditioner and no division on the oracle side",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -535,7 +535,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "a zero quaternion normalizes to Identity \u2014 the documented answer \u2014 and every non-zero quaternion normalizes to a non-zero one, the all-MinValue witness included, which is where the preconditioner\u0027s own overflow would show",
+        "Subject": "a zero quaternion normalizes to Identity — the documented answer — and every non-zero quaternion normalizes to a non-zero one, the all-MinValue witness included, which is where the preconditioner's own overflow would show",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -585,8 +585,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Rotate, both stages and BOTH gates \u2014 the narrow long path (rotor below 2\u00B9\u2077 and vector below 2\u2074\u2070) and the Int128 path \u2014 each stage one FixedQ4816.RoundProductSum per component",
-        "Against": "Oracles.QuaternionSandwich \u2014 the same two stages formed exactly in BigInteger with one Oracles.RoundDyadic each at shift 16, and the doubling-and-adding wrapped by Oracles.WrapToRaw",
+        "Subject": "FixedQuaternion.Rotate, both stages and BOTH gates — the narrow long path (rotor below 2¹⁷ and vector below 2⁴⁰) and the Int128 path — each stage one FixedQ4816.RoundProductSum per component",
+        "Against": "Oracles.QuaternionSandwich — the same two stages formed exactly in BigInteger with one Oracles.RoundDyadic each at shift 16, and the doubling-and-adding wrapped by Oracles.WrapToRaw",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -595,15 +595,15 @@
         "Kind": "SharedSubstrate",
         "Flavor": "Transcription",
         "Subject": "the TWO-STAGE SCHEDULE the oracle runs",
-        "Against": "the subject\u0027s documented remark \u0027two fused stages \u2014 v\u0027 = v \u002B 2\u00B7u\u00D7(u\u00D7v \u002B w\u00B7v) \u2014 each accumulates full-width products before one ties-to-even Q16 rounding per component\u0027",
+        "Against": "the subject's documented remark 'two fused stages — v' = v + 2·u×(u×v + w·v) — each accumulates full-width products before one ties-to-even Q16 rounding per component'",
         "Shared": "the number and the order of the roundings, which over a rounding carrier is part of the answer and which no single-rounding oracle could stand beside",
-        "Citation": "legs 3 and 4 of this same case \u2014 the exact identity poles and the hand-derived geometric ladder, both of which read the rotation\u0027s MEANING and know nothing of its schedule",
+        "Citation": "legs 3 and 4 of this same case — the exact identity poles and the hand-derived geometric ladder, both of which read the rotation's MEANING and know nothing of its schedule",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "both unit poles are EXACT: Identity rotates every swept vector to itself bit-for-bit, and so does its negation, which is the statement that \u2212q and q are the same rotation",
+        "Subject": "both unit poles are EXACT: Identity rotates every swept vector to itself bit-for-bit, and so does its negation, which is the statement that −q and q are the same rotation",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -612,10 +612,10 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Rotate over the four-row geometric ladder \u2014 the quarter turn about z sending x\u0302 to \u0177 and \u0177 to \u2212x\u0302, the half turn about z, and the half turn about (1,1,1)/\u221A3 sending x\u0302 to (\u2212\u2153, \u2154, \u2154)",
+        "Subject": "FixedQuaternion.Rotate over the four-row geometric ladder — the quarter turn about z sending x̂ to ŷ and ŷ to −x̂, the half turn about z, and the half turn about (1,1,1)/√3 sending x̂ to (−⅓, ⅔, ⅔)",
         "Against": "Subjects.QuaternionRotateLadder, a constant expectation table of raws with a tolerance of 8",
         "Shared": "",
-        "Citation": "hand-derived from the rotation each rotor denotes in real three-space, sharing no code and no substrate with the subject; the tolerance is the two stages\u0027 four roundings doubled by the final shift, computed by hand at the quarter-turn row where it lands at 2 raws",
+        "Citation": "hand-derived from the rotation each rotor denotes in real three-space, sharing no code and no substrate with the subject; the tolerance is the two stages' four roundings doubled by the final shift, computed by hand at the quarter-turn row where it lands at 2 raws",
         "Absolute": ""
       },
       {
@@ -623,14 +623,14 @@
         "Flavor": "DelegationTwin",
         "Subject": "FixedQuaternion.RotateInverse",
         "Against": "Conjugate().Rotate(vector) on the same operands",
-        "Shared": "the entire body \u2014 RotateInverse IS that expression, so agreement proves the wiring and nothing else",
+        "Shared": "the entire body — RotateInverse IS that expression, so agreement proves the wiring and nothing else",
         "Citation": "legs 1 and 4 of this same case, which pin Rotate itself; plus leg 6 below, which is the only statement RotateInverse makes on its own",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "for a unit rotor the round trip RotateInverse(Rotate(v)) returns v within 16 raws over the ladder\u0027s rotors and vectors \u2014 the inverse really inverts, measured rather than assumed",
+        "Subject": "for a unit rotor the round trip RotateInverse(Rotate(v)) returns v within 16 raws over the ladder's rotors and vectors — the inverse really inverts, measured rather than assumed",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -671,16 +671,16 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.FromAxisAngle over the nine-row axis-angle ladder \u2014 all three basis axes, the quarter/half/third/two-thirds turns, both signs, and one tilted axis (1,1,1)/\u221A3",
+        "Subject": "FixedQuaternion.FromAxisAngle over the nine-row axis-angle ladder — all three basis axes, the quarter/half/third/two-thirds turns, both signs, and one tilted axis (1,1,1)/√3",
         "Against": "Subjects.QuaternionAxisAngleLadder, a constant expectation table of raws with per-row tolerances of 2 and 4",
         "Shared": "",
-        "Citation": "hand-derived from the real sine and cosine of the ROUNDED HALF-ANGLE RAW the kernel actually forms \u2014 the member multiplies the angle by \u00BD through the carrier before any transcendental call, so the reference must take the same rounded argument or it would count the kernel\u0027s own quantization as error. Tolerance 2 for the basis rows, where the unit axis multiplies through exactly, and 4 for the tilted row, which carries one extra product rounding per lane",
+        "Citation": "hand-derived from the real sine and cosine of the ROUNDED HALF-ANGLE RAW the kernel actually forms — the member multiplies the angle by ½ through the carrier before any transcendental call, so the reference must take the same rounded argument or it would count the kernel's own quantization as error. Tolerance 2 for the basis rows, where the unit axis multiplies through exactly, and 4 for the tilted row, which carries one extra product rounding per lane",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "FromAxisAngle(axis, Zero) is Identity BIT-FOR-BIT for every axis on the ladder: the half-angle raw is zero, the cosine narrows to exactly 2\u00B9\u2076, and each axis lane meets a zero sine",
+        "Subject": "FromAxisAngle(axis, Zero) is Identity BIT-FOR-BIT for every axis on the ladder: the half-angle raw is zero, the cosine narrows to exactly 2¹⁶, and each axis lane meets a zero sine",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -689,7 +689,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the vector part is parallel to the axis lane for lane at every ladder row \u2014 a zero axis lane meets a zero result lane, so a permuted axis fails on placement before any tolerance is consulted \u2014 and the scalar lane depends on the angle alone",
+        "Subject": "the vector part is parallel to the axis lane for lane at every ladder row — a zero axis lane meets a zero result lane, so a permuted axis fails on placement before any tolerance is consulted — and the scalar lane depends on the angle alone",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -698,10 +698,10 @@
       {
         "Kind": "SharedSubstrate",
         "Flavor": "DelegationTwin",
-        "Subject": "FromAxisAngle\u0027s transcendental",
+        "Subject": "FromAxisAngle's transcendental",
         "Against": "FixedQ4816.SinCos of the halved angle",
         "Shared": "the whole sine/cosine computation; the member adds the halving and four products",
-        "Citation": "scalar.sincos-vs-series, which pins SinCos against Oracles.EncloseSinCos \u2014 a radian-domain series enclosure over a Machin-derived \u03C0, sharing neither the reduction domain nor the polynomial with the subject",
+        "Citation": "scalar.sincos-vs-series, which pins SinCos against Oracles.EncloseSinCos — a radian-domain series enclosure over a Machin-derived π, sharing neither the reduction domain nor the polynomial with the subject",
         "Absolute": ""
       }
     ]
@@ -755,10 +755,10 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Exp over the eight-row bivector ladder \u2014 all three basis planes, both signs, the quarter/half/full-turn magnitudes and one tilted bivector",
+        "Subject": "FixedQuaternion.Exp over the eight-row bivector ladder — all three basis planes, both signs, the quarter/half/full-turn magnitudes and one tilted bivector",
         "Against": "Subjects.QuaternionExpLadder, a constant expectation table of raws with a tolerance of 4",
         "Shared": "",
-        "Citation": "hand-derived from the closed form (b\u0302\u00B7sin\u2016b\u2016, cos\u2016b\u2016) over the reals, evaluated at the value each BIVECTOR RAW denotes; the tolerance is the axis normalization\u0027s 1 raw plus the sine\u0027s 0.51 ULP plus the product\u0027s half, rounded up",
+        "Citation": "hand-derived from the closed form (b̂·sin‖b‖, cos‖b‖) over the reals, evaluated at the value each BIVECTOR RAW denotes; the tolerance is the axis normalization's 1 raw plus the sine's 0.51 ULP plus the product's half, rounded up",
         "Absolute": ""
       },
       {
@@ -767,13 +767,13 @@
         "Subject": "FixedQuaternion.Log over the seven-row unit-rotation ladder",
         "Against": "Subjects.QuaternionLogLadder, a constant expectation table of raws with a tolerance of 8",
         "Shared": "",
-        "Citation": "hand-derived from the closed form v\u0302\u00B7atan2(\u2016v\u2016, w) over the reals. EVERY ROW keeps the vector part at or above 4096 raw, which is the floor below which the atan2-over-norm scale division stops carrying information. Corroborated in tree by quaternion.exp-log-ladder-transcription, whose Log leg amplifies its enclosure bound by 65536/vectorLength for exactly that reason - the floor is the same quantity read as a bound rather than as a cut-off. The closed form is the evidence this leg rests on; the floor states where it is legitimate to make it",
+        "Citation": "hand-derived from the closed form v̂·atan2(‖v‖, w) over the reals. EVERY ROW keeps the vector part at or above 4096 raw, which is the floor below which the atan2-over-norm scale division stops carrying information. Corroborated in tree by quaternion.exp-log-ladder-transcription, whose Log leg amplifies its enclosure bound by 65536/vectorLength for exactly that reason - the floor is the same quantity read as a bound rather than as a cut-off. The closed form is the evidence this leg rests on; the floor states where it is legitimate to make it",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "all three exact poles: Exp of the zero bivector is Identity, Identity logs to the zero bivector, and so does its negation \u2014 the two vector-free poles the doc calls out, where the plane is genuinely undefined",
+        "Subject": "all three exact poles: Exp of the zero bivector is Identity, Identity logs to the zero bivector, and so does its negation — the two vector-free poles the doc calls out, where the plane is genuinely undefined",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -782,7 +782,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the round trip Exp(q.Log()) recovers q \u2014 not merely \u00B1q, the SIGN survives \u2014 within 40 raws over every Log ladder row EXCEPT the vector-free W \u003C 0 pole, which the doc itself excludes because the plane is undefined there. This is the doc\u0027s own inverse claim, and it is the strongest statement available without re-deriving either transcendental",
+        "Subject": "the round trip Exp(q.Log()) recovers q — not merely ±q, the SIGN survives — within 40 raws over every Log ladder row EXCEPT the vector-free W < 0 pole, which the doc itself excludes because the plane is undefined there. This is the doc's own inverse claim, and it is the strongest statement available without re-deriving either transcendental",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -791,7 +791,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "a bivector beyond a full turn wraps through the turn-domain reduction rather than saturating: the quarter turn plus 2\u03C0 raw reaches the same rotation within the ladder\u0027s tolerance, and a bivector at all three carrier extremes still exponentiates to a unit rotation, which is the doc\u0027s claim that the phase reduces from the unsaturated full-64-bit norm",
+        "Subject": "a bivector beyond a full turn wraps through the turn-domain reduction rather than saturating: the quarter turn plus 2π raw reaches the same rotation within the ladder's tolerance, and a bivector at all three carrier extremes still exponentiates to a unit rotation, which is the doc's claim that the phase reduces from the unsaturated full-64-bit norm",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -800,9 +800,9 @@
       {
         "Kind": "SharedSubstrate",
         "Flavor": "DelegationTwin",
-        "Subject": "Exp\u0027s and Log\u0027s transcendentals",
+        "Subject": "Exp's and Log's transcendentals",
         "Against": "FixedQ4816.SinCosRaw and FixedQ4816.Atan2",
-        "Shared": "the entire sine/cosine and arctangent computation, plus FixedVectorMath.TryNormalizeWithMagnitude\u0027s one-pass axis-and-norm",
+        "Shared": "the entire sine/cosine and arctangent computation, plus FixedVectorMath.TryNormalizeWithMagnitude's one-pass axis-and-norm",
         "Citation": "scalar.atan2-vs-series pins Atan2 against Oracles.EncloseAtan2, and scalar.sincos-vs-series pins the public SinCos against Oracles.EncloseSinCos; SinCosRaw is the same turn-domain body reached at full unsigned width and is no longer UNGATED: quaternion.sincos-raw-full-unsigned-width stands it against an angle-addition carriage of Oracles.EncloseSinCos over the whole sixty-four-bit width at a derived envelope, and quaternion.sincos-raw-width-sweep repeats that over a dense one-turn span. It is internal, so coverage-manifest.json still cannot name it, which is exactly why a gate over it can go missing without the ratchet noticing and why the statement is spelled out at length there. FixedVectorMath.TryNormalizeWithMagnitude is gated too now, by the vector family case vector.normalize-with-magnitude-full-unsigned-width, whose magnitude statement is an EXACT identity against Oracles.NearestIntegerRoot rather than a tolerance",
         "Absolute": ""
       }
@@ -922,7 +922,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the DEFINING property, measured on the swept stream: FromTo(from, to).Rotate(from\u0302) lies along to \u2014 the exact BigInteger cross product of the rotated direction with the unit end direction has every component below 1024\u00B72\u00B9\u2076, roughly one degree, and their exact dot is non-negative. The comparison is one exact integer inequality; no angle is formed and no root is taken. The bound is the documented antiparallel fallback\u0027s own ~0.45\u00B0 slack plus the Q16 quantization budget",
+        "Subject": "the DEFINING property, measured on the swept stream: FromTo(from, to).Rotate(from̂) lies along to — the exact BigInteger cross product of the rotated direction with the unit end direction has every component below 1024·2¹⁶, roughly one degree, and their exact dot is non-negative. The comparison is one exact integer inequality; no angle is formed and no root is taken. The bound is the documented antiparallel fallback's own ~0.45° slack plus the Q16 quantization budget",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -931,7 +931,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the result is a unit quaternion within 8 raws at every swept operand pair, decided by Oracles.NearestIntegerRoot of the exact four-square sum, which is the doc\u0027s normalization claim read as a measurement",
+        "Subject": "the result is a unit quaternion within 8 raws at every swept operand pair, decided by Oracles.NearestIntegerRoot of the exact four-square sum, which is the doc's normalization claim read as a measurement",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -940,7 +940,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "all three documented poles: a zero operand on either side returns Identity; from == to returns Identity EXACTLY, because the rotor collapses to a single scalar lane and a single non-zero component always normalizes to exactly 2\u00B9\u2076; and the three hand-listed antiparallel witnesses return a scalar part of exactly Zero with a unit vector part that carries the start direction onto its negation",
+        "Subject": "all three documented poles: a zero operand on either side returns Identity; from == to returns Identity EXACTLY, because the rotor collapses to a single scalar lane and a single non-zero component always normalizes to exactly 2¹⁶; and the three hand-listed antiparallel witnesses return a scalar part of exactly Zero with a unit vector part that carries the start direction onto its negation",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -949,7 +949,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the antiparallel FALLBACK BRANCH is reached, not merely believed reachable: the three hand-listed witnesses select each of the three basis-vector arms of the least-aligned-axis choice \u2014 |x| smallest, |y| smallest, and |z| smallest with |x| largest \u2014 so all three arms of that conditional run",
+        "Subject": "the antiparallel FALLBACK BRANCH is reached, not merely believed reachable: the three hand-listed witnesses select each of the three basis-vector arms of the least-aligned-axis choice — |x| smallest, |y| smallest, and |z| smallest with |x| largest — so all three arms of that conditional run",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -958,7 +958,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "scale freedom is BIT-EXACT: FromTo(from\u00B72\u1D4F, to\u00B72\u1D50) equals FromTo(from, to) for the four shift pairs the ladder lists, wherever every sampled raw is below 2\u2074\u2070 so the shifts cannot leave the carrier \u2014 which is the doc\u0027s \u0027common full-range preconditioner\u0027 claim at its strongest reading",
+        "Subject": "scale freedom is BIT-EXACT: FromTo(from·2ᵏ, to·2ᵐ) equals FromTo(from, to) for the four shift pairs the ladder lists, wherever every sampled raw is below 2⁴⁰ so the shifts cannot leave the carrier — which is the doc's 'common full-range preconditioner' claim at its strongest reading",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1015,16 +1015,16 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Slerp from Identity to the quarter turn about z, at the five amounts 0, \u00BC, \u00BD, \u00BE and 1",
+        "Subject": "FixedQuaternion.Slerp from Identity to the quarter turn about z, at the five amounts 0, ¼, ½, ¾ and 1",
         "Against": "Subjects.QuaternionSlerpLadder, a constant expectation table of raws with a tolerance of 64",
         "Shared": "",
-        "Citation": "hand-derived from the real great-circle interpolation \u2014 the quaternion at half-angle t\u00B7\u03C0/4 \u2014 sharing no code with the subject. The tolerance is honest and large: Slerp chains a squared dot, a square root, an arctangent, a sine/cosine pair and a division before renormalizing, and each of the five rounds. This ladder pins the ARC\u0027s shape, not a bit contract",
+        "Citation": "hand-derived from the real great-circle interpolation — the quaternion at half-angle t·π/4 — sharing no code with the subject. The tolerance is honest and large: Slerp chains a squared dot, a square root, an arctangent, a sine/cosine pair and a division before renormalizing, and each of the five rounds. This ladder pins the ARC's shape, not a bit contract",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "both endpoints: Slerp(a, b, Zero) is a normalized EXACTLY, and Slerp(a, b, One) is b normalized within 4 raws on both live lanes \u2014 measured rather than claimed bit-exact, because the sine-ratio weights do not collapse to the endpoint\u0027s own bits",
+        "Subject": "both endpoints: Slerp(a, b, Zero) is a normalized EXACTLY, and Slerp(a, b, One) is b normalized within 4 raws on both live lanes — measured rather than claimed bit-exact, because the sine-ratio weights do not collapse to the endpoint's own bits",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1033,7 +1033,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "monotone traversal: over the ladder\u0027s five amounts Dot(Slerp(a, b, t), a) is non-increasing and Dot(Slerp(a, b, t), b) non-decreasing, which is what \u0027along the arc\u0027 means and which a wrong weight pair would break even where the endpoints held",
+        "Subject": "monotone traversal: over the ladder's five amounts Dot(Slerp(a, b, t), a) is non-increasing and Dot(Slerp(a, b, t), b) non-decreasing, which is what 'along the arc' means and which a wrong weight pair would break even where the endpoints held",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1042,7 +1042,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "BOTH branches are reached, and named: the nearly-parallel pair (Identity against a rotor whose Dot exceeds the 65503 raw threshold) takes the normalized linear blend and reaches its own endpoint, and the quarter-turn pair takes the sine-ratio path \u2014 so neither branch is dark. Each branch\u0027s selecting Dot is asserted, not assumed",
+        "Subject": "BOTH branches are reached, and named: the nearly-parallel pair (Identity against a rotor whose Dot exceeds the 65503 raw threshold) takes the normalized linear blend and reaches its own endpoint, and the quarter-turn pair takes the sine-ratio path — so neither branch is dark. Each branch's selecting Dot is asserted, not assumed",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1051,7 +1051,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the shortest-arc flip is exercised: the operand pair with a negative Dot \u2014 Identity against the NEGATED quarter turn \u2014 reaches the same rotation as the unflipped pair at every ladder amount, which is the statement that \u2212q and q name one rotation",
+        "Subject": "the shortest-arc flip is exercised: the operand pair with a negative Dot — Identity against the NEGATED quarter turn — reaches the same rotation as the unflipped pair at every ladder amount, which is the statement that −q and q name one rotation",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1060,7 +1060,7 @@
       {
         "Kind": "SharedSubstrate",
         "Flavor": "DelegationTwin",
-        "Subject": "Slerp\u0027s transcendentals",
+        "Subject": "Slerp's transcendentals",
         "Against": "FixedQ4816.Sqrt, FixedQ4816.Atan2 and FixedQ4816.SinCos",
         "Shared": "the entire weight computation",
         "Citation": "scalar.sqrt-exact, scalar.atan2-vs-series and scalar.sincos-vs-series pin the three kernels. The COMPOSITION - the whole squared-dot, root, arctangent, sine-ratio and division chain taken end to end - is pinned by quaternion.slerp-ladder-transcription, which stands it against Oracles.EncloseAtan2 and Oracles.EncloseSinCos widened by the propagated kernel envelope and checks DIRECTION by an exact BigInteger cross product rather than value, so the amplification that used to make an end-to-end bound impossible does not arise. A Slerp reference that merely restated the branch schedule would be a transcription rather than independent evidence; this case deliberately declines to add a second copy of that schedule, and states endpoints, monotonicity and branch reachability instead",
@@ -1101,16 +1101,16 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.ToQuaternion over the fourteen-row raw ladder at ALL FOUR lanes \u2014 both carrier extremes, both unit values, both single-raw quanta, and the three 2\u00B2\u2074 rows whose binary32 roundings are exact, a tie down and a tie up",
-        "Against": "Subjects.PresentationBinary32Ladder, a constant table of IEEE-754 binary32 bit patterns compared through BitConverter.SingleToInt32Bits so no floating-point arithmetic enters the law. It is the SAME hand-derived table vector.presentation-ladder reads, because the conversion chain is identical \u2014 the user-defined narrowing to double, then the standard narrowing to float \u2014 and authoring it twice would duplicate only the risk of a transcription slip",
+        "Subject": "FixedQuaternion.ToQuaternion over the fourteen-row raw ladder at ALL FOUR lanes — both carrier extremes, both unit values, both single-raw quanta, and the three 2²⁴ rows whose binary32 roundings are exact, a tie down and a tie up",
+        "Against": "Subjects.PresentationBinary32Ladder, a constant table of IEEE-754 binary32 bit patterns compared through BitConverter.SingleToInt32Bits so no floating-point arithmetic enters the law. It is the SAME hand-derived table vector.presentation-ladder reads, because the conversion chain is identical — the user-defined narrowing to double, then the standard narrowing to float — and authoring it twice would duplicate only the risk of a transcription slip",
         "Shared": "",
-        "Citation": "hand-derived from the binary32 layout and the Q48.16 scale: every row is the raw\u0027s exact real value raw\u00B72\u207B\u00B9\u2076 rounded once to binary64 and once to binary32, each rounding resolved by hand. Shares no code and no substrate with the subject",
+        "Citation": "hand-derived from the binary32 layout and the Q48.16 scale: every row is the raw's exact real value raw·2⁻¹⁶ rounded once to binary64 and once to binary32, each rounding resolved by hand. Shares no code and no substrate with the subject",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the four lanes are carried in order: each ladder raw is placed at X, then Y, then Z, then W in turn while the other three carry FOUR DISTINCT sentinels \u2014 \u22123, \u00BD, \u22122 and 4, none of which is a ladder row \u2014 so any transposition fails on placement before a value is compared, including one that swaps two lanes the ladder raw is not sitting in",
+        "Subject": "the four lanes are carried in order: each ladder raw is placed at X, then Y, then Z, then W in turn while the other three carry FOUR DISTINCT sentinels — −3, ½, −2 and 4, none of which is a ladder row — so any transposition fails on placement before a value is compared, including one that swaps two lanes the ladder raw is not sitting in",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1135,8 +1135,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.FromAxisAngle against Oracles.EncloseSinCos at the EXACT half angle each ladder row\u0027s angleRaw forms",
-        "Against": "Oracles.EncloseSinCos at half = angleRaw/2 (exact when angleRaw is even, or an exact tie rounded to even when it is odd \u2014 the same rule scalar.mul-vs-oracle already pins for the Half multiply). W stands directly against the cosine enclosure at the kernel\u0027s own committed 3/4 raw ULP SinCos envelope, since cos is returned with no further rounding; X, Y, Z stand against the sine enclosure scaled by the axis component\u0027s own exact raw magnitude, widened by that same propagated envelope plus one half raw ULP for the ONE further Q48.16 rounding the axis multiply performs. No offline double computation anywhere \u2014 the tolerance is derived from the propagated kernel envelope, not fitted to any observed output",
+        "Subject": "FixedQuaternion.FromAxisAngle against Oracles.EncloseSinCos at the EXACT half angle each ladder row's angleRaw forms",
+        "Against": "Oracles.EncloseSinCos at half = angleRaw/2 (exact when angleRaw is even, or an exact tie rounded to even when it is odd — the same rule scalar.mul-vs-oracle already pins for the Half multiply). W stands directly against the cosine enclosure at the kernel's own committed 3/4 raw ULP SinCos envelope, since cos is returned with no further rounding; X, Y, Z stand against the sine enclosure scaled by the axis component's own exact raw magnitude, widened by that same propagated envelope plus one half raw ULP for the ONE further Q48.16 rounding the axis multiply performs. No offline double computation anywhere — the tolerance is derived from the propagated kernel envelope, not fitted to any observed output",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1177,8 +1177,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQuaternion.Exp against Oracles.EncloseSinCos, and FixedQuaternion.Log against Oracles.EncloseAtan2, at each row\u0027s EXACT magnitude and unit axis",
-        "Against": "For Exp: Oracles.EncloseSinCos at the row\u0027s exact magnitude (Oracles.NearestIntegerRoot of the exact squared sum, matching FixedVectorMath\u0027s own proven round-to-nearest rule bit for bit) and exact unit axis (the NormalizeOracle bisection above, independently re-derived rather than shared with the kernel\u0027s own normalize chain). W stands against the cosine enclosure at the kernel\u0027s own 3/4 raw ULP envelope alone, since cos is returned with no further rounding; X, Y, Z stand against the sine enclosure scaled by the exact unit axis component, widened by that envelope plus one full raw ULP covering the axis\u0027s own possible divergence from NormalizeOracle and the final multiply\u0027s rounding. For Log: Oracles.EncloseAtan2 at the row\u0027s exact vector length and W, scaled by the same exact unit axis, widened by the atan2 envelope and the division-then-multiply rounding, AMPLIFIED by 65536/vectorLength to stay a safe (not razor-tight) bound since Log divides by vectorLength directly rather than normalizing first. No offline double computation anywhere",
+        "Subject": "FixedQuaternion.Exp against Oracles.EncloseSinCos, and FixedQuaternion.Log against Oracles.EncloseAtan2, at each row's EXACT magnitude and unit axis",
+        "Against": "For Exp: Oracles.EncloseSinCos at the row's exact magnitude (Oracles.NearestIntegerRoot of the exact squared sum, matching FixedVectorMath's own proven round-to-nearest rule bit for bit) and exact unit axis (the NormalizeOracle bisection above, independently re-derived rather than shared with the kernel's own normalize chain). W stands against the cosine enclosure at the kernel's own 3/4 raw ULP envelope alone, since cos is returned with no further rounding; X, Y, Z stand against the sine enclosure scaled by the exact unit axis component, widened by that envelope plus one full raw ULP covering the axis's own possible divergence from NormalizeOracle and the final multiply's rounding. For Log: Oracles.EncloseAtan2 at the row's exact vector length and W, scaled by the same exact unit axis, widened by the atan2 envelope and the division-then-multiply rounding, AMPLIFIED by 65536/vectorLength to stay a safe (not razor-tight) bound since Log divides by vectorLength directly rather than normalizing first. No offline double computation anywhere",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1186,7 +1186,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Exp of zero is the identity and Log of either identity sign is the zero bivector exactly; a bivector beyond a full turn wraps through the turn-domain reduction rather than diverging; a bivector at the carrier\u0027s extreme exponentiates to a unit rotation within eight raw",
+        "Subject": "Exp of zero is the identity and Log of either identity sign is the zero bivector exactly; a bivector beyond a full turn wraps through the turn-domain reduction rather than diverging; a bivector at the carrier's extreme exponentiates to a unit rotation within eight raw",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1291,7 +1291,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "FromTo\u0027s DEFINING property \u2014 rotating the start direction by the produced quaternion aligns it with the target within an exact BigInteger cross and dot bound \u2014 holds over the full edge cross product. No angle or trigonometric comparison is used, so the bound is EXACT rather than a ULP-gated arctangent check",
+        "Subject": "FromTo's DEFINING property — rotating the start direction by the produced quaternion aligns it with the target within an exact BigInteger cross and dot bound — holds over the full edge cross product. No angle or trigonometric comparison is used, so the bound is EXACT rather than a ULP-gated arctangent check",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1321,7 +1321,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "the Hamilton product, dot and inverse over a curated fourteen-by-fourteen boundary set",
-        "Against": "exact BigInteger product sums, dot sums and inverse ratios with exactly one ties-to-even rounding each, hand-derived inline rather than called. ENVELOPE: a curated boundary set, not the carrier\u0027s full combination space, which is why this is Deep rather than Exhaustive",
+        "Against": "exact BigInteger product sums, dot sums and inverse ratios with exactly one ties-to-even rounding each, hand-derived inline rather than called. ENVELOPE: a curated boundary set, not the carrier's full combination space, which is why this is Deep rather than Exhaustive",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1380,7 +1380,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "vector and quaternion normalization over the curated edge sets",
-        "Against": "a BigInteger bisection search for the nearest ties-to-even raw, hand-written inline, gated at one raw unit. ENVELOPE: the curated edge sets only, not dense magnitudes across the continuous range \u2014 that accuracy story is already carried by the existing normalize laws via frontier-sampled domains; this case\u0027s unique contribution is the extreme-carrier set plus the four-square-carry probe",
+        "Against": "a BigInteger bisection search for the nearest ties-to-even raw, hand-written inline, gated at one raw unit. ENVELOPE: the curated edge sets only, not dense magnitudes across the continuous range — that accuracy story is already carried by the existing normalize laws via frontier-sampled domains; this case's unique contribution is the extreme-carrier set plus the four-square-carry probe",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1388,10 +1388,49 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the all-minimum quaternion, which has no positive two\u0027s-complement counterpart in any lane, normalizes through the four-square carry to the documented raw in every lane, and its length refuses",
+        "Subject": "the all-minimum quaternion, which has no positive two's-complement counterpart in any lane, normalizes through the four-square carry to the documented raw in every lane, and its length refuses",
         "Against": "",
         "Shared": "",
         "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quaternion.adoption-ladder",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "FromQuaternion"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQuaternion.FromQuaternion over the SAME twenty-row binary32 ladder the vector seam is held to, placed at X, then Y, then Z, then W with sentinels in the other three lanes — both signed zeros, both unit values, the 2⁻¹⁶ quantum, three exact scaled HALVES and their negatives resolving ties to even in both directions, 0.1f, both float extremes, both infinities and a NaN",
+        "Against": "Subjects.AdoptionBinary32Ladder, the same constant table of IEEE-754 binary32 bit patterns the vector adoption ladder is judged against, fed in through BitConverter.Int32BitsToSingle and compared as exact int64 raws, so no floating-point arithmetic authors an operand or an expectation",
+        "Shared": "",
+        "Citation": "the four lanes are independent Q48.16 adoptions of a binary32, so the vector ladder’s hand-derived expectations transfer unchanged: a binary32 widens to binary64 exactly, the 2¹⁶ scale is a pure exponent shift, and the conversion is one round-half-to-even of that exact dyadic followed by saturation. Sharing the table is deliberate — the two seams MUST agree, and a divergence between them is exactly what this law should catch",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seam does NOT renormalize: (2,0,0,0) adopts as raw (131072,0,0,0) rather than the unit (65536,0,0,0), and a uniformly non-unit (1.5,1.5,1.5,1.5) — norm 3, every lane representable — keeps all four lanes at 98304",
+        "Against": "raws derived by hand from the Q48.16 scale, never captured from the subject",
+        "Shared": "",
+        "Citation": "this is the documented contract, and it cannot be stated by a three-lane vector ladder: FromQuaternion is a REPRESENTATION change, not a repair. Q16 quantization moves a unit rotation off the sphere by itself, so a seam that quietly renormalized would both hide its own quantization error and discard a deliberately non-unit operand. Normalization is the caller’s job, which is only true if nothing here does it",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Q16 quantization itself moves a unit rotation off the sphere, DEMONSTRATED on a pair: (1,2,2,4)/5 is exactly unit in the reals but 0.2 and 0.4 are not binary fractions, so its adopted raws do NOT sum of squares to 2³² — while (½,½,½,½), whose lanes ARE exact in Q16, does",
+        "Against": "the sum of the four squared raws compared against 2³², the exact raw statement of unit norm at the Q48.16 scale",
+        "Shared": "",
+        "Citation": "this is the REASON the seam does not renormalize, moved from prose into evidence. The pair is the point: the first row alone would be satisfied by any carrier that mangles operands, and the second row proves quantization does not move EVERY rotation — so the miss is a property of that operand, not a tautology about the format. A seam that renormalized would fail the first row, which makes this leg an independent witness of the leg above rather than a restatement of it",
         "Absolute": ""
       }
     ]

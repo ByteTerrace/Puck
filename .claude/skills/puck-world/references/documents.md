@@ -29,19 +29,27 @@ members in declaration (= canonical-write) order: `Motion`, `SpawnPoints`,
 `Assignment`, `Addons`, `BindingOverlays`, `Storage`, `Creations`,
 `Placements`, `Authoring`, `Speakers`, `Tunes`, `Patches`, `Audio`,
 `Collision`, `Host`, `Views`, `Looks`, `LookAssignment`, `Links`, `Grants`,
-`Hud`, `State`, `InputHold` — plus 10 trailing OPTIONAL members (each
-`[JsonIgnore(Condition = WhenWritingNull)]` with a `= null` default, so an
-existing document declaring none of them round-trips unchanged): `Rules`
-(see below), `Identity`, `Groups`, `Properties`, `Interactions`,
-`Generation`, `Generators`, `Water` (the standing-water medium — one
-waterline `level`; null IS the dry world; `WorldWater.cs`), `References`, and
-`Portals` — plus `Schema` and the `[JsonExtensionData]` `Extensions` bag.
-There is no `Wander`/`Scene` member and no `WorldSceneRow`
-type any more — both retired; scenery is authored through `Placements` now.
+`Hud`, `State`, `InputHold` (its own type, `WorldInputHoldAuthoring`, is the
+AUTHORED seconds shape — `WorldDefinition.CompiledInputHold` is the compiled
+ticks form runtime code consumes; see `WorldInputHoldSettings`'s remarks) —
+plus 14 trailing OPTIONAL members (each `[JsonIgnore(Condition =
+WhenWritingNull)]` with a `= null` default, so an existing document declaring
+none of them round-trips unchanged): `Rules` (see below), `Identity`,
+`Groups`, `Properties`, `Interactions`, `Generation`, `Generators`, `Water`
+(the standing-water medium — one waterline `level`; null IS the dry world;
+`WorldWater.cs`), `References`, `Portals`, `Simulation`, `Destinations`
+(`WorldDestinations.cs`), `Admission` (`Protocol/WorldAdmission.cs`, the TCP
+door's trust list — deny-by-default, an absent/empty section admits no remote
+peer), and `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
+auction house's config and live listing ledger; null IS today's no-market
+behavior, falling back to `WorldMarketSection.Empty`) — plus `Schema`
+and the `[JsonExtensionData]` `Extensions` bag. There is no `Wander`/`Scene`
+member and no `WorldSceneRow` type any more — both retired; scenery is
+authored through `Placements` now.
 
-The last two carry the four-world charter's topology and are BOOT-AUTHORED
-ONLY — neither has a `WorldSection` axis or a `MutationKind` ordinal, so
-nothing mutates them in session and no grant subject names them:
+The last three carry topology/timing facts that are BOOT-AUTHORED ONLY —
+none has a `WorldSection` axis or a `MutationKind` ordinal, so nothing
+mutates them in session and no grant subject names them:
 
 - **`References`** (`WorldReferences.cs`) — `IReadOnlyList<WorldReference>?`,
   each row `(WorldSafeName Name, string Document)`. This is what a portal
@@ -52,19 +60,40 @@ nothing mutates them in session and no grant subject names them:
   active local-seat party) or `Body` (one seat). It is the world-scope default
   a placement face's own `WorldPlacementPortal` facet falls back to when it
   authors no `Travel`; a null section resolves every facet to `Body`.
+- **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
+  field, `RateHz`, the authoritative server's fixed step rate in Hz. Read
+  through `WorldDefinition.SimulationRateHz` (`Simulation?.RateHz ??
+  WorldSimulationDefaults.DefaultRateHz`, 240) — never `Simulation` directly,
+  since every consumer wants the resolved value, not the presence/absence of
+  the section. MUST be a positive divisor of
+  `Puck.Maths.FixedTickConversion.TicksPerSecond` (50400) exactly, refused
+  by `WorldDefinitionValidator.ValidateSimulation` otherwise (naming the
+  nearest valid rates). Boot-time only, deliberately: nothing in this codebase
+  needs a mid-session rate change today, and building that (recompiling every
+  cached tick-derived table live) is real additional scope this field does not
+  take on. The derived-floor validation (physics floor from body size/speed,
+  interactivity floor from input latency, the substep-derived contact clamp
+  `contactHertz <= RateHz * n / 8` at substep count `n` — it coincides with
+  `RateHz / 4` only at `n` = 2 — and the representable band) is NOT built;
+  `n` is a solver parameter, so `WorldSimulationDefaults` is the seam the
+  solver landing that introduces it adds the validator to.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 29 members, declared
+The `WorldSection` enum (`Protocol/WorldGrant.cs`, 31 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Links, Grants, Hud, State, InputHold, Rules,
-Groups, Properties, Interactions`. It is the grant subject vocabulary
+Groups, Properties, Interactions, PlayerDefaults, Market`. It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
-`WorldDefinition`'s own member list above: `PlayerDefaults`, `Channels`,
+`WorldDefinition`'s own member list above: `Channels`,
 `TargetRegisters`, `BodyMotionPrograms`, `Storage`, `Identity`,
-`Generation`, `Generators`, and `Water` carry no dispatch axis of their own (some
+`Generation`, `Generators`, `Water`, `References`, `Portals`, `Simulation`,
+`Destinations`, and `Admission` carry no dispatch axis of their own (some
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
-`Kits` respectively).
+`Kits` respectively; `PlayerDefaults` dispatches through
+`WorldMutation.SetPlayerDefaults`, and `Market` through the
+`CreateMarketListing`/`PlaceMarketBid`/`BuyoutMarketListing`/
+`CancelMarketListing`/`SettleMarketListing` family).
 
 `rules` (`WorldRule`, `Puck.World.Data/WorldRules.cs`) is the OPTIONAL
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
@@ -139,7 +168,7 @@ lines over the remaining 2679 ticks of a 12-second boot). It never changes what
 is submitted: a write that genuinely tries to CROSS a bound (a cell at 3 taking
 `-5`) is still submitted and still refused BY NAME, so the envelope duality is
 unchanged — this removes the inert case from the write side, it does not add
-saturate-on-write (ruled out, see `docs/capability-channels-STATE.md`).
+saturate-on-write (ruled out).
 
 `setState`/`addState` carry the SAME value/comparand duality on the WRITE side:
 EITHER a literal `value` OR a live copy `(fromState, fromKey)` — another row or
@@ -389,11 +418,14 @@ the character check are gone — a proof, not a courtesy.
 
 Worlds have no in-code definition. A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/play.world.json`; an explicit path or the shipped default that cannot be loaded
-refuses the boot by name. Four shipped worlds — the charter's whole roster, no others: `play` (the hub — the
+refuses the boot by name. Four shipped GAME worlds — the charter's whole roster: `play` (the hub — the
 overworld's first main city, local multiplayer, and the boot default; carries the `references` section naming the
 other three by document path, and a wall-mounted picture-frame placement per named world), `dive` (the underwater
-arena scaffold — the one that also authors `water`), `kart` (the racing arena), `jump` (the platformer arena). All
-four carry the full required top-level set. The loader is `src/Puck.World/WorldDefinitionLoader.cs`.
+arena scaffold — the one that also authors `water`), `kart` (the racing arena), `jump` (the platformer arena). A
+fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
+no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached only
+with `--world` and never from Play. All five carry the full required top-level set, so a change that adds a
+top-level section sweeps five documents, not four. The loader is `src/Puck.World/WorldDefinitionLoader.cs`.
 
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`

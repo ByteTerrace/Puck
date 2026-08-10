@@ -3,22 +3,21 @@ using System.Buffers.Binary;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// The M-08 malformed-BESS-file corpus: every way a well-formed export can be mutated that
+/// The malformed-BESS-file corpus: every way a well-formed export can be mutated that
 /// <see cref="BessImporter.Import"/> must reject before touching any machine state. Shared between the always-run
 /// <see cref="BessImportGuardStage"/> gate (our importer's safety contract; see that stage's doc comment for why this
 /// belongs to Post rather than to evidence tooling) and the <c>--bess-export</c> self-check in
-/// <see cref="BessDiagnostic"/>, so the case list is defined exactly once. One entry per failure class the review
-/// called out: a truncated file, a CORE buffer-table entry pointing outside the file, an undersized CORE block, a
-/// garbaged footer magic, a missing required <c>END </c> block, a nonzero-length or non-final <c>END </c> block, an
-/// exact-size mismatch per region (palette, OAM, HRAM), one oversized-destination-capacity entry per region class
-/// (work-RAM, video-RAM, palette), an optional <c>MBC </c> block whose length is not a multiple of 3, one whose
-/// record writes an address outside <c>0x0000-0x7FFF</c>/<c>0xA000-0xBFFF</c> (M-08's remaining gap), an
-/// incompatible <c>CORE</c> major version, a duplicate <c>CORE</c> block, and a known block (<c>MBC </c>) appearing
-/// before the required <c>CORE</c> block (H-10/H-11).
+/// <see cref="BessDiagnostic"/>, so the case list is defined exactly once. One entry per failure class: a truncated
+/// file, a <c>CORE</c> buffer-table entry pointing outside the file, an undersized <c>CORE</c> block, a garbaged footer magic, a
+/// missing required <c>END </c> block, a nonzero-length or non-final <c>END </c> block, an exact-size mismatch per
+/// region (palette, OAM, HRAM), one oversized-destination-capacity entry per region class (work-RAM, video-RAM,
+/// palette), an optional <c>MBC </c> block whose length is not a multiple of 3, one whose record writes an address
+/// outside <c>0x0000-0x7FFF</c>/<c>0xA000-0xBFFF</c>, an incompatible <c>CORE</c> major version, a duplicate
+/// <c>CORE</c> block, and a known block (<c>MBC </c>) appearing before the required <c>CORE</c> block.
 /// <para>
-/// This is deliberately NOT where the spec's legal-but-undersized work-RAM/video-RAM cases, or the legal-extended
+/// This is deliberately not where the spec's legal-but-undersized work-RAM/video-RAM cases, or the legal-extended
 /// <c>CORE</c> case, live — those are not malformed data (the BESS spec's own "handle size mismatches gracefully"
-/// and "ignore any excess bytes" contracts require them to be ACCEPTED) — see <see cref="BuildGracefulShapeCases"/>
+/// and "ignore any excess bytes" contracts require them to be accepted) — see <see cref="BuildGracefulShapeCases"/>
 /// and <see cref="BuildExtendedCoreCase"/> instead.
 /// </para>
 /// </summary>
@@ -46,7 +45,7 @@ internal static class BessMalformedCorpus {
         yield return ("duplicate CORE block", WithDuplicateCoreBlock(goodFile: goodFile));
         yield return ("known block (MBC) before CORE", WithMbcBlockBeforeCore(goodFile: goodFile));
     }
-    /// <summary>One legal-but-undersized CORE buffer-table case (M-08): the BESS spec's own "handle size mismatches
+    /// <summary>One legal-but-undersized CORE buffer-table case: the BESS spec's own "handle size mismatches
     /// gracefully" contract for work-RAM/video-RAM, which the spec gives no fixed size. A short entry here is valid
     /// input, not malformed data — <see cref="BessImporter.Import"/> must succeed and zero-fill the remainder rather
     /// than throw or leave the destination's prior contents in place.</summary>
@@ -65,14 +64,14 @@ internal static class BessMalformedCorpus {
         yield return BuildUndersizedRangeCase(goodFile: goodFile, tableOffset: 0x00, label: "undersized work-RAM", destinationStart: MemoryMap.WorkRamBank0Start, destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1), declaredSize: 0x100);
         yield return BuildUndersizedRangeCase(goodFile: goodFile, tableOffset: 0x08, label: "undersized video-RAM", destinationStart: MemoryMap.VideoRamStart, destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1), declaredSize: 0x100);
     }
-    /// <summary>Builds the legal-extended <c>CORE</c> case (M-10): the BESS spec's own "implementations are expected
-    /// to ignore any excess bytes" contract for the CORE block's defined 0xD0-byte prefix. This is legal input, not
-    /// malformed data — <see cref="BessImporter.Import"/> must succeed, and must produce the SAME BESS-modeled state
+    /// <summary>Builds the legal-extended <c>CORE</c> case: the BESS spec's own "implementations are expected
+    /// to ignore any excess bytes" contract for the <c>CORE</c> block's defined 0xD0-byte prefix. This is legal input, not
+    /// malformed data — <see cref="BessImporter.Import"/> must succeed, and must produce the same BESS-modeled state
     /// (the same <see cref="BessImportReport"/>, and the same resulting machine snapshot) as importing
     /// <paramref name="goodFile"/> unextended — the forward-compat proof the caller is expected to assert, since this
     /// case's equivalence check does not fit <see cref="GracefulShapeCase"/>'s single-destination-region shape.</summary>
     /// <param name="goodFile">A well-formed BESS file (typically a fresh <see cref="BessExporter.Export"/> output).</param>
-    /// <returns>The file with its CORE block's payload padded with extra, nonzero tail bytes beyond the defined
+    /// <returns>The file with its <c>CORE</c> block's payload padded with extra, nonzero tail bytes beyond the defined
     /// prefix — nonzero so a correct import (which must never read them) is distinguishable from one that happens to
     /// read zeros past the prefix by coincidence.</returns>
     public static byte[] BuildExtendedCoreCase(byte[] goodFile) {

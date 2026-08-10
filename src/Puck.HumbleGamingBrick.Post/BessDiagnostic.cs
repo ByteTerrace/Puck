@@ -6,11 +6,11 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <c>--bess-import</c> loads a BESS file — ours or a foreign one — into a machine and reports the state it restored,
 /// so states can be eyeballed against another BESS-compliant tool as evidence. Diagnostics, never gates.
 /// <para>
-/// M-08: every <c>--bess-export</c> run also feeds the shared <see cref="BessMalformedCorpus"/> into
+/// Every <c>--bess-export</c> run also feeds the shared <see cref="BessMalformedCorpus"/> into
 /// <see cref="BessImporter.Import"/> against a dedicated probe machine, asserting each case is rejected with
 /// <see cref="InvalidDataException"/> and leaves that machine's snapshot byte-for-byte unchanged. This is a
 /// convenience re-run of the same corpus, not the gate — <see cref="BessImportGuardStage"/> is the always-run POST
-/// stage that actually gates the validate-then-apply contract.
+/// stage that gates the validate-then-apply contract.
 /// </para>
 /// </summary>
 internal static class BessDiagnostic {

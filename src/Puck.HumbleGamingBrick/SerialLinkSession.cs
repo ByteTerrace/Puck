@@ -3,7 +3,7 @@ namespace Puck.HumbleGamingBrick;
 /// <summary>
 /// A serial link cable between two machines, together with the deterministic pair-stepper the cable requires.
 /// Constructing the session wires the two machines' serial ports as peers (bits are exchanged synchronously inside the
-/// internally-clocked port's tick — see <see cref="SerialComponent"/>); the pair must then be advanced THROUGH the
+/// internally-clocked port's tick — see <see cref="SerialComponent"/>); the pair must then be advanced through the
 /// session: <see cref="Run"/> moves both machines forward by one shared wall-time budget (master-clock T-cycles, i.e.
 /// LCD dots — the same unit <see cref="Machine.Run"/> consumes, and a rate the DMG/Color models share in every speed
 /// mode), always stepping the machine that is further behind its own cumulative target, one instruction at a time,
@@ -15,7 +15,7 @@ namespace Puck.HumbleGamingBrick;
 /// Causality across the cable is instruction-atomic: when one machine's serial shifter exchanges a bit, the peer's
 /// state is its last instruction boundary — at most one instruction stale, well inside a normal-rate bit period
 /// (512 T-cycles). That is the finest an instruction-atomic core can offer; byte-level link protocols (the handshake
-/// style real link software uses) are exact under it. In a parallel-stepping fleet, a linked pair is ONE work item:
+/// style real link software uses) are exact under it. In a parallel-stepping fleet, a linked pair is one work item:
 /// never step the two machines on separate threads, and never advance either machine directly while the session is
 /// live. Disposing the session severs the cable; both machines then step independently again (an unfinished
 /// external-clock transfer stays pending, as on unplugged hardware).
@@ -25,7 +25,7 @@ namespace Puck.HumbleGamingBrick;
 /// budget having overshot its cumulative target by a few cycles; that overshoot is a credit that carries into the next
 /// budget. <see cref="Suspend"/> severs the cable and hands back a <see cref="SerialLinkResumeToken"/> capturing both
 /// credits, and the resume constructor re-anchors each machine's target at <c>CycleCount − credit</c> so a
-/// snapshot/restore/reconnect cycle continues the EXACT pacing the suspend severed at. A naive reconnect (the plain
+/// snapshot/restore/reconnect cycle continues the exact pacing the suspend severed at. A naive reconnect (the plain
 /// constructor, which anchors targets at the current instant) instead discards the credit and runs those extra cycles,
 /// diverging the trace by construction — so a linked pair may only be snapshotted across a <see cref="Suspend"/>, and
 /// only at a transfer-idle instant.
@@ -82,7 +82,7 @@ public sealed class SerialLinkSession : IDisposable {
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
     }
 
-    /// <summary>Advances BOTH machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
+    /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
     /// the seam a host drives in place of the two machines' own <see cref="Machine.Run"/> while they are linked.</summary>
     /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>

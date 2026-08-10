@@ -6,23 +6,22 @@ using Windows.Win32.Graphics.Direct3D12;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuComputePipelineFactory"/> for Direct3D 12. Builds a compute root signature whose
+/// Implements <see cref="IGpuComputePipelineFactory"/> for Direct3D 12, building a compute root signature whose
 /// single descriptor table mirrors the neutral binding list and a compute PSO from the supplied DXIL.
-/// <para>
+/// </summary>
+/// <remarks>
 /// The descriptor table holds one range per binding, with each range's slot in the heap fixed at its binding
 /// index (<c>OffsetInDescriptorsFromTableStart = binding</c>, matching how the descriptor allocator writes a
 /// descriptor at <c>CpuBase + binding * size</c>). Shader registers are assigned per type in binding order: each
 /// UAV binding (a storage image or a read-write buffer) takes the next <c>u#</c>, each SRV binding (a read-only
 /// buffer) takes the next <c>t#</c>, and an array binding (<see cref="GpuComputeBinding.Count"/> &gt; 1) consumes
-/// that many consecutive registers and heap slots — so each binding list lays out exactly as its kernel declares
-/// its registers. Every parameter is
-/// <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); EACH SampledImage binding adds its own CLAMP static
-/// sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one requested filter — DXC's
-/// <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a kernel with several
-/// screen-like sources declares several distinct sampler symbols at distinct registers); the input-layout
-/// flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
-/// </para>
-/// </summary>
+/// that many consecutive registers and heap slots, so each binding list lays out exactly as its kernel declares
+/// its registers. Every parameter is <c>SHADER_VISIBILITY_ALL</c> (the compute visibility class); each SampledImage
+/// binding adds its own CLAMP static sampler, at s0, s1, ... in binding-list order (all sharing the pipeline's one
+/// requested filter — DXC's <c>vk::combinedImageSampler</c> only fuses a scalar Texture2D+SamplerState pair, so a
+/// kernel with several screen-like sources declares several distinct sampler symbols at distinct registers); the
+/// input-layout flag is dropped. Push constants are eight 32-bit root constants at <c>b0</c>.
+/// </remarks>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelineFactory {
     /// <inheritdoc/>

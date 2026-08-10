@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Puck.Maths;
 
 /// <summary>
-/// The presented algebra of a divisibility window, read as arithmetic: its keys ARE the integers the window holds, its
+/// The presented algebra of a divisibility window, read as arithmetic: its keys are the integers the window holds, its
 /// product IS Dirichlet convolution, and the arithmetic functions of elementary number theory are elements of it rather
 /// than loops beside it.
 /// </summary>
@@ -23,7 +23,7 @@ namespace Puck.Maths;
 /// hash: the lookup table is sorted and searched by bisection.
 /// </para>
 /// <para>
-/// <b>The classical identities quantify over ALL integers, and this window holds only the smooth ones.</b> Mertens'
+/// <b>The classical identities quantify over all integers, and this window holds only the smooth ones.</b> Mertens'
 /// sum, Legendre's sieve count and <c>Σ μ(n)·⌊x/n⌋ = 1</c> each range over every integer through their bound, so they
 /// are statements about this algebra exactly when the window holds every one of them — that is, exactly when the bound
 /// is at most <see cref="ConsecutiveBound"/>. Above it the generating primes stop covering, the missing integers name
@@ -87,7 +87,7 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
 
     /// <summary>Gets the presented algebra whose product is the Dirichlet convolution of this window.</summary>
     public PresentedAlgebra<TValue, TOps> Algebra { get; }
-    /// <summary>Gets the largest bound through which this window holds EVERY integer, not only the smooth ones.</summary>
+    /// <summary>Gets the largest bound through which this window holds every integer, not only the smooth ones.</summary>
     /// <remarks>It is the length of the initial run <c>1, 2, 3, …</c> the generating primes cover inside
     /// <see cref="Window"/>, and it is the precondition of every classical identity this type states: at
     /// <c>{2, 3, 5}</c> with a window of one hundred it is six, because seven names no key. It equals

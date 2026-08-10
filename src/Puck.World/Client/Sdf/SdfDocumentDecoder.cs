@@ -7,55 +7,54 @@ namespace Puck.World.Client.Sdf;
 
 /// <summary>
 /// The <c>puck.sdf.v1</c> front door: turns a JSON geometry document into <see cref="SdfProgramBuilder"/> calls. The
-/// document IS the builder's argument surface — <see cref="Decode"/> is a switch over op names with typed argument
+/// document is the builder's argument surface — <see cref="Decode"/> is a switch over op names with typed argument
 /// records, never a general serializer, so most builder validation throws (an overflowing torus radius sum, an
 /// overflowing cylinder/capsule/box derived bound, <c>AddMaterial</c>'s composed-palette ceiling) stay live and
-/// become the document's own validation for free (see <see cref="Replay"/>). Two DIFFERENT reasons the rest run at
-/// decode instead: (1) a few rules the builder REPAIRS rather than refuses — a negative scale (silently takes the
+/// become the document's own validation for free (see <see cref="Replay"/>). Two different reasons the rest run at
+/// decode instead: (1) a few rules the builder repairs rather than refuses — a negative scale (silently takes the
 /// absolute value and floors it near zero), a negative smooth radius (silently absorbed downstream), an
-/// unnormalizable rotation axis (silently renormalizes to something never authored) — throw NOTHING to inherit, so
+/// unnormalizable rotation axis (silently renormalizes to something never authored) — throw nothing to inherit, so
 /// they are refused explicitly here instead (see <see cref="RequireScale"/>/<see cref="ReadSmooth"/>/
-/// <see cref="RequireAxis"/>); (2) a shape's radius/half-extent/round and a material's four channels are ALSO
+/// <see cref="RequireAxis"/>); (2) a shape's radius/half-extent/round and a material's four channels are also
 /// sign-checked here, even though the builder already refuses a negative one via its own <c>RequireNonNegative</c> —
-/// a decoder-owned MIRROR of a builder refusal (never a repair), added so the refusal names the document's own op
+/// a decoder-owned mirror of a builder refusal (never a repair), added so the refusal names the document's own op
 /// index/field directly instead of surfacing only once <see cref="Replay"/> reaches the builder (see
 /// <see cref="ReadNonNegativeFloat"/>/<see cref="ReadNonNegativeVector3"/>).
 /// </summary>
 /// <remarks>
 /// <para>
-/// WHAT THIS COVERS (a useful subset, not the whole vocabulary): the primitives <see cref="SdfDocumentOpKind.Sphere"/>/
+/// <b>What this covers</b> (a useful subset, not the whole vocabulary): the primitives <see cref="SdfDocumentOpKind.Sphere"/>/
 /// <see cref="SdfDocumentOpKind.Box"/>/<see cref="SdfDocumentOpKind.Capsule"/>/<see cref="SdfDocumentOpKind.Cylinder"/>/
 /// <see cref="SdfDocumentOpKind.Torus"/>/<see cref="SdfDocumentOpKind.Plane"/>, the transforms
 /// <see cref="SdfDocumentOpKind.Translate"/>/<see cref="SdfDocumentOpKind.Rotate"/>/<see cref="SdfDocumentOpKind.Scale"/>/
 /// <see cref="SdfDocumentOpKind.Reset"/>, and the field-scope combinators <see cref="SdfDocumentOpKind.Push"/>/
-/// <see cref="SdfDocumentOpKind.Pop"/>. SKIPPED entirely (see the front door's report for why): glyph/text, every
+/// <see cref="SdfDocumentOpKind.Pop"/>. Skipped entirely: glyph/text, every
 /// positional-recolor fold (<c>WallpaperFold</c>/<c>RepeatPolar</c>/<c>CellJitter</c> — the builder's scope clamp
-/// REPAIRS their stride, and an untrusted-shaped door must refuse rather than inherit a repair, so this prototype
+/// repairs their stride, and an untrusted-shaped door must refuse rather than inherit a repair, so this prototype
 /// simply carries no op that could reach it), every warp/bend/repeat/onion/dilate/log-sphere/symmetry op, screens,
 /// instances, and sampled regions.
 /// </para>
 /// <para>
-/// TOP-LEVEL BLEND RESTRICTION (decision 9, capability-channels-plan.md): a document's field-scope depth starts at 0;
+/// <b>Top-level blend restriction.</b> A document's field-scope depth starts at 0;
 /// <see cref="SdfDocumentOpKind.Push"/> raises it to 1 (refused past 1 — the builder's own
 /// <see cref="SdfProgramBuilder.MaxFieldScopeDepth"/>) and <see cref="SdfDocumentOpKind.Pop"/> lowers it back to 0. A
 /// shape op's <c>blend</c> at depth 0 must be a union-family value (<see cref="SdfBlendOp.Union"/>/
 /// <see cref="SdfBlendOp.SmoothUnion"/>/<see cref="SdfBlendOp.ChamferUnion"/>); depth 1 (inside one push/pop pair)
-/// allows any blend — a document's own field scope is where its subtraction/intersection CSG lives. THE SAME RULE
-/// APPLIES TO A <see cref="SdfDocumentOpKind.Push"/>'S OWN <c>blend</c>: it is evaluated at the depth the push itself
+/// allows any blend — a document's own field scope is where its subtraction/intersection CSG lives. The same rule
+/// applies to a <see cref="SdfDocumentOpKind.Push"/>'s own <c>blend</c>: it is evaluated at the depth the push itself
 /// sits at (never a fixed depth), because that blend composes the closed scope back into whatever field the push
 /// opened inside — a top-level push is therefore restricted exactly like a top-level shape. Enforced here by
 /// validation (never by host-wrapping, which would spend the builder's one field-scope level and strip every
 /// document of its own intra-document CSG).
 /// </para>
 /// <para>
-/// THE FIXED PROTOTYPE RESERVATION (<see cref="MaxOps"/>/<see cref="MaxMaterials"/>/<see cref="MaxDocumentBytes"/>):
-/// this build ships NO per-contributor cost ledger (that accounting is explicitly out of scope — see the front
-/// door's report). Instead, <see cref="WorldSdfDocumentEmitter"/>'s capacity probe reserves a fixed worst case sized
-/// from the first two constants, and a document declaring more ops or materials than they allow is refused HERE, at
-/// decode, before a single builder call runs — so a document that passes decode can never outgrow what the probe
-/// already reserved. <see cref="MaxDocumentBytes"/> backstops the other two on the read side: <c>world.sdf.load</c>
-/// refuses a file over that size before reading it, so a garbage file cannot spend memory or parse time claiming to
-/// be a document at all.
+/// <b>The fixed prototype reservation</b> (<see cref="MaxOps"/>/<see cref="MaxMaterials"/>/<see cref="MaxDocumentBytes"/>):
+/// this build ships no per-contributor cost ledger. Instead, <see cref="WorldSdfDocumentEmitter"/>'s capacity probe
+/// reserves a fixed worst case sized from the first two constants, and a document declaring more ops or materials
+/// than they allow is refused here, at decode, before a single builder call runs — so a document that passes decode
+/// can never outgrow what the probe already reserved. <see cref="MaxDocumentBytes"/> backstops the other two on the
+/// read side: <c>world.sdf.load</c> refuses a file over that size before reading it, so a garbage file cannot spend
+/// memory or parse time claiming to be a document at all.
 /// </para>
 /// </remarks>
 internal static class SdfDocumentDecoder {
@@ -65,8 +64,8 @@ internal static class SdfDocumentDecoder {
     public const int MaxMaterials = 32;
     /// <summary>The most entries one document's <c>ops</c> array may declare — see the type remarks.</summary>
     public const int MaxOps = 256;
-    /// <summary>Finding 4: the largest a <c>puck.sdf.v1</c> document's raw file may be — refused by
-    /// <c>world.sdf.load</c> BEFORE the read completes (a <see cref="System.IO.FileInfo"/> length check, never a
+    /// <summary>The largest a <c>puck.sdf.v1</c> document's raw file may be — refused by
+    /// <c>world.sdf.load</c> before the read completes (a <see cref="System.IO.FileInfo"/> length check, never a
     /// read-then-measure), so a multi-gigabyte file is rejected before it is read, hashed, or DOM-parsed. Derived from
     /// <see cref="MaxMaterials"/>/<see cref="MaxOps"/> with generous headroom: a maximal material entry
     /// (<c>{"albedo":[...],"emissive":...,"specular":...,"shininess":...}</c>) and a maximal op (the largest is
@@ -185,9 +184,8 @@ internal static class SdfDocumentDecoder {
         for (var index = 0; (index < program.Materials.Count); index++) {
             // THE SAME INHERITANCE Apply() gives every op (see its remarks): AddMaterial's own refusals (the
             // composed-palette/ScreenMaterialId collision gate — cross-contributor state this decoder cannot
-            // pre-check; a negative or non-finite channel is now refused earlier, at decode) must reach
-            // world.sdf.load as a document rejection, never an unhandled throw — finding 2 was exactly this loop
-            // running OUTSIDE that boundary.
+            // pre-check; a negative or non-finite channel is refused earlier, at decode) must reach world.sdf.load
+            // as a document rejection, never an unhandled throw.
             try {
                 materialIds[index] = builder.AddMaterial(material: program.Materials[index]);
             } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
@@ -272,8 +270,8 @@ internal static class SdfDocumentDecoder {
         }
     }
     private static IReadOnlyList<SdfMaterial> DecodeMaterials(Dictionary<string, JsonElement> root) {
-        // Finding 5: omission is a structural REJECTION, not a repair into an empty list — an author who means "no
-        // materials" says so with an explicit [] (the same array this returns for one), never by leaving the key out.
+        // Omission is a structural REJECTION, not a repair into an empty list — an author who means "no materials"
+        // says so with an explicit [] (the same array this returns for one), never by leaving the key out.
         if (!root.TryGetValue(key: "materials", value: out var materialsElement)) {
             throw new SdfDocumentException(reason: SdfRefusal.MaterialsRequired, message: "document: 'materials' is required — declare an explicit empty array ([]) to author a document with no materials; omitting the member entirely is refused, not defaulted.");
         }
@@ -321,9 +319,9 @@ internal static class SdfDocumentDecoder {
         return list;
     }
     private static IReadOnlyList<SdfDocumentOp> DecodeOps(Dictionary<string, JsonElement> root, int materialCount) {
-        // Finding 5: omission is refused the same way as materials' — and an explicit "ops": [] stays the legal way
-        // to author (and, via world.sdf.load, to LOAD) a document that clears the previously composed scene to
-        // nothing, since replacing the live document is the only clear path this front door has today.
+        // Omission is refused the same way as materials' — an explicit "ops": [] stays the legal way to author (and,
+        // via world.sdf.load, to LOAD) a document that clears the composed scene to nothing, since replacing the
+        // live document is the only clear path this front door has.
         if (!root.TryGetValue(key: "ops", value: out var opsElement)) {
             throw new SdfDocumentException(reason: SdfRefusal.OpsRequired, message: "document: 'ops' is required — declare an explicit empty array ([]) to author a document with no ops (also the way to clear a previously loaded one via world.sdf.load); omitting the member entirely is refused, not defaulted.");
         }
@@ -368,10 +366,9 @@ internal static class SdfDocumentDecoder {
                 SdfDocumentOpKind.Translate => new SdfDocumentOp(Index: index, Kind: kind, Vector0: RequireVector3(members: members, key: "offset", context: context)),
                 SdfDocumentOpKind.Rotate => new SdfDocumentOp(Index: index, Kind: kind, Vector0: RequireAxis(members: members, context: context), Scalar0: RequireFloat(members: members, key: "angleDegrees", context: context)),
                 SdfDocumentOpKind.Scale => new SdfDocumentOp(Index: index, Kind: kind, Vector0: RequireScale(members: members, context: context)),
-                // Decision 9's depth is the depth THIS push sits at (0 = top level), never a fixed 1 — a push's compose
-                // blend composes the CLOSED scope back into whatever field the push itself opened inside, so it is
-                // refused at top level exactly like a top-level shape (finding 1: this used to be hardcoded to 1,
-                // which let a top-level push carry subtraction/intersection straight onto predecessor-owned geometry).
+                // The depth is the depth THIS push sits at (0 = top level), never a fixed 1 — a push's compose blend
+                // composes the CLOSED scope back into whatever field the push itself opened inside, so it is refused
+                // at top level exactly like a top-level shape.
                 SdfDocumentOpKind.Push => new SdfDocumentOp(Index: index, Kind: kind, Blend: ReadBlend(members: members, context: context, depth: depth), Smooth: ReadSmooth(members: members, context: context)),
                 SdfDocumentOpKind.Pop => new SdfDocumentOp(Index: index, Kind: kind),
                 // The builder's RequireNonNegative sites this decoder mirrors (sphere/capsule/cylinder radii, cylinder
@@ -443,9 +440,9 @@ internal static class SdfDocumentDecoder {
         return material;
     }
 
-    // Finding 3(b): a negative smooth radius has no builder-side refusal to inherit — Shape() only finite-checks it
-    // (its sign is absorbed by the shader's own max(0, smooth)) and PopField clamps a negative scope smooth to zero
-    // at the C# layer, so BOTH are silent REPAIRS this front door must refuse instead of forwarding.
+    // A negative smooth radius has no builder-side refusal to inherit — Shape() only finite-checks it (its sign is
+    // absorbed by the shader's own max(0, smooth)) and PopField clamps a negative scope smooth to zero at the C#
+    // layer, so BOTH are silent REPAIRS this front door must refuse instead of forwarding.
     private static float ReadSmooth(Dictionary<string, JsonElement> members, string context) {
         var smooth = ReadOptionalFloat(members: members, key: "smooth", context: context, fallback: 0f);
 
@@ -455,8 +452,8 @@ internal static class SdfDocumentDecoder {
 
         return smooth;
     }
-    // Finding 3(a): Scale() takes the absolute value and floors near-zero magnitudes to 0.0001 — a REPAIR this front
-    // door must refuse instead of forwarding. ReadFloat already guarantees every component is finite.
+    // Scale() takes the absolute value and floors near-zero magnitudes to 0.0001 — a REPAIR this front door must
+    // refuse instead of forwarding. ReadFloat already guarantees every component is finite.
     private static Vector3 RequireScale(Dictionary<string, JsonElement> members, string context) {
         var scale = RequireVector3(members: members, key: "scale", context: context);
 
@@ -466,8 +463,8 @@ internal static class SdfDocumentDecoder {
 
         return scale;
     }
-    // Finding 3(c): Apply() normalizes the authored axis host-side before calling Rotate — a zero axis (0/0 = NaN) or
-    // an overflowing one (length -> +Infinity, so axis/length -> the zero vector) normalizes to something that is not
+    // Apply() normalizes the authored axis host-side before calling Rotate — a zero axis (0/0 = NaN) or an
+    // overflowing one (length -> +Infinity, so axis/length -> the zero vector) normalizes to something that is not
     // the authored rotation, and the builder never sees the original axis to refuse it. ReadFloat already guarantees
     // every component is finite, so the only remaining failure is the NORMALIZED result being non-finite or zero.
     private static Vector3 RequireAxis(Dictionary<string, JsonElement> members, string context) {
@@ -514,12 +511,10 @@ internal static class SdfDocumentDecoder {
             throw new SdfDocumentException(reason: SdfRefusal.NotANumber, message: $"{context}: must be a number.");
         }
 
-        // Narrows to float HERE (GetSingle), exactly where decision 7's hazard lives — 1e39 parses as a legal double
-        // and becomes +Infinity on this narrowing. Finding 2: this USED to be left unchecked on the theory that the
-        // builder call the value eventually reaches would refuse it anyway — false for AddMaterial, whose loop in
-        // Replay() runs OUTSIDE Apply()'s try/catch, so a non-finite material component escaped as an unhandled
-        // ArgumentOutOfRangeException instead of a document rejection. Checked HERE, once, for every scalar this
-        // decoder ever reads (op arguments included) so no caller can rediscover the gap.
+        // Narrows to float HERE (GetSingle) — 1e39 parses as a legal double and becomes +Infinity on this narrowing.
+        // Checked HERE, once, for every scalar this decoder ever reads (op arguments included), so a non-finite
+        // value is always a document rejection — never an unhandled exception from whatever builder call it
+        // eventually reaches (e.g. AddMaterial, whose loop in Replay() runs OUTSIDE Apply()'s try/catch).
         var value = element.GetSingle();
 
         if (!float.IsFinite(f: value)) {

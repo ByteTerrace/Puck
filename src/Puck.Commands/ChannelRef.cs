@@ -3,10 +3,7 @@ using System.Text.Json;
 
 namespace Puck.Commands;
 
-/// <summary>A binding destination's channel reference, resolved by its declared name. (The former engine-motion-role
-/// arm was retired — a role-keyed reference and a name-keyed reference always resolved to the identical channel, so
-/// the role indirection was a duplicate destination rather than a distinct one; every binding row now names the
-/// channel directly.)</summary>
+/// <summary>A binding destination's channel reference, resolved by its declared name.</summary>
 [JsonConverter(typeof(ChannelRefJsonConverter))]
 public abstract record ChannelRef {
     private ChannelRef() {

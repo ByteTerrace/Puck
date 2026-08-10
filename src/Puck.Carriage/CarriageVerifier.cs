@@ -16,7 +16,7 @@ namespace Puck.Carriage;
 /// <item><b>Exactly two bindings</b>, when the trust list pins a domain root
 /// (<see cref="CarriageTrustMode.Vouches"/>): root-vouches-issuing, then issuing-vouches-subject. A domain
 /// with one user still mints both — depth one would put the cold root on every signup, which is the cost
-/// the two-hop shape exists to avoid, so the root is additionally refused from vouching for ITSELF as the
+/// the two-hop shape exists to avoid, so the root is additionally refused from vouching for itself as the
 /// issuing key (the same cost smuggled through a self-binding).</item>
 /// </list>
 /// <para>One binding is refused as a broken chain, three as an unbounded one. Two is a number this verifier
@@ -27,7 +27,7 @@ public static class CarriageVerifier {
     /// Walks a claim's chain against a trust list and reports whether it verifies.
     /// </summary>
     /// <remarks>
-    /// <b>This never runs inside a tick.</b> It is an ADMISSION-boundary operation, and it breaks
+    /// <b>This never runs inside a tick.</b> It is an admission-boundary operation, and it breaks
     /// world-model invariant 2 twice if it is not: the window is checked against wall-clock Unix seconds
     /// (see <paramref name="now"/>), and a claim carrying a sequence both reads and writes durable storage
     /// through <paramref name="sequenceStore"/>. Verification is also far too slow for 240 Hz. Call it at
@@ -56,7 +56,7 @@ public static class CarriageVerifier {
     /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="CarriageEnvelopeHeader.Audience"/>. A claim with no audience travels anywhere and is checked against <paramref name="sequenceStore"/> instead.</param>
     /// <param name="sequenceStore">
     /// The durable per-(issuer domain, subject) high-water mark seam. Required whenever the claim carries a
-    /// sequence — which a DIRECTED claim may also do, since binding an audience defends only against replay
+    /// sequence — which a directed claim may also do, since binding an audience defends only against replay
     /// at another world and never against replay at the audience itself (docs/world-model.md: "Same-world
     /// replay needs the sequence either way"). May be <see langword="null"/> only if the caller knows no
     /// claim carrying a sequence will ever be presented; one that does is refused, never silently accepted.
@@ -269,10 +269,10 @@ public static class CarriageVerifier {
 
     /// <summary>
     /// The policy tail both depths share: window, audience, and sequence. Audience and sequence are
-    /// INDEPENDENT rather than exclusive — the doc's table pairs them because portability and statelessness
+    /// independent rather than exclusive — the doc's table pairs them because portability and statelessness
     /// are the authored trade, but it also says same-world replay needs the sequence either way, so a
     /// directed claim that carries one is checked against the mark exactly as a bearer claim is. Only the
-    /// bearer case REQUIRES a sequence, because a claim with neither an audience nor a mark has no replay
+    /// bearer case requires a sequence, because a claim with neither an audience nor a mark has no replay
     /// defence at all.
     /// </summary>
     private static CarriageVerifyResult CheckClaimPolicy(
@@ -394,7 +394,7 @@ public static class CarriageVerifier {
 
     /// <summary>
     /// Verifies an envelope's signature. The algorithm rule lives here: <paramref name="pinnedAlgorithm"/>
-    /// — taken from the trust list or a prior hop's binding, NEVER from <paramref name="envelope"/>'s own
+    /// — taken from the trust list or a prior hop's binding, never from <paramref name="envelope"/>'s own
     /// header — is the only thing that selects the hash algorithm this method verifies with. The caller has
     /// already checked <c>envelope.Header.Algorithm == pinnedAlgorithm</c> as a separate consistency check;
     /// this method does not re-read the header's algorithm at all. The imported key's own curve is checked
@@ -402,7 +402,7 @@ public static class CarriageVerifier {
     /// a name that promises P-256.
     /// </summary>
     /// <remarks>
-    /// The signing input is <see cref="SignedCarriageEnvelope.SignedPortion"/> — the bytes that ARRIVED —
+    /// The signing input is <see cref="SignedCarriageEnvelope.SignedPortion"/> — the bytes that arrived —
     /// and never a re-encoding of the parsed model (docs/signed-carriage-wire.md §2). Re-encoding would
     /// make this method verify a claim nobody signed whenever a decoder anywhere accepted two wire forms
     /// for one model: the forged bytes would be normalised away before the signature ever saw them, and
@@ -436,7 +436,7 @@ public static class CarriageVerifier {
 
     /// <summary>
     /// Applies both ends of the validity rule (docs/world-model.md: "Validity is authored at both ends").
-    /// There is deliberately NO clock-skew tolerance: an issuer that wants slack backdates
+    /// There is deliberately no clock-skew tolerance: an issuer that wants slack backdates
     /// <see cref="CarriageEnvelopeHeader.NotBefore"/>, which is authored, auditable and travels signed —
     /// unlike a verifier-side grace window, which every verifier would size differently and which would
     /// silently widen every window in the system by twice its size.

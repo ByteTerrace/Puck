@@ -4,7 +4,7 @@
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
     <!--
-        Puck.Scripting.Simulation — the Simulation-lane adapter of docs/capability-channels-plan.md's assembly
+        Puck.Scripting.Simulation — the Simulation-lane adapter of the capability-channels campaign's assembly
         split: the one project allowed to hold both the neutral scripting core (Puck.Scripting) and the
         engine's command/input vocabularies (Puck.Commands, Puck.Input). It owns AddonSimulationPump, the
         vocabulary validator that turns a guest's decoded output batch into typed AddonActSubmission /

@@ -100,11 +100,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>The largest requested total moment order accepted by the dense exact Hausdorff search.</summary>
     public const int MaximumEulerHausdorffMomentOrder = 256;
 
-    /// <summary>
-    /// Attempts to prove that <c>s_tailIndex</c> is not <paramref name="integerBoundary"/> by an exact Euler-moment
-    /// interval.  This applies to rationally factored numerators even when the characteristic roots and Gauss
-    /// parameter <c>a</c> are genuinely quadratic, so it reaches beyond the 1-period reduction.
-    /// </summary>
+    /// <summary>Attempts to prove that <c>s_tailIndex</c> is not <paramref name="integerBoundary"/>, via an exact
+    /// Euler-moment interval.</summary>
+    /// <remarks>Applies to rationally factored numerators even when the characteristic roots and Gauss parameter
+    /// <c>a</c> are genuinely quadratic, reaching beyond the 1-period reduction.</remarks>
     public bool TryEulerMomentIntegerExclusionCertificate(
         BigInteger tailIndex,
         BigInteger integerBoundary,
@@ -152,11 +151,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         return ((certificate == expected) && EulerMomentTargetIsExcluded(certificate: certificate));
     }
 
-    /// <summary>
-    /// Attempts to exclude an integer equality by generating its forced Euler moments and finding a failed Hausdorff
-    /// inequality <c>E[t^k*(1-t)^j]&gt;0</c>.  Increasing <paramref name="maximumTotalOrder"/> gives a nested exact
-    /// exclusion search; no numerical quadrature or guessed tolerance is used.
-    /// </summary>
+    /// <summary>Attempts to exclude an integer equality by generating its forced Euler moments and finding a failed
+    /// Hausdorff inequality <c>E[t^k*(1-t)^j]&gt;0</c>.</summary>
+    /// <remarks>Increasing <paramref name="maximumTotalOrder"/> gives a nested exact exclusion search; no numerical
+    /// quadrature or guessed tolerance is used.</remarks>
     public bool TryEulerHausdorffIntegerExclusionCertificate(
         BigInteger tailIndex,
         BigInteger integerBoundary,
@@ -223,11 +221,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         return ((certificate.Witness == witness) && (witness.Sign <= 0));
     }
 
-    /// <summary>
-    /// Attempts the Hausdorff exclusion after the least separate contiguous shifts that make both Euler endpoint
-    /// exponents positive.  The requested order is measured beyond that anchor.  The dense exact computation is
-    /// refused when the anchor plus the requested order exceeds <see cref="MaximumEulerHausdorffMomentOrder"/>.
-    /// </summary>
+    /// <summary>Attempts the Hausdorff exclusion after the least separate contiguous shifts that make both Euler
+    /// endpoint exponents positive.</summary>
+    /// <remarks>The requested order is measured beyond that anchor. The dense exact computation is refused when the
+    /// anchor plus the requested order exceeds <see cref="MaximumEulerHausdorffMomentOrder"/>.</remarks>
     public bool TryEulerRegularizedHausdorffIntegerExclusionCertificate(
         BigInteger tailIndex,
         BigInteger integerBoundary,
@@ -328,13 +325,12 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (isZeroAnchorCertificate || isFailedStrictSign));
     }
 
-    /// <summary>
-    /// Constructs the least separate nonnegative contiguous shifts <c>K,J</c> for which
-    /// <c>b+K&gt;0</c> and <c>c-b+J&gt;0</c>.  Success also certifies that the Pochhammer prefactor connecting this
-    /// positive Euler chart to the original quotient is nonzero.  Unlike the dense Hausdorff search, the shifts in
-    /// this reduction are unbounded <see cref="BigInteger"/> values.  The sole double-zero resonance is first moved
-    /// one Riccati step to its equivalent rational boundary.
-    /// </summary>
+    /// <summary>Constructs the least separate nonnegative contiguous shifts <c>K,J</c> for which
+    /// <c>b+K&gt;0</c> and <c>c-b+J&gt;0</c>.</summary>
+    /// <remarks>Success also certifies that the Pochhammer prefactor connecting this positive Euler chart to the
+    /// original quotient is nonzero. Unlike the dense Hausdorff search, the shifts in this reduction are unbounded
+    /// <see cref="BigInteger"/> values. The sole double-zero resonance is first moved one Riccati step to its
+    /// equivalent rational boundary.</remarks>
     public bool TryEulerMomentRegularization(
         BigInteger tailIndex,
         BigInteger integerBoundary,
@@ -641,9 +637,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             return true;
         }
 
-        // Positivity of B_n rules out every zero-Pochhammer resonance except N=1 and B_n=r*n^2.  If a proposed
-        // positive tail hit is M=A_1+d, then d must be positive and the Riccati equation is exactly equivalent to
-        // s_2=B_1/d=r/d.  At N=2 the formerly double-zero factor has b=1, so the quotient chart is nonresonant.
+        // Positivity of B_n rules out every zero-Pochhammer resonance except N=1, B_n=r*n^2 — the special case
+        // handled below.
         data = default;
         if ((tailIndex != BigInteger.One) || !signedRoot.IsZero ||
             !Parameters.NumeratorLinear.IsZero || !Parameters.NumeratorConstant.IsZero) {

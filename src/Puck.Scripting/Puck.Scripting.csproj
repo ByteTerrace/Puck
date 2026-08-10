@@ -11,7 +11,7 @@
     </ItemGroup>
     <ItemGroup>
         <!-- Deliberately NO Puck.Commands or Puck.Input reference: this is the neutral channel/WASM core of
-             docs/capability-channels-plan.md's assembly split. The ABI decodes the guest's declared
+             the capability-channels campaign's assembly split. The ABI decodes the guest's declared
              channel-name table (AddonChannelNameTableReader) and resolves each declared name through the
              injected IAddonChannelResolver; there is no phase discriminant any more, and an unresolved name
              is report-and-inert, never a mount fault. The vocabulary and authority layers live in

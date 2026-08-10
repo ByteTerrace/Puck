@@ -59,11 +59,12 @@ Backends                 Puck.DirectX  Puck.Vulkan
 Shared substrate         Puck.Commands  Puck.Hosting  Puck.Input  Puck.Platform
                          Puck.Scripting  Puck.Scripting.Simulation
                          Puck.Shaders
-Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Maths
-                         Puck.Snapshots  Puck.Storage
-(Test)                   Puck.Analyzers.Tests  Puck.Maths.Tests
-                         Puck.World.Tests
-(Tool)                   Puck.Carriage  Puck.Cli
+Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Carriage
+                         Puck.Maths  Puck.Snapshots  Puck.Storage
+(Test)                   Puck.Analyzers.Tests  Puck.Dynamics.Spike.Tests
+                         Puck.Launcher.Tests  Puck.Maths.Tests
+                         Puck.Recording.Tests  Puck.World.Tests
+(Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```
 
@@ -162,7 +163,7 @@ Nothing measures cross-backend parity today.
 
 | Project | Responsibility |
 |---|---|
-| `Puck.World` | Document-driven (`puck.world.def.v1`, four checked-in worlds, `--world`) network-shaped local multiplayer game host: fixed-point player state, a runtime mutation/journal/undo protocol vocabulary, principals + capability grants (addons included), per-player owned identity worlds (ordinary `puck.world.def.v1` documents carrying an `identity` section) with bindings layered onto the `Puck.Commands` stack, owned-world cloud sync through `Puck.Storage` (`storage.*` verbs), session write-back, native self-recording (`puck.recording.v1`, `--recording`, `capture.*` verbs), and SDF world rendering. Verify game behavior by running it. |
+| `Puck.World` | Document-driven (`puck.world.def.v1`, five checked-in worlds — the charter's four plus the `studio` dev canvas, `--world`) network-shaped local multiplayer game host: fixed-point player state, a runtime mutation/journal/undo protocol vocabulary, principals + capability grants (addons included), per-player owned identity worlds (ordinary `puck.world.def.v1` documents carrying an `identity` section) with bindings layered onto the `Puck.Commands` stack, owned-world cloud sync through `Puck.Storage` (`storage.*` verbs), session write-back, native self-recording (`puck.recording.v1`, `--recording`, `capture.*` verbs), and SDF world rendering. Verify game behavior by running it. |
 | `Puck.SdfVm.Bench` | A real GPU/CPU ceiling-measurement harness for `Puck.SdfVm`'s contributed dynamic geometry — boots its own Vulkan-or-Direct3D-12 window host (`Puck.Launcher` + `SdfWorldRenderBuilder`, the same generic assembly `Puck.World` composes) driving `Puck.SdfVm.Debug.SdfBenchScene`'s `DynamicMatrix` ladder to completion, then exits. A measurement tool, not a game. |
 | `Puck.HumbleGamingBrick.Post` | Humble core conformance, determinism, reference-ROM, save, and cross-generation link battery. |
 | `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, commercial-ROM, link, co-simulation, and diagnostic tooling. |
@@ -171,9 +172,14 @@ Nothing measures cross-backend parity today.
 
 `experimental/` holds `Puck.BareMetal` and the quarantined `Puck.Demo`,
 `Puck.Post`, `tools/`, and both `scripts/` trees; the GamingBrick cores live in
-`src/` alongside the rest of the split projects. **The whole directory is off
-limits** by owner ruling (2026-08-02): no agent reads, edits, builds, runs, or
-cites anything under it. No experimental tree is in `Puck.slnx`, in the root
+`src/` alongside the rest of the split projects. The quarantine governs work,
+not reading (owner ruling 2026-08-08, superseding the 2026-08-02 blanket ban):
+the source is read and cited as prior art, and deleted once live code eclipses
+it, but never improved, fixed, built, run, or revived in place. Expect those
+builds to break as deletions land. The ruling and its retirement procedure live
+in [CLAUDE.md](../CLAUDE.md) and
+[experimental/README.md](../experimental/README.md).
+No experimental tree is in `Puck.slnx`, in the root
 build, or in the architecture gate's scope — each carries its own
 `Directory.Build.props`/`.targets` firewall pair that stops MSBuild's upward
 discovery at the tree, so the isolation is structural rather than a path filter
@@ -182,8 +188,8 @@ somewhere else.
 | Project | Responsibility |
 |---|---|
 | `Puck.BareMetal` | Freestanding Native AOT runtime, UEFI kernels, native experiments, and direct hardware bring-up. |
-| `Puck.Demo` | Quarantined 2026-08-01 by owner ruling, and off limits — do not open it, including for reference. It does not build at this path anyway: its seventeen `ProjectReference`s are relative paths written when it lived under `src/`, and they all dangle. `dotnet restore` there EXITS 0 while silently discarding every one of them (warning-level "Skipping project ... because it was not found"), and the build then fails as a flood of `CS0234` errors pointing at source files rather than at the dangling edges — so do not trust a green restore in that tree. **Nothing is porting its behavior anywhere.** The plan that sequenced that work was deleted; capabilities that lived only here are absent from the product with no scheduled return. |
-| `Puck.Post` | Quarantined 2026-08-02 by owner ruling, and off limits. It was the engine's power-on self-test across CPU, same-device GPU, cross-backend, and live-subsystem tiers. **Nothing gates the shared engine contract today** — the cross-backend render path, the SDF VM ISA, the document schemas, and the deterministic numerics have no automated check. Do not cite it as coverage and do not write a stage for it. |
+| `Puck.Demo` | Quarantined 2026-08-01 by owner ruling: read it as prior art, never build or run it. It does not build at this path anyway: its seventeen `ProjectReference`s are relative paths written when it lived under `src/`, and they all dangle. `dotnet restore` there EXITS 0 while silently discarding every one of them (warning-level "Skipping project ... because it was not found"), and the build then fails as a flood of `CS0234` errors pointing at source files rather than at the dangling edges — so do not trust a green restore in that tree. **Nothing is porting its behavior anywhere.** The plan that sequenced that work was deleted; capabilities that lived only here are absent from the product with no scheduled return. |
+| `Puck.Post` | Quarantined 2026-08-02 by owner ruling: read it as prior art, never build or run it. It was the engine's power-on self-test across CPU, same-device GPU, cross-backend, and live-subsystem tiers. **Nothing gates the shared engine contract today** — the cross-backend render path, the SDF VM ISA, the document schemas, and the deterministic numerics have no automated check. Do not cite it as coverage and do not write a stage for it. |
 
 ## Repository data and tools
 
@@ -193,5 +199,5 @@ somewhere else.
 | `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), and the layering report (`architecture`). Kind `Tool`: it consumes the tree and nothing consumes it. |
 | `src/Puck.Analyzers/` | The repository's Roslyn analyzers — the `[VerifiedCode]` brand enforcement (VER001–VER010) and its code fixes. Kind `Analyzer`: `Directory.Build.props` hands it to every project as a compiler extension (`OutputItemType="Analyzer"`, `ReferenceOutputAssembly="false"`), which is why it never appears in any project's resolved reference set. |
 | `build/` | Build policy the whole tree imports: the `[VerifiedCode]` marker source, the architecture ledger (`Architecture.props`), and the gate (`Puck.Architecture.targets` + `PuckArchitectureGate.cs`). |
-| `tools/` | Quarantined under `experimental/` (2026-08-02) and off limits. It held batteries, generation, and frame utilities. |
+| `tools/` | Quarantined under `experimental/` (2026-08-02): read as prior art, never built or run. It held batteries, generation, and frame utilities. |
 | `.claude/skills/` | Current factual and procedural agent references for repository-specific work. |

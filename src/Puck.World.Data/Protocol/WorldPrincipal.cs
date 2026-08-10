@@ -2,8 +2,8 @@ using System.Globalization;
 
 namespace Puck.World.Protocol;
 
-/// <summary>What kind of actor a <see cref="WorldPrincipal"/> stands for — the one named primitive that engagement,
-/// and machine-input ownership both reduce to (addon slot ownership was a third, deleted in Phase 2 unit 4a). A
+/// <summary>What kind of actor a <see cref="WorldPrincipal"/> stands for — the one named primitive that engagement
+/// and machine-input ownership both reduce to. A
 /// principal acts through <see cref="IServerLink"/>; the server checks its grants (see
 /// <c>Puck.World.Server.WorldGrants</c>) before a write applies.</summary>
 public enum PrincipalKind : byte {
@@ -26,15 +26,15 @@ public enum PrincipalKind : byte {
     /// <summary>Another world document asking this document's authority to act.</summary>
     Document,
 
-    /// <summary>The world's OWN authored program — see <see cref="WorldPrincipal.World"/>.</summary>
+    /// <summary>The world's own authored program — see <see cref="WorldPrincipal.World"/>.</summary>
     World,
 
-    /// <summary>A GROUP — <see cref="WorldPrincipal.Name"/> is the group's stable id (see
+    /// <summary>A group — <see cref="WorldPrincipal.Name"/> is the group's stable id (see
     /// <c>Puck.World.WorldGroup.Id</c>). A grant naming a group as its <see cref="WorldGrant.Principal"/> is held by
-    /// every CURRENT member at CHECK time (<c>Server.WorldGrants.Allows</c>'s group-expansion step) — never baked into
+    /// every current member at check time (<c>Server.WorldGrants.Allows</c>'s group-expansion step) — never baked into
     /// a member's own rows at grant time, so a member who leaves loses the hold on its very next check. A group never
-    /// ACTS: nothing stamps this kind as an ingress's acting principal, so it never reaches
-    /// <see cref="WorldPrincipalMapping"/> or the wire codec as a submitter — it exists only as a grant TARGET and as
+    /// acts: nothing stamps this kind as an ingress's acting principal, so it never reaches
+    /// <see cref="WorldPrincipalMapping"/> or the wire codec as a submitter — it exists only as a grant target and as
     /// a membership-row value.</summary>
     Group,
 }
@@ -54,13 +54,13 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
     /// <summary>Gets the console/script control surface.</summary>
     public static WorldPrincipal Console { get; } = new(Kind: PrincipalKind.Console, Index: 0, Name: null, Generation: 0);
 
-    /// <summary>Returns the seat principal for a 0-based slot. <b>Do not call this to attribute an action reached FOR a slot</b>
+    /// <summary>Returns the seat principal for a 0-based slot. <b>Do not call this to attribute an action reached for a slot</b>
     /// (a drive-intent submission, an engagement route) — a slot can be claimed by something that is not a seat
     /// (<c>Puck.World.Client.PlayerRoster.TryClaimSlot</c>: the editor session today, a replay device or
     /// network peer stand-in tomorrow), so minting this inline attributes the claimant's action to the seat it
-    /// displaced. A COMMAND HANDLER never asks at all: it reads the identity its ingress door stamped, through
+    /// displaced. A command handler never asks at all: it reads the identity its ingress door stamped, through
     /// <see cref="WorldPrincipalMapping"/>. Everything else asks
-    /// <c>Puck.World.Client.PlayerRoster.PrincipalOf</c> for the slot's ACTUAL acting identity — it already
+    /// <c>Puck.World.Client.PlayerRoster.PrincipalOf</c> for the slot's actual acting identity — it already
     /// falls back to this constructor when nothing claimed the slot. The legitimate direct callers are narrow and each
     /// says why at the call site: <c>Puck.World.Client.PlayerRoster.PrincipalOf</c>'s own fallback, the
     /// roster's session-lifecycle mirrors (join/leave/profile — not the write-boundary this doc warns about), the
@@ -82,29 +82,29 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
     public static WorldPrincipal Document(string id) => new(Kind: PrincipalKind.Document, Index: 0, Name: id, Generation: 0);
 
     /// <summary>
-    /// Gets THE WORLD'S OWN AUTHORED PROGRAM — the singleton identity every effect fired by a <see cref="WorldRule"/> or by
+    /// Gets the world's own authored program — the singleton identity every effect fired by a <see cref="WorldRule"/> or by
     /// a kit's <c>ActionEffect.Generate</c> carries.
     /// </summary>
     /// <remarks>
     /// <para><b>Why this is a principal and not a borrowed one.</b> A per-body <c>ActionEffect</c> has always written
     /// without consulting <c>WorldGrants</c> at all — an entity driven by an authored program has no submitter, so
     /// entity-to-entity effects are authorised by what the world's own programs declare. A world rule is the same
-    /// shape one level up. What CHANGED is that these effects now write the DOCUMENT, which has a door; so the
+    /// shape one level up. What changed is that these effects now write the document, which has a door; so the
     /// authored program needs a name at that door. Stamping <see cref="Console"/> (or the firing seat) would be
     /// laundering: Console is a real actor with real rows, and a seat never composed the effect — the document did.
-    /// The seat's input only SELECTS which authored effect runs; the generator, the destination row, and the value
-    /// are all document data no seat can choose. So a SEAT-driven kit effect carries this principal too, and
+    /// The seat's input only selects which authored effect runs; the generator, the destination row, and the value
+    /// are all document data no seat can choose. So a seat-driven kit effect carries this principal too, and
     /// <c>world.why world edit state:&lt;row&gt;</c> answers for it honestly rather than answering about a human who
     /// pressed a button.</para>
-    /// <para><b>What it costs.</b> The exemption is STRUCTURAL — <c>Server.WorldServer.TryAdmitMutation</c> returns
+    /// <para><b>What it costs.</b> The exemption is structural — <c>Server.WorldServer.TryAdmitMutation</c> returns
     /// admitted for this kind before consulting the table, so it can never be narrowed by a grant. That is deliberate
-    /// and bounded: the only way to change what the world's program does is to change the DOCUMENT, and authoring a
+    /// and bounded: the only way to change what the world's program does is to change the document, and authoring a
     /// rule row (<c>Mutate/section:rules</c>) or a kit (<c>Mutate/section:kits</c>) is itself gated. Every non-authority
     /// gate still runs unconditionally — compose, whole-document validate, envelope, solids — so an authored program
     /// can never do what the document may not.</para>
-    /// <para><b>Consequences of holding no rows.</b> It is REFUSED at the grant door (a row naming it would be
+    /// <para><b>Consequences of holding no rows.</b> It is refused at the grant door (a row naming it would be
     /// accepted-and-inert, the "phantom grant" shape the table exists to prevent) and refused on the wire
-    /// (<c>WorldSubmissionCodec</c>): nothing off-process can claim to be the world. <see cref="TryParse"/> DOES
+    /// (<c>WorldSubmissionCodec</c>): nothing off-process can claim to be the world. <see cref="TryParse"/> does
     /// accept the <c>world</c> token, because a read-back that cannot name a principal cannot answer for it — the
     /// token reaches diagnostics (<c>world.why</c>) and the grant door's own refusal, never an acting identity.</para>
     /// </remarks>

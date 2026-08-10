@@ -305,7 +305,7 @@ public readonly struct GeometricAlgebra : IEquatable<GeometricAlgebra> {
     /// branch <c>cosh|b| + (sinh|b|/|b|)·bivector</c> (matching <see cref="FixedSplit.FromRapidity"/>); a zero square
     /// is the degenerate branch <c>1 + bivector</c> (the translator of a null bivector). The transcendentals reuse
     /// the house fixed-point <see cref="FixedQ4816.SinCos"/> and <see cref="FixedQ4816.Exp2"/> machinery.
-    /// <para>The scalar square is a CHECKED PRECONDITION, not an assumption. Both halves of it bite: a lane of grade
+    /// <para>The scalar square is a checked precondition, not an assumption. Both halves of it bite: a lane of grade
     /// zero, one, three, or four is not a bivector at all and the closed form would silently drop it, and a genuine
     /// grade-two element need not square to a scalar once the signature has four generators — in <c>(4, 0, 0)</c> the
     /// bivector <c>e12 + e34</c> squares to <c>−2 + 2·e1234</c>, and its exponential is the product

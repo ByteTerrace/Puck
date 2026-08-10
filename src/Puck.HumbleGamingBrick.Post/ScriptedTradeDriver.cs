@@ -51,12 +51,12 @@ internal sealed class ScriptedTradeDriver {
     private const int ApproachBudget = 400;
     private const int ReceptionistBudget = 12000;
 
-    // TRADE_CENTER seat geometry (maps/TradeCenter.asm). The two console bg_events on row Y=4 are (4,4) BGEVENT_RIGHT and
-    // (5,4) BGEVENT_LEFT; a directional bg_event fires when the player stands on the tile ADJACENT to the console FACING
-    // it (home/map.asm CheckFacingBGEvent → GetFacingTileCoord + the .checkdir facing match), and (4,4)/(5,4) are solid
-    // furniture. So each side stands on the CHRIS-avatar tile its map callback vacated: the external-clock side ($01,
-    // side A) has CHRIS2 removed from (6,4) and stands there facing LEFT (facing tile (5,4) → its BGEVENT_LEFT); the
-    // internal-clock side ($02, side B) has CHRIS1 removed from (3,4) and stands there facing RIGHT (facing tile (4,4)).
+    // TRADE_CENTER seat geometry: the two console bg_events on row Y=4 are (4,4) BGEVENT_RIGHT and (5,4) BGEVENT_LEFT;
+    // a directional bg_event fires when the player stands on the tile adjacent to the console and faces it, and
+    // (4,4)/(5,4) are solid furniture. So each side stands on the CHRIS-avatar tile its map callback vacated: the
+    // external-clock side ($01, side A) has CHRIS2 removed from (6,4) and stands there facing left (facing tile
+    // (5,4) → its BGEVENT_LEFT); the internal-clock side ($02, side B) has CHRIS1 removed from (3,4) and stands
+    // there facing right (facing tile (4,4)).
     private const byte SeatY = 4;
     private const byte CorridorY = 5;
     private const byte FacingLeft = 0x08;
@@ -92,11 +92,11 @@ internal sealed class ScriptedTradeDriver {
     private const int TradeMenuCycle = 90;
     private const ushort SerialControlAddress = 0xFF02;
 
-    // TRADE_CENTER is map group 20 / map 2 (§2.5) — the console room the room-match warp lands both players in.
+    // TRADE_CENTER is map group 20 / map 2 — the console room the room-match warp lands both players in.
     private const byte TradeCenterGroup = 20;
     private const byte TradeCenterMap = 2;
 
-    // wLinkMode == LINK_TRADECENTER (2) once CheckBothSelectedSameRoom succeeds — the link is fully established.
+    // wLinkMode == LINK_TRADECENTER (2) once both sides confirm they're in the same room — the link is fully established.
     private const byte LinkTradeCenter = 2;
 
     /// <summary>Builds and runs the full scripted trade to completion (or the first phase that fails its peek condition),
@@ -154,13 +154,13 @@ internal sealed class ScriptedTradeDriver {
         Observe(instance: m_b, tally: m_tallyB);
 
         // Required symmetry break: two identical Cgb machines connected at identical post-boot state, and
-        // then pair-stepped to equal cumulative CycleCount by the SerialLinkSession, have IDENTICAL free-running DIV
+        // then pair-stepped to equal cumulative CycleCount by the SerialLinkSession, have identical free-running DIV
         // counters for the whole run — so WaitForLinkedFriend's rDIV-jitter (each side spins on DIV bit 7 before asserting
         // its clock role) breaks the two sides identically and they livelock, both landing on USING_EXTERNAL_CLOCK, never
-        // one master + one slave. Advancing side B by half a DIV bit-7 period (32768 T-cycles) BEFORE connecting gives it a
+        // one master + one slave. Advancing side B by half a DIV bit-7 period (32768 T-cycles) before connecting gives it a
         // persistent DIV offset the session preserves (it re-anchors targets at connect, so the head start carries), so the
         // two sides read opposite DIV bit 7 at the jitter check and the rendezvous resolves to exactly one $01 and one $02.
-        // A frame stagger alone does NOT work: the session balances CycleCount, erasing any frame-level lead.
+        // A frame stagger alone does not work: the session balances CycleCount, erasing any frame-level lead.
         m_b.Machine.Run(tCycles: RendezvousDivOffsetCycles);
 
         var session = new SerialLinkSession(first: m_a, second: m_b);
@@ -255,8 +255,8 @@ internal sealed class ScriptedTradeDriver {
             // Seated and facing the console: mash A (only) until this side's script engine reports the console script
             // running — the press that lands after the turn animation settles fires `special TradeCenter`.
             Phase.Console => (ConsoleSide(machine: m_a, localFrame: localFrame), ConsoleSide(machine: m_b, localFrame: localFrame)),
-            // `special TradeCenter` runs the block exchange AND the party-selection / confirm UI internally. Plain A-mash
-            // does NOT trade: pressing A on a party mon opens a horizontal STATS|TRADE submenu with the cursor on STATS, so
+            // `special TradeCenter` runs the block exchange and the party-selection / confirm UI internally. Plain A-mash
+            // does not trade: pressing A on a party mon opens a horizontal STATS|TRADE submenu with the cursor on STATS, so
             // A there just opens the stats screen and loops (the cart's link menu loop). The trade is
             // reached only by RIGHT (cursor -> TRADE) then A. This cyclic A -> RIGHT -> A pattern
             // drives: party-menu A (open submenu) -> RIGHT (to TRADE) -> A (select) -> and the "mon for mon TRADE/CANCEL?"
@@ -434,7 +434,7 @@ internal sealed class ScriptedTradeDriver {
         var dir = ScriptedTradeHarness.Peek(machine: machine, address: ScriptedTradeHarness.PlayerDirectionAddress);
 
         // Climb off the entry / exit-warp row (Y=7) FIRST, to an open corridor row (Y=5), before shifting columns —
-        // walking along Y=7 re-triggers the TRADE_CENTER exit warp (maps/TradeCenter.asm (4,7)/(5,7)).
+        // walking along Y=7 re-triggers the TRADE_CENTER exit warp at (4,7)/(5,7).
         if (y > CorridorY) {
             return JoypadButtons.Up;
         }

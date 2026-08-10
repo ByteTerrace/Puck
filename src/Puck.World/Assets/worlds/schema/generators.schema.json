@@ -12,7 +12,8 @@
     ],
     "properties": {
       "name": {
-        "description": "The source\u0027s name, unique within the section, and the spelling a site\u0027s Source resolves against."
+        "description": "The source\u0027s name, unique within the section, and the spelling a site\u0027s Source resolves against.",
+        "type": "string"
       },
       "generator": {
         "description": "The source itself.",
@@ -22,7 +23,12 @@
             "$ref": "./common.schema.json#/$defs/WorldGeneratorSource"
           },
           "start": {
-            "default": null
+            "description": "Markov only: the context every emission begins from. Must name a declared context.",
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "bound": {
             "description": "Markov only: the maximum tokens ONE emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",

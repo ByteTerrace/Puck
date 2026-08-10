@@ -7,13 +7,13 @@ using Azure.Storage.Blobs.Models;
 namespace Puck.Storage;
 
 /// <summary>
-/// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read (§2.5.2, previously
-/// discarded), and a <c>BlobRequestConditions.IfMatch</c> on a conditional write, catching a 412 as a precondition
+/// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read, and a
+/// <c>BlobRequestConditions.IfMatch</c> on a conditional write, catching a 412 as a precondition
 /// failure. This is the true optimistic-concurrency path the cloud arc exercises; the same seam the local backend
 /// implements best-effort. <see cref="ListAsync"/> answers the discovery half of the contract — the caller's own
-/// listed keys, in the same object-relative key space a read/write address carries; an edge-shaped target routes LIST
+/// listed keys, in the same object-relative key space a read/write address carries; an edge-shaped target routes List
 /// to <see cref="AzureBlobObjectStorageTarget.DirectEndpoint"/> instead of the edge (see that property's remarks —
-/// the edge cannot serve List at all), addressing the account's STORED layout rather than the edge's view of it (see
+/// the edge cannot serve List at all), addressing the account's stored layout rather than the edge's view of it (see
 /// <see cref="GetContainerProjection"/>), and refusing by name when none is authored. <see cref="IDisposable"/> because it
 /// owns the lazily-created credential, which is also the credential a whole session's cloud access rides on: one
 /// <c>DefaultAzureCredential</c> covers both deployment shapes without an app registration — a player's machine signs

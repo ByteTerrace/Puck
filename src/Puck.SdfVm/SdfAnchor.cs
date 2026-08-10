@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// One resolved world-space pose — the smallest shared vocabulary a camera rig, a placed prop, or a diegetic screen
 /// needs to pose itself against something else: a position and an orientation, nothing else. Not a live reference (it
-/// carries no id back to whatever produced it) — a snapshot for THIS tick, republished the next.
+/// carries no id back to whatever produced it) — a snapshot for this tick, republished the next.
 /// <see cref="Views.ISdfCameraRig.Resolve"/> consumes one; <see cref="SdfAnchorTable"/> is the sim-side registry that
 /// produces them by name.
 /// </summary>
@@ -16,7 +16,7 @@ namespace Puck.SdfVm;
 public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation);
 
 /// <summary>
-/// Resolves a stable integer anchor id to its current pose — the READ half of the anchor contract. A camera rig, a
+/// Resolves a stable integer anchor id to its current pose — the read half of the anchor contract. A camera rig, a
 /// placed light, or any other consumer that wants to ride "whatever is publishing anchor 7 this tick" takes one of
 /// these rather than a concrete host type, so it never needs to know whether the anchor is a walking avatar, a static
 /// screen, or a placed stamp. Returns <see langword="false"/> for an id nothing currently publishes (a deleted
@@ -31,15 +31,15 @@ public interface ISdfAnchorSource {
 }
 
 /// <summary>
-/// The sim-side anchor registry — the WRITE half of the anchor contract <see cref="ISdfAnchorSource"/> reads. A host
+/// The sim-side anchor registry — the write half of the anchor contract <see cref="ISdfAnchorSource"/> reads. A host
 /// (the overworld's frame source, a future RTS scenario) owns one instance and, once per tick, republishes every
 /// pose a consumer might want to ride: a player body, the room's spawn point, a console's screen face, a placed
-/// camera's anchor stamp. Consumers never hold a reference to the thing that moved — they hold a NAME (resolved once
+/// camera's anchor stamp. Consumers never hold a reference to the thing that moved — they hold a name (resolved once
 /// to a stable id) and re-resolve the pose through this table every frame, so an anchor's producer can change
 /// identity entirely (a companion despawns and a different one takes its name) without the consumer noticing anything
 /// but a pose jump.
 /// <para>
-/// LIFETIME: an id is stable for the table's own lifetime once assigned — <see cref="Publish"/> keys on the NAME, not
+/// Lifetime: an id is stable for the table's own lifetime once assigned — <see cref="Publish"/> keys on the name, not
 /// insertion order, so publishing "player.0" every tick always returns the same id, and a name that stops being
 /// published simply stops resolving (<see cref="TryResolveAnchor"/> returns <see langword="false"/> for it) rather
 /// than being reassigned to a new name. The table never shrinks or recycles an id — a run with a bounded, small
@@ -47,15 +47,15 @@ public interface ISdfAnchorSource {
 /// short-lived anchors per tick would want a different design (out of scope for this table).
 /// </para>
 /// <para>
-/// SPACE: the table imposes no coordinate space of its own — every anchor a host publishes must agree with every
+/// Space: the table imposes no coordinate space of its own — every anchor a host publishes must agree with every
 /// consumer on what "the" space is for that run (the overworld anchors in its own render-relative space, subtracting
 /// the room's spawn point the same way every other render-relative quantity does). Mixing spaces within one table is
 /// a caller bug the table cannot catch.
 /// </para>
 /// <para>
-/// PER-TICK REPUBLISH: nothing here is diffed or dirtied — a host calls <see cref="Publish"/> for every anchor it
-/// wants live THIS tick, every tick, even when the pose hasn't moved (a static console screen republishes the same
-/// pose every frame). This keeps the table a pure function of "what does the host say is live right now," with no
+/// Per-tick republish: nothing here is diffed or dirtied — a host calls <see cref="Publish"/> for every anchor it
+/// wants live this tick, every tick, even when the pose hasn't moved (a static console screen republishes the same
+/// pose every frame). This keeps the table a pure function of what the host says is live right now, with no
 /// separate deregistration path to forget.
 /// </para>
 /// </summary>
@@ -64,11 +64,11 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
     private readonly List<SdfAnchor> m_poses = [];
     private readonly List<bool> m_live = [];
 
-    /// <summary>Marks every currently-assigned id as NOT live, ahead of this tick's <see cref="Publish"/> calls — the
+    /// <summary>Marks every currently-assigned id as not live, ahead of this tick's <see cref="Publish"/> calls — the
     /// other half of the "stops publishing, stops resolving" contract (see the type remarks). A host calls this once
     /// at the start of its per-tick anchor pass, then <see cref="Publish"/>es every anchor it wants live this tick;
     /// any id nobody re-publishes stays marked not-live, so <see cref="TryResolveAnchor"/> correctly reports it gone
-    /// (its NAME→id mapping is untouched — a later re-publish under the same name resumes the same id). Optional: a
+    /// (its name→id mapping is untouched — a later re-publish under the same name resumes the same id). Optional: a
     /// host that never removes an anchor (every name it ever publishes stays published for the run) need not call
     /// this at all — every id simply stays live forever.</summary>
     public void BeginTick() {
@@ -78,12 +78,12 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
     }
 
     /// <summary>Publishes (or republishes) <paramref name="name"/>'s pose for this tick, returning its stable id. The
-    /// first publish under a given name allocates a new id; every later publish under the SAME name (this tick or a
+    /// first publish under a given name allocates a new id; every later publish under the same name (this tick or a
     /// future one) reuses it — a consumer that resolved the id once via <see cref="TryResolveId"/> keeps working
     /// across ticks without re-resolving the name. Call once per anchor per tick; the host's own tick loop is the
     /// natural place (see the type remarks).</summary>
     /// <param name="name">The anchor's stable name (e.g. <c>"player.0"</c>, <c>"world.spawn"</c>,
-    /// <c>"console.2"</c>) — the ONE handle a consumer resolves against; case-sensitive, compared ordinally.</param>
+    /// <c>"console.2"</c>) — the one handle a consumer resolves against; case-sensitive, compared ordinally.</param>
     /// <param name="pose">This tick's pose.</param>
     /// <returns>The anchor's stable id.</returns>
     public int Publish(string name, in SdfAnchor pose) {
@@ -109,7 +109,7 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
     /// <see cref="TryResolveAnchor"/>).</summary>
     /// <param name="name">The anchor's name.</param>
     /// <param name="anchorId">The resolved id, or 0 when the name was never published.</param>
-    /// <returns><see langword="true"/> when the name has ever been published (even if not live THIS tick — see the
+    /// <returns><see langword="true"/> when the name has ever been published (even if not live this tick — see the
     /// type remarks; a name that stops publishing keeps its id, it just stops resolving via
     /// <see cref="TryResolveAnchor"/>).</returns>
     public bool TryResolveId(string name, out int anchorId) {

@@ -55,6 +55,6 @@ public sealed record BindingWheelSectorView(
     string? Label,
     string? Icon
 ) {
-    /// <summary>The command name, exposed for presentation/read-back only.</summary>
+    /// <summary>Gets the command name, exposed for presentation/read-back only.</summary>
     public string Command => Activation.Command;
 }

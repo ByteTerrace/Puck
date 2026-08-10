@@ -3,17 +3,16 @@ using Puck.Maths;
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The minimal, deterministic payload of one completed link-cable printer job — the machine-to-host event a
-/// <see cref="GamePrinterDevice"/> raises when it finishes a PRINT command. It is a plain immutable value (never emulated
-/// state, never serialized): a host receives it to turn a printed image into a texture, a creation, or a save, exactly
-/// the "cartridge-to-host events" seam the overworld plan sketches.
-/// <para>
+/// The immutable payload of one completed link-cable printer job — the event a <see cref="GamePrinterDevice"/> raises
+/// when it finishes a PRINT command. Never emulated state, never serialized: a host receives it to turn a printed
+/// image into a texture, a creation, or a save.
+/// </summary>
+/// <remarks>
 /// The pixels are the assembled band buffer with the PRINT command's palette applied — one byte per pixel, row-major,
 /// each byte a 0-3 printer shade (0 = lightest .. 3 = darkest) obtained by looking the 2-bit source dot up in the
 /// palette. A host maps those four shades to whatever colors it presents. The dimensions, margins, palette, and exposure
 /// are carried verbatim so a host can reproduce the exact sheet the game asked for.
-/// </para>
-/// </summary>
+/// </remarks>
 public sealed class GamePrintout {
     private readonly byte[] m_pixels;
 

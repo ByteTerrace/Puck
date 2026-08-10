@@ -2,12 +2,12 @@ namespace Puck.Abstractions.Pacing;
 
 /// <summary>
 /// The registry behind genlock's external-clock seam: every rhythm producer — a camera pane, a capture card, a network
-/// feed — registers a NAMED source and publishes its arrivals into its own per-source channel (each source free-runs at
-/// its own rate), and the HOST's election policy decides which single source, if any, is forwarded to the pacer-facing
+/// feed — registers a named source and publishes its arrivals into its own per-source channel (each source free-runs at
+/// its own rate), and the host's election policy decides which single source, if any, is forwarded to the pacer-facing
 /// <see cref="PacerClock"/>. Producers never decide; the pacer never sees more than one rhythm (a deadline grid can
 /// phase-align to exactly one clock — plurality is a selection problem, not a controller problem).
 /// <para>Election policy (the host's genlock configuration): <c>"off"</c> = never forward; a source id =
-/// forward exactly that source once it registers; absent (<see langword="null"/>) = AUTO — forward when exactly one
+/// forward exactly that source once it registers; absent (<see langword="null"/>) = auto — forward when exactly one
 /// source is registered, and refuse (silently un-elect) the moment a second appears, so plural rhythms never race for
 /// the pacer by accident. Registration is idempotent (a re-opened device keeps its channel), and network sources fit
 /// the same contract: whatever ingests the feed stamps <em>local receipt time</em> (<see cref="System.Diagnostics.Stopwatch"/>)
@@ -25,24 +25,26 @@ public sealed class ExternalClockRegistry {
     private volatile bool m_isContended;
 
     /// <summary>Initializes a new instance of the <see cref="ExternalClockRegistry"/> class.</summary>
-    /// <param name="electionPolicy"><see cref="PolicyOff"/>, a source id to elect, or <see langword="null"/> for AUTO
+    /// <param name="electionPolicy"><see cref="PolicyOff"/>, a source id to elect, or <see langword="null"/> for auto
     /// (elect only while exactly one source is registered).</param>
     public ExternalClockRegistry(string? electionPolicy = null) {
         m_policy = (string.IsNullOrWhiteSpace(value: electionPolicy) ? null : electionPolicy.Trim());
     }
 
-    /// <summary>Advances every time the election is re-evaluated (a new source registered), so a host can observe
-    /// election changes — pair with <see cref="IsContended"/> and <see cref="SourceIds"/> — without polling strings.</summary>
+    /// <summary>Gets a counter that advances every time the election is re-evaluated (a new source registered), so a
+    /// host can observe election changes — pair with <see cref="IsContended"/> and <see cref="SourceIds"/> — without
+    /// polling strings.</summary>
     public int ElectionGeneration => Volatile.Read(location: ref m_electionGeneration);
 
-    /// <summary>Whether plural sources are registered with no election to break the tie (the AUTO policy never picks
-    /// an arbitrary winner), so nothing forwards to <see cref="PacerClock"/> until the host names a source.</summary>
+    /// <summary>Gets a value indicating whether plural sources are registered with no election to break the tie (the
+    /// auto policy never picks an arbitrary winner), so nothing forwards to <see cref="PacerClock"/> until the host
+    /// names a source.</summary>
     public bool IsContended => m_isContended;
 
-    /// <summary>The single channel the render pacer reads — fed only by the elected source.</summary>
+    /// <summary>Gets the single channel the render pacer reads — fed only by the elected source.</summary>
     public ExternalPresentClock PacerClock { get; } = new();
 
-    /// <summary>The currently registered source ids (diagnostics).</summary>
+    /// <summary>Gets the currently registered source ids (diagnostics).</summary>
     public IReadOnlyList<string> SourceIds {
         get {
             lock (m_gate) {
@@ -116,7 +118,7 @@ public sealed class ExternalClockSource {
         SourceId = sourceId;
     }
 
-    /// <summary>The stable source identity this channel registered under.</summary>
+    /// <summary>Gets the stable source identity this channel registered under.</summary>
     public string SourceId { get; }
 
     /// <summary>Publishes a frame arrival (from the producer's own thread at its own cadence); forwarded to the pacer

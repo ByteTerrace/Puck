@@ -538,10 +538,13 @@ internal static class Subjects {
         return null;
     }
 
-    /// <summary>Proves the interpolation carries ONE rounding, inside the multiply, over a difference the subject wraps
-    /// BEFORE multiplying — the wrap order the oracle reproduces explicitly, because a difference taken at arbitrary
-    /// width would disagree wherever it leaves the carrier — and that both endpoints and the degenerate segment are
-    /// exact.</summary>
+    /// <summary>Proves the interpolation carries ONE rounding over the TRUE mathematical result — the exact rational
+    /// <c>from + (to − from)·amount</c>, formed in <see cref="BigInteger"/> with NO intermediate wrap at any width and
+    /// only ONE final rounding — and that both endpoints and the degenerate segment are exact. The oracle never
+    /// evaluates <c>to − from</c> as a standalone raw and never wraps it: it forms <c>fromRaw·2¹⁶ + (toRaw − fromRaw)·amountRaw</c>
+    /// as one arbitrary-width integer (exact; a <see cref="BigInteger"/> difference cannot leave any carrier) and rounds
+    /// that once, so it would catch a subject that wraps <c>to − from</c> before multiplying even where every operand
+    /// and the true result are representable.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -552,9 +555,8 @@ internal static class Subjects {
         var from = Raw(value: fromRaw);
         var to = Raw(value: toRaw);
         var amount = Raw(value: amountRaw);
-        var difference = new BigInteger(value: Oracles.WrapToRaw(value: (new BigInteger(value: toRaw) - fromRaw)));
-        var scaled = new BigInteger(value: Oracles.RoundDyadic(exact: (difference * amountRaw), shift: FixedQ4816.FractionBitCount));
-        var expected = Oracles.WrapToRaw(value: (new BigInteger(value: fromRaw) + scaled));
+        var exact = ((new BigInteger(value: fromRaw) << FixedQ4816.FractionBitCount) + ((new BigInteger(value: toRaw) - fromRaw) * amountRaw));
+        var expected = Oracles.RoundDyadic(exact: exact, shift: FixedQ4816.FractionBitCount);
 
         if (FixedQ4816.Lerp(from: from, to: to, amount: amount).Value != expected) { return $"the interpolation of ({fromRaw}, {toRaw}) at {amountRaw} is wrong"; }
         if (FixedQ4816.Lerp(from: from, to: to, amount: FixedQ4816.Zero) != from) { return $"the zero endpoint of ({fromRaw}, {toRaw}) is not exact"; }
@@ -745,6 +747,1511 @@ internal static class Subjects {
     // Spellings the grammar does not name: empty, blank, a bare sign, a bare point, two points, an exponent the style
     // does not admit, hexadecimal, and a word.
     private static readonly string[] FixedRefusedTexts = ["", "   ", "-", "+", ".", "1.2.3", "1e3", "0x10", "one"];
+
+    // ---- carrier scalar (FixedQ1648, Q16.48) ----
+    //
+    // A range-for-resolution scalar leaning toward resolution: a signed Q16.48 sibling of FixedQ4816 sharing the
+    // same sixty-four-bit long carrier and the same fused-arithmetic substrate (FusedArithmetic, FixedPointRounding),
+    // so its non-transcendental surface mirrors FixedQ4816's own scalar laws member for member, retargeted at forty-
+    // eight fraction bits and a sixteen-bit (not forty-eight-bit) integer range — well suited to a quantity, such as
+    // a reciprocal, whose useful values sit close to zero but span many decades of magnitude. It carries no
+    // transcendentals (Sqrt/Log2/Exp2/SinCos/Atan2/Pow), so those FixedQ4816 law shapes have no counterpart here.
+    // Every oracle below routes through the SAME shared-nothing Oracles primitives FixedQ4816's own laws use —
+    // RoundDyadic, RoundDyadicRatio, WrapToRaw, RoundRationalTiesToEven, NearestBinary64Bits, FloorQuotient,
+    // ExactDyadicDecimalSigned, DecimalToRaw — all already parameterized by shift, so nothing here re-implements a
+    // rounding or wrapping rule; only the shift argument changes from sixteen to forty-eight.
+
+    private static FixedQ1648 RawQ1648(long value) =>
+        FixedQ1648.FromRawBits(value: value);
+
+    private static readonly BigInteger Q1648OneRaw = (BigInteger.One << FixedQ1648.FractionBitCount);
+
+    /// <summary>The subject <see cref="FixedQ1648"/> multiply.</summary>
+    public static long Q1648Multiply(long a, long b) =>
+        (RawQ1648(value: a) * RawQ1648(value: b)).Value;
+
+    /// <summary>The subject <see cref="FixedQ1648"/> add.</summary>
+    public static long Q1648Add(long a, long b) =>
+        (RawQ1648(value: a) + RawQ1648(value: b)).Value;
+
+    /// <summary>The dyadic oracle for <see cref="FixedQ1648"/> multiply — one Q48 rounding, ties to even.</summary>
+    public static long Q1648MultiplyOracle(long a, long b) =>
+        Oracles.RoundDyadic(exact: ((BigInteger)a * b), shift: FixedQ1648.FractionBitCount);
+
+    /// <summary>The oracle for <see cref="FixedQ1648"/> add — exact, wrapped to the carrier.</summary>
+    public static long Q1648AddOracle(long a, long b) =>
+        Oracles.WrapToRaw(value: ((BigInteger)a + b));
+
+    private static long Q1648NonZeroDivisor(long b) =>
+        ((0L == b) ? 1L : b);
+
+    /// <summary>The subject <see cref="FixedQ1648"/> divide.</summary>
+    public static long Q1648Divide(long a, long b) =>
+        (RawQ1648(value: a) / RawQ1648(value: Q1648NonZeroDivisor(b: b))).Value;
+
+    /// <summary>The dyadic oracle for <see cref="FixedQ1648"/> divide — one Q48 rounding of the exact ratio, ties to
+    /// even.</summary>
+    public static long Q1648DivideOracle(long a, long b) =>
+        Oracles.RoundDyadicRatio(
+            numerator: new BigInteger(value: a),
+            denominator: new BigInteger(value: Q1648NonZeroDivisor(b: b)),
+            shift: FixedQ1648.FractionBitCount
+        );
+
+    // The exact rounded product/ratio as UNWRAPPED integers — FixedQ4816's ExactRoundedProduct/ExactRoundedRatio are
+    // locked to shift sixteen, so this type routes the SAME shared RoundRationalTiesToEven body at its own shift
+    // rather than reusing those two shift-sixteen convenience wrappers.
+    private static BigInteger Q1648ExactRoundedProduct(long a, long b) =>
+        Oracles.RoundRationalTiesToEven(numerator: (((BigInteger)a) * b), denominator: (BigInteger.One << FixedQ1648.FractionBitCount));
+    private static BigInteger Q1648ExactRoundedRatio(long a, long b) =>
+        Oracles.RoundRationalTiesToEven(numerator: (((BigInteger)a) << FixedQ1648.FractionBitCount), denominator: new BigInteger(value: b));
+
+    /// <summary>Proves the signed Q16.48 grid on its own ladder: the declared constants are one consistent fact, the
+    /// raw survives every construction route, the whole-number seam admits exactly the sixteen-bit integer range and
+    /// refuses the first value beyond on each side, and the double seam saturates at both extremes and rounds ties
+    /// to even.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648GridAndConstruction() {
+        var fractionBits = FixedQ1648.FractionBitCount;
+        var integerBits = FixedQ1648.IntegerBitCount;
+        var totalBits = FixedQ1648.TotalBitCount;
+
+        if (fractionBits != 48) { return $"FractionBitCount is {fractionBits}"; }
+        if (integerBits != (totalBits - fractionBits)) { return "the integer and fraction bit counts do not partition the carrier"; }
+        if (totalBits != 64) { return $"TotalBitCount is {totalBits}"; }
+        if (FixedQ1648.Radix != 2) { return $"Radix is {FixedQ1648.Radix}"; }
+        if (FixedQ1648.One.Value != (1L << FixedQ1648.FractionBitCount)) { return $"one has raw {FixedQ1648.One.Value}"; }
+        if (FixedQ1648.Epsilon.Value != 1L) { return $"epsilon has raw {FixedQ1648.Epsilon.Value}"; }
+        if (FixedQ1648.NegativeOne.Value != -FixedQ1648.One.Value) { return $"negative one has raw {FixedQ1648.NegativeOne.Value}"; }
+        if (FixedQ1648.Zero.Value != 0L) { return $"zero has raw {FixedQ1648.Zero.Value}"; }
+        if (default(FixedQ1648) != FixedQ1648.Zero) { return "the default value is not zero"; }
+        if (FixedQ1648.MaxValue.Value != long.MaxValue) { return $"MaxValue has raw {FixedQ1648.MaxValue.Value}"; }
+        if (FixedQ1648.MinValue.Value != long.MinValue) { return $"MinValue has raw {FixedQ1648.MinValue.Value}"; }
+        if (FixedQ1648.AdditiveIdentity != FixedQ1648.Zero) { return "the additive identity is not zero"; }
+        if (FixedQ1648.MultiplicativeIdentity != FixedQ1648.One) { return "the multiplicative identity is not one"; }
+
+        foreach (var raw in Q1648RawLadder) {
+            if (new FixedQ1648(Value: raw).Value != raw) { return $"the constructor moved the ladder raw {raw}"; }
+            if (FixedQ1648.FromRawBits(value: raw).Value != raw) { return $"FromRawBits moved the ladder raw {raw}"; }
+        }
+
+        foreach (var value in Q1648IntegerLadder) {
+            var expected = (new BigInteger(value: value) << FixedQ1648.FractionBitCount);
+
+            if (FixedQ1648.FromInteger(value: value).Value != expected) { return $"the whole number {value} did not scale to {expected}"; }
+        }
+
+        foreach (var value in (ReadOnlySpan<long>)[32768L, -32769L, long.MaxValue, long.MinValue]) {
+            if (!Throws<ArgumentOutOfRangeException>(action: () => _ = FixedQ1648.FromInteger(value: value), paramName: "value")) {
+                return $"the unrepresentable whole number {value} was accepted";
+            }
+        }
+
+        foreach (var (value, expected) in Q1648DoubleLadder) {
+            var converted = FixedQ1648.FromDouble(value: value);
+
+            if (converted.Value != expected) { return $"the double {value} converted to raw {converted.Value}, expected {expected}"; }
+        }
+
+        // The OUTWARD double seam (op_Explicit): one round-to-nearest-ties-to-even of the signed raw followed by an
+        // exact scale by 2⁻⁴⁸, read as an exact bit pattern against an oracle that assembles the IEEE-754 encoding
+        // from the format in BigInteger — the same oracle FixedQ4816's own projection law uses, at this format's own
+        // shift.
+        foreach (var raw in Q1648RawLadder) {
+            var projected = ((double)RawQ1648(value: raw));
+            var bits = BitConverter.DoubleToUInt64Bits(value: projected);
+            var expected = Oracles.NearestBinary64Bits(value: new BigInteger(value: raw), shift: FixedQ1648.FractionBitCount);
+
+            if (bits != expected) { return $"the raw {raw} projected to {bits:X16}, expected {expected:X16}"; }
+        }
+
+        return null;
+    }
+
+    // The construction ladder: both carrier extremes and their neighbourhoods, zero and both units, and the
+    // fraction/integer seam at 2^48 either side.
+    private static readonly long[] Q1648RawLadder = [
+        long.MinValue, (long.MinValue + 1L), -562949953421313L, -562949953421312L, -562949953421311L,
+        -281474976710657L, -281474976710656L, -1L, 0L, 1L, 281474976710656L, 281474976710657L,
+        562949953421311L, 562949953421312L, (long.MaxValue - 1L), long.MaxValue,
+    ];
+
+    // The whole-number seam: both admissible extremes ([-32768, 32767]) and the ordinary interior.
+    private static readonly long[] Q1648IntegerLadder = [-32768L, -32767L, -2L, -1L, 0L, 1L, 2L, 32766L, 32767L];
+
+    // The double seam, each expectation derived from the IEEE-754 layout and the 2⁻⁴⁸ grid rather than from the
+    // kernel: not-a-number and both infinities, the two saturations, the exactly-representable interior points, the
+    // four half-ULP ties whose ties-to-even resolution is the house rounding discipline, and the 2^15 seam — 32768
+    // scales to exactly 2⁶³ (one raw past MaxValue) while −32768 scales to exactly −2⁶³ (MinValue itself, exact
+    // rather than saturating).
+    private static readonly (double Value, long Expected)[] Q1648DoubleLadder = [
+        (double.NaN, 0L),
+        (double.NegativeInfinity, long.MinValue),
+        (double.PositiveInfinity, long.MaxValue),
+        (0d, 0L), (-0d, 0L),
+        (1d, 281474976710656L), (-1d, -281474976710656L),
+        (0.5d, 140737488355328L), (-0.5d, -140737488355328L),
+        ((1d / 281474976710656d), 1L), ((-1d) / 281474976710656d, -1L),
+        ((1d / 562949953421312d), 0L), ((-1d) / 562949953421312d, 0L),
+        ((3d / 562949953421312d), 2L), ((-3d) / 562949953421312d, -2L),
+        ((5d / 562949953421312d), 2L), ((-5d) / 562949953421312d, -2L),
+        (32768d, long.MaxValue),
+        (-32768d, long.MinValue),
+        (1e300d, long.MaxValue), (-1e300d, long.MinValue),
+    ];
+
+    /// <summary>Proves the wrapping additive surface is exact integer arithmetic on the raw, wrapped to the carrier:
+    /// subtraction, negation, unary plus, and the two translations agree with arbitrary-width arithmetic, negation is
+    /// an involution with <see cref="FixedQ1648.MinValue"/> as its own fixed point, and increment and decrement are
+    /// mutually inverse and equal to adding and subtracting one.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648AdditiveOpsExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ1648(value: rawA);
+        var b = RawQ1648(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+
+        if ((a - b).Value != Oracles.WrapToRaw(value: (exactA - exactB))) { return $"the difference of {rawA} and {rawB} is wrong"; }
+        if ((-a).Value != Oracles.WrapToRaw(value: -exactA)) { return $"the negation of {rawA} is wrong"; }
+        if ((+a) != a) { return $"unary plus moved the raw {rawA}"; }
+        if (-(-a) != a) { return $"negation is not an involution at {rawA}"; }
+
+        var incremented = a;
+        var decremented = a;
+
+        ++incremented;
+        --decremented;
+
+        if (incremented.Value != Oracles.WrapToRaw(value: (exactA + Q1648OneRaw))) { return $"the increment of {rawA} is wrong"; }
+        if (decremented.Value != Oracles.WrapToRaw(value: (exactA - Q1648OneRaw))) { return $"the decrement of {rawA} is wrong"; }
+        if (incremented != (a + FixedQ1648.One)) { return $"the increment of {rawA} differs from adding one"; }
+        if (decremented != (a - FixedQ1648.One)) { return $"the decrement of {rawA} differs from subtracting one"; }
+
+        var restored = incremented;
+
+        --restored;
+
+        if (restored != a) { return $"increment and decrement are not mutually inverse at {rawA}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves all seven checked operators against the EXACT value of their operation, which decides both
+    /// halves of the statement: the operator must return that value where it lands inside the carrier and must throw
+    /// where it does not, and must agree bit-for-bit with its wrapping sibling wherever it answers. The two division
+    /// refusals no swept operand can reach — a zero divisor on both routes, and the signed minimum over negative one —
+    /// are stated alongside.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648CheckedOpsRefuse(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = Q1648NonZeroDivisor(b: right[0]);
+        var a = RawQ1648(value: rawA);
+        var b = RawQ1648(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+
+        if (Q1648CheckedOperator(name: "addition", rawA: rawA, rawB: rawB, exact: (exactA + exactB), checkedCall: () => checked(a + b), uncheckedCall: () => (a + b)) is { } addition) { return addition; }
+        if (Q1648CheckedOperator(name: "subtraction", rawA: rawA, rawB: rawB, exact: (exactA - exactB), checkedCall: () => checked(a - b), uncheckedCall: () => (a - b)) is { } subtraction) { return subtraction; }
+        if (Q1648CheckedOperator(name: "negation", rawA: rawA, rawB: rawB, exact: -exactA, checkedCall: () => checked(-a), uncheckedCall: () => (-a)) is { } negation) { return negation; }
+        if (Q1648CheckedOperator(name: "increment", rawA: rawA, rawB: rawB, exact: (exactA + Q1648OneRaw), checkedCall: () => { var value = a; return checked(++value); }, uncheckedCall: () => { var value = a; return ++value; }) is { } increment) { return increment; }
+        if (Q1648CheckedOperator(name: "decrement", rawA: rawA, rawB: rawB, exact: (exactA - Q1648OneRaw), checkedCall: () => { var value = a; return checked(--value); }, uncheckedCall: () => { var value = a; return --value; }) is { } decrement) { return decrement; }
+        if (Q1648CheckedOperator(name: "multiplication", rawA: rawA, rawB: rawB, exact: Q1648ExactRoundedProduct(a: rawA, b: rawB), checkedCall: () => checked(a * b), uncheckedCall: () => (a * b)) is { } multiplication) { return multiplication; }
+        if (Q1648CheckedOperator(name: "division", rawA: rawA, rawB: rawB, exact: Q1648ExactRoundedRatio(a: rawA, b: rawB), checkedCall: () => checked(a / b), uncheckedCall: () => (a / b)) is { } division) { return division; }
+
+        if (!Throws<DivideByZeroException>(action: () => _ = (a / FixedQ1648.Zero))) { return "the unchecked division answered a zero divisor"; }
+        if (!Throws<DivideByZeroException>(action: () => _ = checked(a / FixedQ1648.Zero))) { return "the checked division answered a zero divisor"; }
+        if (!Throws<OverflowException>(action: () => _ = checked(FixedQ1648.MinValue / FixedQ1648.NegativeOne))) { return "the checked division answered MinValue over negative one"; }
+        if ((FixedQ1648.MinValue / FixedQ1648.NegativeOne) != FixedQ1648.MinValue) { return "the unchecked division of MinValue over negative one did not wrap to MinValue"; }
+
+        return null;
+    }
+
+    private static string? Q1648CheckedOperator(string name, long rawA, long rawB, BigInteger exact, Func<FixedQ1648> checkedCall, Func<FixedQ1648> uncheckedCall) {
+        if ((exact < long.MinValue) || (exact > long.MaxValue)) {
+            return (Throws<OverflowException>(action: () => _ = checkedCall())
+                ? null
+                : $"the checked {name} of ({rawA}, {rawB}) answered {exact}, which is outside the carrier, instead of refusing it");
+        }
+
+        var landed = checkedCall();
+
+        if (landed.Value != exact) { return $"the checked {name} of ({rawA}, {rawB}) is {landed.Value}, expected {exact}"; }
+        if (landed != uncheckedCall()) { return $"the checked and unchecked {name} of ({rawA}, {rawB}) disagree inside the carrier"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the remainder is the exact truncated remainder of the raws, that the operator's two
+    /// short-circuit divisors return the answer the oracle independently confirms, that the division identity and the
+    /// magnitude bound hold, and that the signed minimum over negative epsilon returns zero rather than raising the
+    /// platform's signed-remainder trap while a zero divisor still refuses.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648ModulusExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = Q1648NonZeroDivisor(b: right[0]);
+        var actual = (RawQ1648(value: rawA) % RawQ1648(value: rawB)).Value;
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var expected = (exactA - (BigInteger.Divide(dividend: exactA, divisor: exactB) * exactB));
+
+        if (actual != expected) { return $"the remainder of {rawA} over {rawB} is {actual}, expected {expected}"; }
+        if (BigInteger.Abs(value: new BigInteger(value: actual)) >= BigInteger.Abs(value: exactB)) { return $"the remainder of {rawA} over {rawB} is not smaller than the divisor"; }
+        if (!((exactA - actual) % exactB).IsZero) { return $"the division identity fails at ({rawA}, {rawB})"; }
+
+        foreach (var divisor in (ReadOnlySpan<long>)[1L, -1L]) {
+            if ((RawQ1648(value: rawA) % RawQ1648(value: divisor)) != FixedQ1648.Zero) { return $"the remainder of {rawA} over the raw {divisor} is not zero"; }
+        }
+
+        if ((FixedQ1648.MinValue % RawQ1648(value: -1L)) != FixedQ1648.Zero) { return "MinValue over the negative epsilon did not return zero"; }
+        if (!Throws<DivideByZeroException>(action: () => _ = (RawQ1648(value: rawA) % FixedQ1648.Zero))) { return "the remainder answered a zero divisor"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the order the carrier reports is the exact order of the raws, read through every operator the
+    /// comparison contract names, that the two selections and the clamp agree with arbitrary-width formulations of the
+    /// same rules, and that the boxed comparison and the inverted clamp range refuse as documented.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648OrderExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ1648(value: rawA);
+        var b = RawQ1648(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var order = BigInteger.Compare(left: exactA, right: exactB);
+
+        if (Math.Sign(value: a.CompareTo(other: b)) != order) { return $"the comparison of {rawA} and {rawB} reports the wrong order"; }
+        if ((a < b) != (order < 0)) { return $"the less-than operator disagrees at ({rawA}, {rawB})"; }
+        if ((a <= b) != (order <= 0)) { return $"the less-or-equal operator disagrees at ({rawA}, {rawB})"; }
+        if ((a > b) != (order > 0)) { return $"the greater-than operator disagrees at ({rawA}, {rawB})"; }
+        if ((a >= b) != (order >= 0)) { return $"the greater-or-equal operator disagrees at ({rawA}, {rawB})"; }
+        if (FixedQ1648.Max(x: a, y: b).Value != BigInteger.Max(left: exactA, right: exactB)) { return $"the maximum of {rawA} and {rawB} is wrong"; }
+        if (FixedQ1648.Min(x: a, y: b).Value != BigInteger.Min(left: exactA, right: exactB)) { return $"the minimum of {rawA} and {rawB} is wrong"; }
+        if (FixedQ1648.Sign(value: a) != exactA.Sign) { return $"the sign of {rawA} is wrong"; }
+        if ((0 == order) && (FixedQ1648.Max(x: a, y: b) != FixedQ1648.Min(x: a, y: b))) { return $"the two selections disagree at the equal pair {rawA}"; }
+
+        var bound = new BigInteger(value: left[1]);
+        var lower = BigInteger.Min(left: exactB, right: bound);
+        var upper = BigInteger.Max(left: exactB, right: bound);
+        var clamped = FixedQ1648.Clamp(value: a, minimum: RawQ1648(value: ((long)lower)), maximum: RawQ1648(value: ((long)upper)));
+
+        if (clamped.Value != BigInteger.Min(left: BigInteger.Max(left: exactA, right: lower), right: upper)) { return $"the clamp of {rawA} into [{lower}, {upper}] is wrong"; }
+        if (FixedQ1648.Clamp(value: a, minimum: a, maximum: a) != a) { return $"the clamp is not the identity inside its own bounds at {rawA}"; }
+
+        if (a.CompareTo(obj: null) != 1) { return "a null comparand does not sort first"; }
+        if (a.CompareTo(obj: ((object)a)) != 0) { return $"the boxed comparison of {rawA} against itself is not zero"; }
+        if (!Throws<ArgumentException>(action: () => _ = a.CompareTo(obj: "not a fixed-point value"), paramName: "obj")) { return "the boxed comparison accepted a foreign type"; }
+        if (!Throws<ArgumentException>(action: () => _ = FixedQ1648.Clamp(value: a, minimum: FixedQ1648.One, maximum: FixedQ1648.Zero))) { return "the clamp accepted an inverted range"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the two magnitude selections are the IEEE-754 <c>maximumMagnitude</c>/<c>minimumMagnitude</c>
+    /// rules re-derived in arbitrary width, that the two <c>*Number</c> members do not diverge from them, that the
+    /// pair is partitioned between the two selections, and that the absolute value and the sign transplant answer or
+    /// refuse exactly where the carrier's asymmetric magnitude says they must.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648MagnitudeSelectionExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ1648(value: rawA);
+        var b = RawQ1648(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var magnitudeA = BigInteger.Abs(value: exactA);
+        var magnitudeB = BigInteger.Abs(value: exactB);
+        var expectedMaximum = (((magnitudeA > magnitudeB) || ((magnitudeA == magnitudeB) && (exactA >= exactB))) ? a : b);
+        var expectedMinimum = (((magnitudeA < magnitudeB) || ((magnitudeA == magnitudeB) && (exactA <= exactB))) ? a : b);
+
+        if (FixedQ1648.MaxMagnitude(x: a, y: b) != expectedMaximum) { return $"the greater magnitude of ({rawA}, {rawB}) is wrong"; }
+        if (FixedQ1648.MinMagnitude(x: a, y: b) != expectedMinimum) { return $"the lesser magnitude of ({rawA}, {rawB}) is wrong"; }
+        if (FixedQ1648.MaxMagnitudeNumber(x: a, y: b) != FixedQ1648.MaxMagnitude(x: a, y: b)) { return $"MaxMagnitudeNumber diverges from MaxMagnitude at ({rawA}, {rawB})"; }
+        if (FixedQ1648.MinMagnitudeNumber(x: a, y: b) != FixedQ1648.MinMagnitude(x: a, y: b)) { return $"MinMagnitudeNumber diverges from MinMagnitude at ({rawA}, {rawB})"; }
+        if (unchecked(FixedQ1648.MaxMagnitude(x: a, y: b).Value + FixedQ1648.MinMagnitude(x: a, y: b).Value) != unchecked(rawA + rawB)) { return $"the two selections do not partition the pair ({rawA}, {rawB})"; }
+
+        if (long.MinValue == rawA) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ1648.Abs(value: a))) { return "the absolute value of MinValue was answered"; }
+        } else if (FixedQ1648.Abs(value: a).Value != magnitudeA) {
+            return $"the absolute value of {rawA} is wrong";
+        }
+
+        foreach (var sign in (ReadOnlySpan<long>)[rawB, -1L, 0L, 1L]) {
+            var target = RawQ1648(value: sign);
+
+            if ((long.MinValue == rawA) && (sign >= 0L)) {
+                if (!Throws<OverflowException>(action: () => _ = FixedQ1648.CopySign(value: a, sign: target))) { return $"the positive magnitude of MinValue was answered at sign {sign}"; }
+
+                continue;
+            }
+
+            var expected = ((sign < 0L) ? -magnitudeA : magnitudeA);
+
+            if (FixedQ1648.CopySign(value: a, sign: target).Value != Oracles.WrapToRaw(value: expected)) { return $"the sign transplant of {rawA} onto {sign} is wrong"; }
+        }
+
+        return null;
+    }
+
+    /// <summary>Proves the five integral parts against arbitrary-width derivations that each reach the answer by a
+    /// DIFFERENT route from the subject's bit masking, that they are mutually consistent, and that the two that can
+    /// leave the carrier refuse exactly inside the top integer bucket while the two that cannot never throw.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648IntegralPartsExact(long[] left, long[] right) {
+        if (Q1648IntegralPartsAt(raw: left[0]) is { } sampled) { return sampled; }
+
+        // The top integer bucket, always, whatever the domain drew: an exact top integer (no overflow either way), a
+        // fraction just below half (Ceiling overflows, Round does not), an exact half-tie on an ODD integer part
+        // (both round UP and so both overflow), and the maximal fraction (both overflow) — plus MinValue and its
+        // neighbour at the opposite extreme, where neither operation can ever overflow.
+        foreach (var raw in (ReadOnlySpan<long>)[
+            long.MinValue, (long.MinValue + 1L),
+            (32767L << 48),
+            ((32767L << 48) | ((1L << 47) - 1L)),
+            ((32767L << 48) | (1L << 47)),
+            long.MaxValue,
+        ]) {
+            if (Q1648IntegralPartsAt(raw: raw) is { } fixedRung) { return fixedRung; }
+        }
+
+        return null;
+    }
+
+    private static string? Q1648IntegralPartsAt(long raw) {
+        var value = RawQ1648(value: raw);
+        var exact = new BigInteger(value: raw);
+        var half = (Q1648OneRaw >> 1);
+        var floorUnits = Oracles.FloorQuotient(numerator: exact, denominator: Q1648OneRaw);
+        var floor = (floorUnits * Q1648OneRaw);
+        var fraction = (exact - floor);
+        var truncated = (BigInteger.Divide(dividend: exact, divisor: Q1648OneRaw) * Q1648OneRaw);
+        var ceiling = (-(Oracles.FloorQuotient(numerator: -exact, denominator: Q1648OneRaw)) * Q1648OneRaw);
+        var roundsUp = ((fraction > half) || ((fraction == half) && !((floorUnits & BigInteger.One).IsZero)));
+        var rounded = (roundsUp ? (floor + Q1648OneRaw) : floor);
+
+        if (FixedQ1648.Floor(value: value).Value != floor) { return $"the floor of {raw} is wrong"; }
+        if (FixedQ1648.Truncate(value: value).Value != truncated) { return $"the truncation of {raw} is wrong"; }
+        if (FixedQ1648.Fractional(value: value).Value != fraction) { return $"the fractional part of {raw} is wrong"; }
+
+        if (ceiling > long.MaxValue) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ1648.Ceiling(value: value))) { return $"the ceiling of {raw} was answered past the carrier"; }
+        } else if (FixedQ1648.Ceiling(value: value).Value != ceiling) {
+            return $"the ceiling of {raw} is wrong";
+        }
+
+        if (rounded > long.MaxValue) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ1648.Round(value: value))) { return $"the rounding of {raw} was answered past the carrier"; }
+        } else if (FixedQ1648.Round(value: value).Value != rounded) {
+            return $"the rounding of {raw} is wrong";
+        }
+
+        if ((floor + fraction) != exact) { return $"the floor and the fraction do not reconstruct {raw}"; }
+        if ((fraction.Sign < 0) || (fraction >= Q1648OneRaw)) { return $"the fractional part of {raw} left the unit interval"; }
+        if ((ceiling - floor) != (fraction.IsZero ? BigInteger.Zero : Q1648OneRaw)) { return $"the ceiling is not the floor plus one whole unit at {raw}"; }
+        if (truncated != ((raw < 0L) ? ceiling : floor)) { return $"the truncation of {raw} does not round toward zero"; }
+        if ((rounded != floor) && (rounded != ceiling)) { return $"the rounding of {raw} landed off the integer grid"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the seventeen classifiers on the carrier: integrality and its two parities read from the
+    /// value's exact divisibility rather than from a bit mask, the sign predicates from the exact sign, the eleven
+    /// constant ones holding their value at every raw, and the partitions the set must satisfy.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648PredicatesClassify(long[] left, long[] right) {
+        if (Q1648PredicatesAt(raw: left[0]) is { } sampled) { return sampled; }
+
+        foreach (var raw in (ReadOnlySpan<long>)[long.MinValue, long.MaxValue, 0L]) {
+            if (Q1648PredicatesAt(raw: raw) is { } extreme) { return extreme; }
+        }
+
+        return null;
+    }
+
+    private static string? Q1648PredicatesAt(long raw) {
+        var value = RawQ1648(value: raw);
+        var exact = new BigInteger(value: raw);
+        var isInteger = (exact % Q1648OneRaw).IsZero;
+        var wholeUnits = Oracles.FloorQuotient(numerator: exact, denominator: Q1648OneRaw);
+        var isEven = (isInteger && (wholeUnits % 2).IsZero);
+        var isOdd = (isInteger && !(wholeUnits % 2).IsZero);
+
+        if (FixedQ1648.IsInteger(value: value) != isInteger) { return $"the integrality of {raw} is wrong"; }
+        if (FixedQ1648.IsEvenInteger(value: value) != isEven) { return $"the even-integer classification of {raw} is wrong"; }
+        if (FixedQ1648.IsOddInteger(value: value) != isOdd) { return $"the odd-integer classification of {raw} is wrong"; }
+        if (FixedQ1648.IsZero(value: value) != exact.IsZero) { return $"the zero classification of {raw} is wrong"; }
+        if (FixedQ1648.IsNegative(value: value) != (exact.Sign < 0)) { return $"the negative classification of {raw} is wrong"; }
+        if (FixedQ1648.IsPositive(value: value) != (exact.Sign >= 0)) { return $"the positive classification of {raw} is wrong"; }
+        if (FixedQ1648.IsNormal(value: value) != !exact.IsZero) { return $"the normal classification of {raw} is wrong"; }
+
+        if (!FixedQ1648.IsCanonical(value: value)) { return $"{raw} is not canonical"; }
+        if (!FixedQ1648.IsFinite(value: value)) { return $"{raw} is not finite"; }
+        if (!FixedQ1648.IsRealNumber(value: value)) { return $"{raw} is not a real number"; }
+        if (FixedQ1648.IsComplexNumber(value: value)) { return $"{raw} claims to be a complex number"; }
+        if (FixedQ1648.IsImaginaryNumber(value: value)) { return $"{raw} claims to be an imaginary number"; }
+        if (FixedQ1648.IsInfinity(value: value)) { return $"{raw} claims to be infinite"; }
+        if (FixedQ1648.IsNegativeInfinity(value: value)) { return $"{raw} claims to be negative infinity"; }
+        if (FixedQ1648.IsPositiveInfinity(value: value)) { return $"{raw} claims to be positive infinity"; }
+        if (FixedQ1648.IsNaN(value: value)) { return $"{raw} claims not to be a number"; }
+        if (FixedQ1648.IsSubnormal(value: value)) { return $"{raw} claims to be subnormal"; }
+
+        if (FixedQ1648.IsPositive(value: value) == FixedQ1648.IsNegative(value: value)) { return $"the two sign classifiers agree at {raw}"; }
+        if (FixedQ1648.IsEvenInteger(value: value) && FixedQ1648.IsOddInteger(value: value)) { return $"{raw} is both even and odd"; }
+        if ((FixedQ1648.IsEvenInteger(value: value) || FixedQ1648.IsOddInteger(value: value)) != FixedQ1648.IsInteger(value: value)) { return $"the parities do not cover integrality at {raw}"; }
+        if (FixedQ1648.IsZero(value: value) == FixedQ1648.IsNormal(value: value)) { return $"the zero and normal classifiers agree at {raw}"; }
+        if (FixedQ1648.IsZero(value: value) != (value == FixedQ1648.AdditiveIdentity)) { return $"the zero classifier disagrees with the additive identity at {raw}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the interpolation carries ONE rounding over the TRUE mathematical result — the exact rational
+    /// <c>from + (to − from)·amount</c>, formed in <see cref="BigInteger"/> with NO intermediate wrap at any width and
+    /// only ONE final rounding — and that both endpoints and the degenerate segment are exact. The oracle never
+    /// evaluates <c>to − from</c> as a standalone raw and never wraps it: it forms <c>fromRaw·2⁴⁸ + (toRaw − fromRaw)·amountRaw</c>
+    /// as one arbitrary-width integer (exact; a <see cref="BigInteger"/> difference cannot leave any carrier) and rounds
+    /// that once, so it would catch a subject that wraps <c>to − from</c> before multiplying even where every operand
+    /// and the true result are representable.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648LerpEndpointsAndOracle(long[] left, long[] right) {
+        var fromRaw = left[0];
+        var toRaw = right[0];
+        var amountRaw = left[1];
+        var from = RawQ1648(value: fromRaw);
+        var to = RawQ1648(value: toRaw);
+        var amount = RawQ1648(value: amountRaw);
+        var exact = ((new BigInteger(value: fromRaw) << FixedQ1648.FractionBitCount) + ((new BigInteger(value: toRaw) - fromRaw) * amountRaw));
+        var expected = Oracles.RoundDyadic(exact: exact, shift: FixedQ1648.FractionBitCount);
+
+        if (FixedQ1648.Lerp(from: from, to: to, amount: amount).Value != expected) { return $"the interpolation of ({fromRaw}, {toRaw}) at {amountRaw} is wrong"; }
+        if (FixedQ1648.Lerp(from: from, to: to, amount: FixedQ1648.Zero) != from) { return $"the zero endpoint of ({fromRaw}, {toRaw}) is not exact"; }
+        if (FixedQ1648.Lerp(from: from, to: to, amount: FixedQ1648.One) != to) { return $"the unit endpoint of ({fromRaw}, {toRaw}) is not exact"; }
+        if (FixedQ1648.Lerp(from: from, to: from, amount: amount) != from) { return $"the degenerate segment at {fromRaw} moved under the amount {amountRaw}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the signed text seam at every swept raw: the rendering is the exact decimal expansion the
+    /// arbitrary-width oracle derives by a different route, the span formatter fills an exact destination and refuses
+    /// a short one, the text names a rational the oracle quantizes back onto the same raw, and all eight parse entry
+    /// points round-trip it.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648TextRoundTrip(long[] left, long[] right) {
+        var raw = left[0];
+        var value = RawQ1648(value: raw);
+        var rendered = value.ToString();
+        var reference = Oracles.ExactDyadicDecimalSigned(value: new BigInteger(value: raw), shift: FixedQ1648.FractionBitCount);
+
+        if (rendered != reference) { return $"the raw {raw} rendered as '{rendered}', expected '{reference}'"; }
+
+        Span<char> destination = stackalloc char[rendered.Length];
+
+        if (!value.TryFormat(destination: destination, charsWritten: out var written, format: "G", provider: null) ||
+            (written != rendered.Length) ||
+            !destination[..written].SequenceEqual(other: rendered)) { return $"the span format did not fill an exact destination at raw {raw}"; }
+
+        destination[..^1].Fill(value: '#');
+
+        if (value.TryFormat(destination: destination[..^1], charsWritten: out var refused, format: default, provider: null) || (0 != refused)) { return $"the span format claimed a short destination at raw {raw}"; }
+        if (destination[..^1].ContainsAnyExcept(value: '#')) { return $"the failed span format left a partial rendering behind at raw {raw}"; }
+        if (!Throws<FormatException>(action: () => { Span<char> local = stackalloc char[80]; _ = value.TryFormat(destination: local, charsWritten: out _, format: "N2", provider: null); })) { return $"the span format accepted an unsupported specifier at raw {raw}"; }
+
+        var point = rendered.IndexOf(value: '.');
+        var digits = ((point < 0) ? rendered : string.Concat(str0: rendered.AsSpan(start: 0, length: point), str1: rendered.AsSpan(start: (point + 1))));
+        var fractionDigitCount = ((point < 0) ? 0 : ((rendered.Length - point) - 1));
+        var (inRange, quantized) = Oracles.DecimalToRaw(
+            numerator: BigInteger.Parse(value: digits, provider: CultureInfo.InvariantCulture),
+            decimalExponent: fractionDigitCount,
+            shift: FixedQ1648.FractionBitCount
+        );
+
+        if (!inRange || (quantized != raw)) { return $"the oracle re-derived '{rendered}' as {quantized} (in range: {inRange}), not {raw}"; }
+
+        return Q1648ParseAll(text: rendered, provider: CultureInfo.InvariantCulture, expected: raw);
+    }
+
+    private static string? Q1648ParseAll(string text, IFormatProvider provider, long expected) {
+        if (FixedQ1648.Parse(s: text, provider: provider).Value != expected) { return $"the string parse of '{text}' did not return {expected}"; }
+        if (FixedQ1648.Parse(s: text.AsSpan(), provider: provider).Value != expected) { return $"the span parse of '{text}' did not return {expected}"; }
+        if (!FixedQ1648.TryParse(s: text, provider: provider, result: out var fromString) || (fromString.Value != expected)) { return $"the string try-parse of '{text}' did not return {expected}"; }
+        if (!FixedQ1648.TryParse(s: text.AsSpan(), provider: provider, result: out var fromSpan) || (fromSpan.Value != expected)) { return $"the span try-parse of '{text}' did not return {expected}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the signed text contract refuses malformed spellings on every entry point, that the null
+    /// string is refused (rather than accepted or defaulted) on both the throwing and the trying routes, and that the
+    /// asymmetric integer extremes — <c>-32768</c> round-trips exactly, <c>32768</c> is refused as an overflow rather
+    /// than accepted or mis-parsed — hold. Unlike <see cref="Q1648TextRoundTrip"/>, which sweeps sampled operands
+    /// through the oracle, this is the type's own fixed refusal ladder and needs no domain.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648TextRefusals() {
+        foreach (var text in Q1648RefusedTexts) {
+            if (FixedQ1648.TryParse(s: text, provider: CultureInfo.InvariantCulture, result: out var refused) || (refused != default)) { return $"'{text}' was accepted, or left raw {refused.Value} behind"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ1648.Parse(s: text, provider: CultureInfo.InvariantCulture))) { return $"the throwing string parse accepted '{text}'"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ1648.Parse(s: text.AsSpan(), provider: CultureInfo.InvariantCulture))) { return $"the throwing span parse accepted '{text}'"; }
+        }
+
+        if (!FixedQ1648.TryParse(s: "-32768", provider: CultureInfo.InvariantCulture, result: out var minText) || (minText != FixedQ1648.MinValue)) { return "the text '-32768' did not parse to MinValue"; }
+        if (FixedQ1648.TryParse(s: "32768", provider: CultureInfo.InvariantCulture, result: out var overflowed) || (overflowed != default)) { return "'32768' was accepted, or left a raw behind"; }
+        if (!Throws<OverflowException>(action: () => _ = FixedQ1648.Parse(s: "32768", provider: CultureInfo.InvariantCulture))) { return "the throwing parse of '32768' did not report an overflow"; }
+
+        if (FixedQ1648.TryParse(s: ((string?)null), provider: null, result: out var fromNull) || (fromNull != default)) { return "a null string was accepted"; }
+        if (!Throws<ArgumentNullException>(action: () => _ = FixedQ1648.Parse(s: ((string)null!), provider: null), paramName: "s")) { return "the throwing parse accepted a null string"; }
+
+        return null;
+    }
+
+    // Spellings the grammar does not name: empty, blank, a bare sign, a bare point, two points, an exponent the
+    // style does not admit, hexadecimal, and a word.
+    private static readonly string[] Q1648RefusedTexts = ["", "   ", "-", "+", ".", "1.2.3", "1e3", "0x10", "one"];
+
+    /// <summary>Proves the NumberStyles-taking Parse/TryParse overloads genuinely depend on their style argument for
+    /// FixedQ1648: <c>"1e3"</c> is refused under the default style (no <c>AllowExponent</c> — see
+    /// <see cref="Q1648RefusedTexts"/>) but accepted and quantized to exactly <c>1000</c> under
+    /// <see cref="NumberStyles.Float"/>, which adds <c>AllowExponent</c>. Every other FixedQ1648 text law
+    /// (<see cref="Q1648TextRoundTrip"/>, <see cref="Q1648TextRefusals"/>, <see cref="Q1648TextParseTies"/>) calls
+    /// only the two-argument provider-only overloads, which forward a FIXED style internally — the manifest's
+    /// "covered" mark on the four-argument overloads was earned by that forwarding alone, never by a caller-supplied
+    /// style actually changing the outcome, until this law.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648StyledParseIsGenuine() {
+        const string text = "1e3";
+        const long expected = (1000L << FixedQ1648.FractionBitCount);
+
+        if (!FixedQ1648.TryParse(s: text, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var fromString) || (fromString.Value != expected)) { return $"the styled string try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (!FixedQ1648.TryParse(s: text.AsSpan(), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var fromSpan) || (fromSpan.Value != expected)) { return $"the styled span try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (FixedQ1648.Parse(s: text, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture).Value != expected) { return $"the styled string parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (FixedQ1648.Parse(s: text.AsSpan(), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture).Value != expected) { return $"the styled span parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+
+        // The same text, through the same four-argument entry point, refused at a style lacking AllowExponent —
+        // Q1648TextRefusals already pins the provider-only route to this refusal; this pins the styled route too, so
+        // both ends of the discriminating pair are reached directly rather than through internal forwarding. The
+        // style spelled here matches FixedQ1648's own (private) DefaultParseStyle field-for-field.
+        const NumberStyles noExponentStyle = (NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite |
+                                               NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint);
+
+        if (FixedQ1648.TryParse(s: text, style: noExponentStyle, provider: CultureInfo.InvariantCulture, result: out var refused) || (refused != default)) { return $"'{text}' was accepted under a style without AllowExponent"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the half-ULP tie-break at FixedQ1648's own forty-nine-fraction-digit limit: a decimal string
+    /// exactly at the tie between two raws rounds to the EVEN one, one just below rounds down, and one just above
+    /// rounds up. <see cref="Q1648TextRoundTrip"/> alone never reaches this: every string it feeds Parse is the exact
+    /// terminating expansion of an already-representable raw, so the division remainder there is always zero and the
+    /// tie-break arithmetic never runs. <c>3·2⁻⁴⁹</c> is exactly forty-nine fraction decimal digits — the type's own
+    /// <c>fractionBitCount + 1</c> — so no digit is discarded and the remainder lands exactly on the tie at raw
+    /// <c>1.5</c>; perturbing only the forty-ninth digit moves the remainder one part in <c>2·5⁴⁹</c> off the tie
+    /// without touching the quotient.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648TextParseTies() {
+        const string below = "0.0000000000000053290705182007513940334320068359374";
+        const string exact = "0.0000000000000053290705182007513940334320068359375";
+        const string above = "0.0000000000000053290705182007513940334320068359376";
+
+        return
+            Q1648CheckTie(text: below, expectedRaw: 1) ??
+            Q1648CheckTie(text: exact, expectedRaw: 2) ??
+            Q1648CheckTie(text: above, expectedRaw: 2);
+    }
+
+    // Re-derives the expected raw from the string with the same shared-nothing oracle Q1648TextRoundTrip uses (never
+    // through FixedQ1648.Parse), then proves every parse entry point agrees with the CALLER's expected raw — so a
+    // wrong expectedRaw in the test itself, not just a wrong subject, would still be caught.
+    private static string? Q1648CheckTie(string text, long expectedRaw) {
+        var point = text.IndexOf(value: '.');
+        var digits = string.Concat(str0: text.AsSpan(start: 0, length: point), str1: text.AsSpan(start: (point + 1)));
+        var fractionDigitCount = ((text.Length - point) - 1);
+        var (inRange, quantized) = Oracles.DecimalToRaw(
+            numerator: BigInteger.Parse(value: digits, provider: CultureInfo.InvariantCulture),
+            decimalExponent: fractionDigitCount,
+            shift: FixedQ1648.FractionBitCount
+        );
+
+        if (!inRange || (quantized != expectedRaw)) { return $"the oracle quantized '{text}' as {quantized} (in range: {inRange}), not the expected {expectedRaw}"; }
+
+        return Q1648ParseAll(text: text, provider: CultureInfo.InvariantCulture, expected: expectedRaw);
+    }
+
+    /// <summary>Proves this carrier's FixedQ4816 (Q48.16) peer conversion. Narrowing
+    /// (<see cref="FixedQ1648.ToFixedQ4816"/>) is a single ties-to-even rounding at the thirty-two-bit fraction
+    /// difference and NEVER overflows, because Q16.48's whole range fits inside Q48.16's; widening
+    /// (<see cref="FixedQ1648.FromFixedQ4816"/> / <see cref="FixedQ1648.TryFromFixedQ4816"/>) is EXACT — it only
+    /// appends zero bits — but is gated by whether the source's integer part fits the sixteen-bit range, and the
+    /// widen-then-narrow round trip recovers the original Q48.16 value exactly wherever it succeeded.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648PeerConversionExact() {
+        foreach (var raw in Q1648RawLadder) {
+            var value = RawQ1648(value: raw);
+            var narrowed = value.ToFixedQ4816();
+            var expected = Oracles.RoundDyadic(exact: new BigInteger(value: raw), shift: (FixedQ1648.FractionBitCount - FixedQ4816.FractionBitCount));
+
+            if (narrowed.Value != expected) { return $"ToFixedQ4816 of raw {raw} is {narrowed.Value}, expected {expected}"; }
+        }
+
+        foreach (var raw in FixedQ4816RawLadderForPeer) {
+            var source = FixedQ4816.FromRawBits(value: raw);
+            var widened = (new BigInteger(value: raw) << (FixedQ1648.FractionBitCount - FixedQ4816.FractionBitCount));
+            var inRange = ((widened >= long.MinValue) && (widened <= long.MaxValue));
+            var succeeded = FixedQ1648.TryFromFixedQ4816(value: source, result: out var tried);
+
+            if (succeeded != inRange) { return $"TryFromFixedQ4816 of raw {raw} reported {succeeded}, expected {inRange}"; }
+
+            if (inRange) {
+                if (tried.Value != widened) { return $"TryFromFixedQ4816 of raw {raw} is {tried.Value}, expected {widened}"; }
+                if (FixedQ1648.FromFixedQ4816(value: source).Value != widened) { return $"FromFixedQ4816 of raw {raw} is wrong"; }
+                if (tried.ToFixedQ4816() != source) { return $"the widen-then-narrow round trip of raw {raw} did not recover the original Q48.16 value"; }
+            } else {
+                if (tried != default) { return $"TryFromFixedQ4816 of raw {raw} left a non-default result behind on failure"; }
+                if (!Throws<OverflowException>(action: () => _ = FixedQ1648.FromFixedQ4816(value: source))) { return $"FromFixedQ4816 of raw {raw} did not throw on overflow"; }
+            }
+        }
+
+        return null;
+    }
+
+    // FixedQ4816 raws spanning the Q16.48 integer boundary: comfortably inside, exactly at both edges, one raw past
+    // both edges, and a scattering of ordinary and wildly out-of-range values.
+    private static readonly long[] FixedQ4816RawLadderForPeer = [
+        0L, 65536L, -65536L,
+        (32767L << 16), ((32767L << 16) | 0xFFFFL),
+        (-32768L << 16),
+        (((-32768L) << 16) - 1L),
+        (32768L << 16),
+        long.MaxValue, long.MinValue,
+        (1L << 47), -(1L << 47),
+    ];
+
+    // ---- carrier scalar (FixedQ3232, Q32.32) ----
+    //
+    // A balanced scalar splitting integer and fraction bits evenly: a signed Q32.32 sibling of FixedQ4816 sharing
+    // the same sixty-four-bit long carrier and the same fused-arithmetic substrate (FusedArithmetic,
+    // FixedPointRounding), so its non-transcendental surface mirrors FixedQ4816's own scalar laws member for member,
+    // retargeted at thirty-two fraction bits and a thirty-two-bit (not forty-eight-bit) integer range — the balanced
+    // point between FixedQ4816's range-leaning Q48.16 split and FixedQ1648's resolution-leaning Q16.48 split. It
+    // carries no transcendentals (Sqrt/Log2/Exp2/SinCos/Atan2/Pow), so those FixedQ4816 law shapes have no
+    // counterpart here. Every oracle below routes through the SAME shared-nothing Oracles primitives FixedQ4816's
+    // own laws use — RoundDyadic, RoundDyadicRatio, WrapToRaw, RoundRationalTiesToEven, NearestBinary64Bits,
+    // FloorQuotient, ExactDyadicDecimalSigned, DecimalToRaw — all already parameterized by shift, so nothing here
+    // re-implements a rounding or wrapping rule; only the shift argument changes from sixteen to thirty-two.
+
+    private static FixedQ3232 RawQ3232(long value) =>
+        FixedQ3232.FromRawBits(value: value);
+
+    private static readonly BigInteger Q3232OneRaw = (BigInteger.One << FixedQ3232.FractionBitCount);
+
+    // FixedQ3232's private default parse style, restated so the laws can reach the styled overloads through the same
+    // grammar as the provider-only forwards and prove those overloads rather than receiving coverage by name alone.
+    private const NumberStyles Q3232DefaultParseStyle = (NumberStyles.AllowLeadingWhite |
+                                                          NumberStyles.AllowTrailingWhite |
+                                                          NumberStyles.AllowLeadingSign |
+                                                          NumberStyles.AllowDecimalPoint);
+
+    /// <summary>The subject <see cref="FixedQ3232"/> multiply.</summary>
+    public static long Q3232Multiply(long a, long b) =>
+        (RawQ3232(value: a) * RawQ3232(value: b)).Value;
+
+    /// <summary>The subject <see cref="FixedQ3232"/> add.</summary>
+    public static long Q3232Add(long a, long b) =>
+        (RawQ3232(value: a) + RawQ3232(value: b)).Value;
+
+    /// <summary>The dyadic oracle for <see cref="FixedQ3232"/> multiply — one Q32 rounding, ties to even.</summary>
+    public static long Q3232MultiplyOracle(long a, long b) =>
+        Oracles.RoundDyadic(exact: ((BigInteger)a * b), shift: FixedQ3232.FractionBitCount);
+
+    /// <summary>The oracle for <see cref="FixedQ3232"/> add — exact, wrapped to the carrier.</summary>
+    public static long Q3232AddOracle(long a, long b) =>
+        Oracles.WrapToRaw(value: ((BigInteger)a + b));
+
+    private static long Q3232NonZeroDivisor(long b) =>
+        ((0L == b) ? 1L : b);
+
+    /// <summary>The subject <see cref="FixedQ3232"/> divide.</summary>
+    public static long Q3232Divide(long a, long b) =>
+        (RawQ3232(value: a) / RawQ3232(value: Q3232NonZeroDivisor(b: b))).Value;
+
+    /// <summary>The dyadic oracle for <see cref="FixedQ3232"/> divide — one Q32 rounding of the exact ratio, ties to
+    /// even.</summary>
+    public static long Q3232DivideOracle(long a, long b) =>
+        Oracles.RoundDyadicRatio(
+            numerator: new BigInteger(value: a),
+            denominator: new BigInteger(value: Q3232NonZeroDivisor(b: b)),
+            shift: FixedQ3232.FractionBitCount
+        );
+
+    // The exact rounded product/ratio as UNWRAPPED integers — FixedQ4816's ExactRoundedProduct/ExactRoundedRatio are
+    // locked to shift sixteen, so this type routes the SAME shared RoundRationalTiesToEven body at its own shift
+    // rather than reusing those two shift-sixteen convenience wrappers.
+    private static BigInteger Q3232ExactRoundedProduct(long a, long b) =>
+        Oracles.RoundRationalTiesToEven(numerator: (((BigInteger)a) * b), denominator: (BigInteger.One << FixedQ3232.FractionBitCount));
+    private static BigInteger Q3232ExactRoundedRatio(long a, long b) =>
+        Oracles.RoundRationalTiesToEven(numerator: (((BigInteger)a) << FixedQ3232.FractionBitCount), denominator: new BigInteger(value: b));
+
+    /// <summary>Proves the signed Q32.32 grid on its own ladder: the declared constants are one consistent fact, the
+    /// raw survives every construction route, the whole-number seam admits exactly the thirty-two-bit integer range
+    /// and refuses the first value beyond on each side, and the double seam saturates at both extremes and rounds
+    /// ties to even.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232GridAndConstruction() {
+        var fractionBits = FixedQ3232.FractionBitCount;
+        var integerBits = FixedQ3232.IntegerBitCount;
+        var totalBits = FixedQ3232.TotalBitCount;
+
+        if (fractionBits != 32) { return $"FractionBitCount is {fractionBits}"; }
+        if (integerBits != (totalBits - fractionBits)) { return "the integer and fraction bit counts do not partition the carrier"; }
+        if (totalBits != 64) { return $"TotalBitCount is {totalBits}"; }
+        if (FixedQ3232.Radix != 2) { return $"Radix is {FixedQ3232.Radix}"; }
+        if (FixedQ3232.One.Value != (1L << FixedQ3232.FractionBitCount)) { return $"one has raw {FixedQ3232.One.Value}"; }
+        if (FixedQ3232.Epsilon.Value != 1L) { return $"epsilon has raw {FixedQ3232.Epsilon.Value}"; }
+        if (FixedQ3232.NegativeOne.Value != -FixedQ3232.One.Value) { return $"negative one has raw {FixedQ3232.NegativeOne.Value}"; }
+        if (FixedQ3232.Zero.Value != 0L) { return $"zero has raw {FixedQ3232.Zero.Value}"; }
+        if (default(FixedQ3232) != FixedQ3232.Zero) { return "the default value is not zero"; }
+        if (FixedQ3232.MaxValue.Value != long.MaxValue) { return $"MaxValue has raw {FixedQ3232.MaxValue.Value}"; }
+        if (FixedQ3232.MinValue.Value != long.MinValue) { return $"MinValue has raw {FixedQ3232.MinValue.Value}"; }
+        if (FixedQ3232.AdditiveIdentity != FixedQ3232.Zero) { return "the additive identity is not zero"; }
+        if (FixedQ3232.MultiplicativeIdentity != FixedQ3232.One) { return "the multiplicative identity is not one"; }
+
+        foreach (var raw in Q3232RawLadder) {
+            if (new FixedQ3232(Value: raw).Value != raw) { return $"the constructor moved the ladder raw {raw}"; }
+            if (FixedQ3232.FromRawBits(value: raw).Value != raw) { return $"FromRawBits moved the ladder raw {raw}"; }
+        }
+
+        foreach (var value in Q3232IntegerLadder) {
+            var expected = (new BigInteger(value: value) << FixedQ3232.FractionBitCount);
+
+            if (FixedQ3232.FromInteger(value: value).Value != expected) { return $"the whole number {value} did not scale to {expected}"; }
+        }
+
+        foreach (var value in (ReadOnlySpan<long>)[2147483648L, -2147483649L, long.MaxValue, long.MinValue]) {
+            if (!Throws<ArgumentOutOfRangeException>(action: () => _ = FixedQ3232.FromInteger(value: value), paramName: "value")) {
+                return $"the unrepresentable whole number {value} was accepted";
+            }
+        }
+
+        foreach (var (value, expected) in Q3232DoubleLadder) {
+            var converted = FixedQ3232.FromDouble(value: value);
+
+            if (converted.Value != expected) { return $"the double {value} converted to raw {converted.Value}, expected {expected}"; }
+        }
+
+        // The OUTWARD double seam (op_Explicit): one round-to-nearest-ties-to-even of the signed raw followed by an
+        // exact scale by 2⁻³², read as an exact bit pattern against an oracle that assembles the IEEE-754 encoding
+        // from the format in BigInteger — the same oracle FixedQ4816's own projection law uses, at this format's own
+        // shift.
+        foreach (var raw in Q3232RawLadder) {
+            var projected = ((double)RawQ3232(value: raw));
+            var bits = BitConverter.DoubleToUInt64Bits(value: projected);
+            var expected = Oracles.NearestBinary64Bits(value: new BigInteger(value: raw), shift: FixedQ3232.FractionBitCount);
+
+            if (bits != expected) { return $"the raw {raw} projected to {bits:X16}, expected {expected:X16}"; }
+        }
+
+        return null;
+    }
+
+    // The construction ladder: both carrier extremes and their neighbourhoods, zero and both units, and the
+    // fraction/integer seam at 2^32 either side.
+    private static readonly long[] Q3232RawLadder = [
+        long.MinValue, (long.MinValue + 1L), -8589934593L, -8589934592L, -8589934591L,
+        -4294967297L, -4294967296L, -1L, 0L, 1L, 4294967296L, 4294967297L,
+        8589934591L, 8589934592L, (long.MaxValue - 1L), long.MaxValue,
+    ];
+
+    // The whole-number seam: both admissible extremes ([-2147483648, 2147483647]) and the ordinary interior.
+    private static readonly long[] Q3232IntegerLadder = [-2147483648L, -2147483647L, -2L, -1L, 0L, 1L, 2L, 2147483646L, 2147483647L];
+
+    // The double seam, each expectation derived from the IEEE-754 layout and the 2⁻³² grid rather than from the
+    // kernel: not-a-number and both infinities, both ends of the subnormal band, the two saturations, the last double
+    // grid point inside each carrier edge, the exactly-representable interior points, the four half-ULP ties whose
+    // ties-to-even resolution is the house rounding discipline, and the 2^31 seam —
+    // 2147483648 scales to exactly 2⁶³ (one raw past MaxValue) while −2147483648 scales to exactly −2⁶³ (MinValue
+    // itself, exact rather than saturating).
+    private static readonly (double Value, long Expected)[] Q3232DoubleLadder = [
+        (double.NaN, 0L),
+        (double.NegativeInfinity, long.MinValue),
+        (double.PositiveInfinity, long.MaxValue),
+        (0d, 0L), (-0d, 0L),
+        (double.Epsilon, 0L), (-double.Epsilon, 0L),
+        (BitConverter.Int64BitsToDouble(value: 0x000FFFFFFFFFFFFF), 0L),
+        (BitConverter.Int64BitsToDouble(value: unchecked((long)0x800FFFFFFFFFFFFFUL)), 0L),
+        (1d, 4294967296L), (-1d, -4294967296L),
+        (0.5d, 2147483648L), (-0.5d, -2147483648L),
+        ((1d / 4294967296d), 1L), ((-1d) / 4294967296d, -1L),
+        ((1d / 8589934592d), 0L), ((-1d) / 8589934592d, 0L),
+        ((3d / 8589934592d), 2L), ((-3d) / 8589934592d, -2L),
+        ((5d / 8589934592d), 2L), ((-5d) / 8589934592d, -2L),
+        (BitConverter.Int64BitsToDouble(value: 0x41DFFFFFFFFFFFFF), 9223372036854774784L),
+        (BitConverter.Int64BitsToDouble(value: unchecked((long)0xC1DFFFFFFFFFFFFFUL)), (long.MinValue + 1024L)),
+        (2147483648d, long.MaxValue),
+        (-2147483648d, long.MinValue),
+        (1e300d, long.MaxValue), (-1e300d, long.MinValue),
+    ];
+
+    /// <summary>Proves the wrapping additive surface is exact integer arithmetic on the raw, wrapped to the carrier:
+    /// subtraction, negation, unary plus, and the two translations agree with arbitrary-width arithmetic, negation is
+    /// an involution with <see cref="FixedQ3232.MinValue"/> as its own fixed point, and increment and decrement are
+    /// mutually inverse and equal to adding and subtracting one.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232AdditiveOpsExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ3232(value: rawA);
+        var b = RawQ3232(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+
+        if ((a - b).Value != Oracles.WrapToRaw(value: (exactA - exactB))) { return $"the difference of {rawA} and {rawB} is wrong"; }
+        if ((-a).Value != Oracles.WrapToRaw(value: -exactA)) { return $"the negation of {rawA} is wrong"; }
+        if ((+a) != a) { return $"unary plus moved the raw {rawA}"; }
+        if (-(-a) != a) { return $"negation is not an involution at {rawA}"; }
+
+        var incremented = a;
+        var decremented = a;
+
+        ++incremented;
+        --decremented;
+
+        if (incremented.Value != Oracles.WrapToRaw(value: (exactA + Q3232OneRaw))) { return $"the increment of {rawA} is wrong"; }
+        if (decremented.Value != Oracles.WrapToRaw(value: (exactA - Q3232OneRaw))) { return $"the decrement of {rawA} is wrong"; }
+        if (incremented != (a + FixedQ3232.One)) { return $"the increment of {rawA} differs from adding one"; }
+        if (decremented != (a - FixedQ3232.One)) { return $"the decrement of {rawA} differs from subtracting one"; }
+
+        var restored = incremented;
+
+        --restored;
+
+        if (restored != a) { return $"increment and decrement are not mutually inverse at {rawA}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves all seven checked operators against the EXACT value of their operation, which decides both
+    /// halves of the statement: the operator must return that value where it lands inside the carrier and must throw
+    /// where it does not, and must agree bit-for-bit with its wrapping sibling wherever it answers. The two division
+    /// refusals no swept operand can reach — a zero divisor on both routes, and the signed minimum over negative one —
+    /// are stated alongside.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232CheckedOpsRefuse(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = Q3232NonZeroDivisor(b: right[0]);
+        var a = RawQ3232(value: rawA);
+        var b = RawQ3232(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+
+        if (Q3232CheckedOperator(name: "addition", rawA: rawA, rawB: rawB, exact: (exactA + exactB), checkedCall: () => checked(a + b), uncheckedCall: () => (a + b)) is { } addition) { return addition; }
+        if (Q3232CheckedOperator(name: "subtraction", rawA: rawA, rawB: rawB, exact: (exactA - exactB), checkedCall: () => checked(a - b), uncheckedCall: () => (a - b)) is { } subtraction) { return subtraction; }
+        if (Q3232CheckedOperator(name: "negation", rawA: rawA, rawB: rawB, exact: -exactA, checkedCall: () => checked(-a), uncheckedCall: () => (-a)) is { } negation) { return negation; }
+        if (Q3232CheckedOperator(name: "increment", rawA: rawA, rawB: rawB, exact: (exactA + Q3232OneRaw), checkedCall: () => { var value = a; return checked(++value); }, uncheckedCall: () => { var value = a; return ++value; }) is { } increment) { return increment; }
+        if (Q3232CheckedOperator(name: "decrement", rawA: rawA, rawB: rawB, exact: (exactA - Q3232OneRaw), checkedCall: () => { var value = a; return checked(--value); }, uncheckedCall: () => { var value = a; return --value; }) is { } decrement) { return decrement; }
+        if (Q3232CheckedOperator(name: "multiplication", rawA: rawA, rawB: rawB, exact: Q3232ExactRoundedProduct(a: rawA, b: rawB), checkedCall: () => checked(a * b), uncheckedCall: () => (a * b)) is { } multiplication) { return multiplication; }
+        if (Q3232CheckedOperator(name: "division", rawA: rawA, rawB: rawB, exact: Q3232ExactRoundedRatio(a: rawA, b: rawB), checkedCall: () => checked(a / b), uncheckedCall: () => (a / b)) is { } division) { return division; }
+
+        if (!Throws<DivideByZeroException>(action: () => _ = (a / FixedQ3232.Zero))) { return "the unchecked division answered a zero divisor"; }
+        if (!Throws<DivideByZeroException>(action: () => _ = checked(a / FixedQ3232.Zero))) { return "the checked division answered a zero divisor"; }
+        if (!Throws<OverflowException>(action: () => _ = checked(FixedQ3232.MinValue / FixedQ3232.NegativeOne))) { return "the checked division answered MinValue over negative one"; }
+        if ((FixedQ3232.MinValue / FixedQ3232.NegativeOne) != FixedQ3232.MinValue) { return "the unchecked division of MinValue over negative one did not wrap to MinValue"; }
+
+        return null;
+    }
+
+    private static string? Q3232CheckedOperator(string name, long rawA, long rawB, BigInteger exact, Func<FixedQ3232> checkedCall, Func<FixedQ3232> uncheckedCall) {
+        if ((exact < long.MinValue) || (exact > long.MaxValue)) {
+            return (Throws<OverflowException>(action: () => _ = checkedCall())
+                ? null
+                : $"the checked {name} of ({rawA}, {rawB}) answered {exact}, which is outside the carrier, instead of refusing it");
+        }
+
+        var landed = checkedCall();
+
+        if (landed.Value != exact) { return $"the checked {name} of ({rawA}, {rawB}) is {landed.Value}, expected {exact}"; }
+        if (landed != uncheckedCall()) { return $"the checked and unchecked {name} of ({rawA}, {rawB}) disagree inside the carrier"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the remainder is the exact truncated remainder of the raws, that the operator's two
+    /// short-circuit divisors return the answer the oracle independently confirms, that the division identity and the
+    /// magnitude bound hold, and that the signed minimum over negative epsilon returns zero rather than raising the
+    /// platform's signed-remainder trap while a zero divisor still refuses.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232ModulusExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = Q3232NonZeroDivisor(b: right[0]);
+        var actual = (RawQ3232(value: rawA) % RawQ3232(value: rawB)).Value;
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var expected = (exactA - (BigInteger.Divide(dividend: exactA, divisor: exactB) * exactB));
+
+        if (actual != expected) { return $"the remainder of {rawA} over {rawB} is {actual}, expected {expected}"; }
+        if (BigInteger.Abs(value: new BigInteger(value: actual)) >= BigInteger.Abs(value: exactB)) { return $"the remainder of {rawA} over {rawB} is not smaller than the divisor"; }
+        if (!((exactA - actual) % exactB).IsZero) { return $"the division identity fails at ({rawA}, {rawB})"; }
+
+        foreach (var divisor in (ReadOnlySpan<long>)[1L, -1L]) {
+            if ((RawQ3232(value: rawA) % RawQ3232(value: divisor)) != FixedQ3232.Zero) { return $"the remainder of {rawA} over the raw {divisor} is not zero"; }
+        }
+
+        if ((FixedQ3232.MinValue % RawQ3232(value: -1L)) != FixedQ3232.Zero) { return "MinValue over the negative epsilon did not return zero"; }
+        if (!Throws<DivideByZeroException>(action: () => _ = (RawQ3232(value: rawA) % FixedQ3232.Zero))) { return "the remainder answered a zero divisor"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the order the carrier reports is the exact order of the raws, read through every operator the
+    /// comparison contract names, that the two selections and the clamp agree with arbitrary-width formulations of the
+    /// same rules, and that the boxed comparison and the inverted clamp range refuse as documented.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232OrderExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ3232(value: rawA);
+        var b = RawQ3232(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var order = BigInteger.Compare(left: exactA, right: exactB);
+
+        if (Math.Sign(value: a.CompareTo(other: b)) != order) { return $"the comparison of {rawA} and {rawB} reports the wrong order"; }
+        if ((a < b) != (order < 0)) { return $"the less-than operator disagrees at ({rawA}, {rawB})"; }
+        if ((a <= b) != (order <= 0)) { return $"the less-or-equal operator disagrees at ({rawA}, {rawB})"; }
+        if ((a > b) != (order > 0)) { return $"the greater-than operator disagrees at ({rawA}, {rawB})"; }
+        if ((a >= b) != (order >= 0)) { return $"the greater-or-equal operator disagrees at ({rawA}, {rawB})"; }
+        if (FixedQ3232.Max(x: a, y: b).Value != BigInteger.Max(left: exactA, right: exactB)) { return $"the maximum of {rawA} and {rawB} is wrong"; }
+        if (FixedQ3232.Min(x: a, y: b).Value != BigInteger.Min(left: exactA, right: exactB)) { return $"the minimum of {rawA} and {rawB} is wrong"; }
+        if (FixedQ3232.Sign(value: a) != exactA.Sign) { return $"the sign of {rawA} is wrong"; }
+        if ((0 == order) && (FixedQ3232.Max(x: a, y: b) != FixedQ3232.Min(x: a, y: b))) { return $"the two selections disagree at the equal pair {rawA}"; }
+
+        var bound = new BigInteger(value: left[1]);
+        var lower = BigInteger.Min(left: exactB, right: bound);
+        var upper = BigInteger.Max(left: exactB, right: bound);
+        var clamped = FixedQ3232.Clamp(value: a, minimum: RawQ3232(value: ((long)lower)), maximum: RawQ3232(value: ((long)upper)));
+
+        if (clamped.Value != BigInteger.Min(left: BigInteger.Max(left: exactA, right: lower), right: upper)) { return $"the clamp of {rawA} into [{lower}, {upper}] is wrong"; }
+        if (FixedQ3232.Clamp(value: a, minimum: a, maximum: a) != a) { return $"the clamp is not the identity inside its own bounds at {rawA}"; }
+
+        if (a.CompareTo(obj: null) != 1) { return "a null comparand does not sort first"; }
+        if (a.CompareTo(obj: ((object)a)) != 0) { return $"the boxed comparison of {rawA} against itself is not zero"; }
+        if (!Throws<ArgumentException>(action: () => _ = a.CompareTo(obj: "not a fixed-point value"), paramName: "obj")) { return "the boxed comparison accepted a foreign type"; }
+        if (!Throws<ArgumentException>(action: () => _ = FixedQ3232.Clamp(value: a, minimum: FixedQ3232.One, maximum: FixedQ3232.Zero))) { return "the clamp accepted an inverted range"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the two magnitude selections are the IEEE-754 <c>maximumMagnitude</c>/<c>minimumMagnitude</c>
+    /// rules re-derived in arbitrary width, that the two <c>*Number</c> members do not diverge from them, that the
+    /// pair is partitioned between the two selections, and that the absolute value and the sign transplant answer or
+    /// refuse exactly where the carrier's asymmetric magnitude says they must.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232MagnitudeSelectionExact(long[] left, long[] right) {
+        var rawA = left[0];
+        var rawB = right[0];
+        var a = RawQ3232(value: rawA);
+        var b = RawQ3232(value: rawB);
+        var exactA = new BigInteger(value: rawA);
+        var exactB = new BigInteger(value: rawB);
+        var magnitudeA = BigInteger.Abs(value: exactA);
+        var magnitudeB = BigInteger.Abs(value: exactB);
+        var expectedMaximum = (((magnitudeA > magnitudeB) || ((magnitudeA == magnitudeB) && (exactA >= exactB))) ? a : b);
+        var expectedMinimum = (((magnitudeA < magnitudeB) || ((magnitudeA == magnitudeB) && (exactA <= exactB))) ? a : b);
+
+        if (FixedQ3232.MaxMagnitude(x: a, y: b) != expectedMaximum) { return $"the greater magnitude of ({rawA}, {rawB}) is wrong"; }
+        if (FixedQ3232.MinMagnitude(x: a, y: b) != expectedMinimum) { return $"the lesser magnitude of ({rawA}, {rawB}) is wrong"; }
+        if (FixedQ3232.MaxMagnitudeNumber(x: a, y: b) != FixedQ3232.MaxMagnitude(x: a, y: b)) { return $"MaxMagnitudeNumber diverges from MaxMagnitude at ({rawA}, {rawB})"; }
+        if (FixedQ3232.MinMagnitudeNumber(x: a, y: b) != FixedQ3232.MinMagnitude(x: a, y: b)) { return $"MinMagnitudeNumber diverges from MinMagnitude at ({rawA}, {rawB})"; }
+        if (unchecked(FixedQ3232.MaxMagnitude(x: a, y: b).Value + FixedQ3232.MinMagnitude(x: a, y: b).Value) != unchecked(rawA + rawB)) { return $"the two selections do not partition the pair ({rawA}, {rawB})"; }
+
+        if (long.MinValue == rawA) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Abs(value: a))) { return "the absolute value of MinValue was answered"; }
+        } else if (FixedQ3232.Abs(value: a).Value != magnitudeA) {
+            return $"the absolute value of {rawA} is wrong";
+        }
+
+        foreach (var sign in (ReadOnlySpan<long>)[rawB, -1L, 0L, 1L]) {
+            var target = RawQ3232(value: sign);
+
+            if ((long.MinValue == rawA) && (sign >= 0L)) {
+                if (!Throws<OverflowException>(action: () => _ = FixedQ3232.CopySign(value: a, sign: target))) { return $"the positive magnitude of MinValue was answered at sign {sign}"; }
+
+                continue;
+            }
+
+            var expected = ((sign < 0L) ? -magnitudeA : magnitudeA);
+
+            if (FixedQ3232.CopySign(value: a, sign: target).Value != Oracles.WrapToRaw(value: expected)) { return $"the sign transplant of {rawA} onto {sign} is wrong"; }
+        }
+
+        return null;
+    }
+
+    /// <summary>Proves the five integral parts against arbitrary-width derivations that each reach the answer by a
+    /// DIFFERENT route from the subject's bit masking, that they are mutually consistent, and that the two that can
+    /// leave the carrier refuse exactly inside the top integer bucket while the two that cannot never throw.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232IntegralPartsExact(long[] left, long[] right) {
+        if (Q3232IntegralPartsAt(raw: left[0]) is { } sampled) { return sampled; }
+
+        // The top integer bucket, always, whatever the domain drew: an exact top integer (no overflow either way), a
+        // fraction just below half (Ceiling overflows, Round does not), an exact half-tie on an ODD integer part
+        // (both round UP and so both overflow), and the maximal fraction (both overflow) — plus MinValue and its
+        // neighbour at the opposite extreme, where neither operation can ever overflow.
+        foreach (var raw in (ReadOnlySpan<long>)[
+            long.MinValue, (long.MinValue + 1L),
+            (2147483647L << 32),
+            ((2147483647L << 32) | ((1L << 31) - 1L)),
+            ((2147483647L << 32) | (1L << 31)),
+            long.MaxValue,
+        ]) {
+            if (Q3232IntegralPartsAt(raw: raw) is { } fixedRung) { return fixedRung; }
+        }
+
+        return null;
+    }
+
+    private static string? Q3232IntegralPartsAt(long raw) {
+        var value = RawQ3232(value: raw);
+        var exact = new BigInteger(value: raw);
+        var half = (Q3232OneRaw >> 1);
+        var floorUnits = Oracles.FloorQuotient(numerator: exact, denominator: Q3232OneRaw);
+        var floor = (floorUnits * Q3232OneRaw);
+        var fraction = (exact - floor);
+        var truncated = (BigInteger.Divide(dividend: exact, divisor: Q3232OneRaw) * Q3232OneRaw);
+        var ceiling = (-(Oracles.FloorQuotient(numerator: -exact, denominator: Q3232OneRaw)) * Q3232OneRaw);
+        var roundsUp = ((fraction > half) || ((fraction == half) && !((floorUnits & BigInteger.One).IsZero)));
+        var rounded = (roundsUp ? (floor + Q3232OneRaw) : floor);
+
+        if (FixedQ3232.Floor(value: value).Value != floor) { return $"the floor of {raw} is wrong"; }
+        if (FixedQ3232.Truncate(value: value).Value != truncated) { return $"the truncation of {raw} is wrong"; }
+        if (FixedQ3232.Fractional(value: value).Value != fraction) { return $"the fractional part of {raw} is wrong"; }
+
+        if (ceiling > long.MaxValue) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Ceiling(value: value))) { return $"the ceiling of {raw} was answered past the carrier"; }
+        } else if (FixedQ3232.Ceiling(value: value).Value != ceiling) {
+            return $"the ceiling of {raw} is wrong";
+        }
+
+        if (rounded > long.MaxValue) {
+            if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Round(value: value))) { return $"the rounding of {raw} was answered past the carrier"; }
+        } else if (FixedQ3232.Round(value: value).Value != rounded) {
+            return $"the rounding of {raw} is wrong";
+        }
+
+        if ((floor + fraction) != exact) { return $"the floor and the fraction do not reconstruct {raw}"; }
+        if ((fraction.Sign < 0) || (fraction >= Q3232OneRaw)) { return $"the fractional part of {raw} left the unit interval"; }
+        if ((ceiling - floor) != (fraction.IsZero ? BigInteger.Zero : Q3232OneRaw)) { return $"the ceiling is not the floor plus one whole unit at {raw}"; }
+        if (truncated != ((raw < 0L) ? ceiling : floor)) { return $"the truncation of {raw} does not round toward zero"; }
+        if ((rounded != floor) && (rounded != ceiling)) { return $"the rounding of {raw} landed off the integer grid"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the seventeen classifiers on the carrier: integrality and its two parities read from the
+    /// value's exact divisibility rather than from a bit mask, the sign predicates from the exact sign, the eleven
+    /// constant ones holding their value at every raw, and the partitions the set must satisfy.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232PredicatesClassify(long[] left, long[] right) {
+        if (Q3232PredicatesAt(raw: left[0]) is { } sampled) { return sampled; }
+
+        foreach (var raw in (ReadOnlySpan<long>)[long.MinValue, long.MaxValue, 0L]) {
+            if (Q3232PredicatesAt(raw: raw) is { } extreme) { return extreme; }
+        }
+
+        return null;
+    }
+
+    private static string? Q3232PredicatesAt(long raw) {
+        var value = RawQ3232(value: raw);
+        var exact = new BigInteger(value: raw);
+        var isInteger = (exact % Q3232OneRaw).IsZero;
+        var wholeUnits = Oracles.FloorQuotient(numerator: exact, denominator: Q3232OneRaw);
+        var isEven = (isInteger && (wholeUnits % 2).IsZero);
+        var isOdd = (isInteger && !(wholeUnits % 2).IsZero);
+
+        if (FixedQ3232.IsInteger(value: value) != isInteger) { return $"the integrality of {raw} is wrong"; }
+        if (FixedQ3232.IsEvenInteger(value: value) != isEven) { return $"the even-integer classification of {raw} is wrong"; }
+        if (FixedQ3232.IsOddInteger(value: value) != isOdd) { return $"the odd-integer classification of {raw} is wrong"; }
+        if (FixedQ3232.IsZero(value: value) != exact.IsZero) { return $"the zero classification of {raw} is wrong"; }
+        if (FixedQ3232.IsNegative(value: value) != (exact.Sign < 0)) { return $"the negative classification of {raw} is wrong"; }
+        if (FixedQ3232.IsPositive(value: value) != (exact.Sign >= 0)) { return $"the positive classification of {raw} is wrong"; }
+        if (FixedQ3232.IsNormal(value: value) != !exact.IsZero) { return $"the normal classification of {raw} is wrong"; }
+
+        if (!FixedQ3232.IsCanonical(value: value)) { return $"{raw} is not canonical"; }
+        if (!FixedQ3232.IsFinite(value: value)) { return $"{raw} is not finite"; }
+        if (!FixedQ3232.IsRealNumber(value: value)) { return $"{raw} is not a real number"; }
+        if (FixedQ3232.IsComplexNumber(value: value)) { return $"{raw} claims to be a complex number"; }
+        if (FixedQ3232.IsImaginaryNumber(value: value)) { return $"{raw} claims to be an imaginary number"; }
+        if (FixedQ3232.IsInfinity(value: value)) { return $"{raw} claims to be infinite"; }
+        if (FixedQ3232.IsNegativeInfinity(value: value)) { return $"{raw} claims to be negative infinity"; }
+        if (FixedQ3232.IsPositiveInfinity(value: value)) { return $"{raw} claims to be positive infinity"; }
+        if (FixedQ3232.IsNaN(value: value)) { return $"{raw} claims not to be a number"; }
+        if (FixedQ3232.IsSubnormal(value: value)) { return $"{raw} claims to be subnormal"; }
+
+        if (FixedQ3232.IsPositive(value: value) == FixedQ3232.IsNegative(value: value)) { return $"the two sign classifiers agree at {raw}"; }
+        if (FixedQ3232.IsEvenInteger(value: value) && FixedQ3232.IsOddInteger(value: value)) { return $"{raw} is both even and odd"; }
+        if ((FixedQ3232.IsEvenInteger(value: value) || FixedQ3232.IsOddInteger(value: value)) != FixedQ3232.IsInteger(value: value)) { return $"the parities do not cover integrality at {raw}"; }
+        if (FixedQ3232.IsZero(value: value) == FixedQ3232.IsNormal(value: value)) { return $"the zero and normal classifiers agree at {raw}"; }
+        if (FixedQ3232.IsZero(value: value) != (value == FixedQ3232.AdditiveIdentity)) { return $"the zero classifier disagrees with the additive identity at {raw}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the interpolation carries ONE rounding over the TRUE mathematical result — the exact rational
+    /// <c>from + (to − from)·amount</c>, formed in <see cref="BigInteger"/> with NO intermediate wrap at any width and
+    /// only ONE final rounding — and that both endpoints and the degenerate segment are exact. The oracle never
+    /// evaluates <c>to − from</c> as a standalone raw and never wraps it: it forms <c>fromRaw·2³² + (toRaw − fromRaw)·amountRaw</c>
+    /// as one arbitrary-width integer (exact; a <see cref="BigInteger"/> difference cannot leave any carrier) and rounds
+    /// that once, so it would catch a subject that wraps <c>to − from</c> before multiplying even where every operand
+    /// and the true result are representable.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232LerpEndpointsAndOracle(long[] left, long[] right) {
+        var fromRaw = left[0];
+        var toRaw = right[0];
+        var amountRaw = left[1];
+        var from = RawQ3232(value: fromRaw);
+        var to = RawQ3232(value: toRaw);
+        var amount = RawQ3232(value: amountRaw);
+        var exact = ((new BigInteger(value: fromRaw) << FixedQ3232.FractionBitCount) + ((new BigInteger(value: toRaw) - fromRaw) * amountRaw));
+        var expected = Oracles.RoundDyadic(exact: exact, shift: FixedQ3232.FractionBitCount);
+
+        if (FixedQ3232.Lerp(from: from, to: to, amount: amount).Value != expected) { return $"the interpolation of ({fromRaw}, {toRaw}) at {amountRaw} is wrong"; }
+        if (FixedQ3232.Lerp(from: from, to: to, amount: FixedQ3232.Zero) != from) { return $"the zero endpoint of ({fromRaw}, {toRaw}) is not exact"; }
+        if (FixedQ3232.Lerp(from: from, to: to, amount: FixedQ3232.One) != to) { return $"the unit endpoint of ({fromRaw}, {toRaw}) is not exact"; }
+        if (FixedQ3232.Lerp(from: from, to: from, amount: amount) != from) { return $"the degenerate segment at {fromRaw} moved under the amount {amountRaw}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the signed text seam at every swept raw: the rendering is the exact decimal expansion the
+    /// arbitrary-width oracle derives by a different route, the span formatter fills an exact destination and refuses
+    /// a short one, the text names a rational the oracle quantizes back onto the same raw, and all eight parse entry
+    /// points round-trip it.</summary>
+    /// <param name="left">The first sampled operand lane.</param>
+    /// <param name="right">The second sampled operand lane.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232TextRoundTrip(long[] left, long[] right) {
+        var raw = left[0];
+        var value = RawQ3232(value: raw);
+        var rendered = value.ToString();
+        var reference = Oracles.ExactDyadicDecimalSigned(value: new BigInteger(value: raw), shift: FixedQ3232.FractionBitCount);
+
+        if (rendered != reference) { return $"the raw {raw} rendered as '{rendered}', expected '{reference}'"; }
+
+        Span<char> destination = stackalloc char[rendered.Length];
+
+        if (!value.TryFormat(destination: destination, charsWritten: out var written, format: "G", provider: null) ||
+            (written != rendered.Length) ||
+            !destination[..written].SequenceEqual(other: rendered)) { return $"the span format did not fill an exact destination at raw {raw}"; }
+
+        destination[..^1].Fill(value: '#');
+
+        if (value.TryFormat(destination: destination[..^1], charsWritten: out var refused, format: default, provider: null) || (0 != refused)) { return $"the span format claimed a short destination at raw {raw}"; }
+        if (destination[..^1].ContainsAnyExcept(value: '#')) { return $"the failed span format left a partial rendering behind at raw {raw}"; }
+        if (!Throws<FormatException>(action: () => { Span<char> local = stackalloc char[80]; _ = value.TryFormat(destination: local, charsWritten: out _, format: "N2", provider: null); })) { return $"the span format accepted an unsupported specifier at raw {raw}"; }
+
+        var point = rendered.IndexOf(value: '.');
+        var digits = ((point < 0) ? rendered : string.Concat(str0: rendered.AsSpan(start: 0, length: point), str1: rendered.AsSpan(start: (point + 1))));
+        var fractionDigitCount = ((point < 0) ? 0 : ((rendered.Length - point) - 1));
+        var (inRange, quantized) = Oracles.DecimalToRaw(
+            numerator: BigInteger.Parse(value: digits, provider: CultureInfo.InvariantCulture),
+            decimalExponent: fractionDigitCount,
+            shift: FixedQ3232.FractionBitCount
+        );
+
+        if (!inRange || (quantized != raw)) { return $"the oracle re-derived '{rendered}' as {quantized} (in range: {inRange}), not {raw}"; }
+
+        return Q3232ParseAll(text: rendered, provider: CultureInfo.InvariantCulture, expected: raw);
+    }
+
+    private static string? Q3232ParseAll(string text, IFormatProvider provider, long expected) {
+        if (FixedQ3232.Parse(s: text, provider: provider).Value != expected) { return $"the string parse of '{text}' did not return {expected}"; }
+        if (FixedQ3232.Parse(s: text.AsSpan(), provider: provider).Value != expected) { return $"the span parse of '{text}' did not return {expected}"; }
+        if (!FixedQ3232.TryParse(s: text, provider: provider, result: out var fromString) || (fromString.Value != expected)) { return $"the string try-parse of '{text}' did not return {expected}"; }
+        if (!FixedQ3232.TryParse(s: text.AsSpan(), provider: provider, result: out var fromSpan) || (fromSpan.Value != expected)) { return $"the span try-parse of '{text}' did not return {expected}"; }
+        if (FixedQ3232.Parse(s: text, style: Q3232DefaultParseStyle, provider: provider).Value != expected) { return $"the styled string parse of '{text}' did not return {expected}"; }
+        if (FixedQ3232.Parse(s: text.AsSpan(), style: Q3232DefaultParseStyle, provider: provider).Value != expected) { return $"the styled span parse of '{text}' did not return {expected}"; }
+        if (!FixedQ3232.TryParse(s: text, style: Q3232DefaultParseStyle, provider: provider, result: out var fromStyledString) || (fromStyledString.Value != expected)) { return $"the styled string try-parse of '{text}' did not return {expected}"; }
+        if (!FixedQ3232.TryParse(s: text.AsSpan(), style: Q3232DefaultParseStyle, provider: provider, result: out var fromStyledSpan) || (fromStyledSpan.Value != expected)) { return $"the styled span try-parse of '{text}' did not return {expected}"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the signed text contract refuses malformed spellings on every entry point, that the null
+    /// string is refused (rather than accepted or defaulted) on both the throwing and the trying routes, and that the
+    /// asymmetric integer extremes — <c>-2147483648</c> round-trips exactly, <c>2147483648</c> is refused as an
+    /// overflow rather than accepted or mis-parsed — hold. Unlike <see cref="Q3232TextRoundTrip"/>, which sweeps
+    /// sampled operands through the oracle, this is the type's own fixed refusal ladder and needs no domain.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232TextRefusals() {
+        foreach (var text in Q3232RefusedTexts) {
+            if (FixedQ3232.TryParse(s: text, provider: CultureInfo.InvariantCulture, result: out var refused) || (refused != default)) { return $"'{text}' was accepted, or left raw {refused.Value} behind"; }
+            if (FixedQ3232.TryParse(s: text.AsSpan(), provider: CultureInfo.InvariantCulture, result: out var refusedSpan) || (refusedSpan != default)) { return $"the span '{text}' was accepted, or left raw {refusedSpan.Value} behind"; }
+            if (FixedQ3232.TryParse(s: text, style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var refusedStyled) || (refusedStyled != default)) { return $"the styled string '{text}' was accepted, or left raw {refusedStyled.Value} behind"; }
+            if (FixedQ3232.TryParse(s: text.AsSpan(), style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var refusedStyledSpan) || (refusedStyledSpan != default)) { return $"the styled span '{text}' was accepted, or left raw {refusedStyledSpan.Value} behind"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text, provider: CultureInfo.InvariantCulture))) { return $"the throwing string parse accepted '{text}'"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text.AsSpan(), provider: CultureInfo.InvariantCulture))) { return $"the throwing span parse accepted '{text}'"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text, style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture))) { return $"the throwing styled string parse accepted '{text}'"; }
+            if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text.AsSpan(), style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture))) { return $"the throwing styled span parse accepted '{text}'"; }
+        }
+
+        if (Q3232ParseAll(text: "-2147483648", provider: CultureInfo.InvariantCulture, expected: long.MinValue) is { } minimumFailure) { return minimumFailure; }
+        if (FixedQ3232.TryParse(s: "2147483648", provider: CultureInfo.InvariantCulture, result: out var overflowed) || (overflowed != default)) { return "'2147483648' was accepted, or left a raw behind"; }
+        if (FixedQ3232.TryParse(s: "2147483648".AsSpan(), provider: CultureInfo.InvariantCulture, result: out var overflowedSpan) || (overflowedSpan != default)) { return "the span '2147483648' was accepted, or left a raw behind"; }
+        if (FixedQ3232.TryParse(s: "2147483648", style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var overflowedStyled) || (overflowedStyled != default)) { return "the styled string '2147483648' was accepted, or left a raw behind"; }
+        if (FixedQ3232.TryParse(s: "2147483648".AsSpan(), style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var overflowedStyledSpan) || (overflowedStyledSpan != default)) { return "the styled span '2147483648' was accepted, or left a raw behind"; }
+        if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Parse(s: "2147483648", provider: CultureInfo.InvariantCulture))) { return "the throwing parse of '2147483648' did not report an overflow"; }
+        if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Parse(s: "2147483648".AsSpan(), provider: CultureInfo.InvariantCulture))) { return "the throwing span parse of '2147483648' did not report an overflow"; }
+        if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Parse(s: "2147483648", style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture))) { return "the throwing styled string parse of '2147483648' did not report an overflow"; }
+        if (!Throws<OverflowException>(action: () => _ = FixedQ3232.Parse(s: "2147483648".AsSpan(), style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture))) { return "the throwing styled span parse of '2147483648' did not report an overflow"; }
+
+        if (FixedQ3232.TryParse(s: ((string?)null), provider: null, result: out var fromNull) || (fromNull != default)) { return "a null string was accepted"; }
+        if (!Throws<ArgumentNullException>(action: () => _ = FixedQ3232.Parse(s: ((string)null!), provider: null), paramName: "s")) { return "the throwing parse accepted a null string"; }
+
+        return null;
+    }
+
+    // Spellings the grammar does not name: empty, blank, a bare sign, a bare point, two points, an exponent the
+    // style does not admit, hexadecimal, and a word.
+    private static readonly string[] Q3232RefusedTexts = ["", "   ", "-", "+", ".", "1.2.3", "1e3", "0x10", "one"];
+
+    /// <summary>Proves the NumberStyles-taking Parse/TryParse overloads genuinely depend on their style argument for
+    /// FixedQ3232: <c>"1e3"</c> is refused under the default style (no <c>AllowExponent</c> — see
+    /// <see cref="Q3232RefusedTexts"/>) but accepted and quantized to exactly <c>1000</c> under
+    /// <see cref="NumberStyles.Float"/>, which adds <c>AllowExponent</c>. Every other FixedQ3232 text law
+    /// (<see cref="Q3232TextRoundTrip"/>, <see cref="Q3232TextRefusals"/>, <see cref="Q3232TextParseTies"/>) calls
+    /// only the two-argument provider-only overloads, which forward a FIXED style internally — the manifest's
+    /// "covered" mark on the four-argument overloads was earned by that forwarding alone, never by a caller-supplied
+    /// style actually changing the outcome, until this law.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232StyledParseIsGenuine() {
+        const string text = "1e3";
+        const long expected = (1000L << FixedQ3232.FractionBitCount);
+
+        if (!FixedQ3232.TryParse(s: text, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var fromString) || (fromString.Value != expected)) { return $"the styled string try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (!FixedQ3232.TryParse(s: text.AsSpan(), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var fromSpan) || (fromSpan.Value != expected)) { return $"the styled span try-parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (FixedQ3232.Parse(s: text, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture).Value != expected) { return $"the styled string parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+        if (FixedQ3232.Parse(s: text.AsSpan(), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture).Value != expected) { return $"the styled span parse of '{text}' under NumberStyles.Float did not return {expected}"; }
+
+        // The same text is refused both through a caller-supplied style lacking AllowExponent and through all four
+        // provider-only overloads, whose fixed style has the same grammar. Calling both families here keeps this law's
+        // name-based Parse/TryParse declaration honest for every overload while preserving the discriminating pair.
+        if (FixedQ3232.TryParse(s: text, style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var refused) || (refused != default)) { return $"'{text}' was accepted under a style without AllowExponent"; }
+        if (FixedQ3232.TryParse(s: text.AsSpan(), style: Q3232DefaultParseStyle, provider: CultureInfo.InvariantCulture, result: out var refusedStyledSpan) || (refusedStyledSpan != default)) { return $"the span '{text}' was accepted under a style without AllowExponent"; }
+        if (FixedQ3232.TryParse(s: text, provider: CultureInfo.InvariantCulture, result: out var refusedProvider) || (refusedProvider != default)) { return $"the provider-only string '{text}' was accepted"; }
+        if (FixedQ3232.TryParse(s: text.AsSpan(), provider: CultureInfo.InvariantCulture, result: out var refusedProviderSpan) || (refusedProviderSpan != default)) { return $"the provider-only span '{text}' was accepted"; }
+        if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text, provider: CultureInfo.InvariantCulture))) { return $"the provider-only throwing string parse accepted '{text}'"; }
+        if (!Throws<FormatException>(action: () => _ = FixedQ3232.Parse(s: text.AsSpan(), provider: CultureInfo.InvariantCulture))) { return $"the provider-only throwing span parse accepted '{text}'"; }
+
+        return null;
+    }
+
+    /// <summary>Proves the half-ULP tie-break at FixedQ3232's own thirty-three-fraction-digit limit: a decimal string
+    /// exactly at the tie between two raws rounds to the EVEN one, one just below rounds down, and one just above
+    /// rounds up. <see cref="Q3232TextRoundTrip"/> alone never reaches this: every string it feeds Parse is the exact
+    /// terminating expansion of an already-representable raw, so the division remainder there is always zero and the
+    /// tie-break arithmetic never runs. <c>3·2⁻³³</c> is exactly thirty-three fraction decimal digits — the type's own
+    /// <c>fractionBitCount + 1</c> — so no digit is discarded and the remainder lands exactly on the tie at raw
+    /// <c>1.5</c>; perturbing only the thirty-third digit moves the remainder one part in <c>2·5³³</c> off the tie
+    /// without touching the quotient.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232TextParseTies() {
+        const string below = "0.000000000349245965480804443359374";
+        const string exact = "0.000000000349245965480804443359375";
+        const string above = "0.000000000349245965480804443359376";
+
+        return
+            Q3232CheckTie(text: below, expectedRaw: 1) ??
+            Q3232CheckTie(text: exact, expectedRaw: 2) ??
+            Q3232CheckTie(text: above, expectedRaw: 2);
+    }
+
+    // Re-derives the expected raw from the string with the same shared-nothing oracle Q3232TextRoundTrip uses (never
+    // through FixedQ3232.Parse), then proves every parse entry point agrees with the CALLER's expected raw — so a
+    // wrong expectedRaw in the test itself, not just a wrong subject, would still be caught.
+    private static string? Q3232CheckTie(string text, long expectedRaw) {
+        var point = text.IndexOf(value: '.');
+        var digits = string.Concat(str0: text.AsSpan(start: 0, length: point), str1: text.AsSpan(start: (point + 1)));
+        var fractionDigitCount = ((text.Length - point) - 1);
+        var (inRange, quantized) = Oracles.DecimalToRaw(
+            numerator: BigInteger.Parse(value: digits, provider: CultureInfo.InvariantCulture),
+            decimalExponent: fractionDigitCount,
+            shift: FixedQ3232.FractionBitCount
+        );
+
+        if (!inRange || (quantized != expectedRaw)) { return $"the oracle quantized '{text}' as {quantized} (in range: {inRange}), not the expected {expectedRaw}"; }
+
+        return Q3232ParseAll(text: text, provider: CultureInfo.InvariantCulture, expected: expectedRaw);
+    }
+
+    /// <summary>Proves this carrier's FixedQ4816 (Q48.16) peer conversion. Narrowing
+    /// (<see cref="FixedQ3232.ToFixedQ4816"/>) is a single ties-to-even rounding at the sixteen-bit fraction
+    /// difference and NEVER overflows, because Q32.32's whole range fits inside Q48.16's; widening
+    /// (<see cref="FixedQ3232.FromFixedQ4816"/> / <see cref="FixedQ3232.TryFromFixedQ4816"/>) is EXACT — it only
+    /// appends zero bits — but is gated by whether the source's integer part fits the thirty-two-bit range, and the
+    /// widen-then-narrow round trip recovers the original Q48.16 value exactly wherever it succeeded.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232PeerConversionExact() {
+        foreach (var raw in Q3232RawLadder) {
+            var value = RawQ3232(value: raw);
+            var narrowed = value.ToFixedQ4816();
+            var expected = Oracles.RoundDyadic(exact: new BigInteger(value: raw), shift: (FixedQ3232.FractionBitCount - FixedQ4816.FractionBitCount));
+
+            if (narrowed.Value != expected) { return $"ToFixedQ4816 of raw {raw} is {narrowed.Value}, expected {expected}"; }
+            if (ConvertChecked<FixedQ4816, FixedQ3232>(value: value) != narrowed) { return $"CreateChecked<FixedQ4816> disagrees with ToFixedQ4816 at raw {raw}"; }
+            if (ConvertSaturating<FixedQ4816, FixedQ3232>(value: value) != narrowed) { return $"CreateSaturating<FixedQ4816> disagrees with ToFixedQ4816 at raw {raw}"; }
+            if (ConvertTruncating<FixedQ4816, FixedQ3232>(value: value) != narrowed) { return $"CreateTruncating<FixedQ4816> disagrees with ToFixedQ4816 at raw {raw}"; }
+        }
+
+        // The general ladder has no exact half after the sixteen-bit shift, so it cannot distinguish ties-to-even
+        // from either half-up or half-down. These six rows pin both even and odd ties in both sign directions.
+        foreach (var (raw, expected) in Q3232PeerNarrowingTieLadder) {
+            var narrowed = RawQ3232(value: raw).ToFixedQ4816();
+
+            if (narrowed.Value != expected) { return $"ToFixedQ4816 tie raw {raw} is {narrowed.Value}, expected {expected}"; }
+        }
+
+        foreach (var raw in FixedQ4816RawLadderForQ3232Peer) {
+            var source = FixedQ4816.FromRawBits(value: raw);
+            var widened = (new BigInteger(value: raw) << (FixedQ3232.FractionBitCount - FixedQ4816.FractionBitCount));
+            var inRange = ((widened >= long.MinValue) && (widened <= long.MaxValue));
+            var succeeded = FixedQ3232.TryFromFixedQ4816(value: source, result: out var tried);
+
+            if (succeeded != inRange) { return $"TryFromFixedQ4816 of raw {raw} reported {succeeded}, expected {inRange}"; }
+
+            var saturatedExpected = ((widened < long.MinValue) ? long.MinValue : ((widened > long.MaxValue) ? long.MaxValue : ((long)widened)));
+            var truncatingExpected = unchecked((long)(ulong)(widened & ulong.MaxValue));
+
+            if (ConvertSaturating<FixedQ3232, FixedQ4816>(value: source).Value != saturatedExpected) { return $"CreateSaturating<FixedQ3232> of raw {raw} did not clamp the exact widened value"; }
+            if (ConvertTruncating<FixedQ3232, FixedQ4816>(value: source).Value != truncatingExpected) { return $"CreateTruncating<FixedQ3232> of raw {raw} did not keep the widened value's low sixty-four bits"; }
+
+            if (inRange) {
+                if (tried.Value != widened) { return $"TryFromFixedQ4816 of raw {raw} is {tried.Value}, expected {widened}"; }
+                if (FixedQ3232.FromFixedQ4816(value: source).Value != widened) { return $"FromFixedQ4816 of raw {raw} is wrong"; }
+                if (ConvertChecked<FixedQ3232, FixedQ4816>(value: source).Value != widened) { return $"CreateChecked<FixedQ3232> of raw {raw} is wrong"; }
+                if (tried.ToFixedQ4816() != source) { return $"the widen-then-narrow round trip of raw {raw} did not recover the original Q48.16 value"; }
+            } else {
+                if (tried != default) { return $"TryFromFixedQ4816 of raw {raw} left a non-default result behind on failure"; }
+                if (!Throws<OverflowException>(action: () => _ = FixedQ3232.FromFixedQ4816(value: source))) { return $"FromFixedQ4816 of raw {raw} did not throw on overflow"; }
+                if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ3232, FixedQ4816>(value: source))) { return $"CreateChecked<FixedQ3232> of raw {raw} did not throw on overflow"; }
+            }
+        }
+
+        return null;
+    }
+
+    // FixedQ4816 raws spanning the Q32.32 integer boundary: comfortably inside, exactly at both edges, one raw past
+    // both edges, and a scattering of ordinary and wildly out-of-range values.
+    private static readonly long[] FixedQ4816RawLadderForQ3232Peer = [
+        0L, 65536L, -65536L,
+        (2147483647L << 16), ((2147483647L << 16) | 0xFFFFL),
+        (-2147483648L << 16),
+        ((-2147483648L << 16) - 1L),
+        (2147483648L << 16),
+        long.MaxValue, long.MinValue,
+        (1L << 47), -(1L << 47),
+    ];
+
+    private static readonly (long Raw, long Expected)[] Q3232PeerNarrowingTieLadder = [
+        (0x0000000000008000L, 0L),
+        (0x0000000000018000L, 2L),
+        (0x0000000000028000L, 2L),
+        (-0x0000000000008000L, 0L),
+        (-0x0000000000018000L, -2L),
+        (-0x0000000000028000L, -2L),
+    ];
+
+    /// <summary>Proves the three <c>INumberBase</c> conversion modes through a <c>decimal</c> source into
+    /// <see cref="FixedQ3232"/> — a second public route to <c>FixedPointConvert.ScaleDecimalWide</c>, alongside
+    /// <see cref="Q1648DecimalConversionModes"/>: <see cref="GenericConversionModes"/> exercises the same three
+    /// modes but only ever targets <see cref="FixedQ4816"/>/<see cref="UFixedQ4816"/>, both of which route decimal
+    /// through the narrower <c>ScaleDecimal</c> instead, since their sixteen fraction bits sit under its
+    /// thirty-one-bit cap where FixedQ3232's thirty-two do not. <c>decimal.MaxValue</c>'s exact scaled value at
+    /// Q32.32 is independently derived here from its own documented bit layout (a scale-zero, <c>2⁹⁶ − 1</c>
+    /// mantissa) rather than through <c>ScaleDecimalWide</c> itself: checked must refuse it, saturating must clamp
+    /// to <see cref="FixedQ3232.MaxValue"/>, and truncating must keep exactly its low sixty-four bits — raw
+    /// <c>0xFFFFFFFF00000000</c>, signed <c>−4294967296</c>. <c>decimal.MinValue</c> mirrors it by sign, and an
+    /// in-range decimals exercise exact scaling and both directions of non-tie rounding where all three modes must
+    /// agree. Decimal cannot name a half-raw tie here: its scale is at most twenty-eight, so the Q32 multiplication
+    /// cancels every factor of two in its denominator and leaves an odd denominator.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q3232DecimalConversionModes() {
+        const long expectedTruncatingAtMax = unchecked((long)0xFFFFFFFF00000000UL);
+        var scaledMax = ScaledDecimalAt(value: decimal.MaxValue, fractionBitCount: FixedQ3232.FractionBitCount);
+
+        if (scaledMax != (((BigInteger.One << 96) - BigInteger.One) << FixedQ3232.FractionBitCount)) { return "the independently-derived scaled value of decimal.MaxValue does not match its hand-derived bit layout"; }
+
+        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ3232, decimal>(value: decimal.MaxValue))) { return "CreateChecked accepted decimal.MaxValue instead of refusing it"; }
+
+        var saturatedMax = ConvertSaturating<FixedQ3232, decimal>(value: decimal.MaxValue);
+
+        if (saturatedMax != FixedQ3232.MaxValue) { return $"CreateSaturating of decimal.MaxValue is {saturatedMax}, expected MaxValue"; }
+
+        var truncatedMax = ConvertTruncating<FixedQ3232, decimal>(value: decimal.MaxValue).Value;
+
+        if (truncatedMax != expectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {expectedTruncatingAtMax}"; }
+
+        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ3232, decimal>(value: decimal.MinValue))) { return "CreateChecked accepted decimal.MinValue instead of refusing it"; }
+
+        var saturatedMin = ConvertSaturating<FixedQ3232, decimal>(value: decimal.MinValue);
+
+        if (saturatedMin != FixedQ3232.MinValue) { return $"CreateSaturating of decimal.MinValue is {saturatedMin}, expected MinValue"; }
+
+        var truncatedMin = ConvertTruncating<FixedQ3232, decimal>(value: decimal.MinValue).Value;
+
+        if (truncatedMin != unchecked(-expectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-expectedTruncatingAtMax)}"; }
+
+        // An in-range decimal: all three modes must agree with each other and with the independent oracle.
+        var inRangeExpected = ((long)ScaledDecimalAt(value: 1.5m, fractionBitCount: FixedQ3232.FractionBitCount));
+        var exact = ConvertChecked<FixedQ3232, decimal>(value: 1.5m).Value;
+        var saturatedInRange = ConvertSaturating<FixedQ3232, decimal>(value: 1.5m).Value;
+        var truncatedInRange = ConvertTruncating<FixedQ3232, decimal>(value: 1.5m).Value;
+
+        if ((exact != inRangeExpected) || (saturatedInRange != inRangeExpected) || (truncatedInRange != inRangeExpected)) { return $"the three modes disagree on the in-range decimal 1.5: checked={exact}, saturating={saturatedInRange}, truncating={truncatedInRange}, expected {inRangeExpected}"; }
+
+        foreach (var value in (ReadOnlySpan<decimal>)[0.1m, -0.1m, 0.2m, -0.2m, 0.3m, -0.3m]) {
+            var expected = ((long)ScaledDecimalAt(value: value, fractionBitCount: FixedQ3232.FractionBitCount));
+            var checkedValue = ConvertChecked<FixedQ3232, decimal>(value: value).Value;
+            var saturatedValue = ConvertSaturating<FixedQ3232, decimal>(value: value).Value;
+            var truncatedValue = ConvertTruncating<FixedQ3232, decimal>(value: value).Value;
+
+            if ((checkedValue != expected) || (saturatedValue != expected) || (truncatedValue != expected)) { return $"the three modes disagree on the rounded in-range decimal {value}: checked={checkedValue}, saturating={saturatedValue}, truncating={truncatedValue}, expected {expected}"; }
+        }
+
+        return null;
+    }
 
     // ---- the exponent-compensation seam: an exponent no fixed cap can bound ----
 
@@ -1026,6 +2533,67 @@ internal static class Subjects {
         if (!Throws<OverflowException>(action: () => _ = ConvertChecked<UFixedQ4816, TSource>(value: value))) { return $"{label}: CreateChecked did not report an overflow"; }
 
         if (saturating != truncating) { ++divergences; }
+
+        return null;
+    }
+
+    // The source's exact value at an arbitrary fixed-point scale, from the decimal's own bits — the same route
+    // ScaledDecimal uses at FixedQ4816's fixed Q16, generalized to any fraction bit count so FixedQ1648's Q48 and
+    // FixedQ3232's Q32 can both reuse it without touching FixedPointConvert.ScaleDecimalWide itself.
+    private static BigInteger ScaledDecimalAt(decimal value, int fractionBitCount) {
+        var (numerator, decimalExponent) = DecimalParts(value: value);
+
+        return Oracles.RoundRationalTiesToEven(
+            numerator: (numerator << fractionBitCount),
+            denominator: BigInteger.Pow(value: new BigInteger(value: 10), exponent: decimalExponent)
+        );
+    }
+
+    /// <summary>Proves the three <c>INumberBase</c> conversion modes through a <c>decimal</c> source into
+    /// <see cref="FixedQ1648"/> — one of the two public routes to <c>FixedPointConvert.ScaleDecimalWide</c>, the
+    /// other being <see cref="Q3232DecimalConversionModes"/>: <see cref="GenericConversionModes"/> exercises the
+    /// same three modes but only ever targets <see cref="FixedQ4816"/>/<see cref="UFixedQ4816"/>, both of which
+    /// route decimal through the narrower <c>ScaleDecimal</c> instead. <c>decimal.MaxValue</c>'s exact scaled value
+    /// at Q16.48 is independently derived
+    /// here from its own documented bit layout (a scale-zero, <c>2⁹⁶ − 1</c> mantissa) rather than through
+    /// <c>ScaleDecimalWide</c> itself: checked must refuse it, saturating must clamp to <see cref="FixedQ1648.MaxValue"/>,
+    /// and truncating must keep exactly its low sixty-four bits — raw <c>0xFFFF000000000000</c>, signed
+    /// <c>−281474976710656</c>. <c>decimal.MinValue</c> mirrors it by sign, and an in-range decimal exercises the
+    /// branch where all three modes must agree.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? Q1648DecimalConversionModes() {
+        const long expectedTruncatingAtMax = unchecked((long)0xFFFF000000000000UL);
+        var scaledMax = ScaledDecimalAt(value: decimal.MaxValue, fractionBitCount: FixedQ1648.FractionBitCount);
+
+        if (scaledMax != (((BigInteger.One << 96) - BigInteger.One) << FixedQ1648.FractionBitCount)) { return "the independently-derived scaled value of decimal.MaxValue does not match its hand-derived bit layout"; }
+
+        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ1648, decimal>(value: decimal.MaxValue))) { return "CreateChecked accepted decimal.MaxValue instead of refusing it"; }
+
+        var saturatedMax = ConvertSaturating<FixedQ1648, decimal>(value: decimal.MaxValue);
+
+        if (saturatedMax != FixedQ1648.MaxValue) { return $"CreateSaturating of decimal.MaxValue is {saturatedMax}, expected MaxValue"; }
+
+        var truncatedMax = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MaxValue).Value;
+
+        if (truncatedMax != expectedTruncatingAtMax) { return $"CreateTruncating of decimal.MaxValue is raw {truncatedMax}, expected raw {expectedTruncatingAtMax}"; }
+
+        if (!Throws<OverflowException>(action: () => _ = ConvertChecked<FixedQ1648, decimal>(value: decimal.MinValue))) { return "CreateChecked accepted decimal.MinValue instead of refusing it"; }
+
+        var saturatedMin = ConvertSaturating<FixedQ1648, decimal>(value: decimal.MinValue);
+
+        if (saturatedMin != FixedQ1648.MinValue) { return $"CreateSaturating of decimal.MinValue is {saturatedMin}, expected MinValue"; }
+
+        var truncatedMin = ConvertTruncating<FixedQ1648, decimal>(value: decimal.MinValue).Value;
+
+        if (truncatedMin != unchecked(-expectedTruncatingAtMax)) { return $"CreateTruncating of decimal.MinValue is raw {truncatedMin}, expected raw {unchecked(-expectedTruncatingAtMax)}"; }
+
+        // An in-range decimal: all three modes must agree with each other and with the independent oracle.
+        var inRangeExpected = ((long)ScaledDecimalAt(value: 1.5m, fractionBitCount: FixedQ1648.FractionBitCount));
+        var exact = ConvertChecked<FixedQ1648, decimal>(value: 1.5m).Value;
+        var saturatedInRange = ConvertSaturating<FixedQ1648, decimal>(value: 1.5m).Value;
+        var truncatedInRange = ConvertTruncating<FixedQ1648, decimal>(value: 1.5m).Value;
+
+        if ((exact != inRangeExpected) || (saturatedInRange != inRangeExpected) || (truncatedInRange != inRangeExpected)) { return $"the three modes disagree on the in-range decimal 1.5: checked={exact}, saturating={saturatedInRange}, truncating={truncatedInRange}, expected {inRangeExpected}"; }
 
         return null;
     }
@@ -16175,9 +17743,9 @@ internal static class Subjects {
 
     /// <summary>Proves the componentwise lift is EXACTLY the carrier's own operator applied lane by lane: the wrapping
     /// sum, difference and negation against arbitrary-width arithmetic, the scalar multiply and divide against one
-    /// ties-to-even rounding each, and the interpolation against the documented two-wraps-one-rounding expression —
-    /// stated for both types on the same operands, so a divergence between the two lifts shows up here rather than only
-    /// through the kinship seam.</summary>
+    /// ties-to-even rounding each, and the interpolation against the true mathematical result with no intermediate
+    /// wrap and one final rounding — stated for both types on the same operands, so a divergence between the two lifts
+    /// shows up here rather than only through the kinship seam.</summary>
     /// <param name="left">The first operand's four lanes: the first vector and the scalar.</param>
     /// <param name="right">The second operand's four lanes: the second vector and the divisor.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -16843,6 +18411,75 @@ internal static class Subjects {
     private const long VectorAdoptionSentinelARaw = 65536L;
     private const float VectorAdoptionSentinelB = -3f;
     private const long VectorAdoptionSentinelBRaw = -196608L;
+
+    /// <summary>Proves the QUATERNION inbound seam over the same binary32 ladder the vector seam is held to, across
+    /// all FOUR lanes, and proves the two facts a three-lane ladder cannot state: that the seam is componentwise, and
+    /// that it does NOT renormalize.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    /// <remarks>The non-unit rows are the point. <see cref="FixedQuaternion.FromQuaternion"/> is a REPRESENTATION
+    /// change, not a repair: Q16 quantization moves a unit rotation off the sphere by itself, so a seam that quietly
+    /// renormalized would hide its own error and would also silently discard a deliberately non-unit operand.
+    /// Normalization is the caller's, which is only true if nothing here does it.</remarks>
+    public static string? QuaternionAdoptionMatchesLadder() {
+        foreach (var (bits, expected) in AdoptionBinary32Ladder) {
+            var value = BitConverter.Int32BitsToSingle(value: bits);
+            var atX = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: value, y: VectorAdoptionSentinelA, z: VectorAdoptionSentinelB, w: VectorAdoptionSentinelA));
+            var atY = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: VectorAdoptionSentinelA, y: value, z: VectorAdoptionSentinelB, w: VectorAdoptionSentinelA));
+            var atZ = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: VectorAdoptionSentinelA, y: VectorAdoptionSentinelB, z: value, w: VectorAdoptionSentinelA));
+            var atW = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: VectorAdoptionSentinelA, y: VectorAdoptionSentinelB, z: VectorAdoptionSentinelA, w: value));
+
+            if (atX.X.Value != expected) { return $"the binary32 {bits:X8} adopted as {atX.X.Value} at lane 0, expected {expected}"; }
+            if (atY.Y.Value != expected) { return $"the binary32 {bits:X8} adopted as {atY.Y.Value} at lane 1, expected {expected}"; }
+            if (atZ.Z.Value != expected) { return $"the binary32 {bits:X8} adopted as {atZ.Z.Value} at lane 2, expected {expected}"; }
+            if (atW.W.Value != expected) { return $"the binary32 {bits:X8} adopted as {atW.W.Value} at lane 3, expected {expected}"; }
+
+            if (atX.Y.Value != VectorAdoptionSentinelARaw) { return $"the first sentinel moved beside the ladder row {bits:X8} at lane 1"; }
+            if (atX.Z.Value != VectorAdoptionSentinelBRaw) { return $"the second sentinel moved beside the ladder row {bits:X8} at lane 2"; }
+            if (atX.W.Value != VectorAdoptionSentinelARaw) { return $"the first sentinel moved beside the ladder row {bits:X8} at lane 3"; }
+            if (atY.X.Value != VectorAdoptionSentinelARaw) { return $"the first sentinel moved beside the ladder row {bits:X8} at lane 0"; }
+            if (atZ.Y.Value != VectorAdoptionSentinelBRaw) { return $"the second sentinel moved beside the ladder row {bits:X8} at lane 1"; }
+            if (atW.Z.Value != VectorAdoptionSentinelARaw) { return $"the first sentinel moved beside the ladder row {bits:X8} at lane 2"; }
+        }
+
+        // NOT renormalized. (2, 0, 0, 0) has norm 2, and every lane must survive untouched — a seam that normalized
+        // would land (1, 0, 0, 0) and the raw would read 65536 instead of 131072.
+        var doubled = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: 2f, y: 0f, z: 0f, w: 0f));
+
+        if ((doubled.X.Value != 131072L) || (doubled.Y.Value != 0L) || (doubled.Z.Value != 0L) || (doubled.W.Value != 0L)) {
+            return $"a non-unit quaternion was repaired on the way in: ({doubled.X.Value}, {doubled.Y.Value}, {doubled.Z.Value}, {doubled.W.Value}), expected (131072, 0, 0, 0)";
+        }
+
+        // The same statement where a normalizing seam would be hardest to catch: an operand already NEAR the sphere.
+        // Half of each lane is norm 1 exactly, so scaling it by 3 gives norm 3 with every lane still representable.
+        var scaled = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: 1.5f, y: 1.5f, z: 1.5f, w: 1.5f));
+
+        if ((scaled.X.Value != 98304L) || (scaled.Y.Value != 98304L) || (scaled.Z.Value != 98304L) || (scaled.W.Value != 98304L)) {
+            return $"a uniformly non-unit quaternion was rescaled on the way in: ({scaled.X.Value}, {scaled.Y.Value}, {scaled.Z.Value}, {scaled.W.Value}), expected four lanes of 98304";
+        }
+
+        // WHY normalization is the caller's job, demonstrated rather than asserted. (1,2,2,4)/5 is EXACTLY unit in
+        // the reals, but 0.2 and 0.4 are not binary fractions, so Q16 cannot hold them and the adopted quaternion
+        // lands OFF the sphere. Measured as raws: unit means the sum of squares is exactly 2^32.
+        const long UnitSumOfSquares = (1L << 32);
+        var offSphere = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: 0.2f, y: 0.4f, z: 0.4f, w: 0.8f));
+        var offSum = (((offSphere.X.Value * offSphere.X.Value) + (offSphere.Y.Value * offSphere.Y.Value)) + ((offSphere.Z.Value * offSphere.Z.Value) + (offSphere.W.Value * offSphere.W.Value)));
+
+        if (offSum == UnitSumOfSquares) {
+            return "an exactly-unit rotation whose components are NOT binary fractions survived adoption exactly unit — either the ladder rows changed or something renormalized";
+        }
+
+        // The DISCRIMINATING half: quantization does not move EVERY rotation off the sphere, so the row above is a
+        // real property of that operand and not a tautology about the carrier. Halves are exact in Q16, so this one
+        // lands on the sphere precisely — 4 x 32768^2 = 2^32.
+        var onSphere = FixedQuaternion.FromQuaternion(value: new System.Numerics.Quaternion(x: 0.5f, y: 0.5f, z: 0.5f, w: 0.5f));
+        var onSum = (((onSphere.X.Value * onSphere.X.Value) + (onSphere.Y.Value * onSphere.Y.Value)) + ((onSphere.Z.Value * onSphere.Z.Value) + (onSphere.W.Value * onSphere.W.Value)));
+
+        if (onSum != UnitSumOfSquares) {
+            return $"an exactly representable unit rotation did not survive adoption unit: sum of squares {onSum}, expected {UnitSumOfSquares}";
+        }
+
+        return null;
+    }
 
     // ---- the kinematics family: FixedPosition, FixedRigidTransform, the two rate integrators ----
     //

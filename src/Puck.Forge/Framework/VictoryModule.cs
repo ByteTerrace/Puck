@@ -3,17 +3,16 @@ namespace Puck.Forge.Framework;
 /// <summary>
 /// The 128-bit victory-metadata seam shared by framework games: on a game's win
 /// edge it copies this cabinet's authored 16-byte "share" — seeded by the host into the framework's
-/// <see cref="FrameworkMemoryMap.VictoryShareSource"/> work-RAM slot at boot — verbatim into the TOP 16 bytes of the
+/// <see cref="FrameworkMemoryMap.VictoryShareSource"/> work-RAM slot at boot — verbatim into the top 16 bytes of the
 /// cartridge's external (battery) RAM, the region a host-side meta-victory gate reads and XORs across cabinets.
 /// Whole-region-on-win, not progressive: the game writes all 16 share bytes at once when it completes, which is all a
-/// binary "complete X games" gate needs. NOTE: only the cartridge half of this seam exists — the host-side reader
-/// (<c>VictoryGate</c>) was deleted with Puck.Scene on 2026-08-01 and nothing reads the region today, so the write is
-/// currently unobserved.
+/// binary "complete X games" gate needs. Only the cartridge half of this seam exists — no host-side reader currently
+/// exists, so the write is currently unobserved.
 ///
 /// <para>The write follows SaveModule's exact anti-corruption discipline — SRAM is enabled (<c>0x0A → 0x0000</c>) only
-/// for the duration of the copy and disabled again on the way out — and the region lives ABOVE the save block
+/// for the duration of the copy and disabled again on the way out — and the region lives above the save block
 /// (<see cref="SaveModule.SramBase"/> at 0xA000, ≤ 77 bytes) at the very top of the 8&#160;KiB MBC1 window, so it never
-/// collides with the persisted high-score save. Boot CLEARS this region (see <see cref="EmitBootReset"/>) so a stale
+/// collides with the persisted high-score save. Boot clears this region (see <see cref="EmitBootReset"/>) so a stale
 /// <c>.sav</c> can never auto-fire the gate on reboot; the share is re-earned every session.</para>
 /// </summary>
 internal sealed class VictoryModule {

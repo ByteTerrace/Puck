@@ -184,8 +184,8 @@ internal sealed class WasapiAudioRenderDevice : IAudioRenderDevice {
 
         try {
             Marshal.StructureToPtr(structure: format, ptr: formatPointer, fDeleteOld: false);
-            // Buffer duration 0 = the engine's default event-driven buffer (~2 device periods, ~20 ms at 48 kHz) —
-            // inside the plan's 25-35 ms end-to-end budget with the snapshot pipeline on top; no IAudioClient3 heroics.
+            // Buffer duration 0 = the engine's default event-driven buffer (~2 device periods, ~20 ms at 48 kHz); no
+            // IAudioClient3 low-latency negotiation.
             Wasapi.Check(hr: audioClient.Initialize(
                 shareMode: Wasapi.ShareModeShared,
                 streamFlags: Wasapi.StreamFlagsEventCallback | Wasapi.StreamFlagsAutoConvertPcm | Wasapi.StreamFlagsSrcDefaultQuality,

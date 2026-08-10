@@ -3,10 +3,10 @@ using System.Numerics;
 namespace Puck.SdfVm.Debug;
 
 /// <summary>
-/// The MODE-STATE owner for the fullscreen SDF-debug takeover — holds the scene state, the orbit controller, the bench
+/// The mode-state owner for the fullscreen SDF-debug takeover — holds the scene state, the orbit controller, the bench
 /// runner, and the gallery tour, and dispatches the one <see cref="Emit"/>/<see cref="EmitProbe"/> pair a composition
 /// host (see <see cref="Puck.SdfVm.Debug.SdfDebugEmitter"/>, its <see cref="ISdfSceneEmitter"/> adapter) needs to treat
-/// the whole surface as ONE alternate-list takeover. A host's frame source (e.g. the demo's
+/// the whole surface as one alternate-list takeover. A host's frame source (e.g. the demo's
 /// <c>OverworldFrameSource</c>) drives it through these members; the host's console module reaches <see cref="Scene"/>
 /// through it. Presentation only — the deterministic simulation never sees the debug subject.
 /// </summary>
@@ -29,7 +29,7 @@ public sealed class SdfDebugMode {
     /// <summary>The debug scene the <c>sdf.*</c> verbs mutate (shape, op stack, floor, lift).</summary>
     public SdfDebugScene Scene => m_scene;
 
-    /// <summary>The carve-bake settle planner for the interactive debug carve pool (carve-bake plan §4) — the seam the
+    /// <summary>The carve-bake settle planner for the interactive debug carve pool — the seam the
     /// <c>sdf.bake status</c>/<c>sdf.bake now</c> verbs inspect and nudge. The process-wide <c>sdf.carve-bake</c> switch
     /// (<see cref="SdfCarveBakePlanner.Enabled"/>) gates whether it ever bakes; off, the pool stays fully analytic.</summary>
     public SdfCarveBakePlanner CarveBake => m_scene.CarvePlanner;
@@ -48,16 +48,16 @@ public sealed class SdfDebugMode {
     /// bench workload rather than the debug subject).</summary>
     public bool BenchRunning => m_bench.Running;
 
-    /// <summary>The dynamic-transform slot count the render assembly must RESERVE for this mode — the storm bench's
+    /// <summary>The dynamic-transform slot count the render assembly must reserve for this mode — the storm bench's
     /// motion ceiling (<see cref="SdfBenchScene.MaxStormInstances"/> moving instances). The engine sizes its per-frame
-    /// dynamic-transform buffer ONCE at construction, so a storm motion program (up to this many dynamic slots) can only
+    /// dynamic-transform buffer once at construction, so a storm motion program (up to this many dynamic slots) can only
     /// upload if the render assembly's <c>DynamicTransformCapacity</c> floor was raised to it. Presentation only — the
     /// room's own transforms sit far below this, and the reserved-but-unused slots cost one buffer allocation, no
-    /// per-frame work. An INSTANCE property (not a const) so the frame source reads it through the already-composed
+    /// per-frame work. An instance property (not a const) so the frame source reads it through the already-composed
     /// facade instead of naming this type statically — that source sits at its exact analyzer coupling ceiling.</summary>
     public int WorstCaseDynamicTransformCapacity => SdfBenchScene.MaxStormInstances;
 
-    /// <summary>Whether the active bench config is a storm MOTION rung, and if so packs this produced frame's dynamic
+    /// <summary>Whether the active bench config is a storm motion rung, and if so packs this produced frame's dynamic
     /// transforms (see <see cref="SdfBenchScene.TryPackStormTransforms"/>) — the frame source supplies them as the
     /// frame's <c>DynamicTransforms</c> so the moving instances ride the per-frame buffer without a rebuild. False for
     /// every other state (the room's own dynamic transforms then apply).</summary>
@@ -77,7 +77,7 @@ public sealed class SdfDebugMode {
     /// <summary>Writes the content counters the frame source rebuilds on: the debug scene's, the bench's (so a bench
     /// config change forces a program rebuild exactly as a scene edit does), the gallery's (an exhibit
     /// enter/advance/jump/off rebuilds the program to that exhibit), the grid-cull toggle's, and the carve-bake
-    /// handoff's — SIDE BY SIDE, never added together. Handing the host one sum would let two counters moving in
+    /// handoff's — side by side, never added together. Handing the host one sum would let two counters moving in
     /// opposite directions by the same amount cancel and hold a stale takeover program; the host compares componentwise
     /// precisely so no addition on this path can hide a change (see <see cref="Puck.SdfVm.ISdfSceneEmitter.WriteRevision"/>).</summary>
     /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
@@ -89,8 +89,8 @@ public sealed class SdfDebugMode {
         destination[4] = m_bakeRevision;
     }
 
-    /// <summary>Whether the mode's takeover programs pack the uniform-grid instance cull (default ON — the production
-    /// path). OFF packs a DISABLED grid so the beam takes the flat per-instance fallback over the same instances — the
+    /// <summary>Whether the mode's takeover programs pack the uniform-grid instance cull (default on — the production
+    /// path). Off packs a disabled grid so the beam takes the flat per-instance fallback over the same instances — the
     /// <c>sdf.grid</c> verb's live A/B lever for grid-vs-flat beam measurement (no rebuild, no checkout).</summary>
     public bool GridCull => m_gridCull;
 
@@ -106,9 +106,9 @@ public sealed class SdfDebugMode {
         m_gridRevision++;
     }
 
-    /// <summary>Whether the soft-shadow GRID CULL is ON (default true = the production path). ON gathers each lit pixel's
+    /// <summary>Whether the soft-shadow grid cull is on (default true = the production path). On gathers each lit pixel's
     /// shadow-ray grid neighborhood and marches only those instances (bit-identical to flat, cheaper on spread scenes);
-    /// OFF forces the flat all-instances shadow march — the <c>sdf.shadowcull</c> verb's live A/B lever. A pure
+    /// off forces the flat all-instances shadow march — the <c>sdf.shadowcull</c> verb's live A/B lever. A pure
     /// frame-channel flag (<see cref="SdfFrame.DisableShadowCull"/>), so no rebuild — the frame source reads it fresh
     /// each frame.</summary>
     public bool ShadowCull => m_shadowCull;
@@ -121,7 +121,7 @@ public sealed class SdfDebugMode {
     }
 
     /// <summary>Whether the lit surface normal uses the four-tap finite-difference probe instead of
-    /// the DEFAULT analytic forward-mode gradient dual. A pure frame-channel flag (<see cref="SdfFrame.UseFiniteDifferenceNormals"/>) —
+    /// the default analytic forward-mode gradient dual. A pure frame-channel flag (<see cref="SdfFrame.UseFiniteDifferenceNormals"/>) —
     /// it changes no geometry, so it needs no revision bump; the frame source reads it fresh each frame. Pair with
     /// <c>debug.view.normals</c> for the visual A/B.</summary>
     public bool UseFiniteDifferenceNormals => m_useFdNormals;
@@ -133,21 +133,21 @@ public sealed class SdfDebugMode {
         m_useFdNormals = useTaps;
     }
 
-    /// <summary>The SLICE view's plane selector as a frame-channel float (0 = camera-locked, 1/2/3 = world X/Y/Z) —
+    /// <summary>The slice view's plane selector as a frame-channel float (0 = camera-locked, 1/2/3 = world X/Y/Z) —
     /// the frame source threads it into <see cref="SdfFrame.DebugSliceAxis"/> every frame.</summary>
     public float SliceAxis => m_scene.SliceAxis;
 
     /// <summary>The axis slice plane's signed offset (see <see cref="SdfFrame.DebugSliceOffset"/>).</summary>
     public float SliceOffset => m_scene.SliceOffset;
 
-    /// <summary>The camera frame while active — the bench's FIXED deterministic pose when a run is in flight, otherwise
+    /// <summary>The camera frame while active — the bench's fixed deterministic pose when a run is in flight, otherwise
     /// the pad orbit (object-intent). Null when the mode is down.</summary>
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame =>
         (m_active ? (m_bench.CameraFrame ?? (m_gallery.CameraFrame ?? m_controller.CameraFrame)) : null);
 
-    /// <summary>Whether the camera pose must be applied VERBATIM (no easing): true while a bench run supplies the pose
+    /// <summary>Whether the camera pose must be applied verbatim (no easing): true while a bench run supplies the pose
     /// (so every configuration measures an identical, fully settled framing — an eased pose converges on the wall-clock
-    /// delta, sampling fast configurations MID-EASE and making tables incomparable run-to-run), OR while a gallery
+    /// delta, sampling fast configurations mid-ease and making tables incomparable run-to-run), or while a gallery
     /// exhibit is active (each exhibit's defect wants its authored framing held exactly, not eased into).</summary>
     public bool CameraSnaps => (m_active && (m_bench.Running || m_gallery.Active));
 
@@ -174,7 +174,7 @@ public sealed class SdfDebugMode {
     }
 
     /// <summary>Forwards the host's neutral orbit input to the orbit controller (only while active) and drains a
-    /// pending pad-chord carve — appending it to the scene and echoing it to stdout. Draining HERE (the per-frame call
+    /// pending pad-chord carve — appending it to the scene and echoing it to stdout. Draining here (the per-frame call
     /// the render node already makes) keeps the carve as pure data without new render-node plumbing: a pad carve
     /// appends the exact same <see cref="SdfCarve"/> a scripted <c>sdf.carve</c> does, and the same revision bump
     /// rebuilds the program.</summary>
@@ -219,12 +219,12 @@ public sealed class SdfDebugMode {
         }
     }
 
-    /// <summary>Whether the orbit controller's EXIT button fired since the last consume (clears it).</summary>
+    /// <summary>Whether the orbit controller's exit button fired since the last consume (clears it).</summary>
     public bool ConsumeExitRequest() =>
         m_controller.ConsumeExitRequest();
 
-    /// <summary>Emits the LIVE takeover program: the current BENCH workload while a run is in flight, else the current
-    /// GALLERY exhibit while the tour is active, otherwise the debug subject (+ optional floor). All three are within
+    /// <summary>Emits the live takeover program: the current bench workload while a run is in flight, else the current
+    /// gallery exhibit while the tour is active, otherwise the debug subject (+ optional floor). All three are within
     /// the frozen worst-case envelope (the gallery's exhibits are small — see <see cref="SdfDebugRenderer.EmitProbe"/>).</summary>
     /// <param name="builder">The program builder.</param>
     public void Emit(SdfProgramBuilder builder) {
@@ -243,16 +243,16 @@ public sealed class SdfDebugMode {
         m_renderer.Emit(builder: builder, scene: m_scene);
     }
 
-    /// <summary>Emits the WORST-CASE debug subject for the frame source's capacity probe (never rendered). The BENCH
-    /// worst case is a SEPARATE probe (<see cref="EmitBenchProbe"/>) — the mode's takeover is either the debug subject
-    /// OR a bench workload, never both, so the envelope is their MAX (not their sum), and 4096 bench instances must not
+    /// <summary>Emits the worst-case debug subject for the frame source's capacity probe (never rendered). The bench
+    /// worst case is a separate probe (<see cref="EmitBenchProbe"/>) — the mode's takeover is either the debug subject
+    /// or a bench workload, never both, so the envelope is their max (not their sum), and 4096 bench instances must not
     /// pile onto the room's own instances in one program (which would exceed the instance cap).</summary>
     /// <param name="builder">The probe builder.</param>
     public void EmitProbe(SdfProgramBuilder builder) =>
         m_renderer.EmitProbe(builder: builder);
 
-    /// <summary>Emits the bench WORST CASE (4096 instances of the wordiest shape) into its OWN probe builder — measured
-    /// separately from the room/debug probe and folded as a MAX into the frozen envelope. Never rendered.</summary>
+    /// <summary>Emits the bench worst case (4096 instances of the wordiest shape) into its own probe builder — measured
+    /// separately from the room/debug probe and folded as a max into the frozen envelope. Never rendered.</summary>
     /// <param name="builder">A fresh probe builder holding only the bench worst case.</param>
     public void EmitBenchProbe(SdfProgramBuilder builder) =>
         m_renderer.EmitBenchProbe(builder: builder);
@@ -262,7 +262,7 @@ public sealed class SdfDebugMode {
     public void AdvanceBench(bool hasTimings, double beam, double views, double composite, double frame, uint width, uint height, bool backendIsDirectX) =>
         m_bench.Advance(hasTimings: hasTimings, beam: beam, views: views, composite: composite, frame: frame, width: width, height: height, backendIsDirectX: backendIsDirectX);
 
-    /// <summary>Drives the carve-bake settle planner one produced frame against the live engine (carve-bake plan §3/§4):
+    /// <summary>Drives the carve-bake settle planner one produced frame against the live engine:
     /// while a bench run is up the bench's carves planner advances (settle 0), otherwise the interactive debug pool's
     /// (settle 120). A handoff (a bin adopting or releasing a brick) bumps the carve-bake component of
     /// <see cref="WriteRevision"/> so the frame source

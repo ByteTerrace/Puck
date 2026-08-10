@@ -11,14 +11,14 @@ namespace Puck.Storage;
 public readonly record struct AzureBlobCredentialStatus(bool Available, string Detail, DateTimeOffset? ExpiresOn);
 
 /// <summary>
-/// Asks the AMBIENT Azure credential — the same <c>DefaultAzureCredential</c> chain
+/// Asks the ambient Azure credential — the same <c>DefaultAzureCredential</c> chain
 /// <see cref="AzureBlobObjectBlobStoreBackend"/> authenticates its service-URI targets with — whether it can issue a
 /// blob-storage token right now. No app registration is involved, by design: a player's machine authenticates
 /// ambiently (developer tooling, the OS broker, a shared token cache) and a hosted server runs as a user-assigned
 /// managed identity, so one credential type covers both and neither needs a client id.
 /// </summary>
 /// <remarks>
-/// This is a PRESENCE check, not a sign-in: it never prompts and never mutates anything. It answers the one question
+/// This is a presence check, not a sign-in: it never prompts and never mutates anything. It answers the one question
 /// an operator cannot otherwise answer before a push fails — "would the cloud let me in from this machine". A
 /// connection-string target authenticates with the account key instead, so the answer is informational there.
 /// A fresh <c>DefaultAzureCredential</c> is built per probe rather than borrowed from the backend: the chain caches

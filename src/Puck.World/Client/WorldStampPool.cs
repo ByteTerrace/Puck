@@ -5,18 +5,18 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The creation-STAMP pool: the reserved dynamic-transform pool a creation renders through as per-shape dynamic
-/// instances, presentation-only (never simulation state). Three root sources share the ONE pool and the ONE reserved
+/// The creation-stamp pool: the reserved dynamic-transform pool a creation renders through as per-shape dynamic
+/// instances, presentation-only (never simulation state). Three root sources share the one pool and its one reserved
 /// slot budget:
 /// <list type="bullet">
-/// <item><description>an ANIMATED placement (a creation carrying timeline frames) roots on the placement's static
-/// stamped transform and replays its frames HOLD-STYLE at the fixed cadence
+/// <item><description>an animated placement (a creation carrying timeline frames) roots on the placement's static
+/// stamped transform and replays its frames hold-style at the fixed cadence
 /// (<see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>);</description></item>
-/// <item><description>a BODY-ROOTED stamp (an inhabited placement's body, or a crowd body wearing a creation look)
+/// <item><description>a body-rooted stamp (an inhabited placement's body, or a crowd body wearing a creation look)
 /// roots on the client's interpolated body pose, so an inhabited creation walks its authored walk cycle while its body
 /// moves — that is the entire visual change over a static stamp.</description></item>
-/// <item><description>an ATTACHED placement (<see cref="WorldPlacementAttach"/>) roots on the client's interpolated
-/// body pose composed with the facet's local offset/yaw, so the row RIDES that body. It keys by placement id like an
+/// <item><description>an attached placement (<see cref="WorldPlacementAttach"/>) roots on the client's interpolated
+/// body pose composed with the facet's local offset/yaw, so the row rides that body. It keys by placement id like an
 /// animated row (a body may carry several attached rows, and the body keeps its own avatar), and its authored
 /// transform is inert — <see cref="WorldPlacementStamper.IsStaticStamp"/> already skipped it.</description></item>
 /// </list>
@@ -25,7 +25,7 @@ namespace Puck.World.Client;
 /// recreates (the clock resets), and a departed registration releases its pool slot at the delivery boundary (the
 /// symmetric-release rule).
 /// </summary>
-/// <remarks>The pool is emitted on EVERY rebuild with a CONSTANT slot count
+/// <remarks>The pool is emitted on every rebuild with a constant slot count
 /// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>); an unused slot draws a
 /// parked placeholder hidden below the floor, exactly like the avatar catalog's inactive-slot story. The probe path
 /// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
@@ -69,15 +69,15 @@ internal sealed class WorldStampPool {
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
 
-    /// <summary>The dynamic-transform slots ONE registration reserves: its root + its full shape-slot pool.</summary>
+    /// <summary>The dynamic-transform slots one registration reserves: its root + its full shape-slot pool.</summary>
     public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
 
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
     public static int DynamicSlotCount => (WorldPlacementPolicy.MaxStampRegistrations * SlotsPerPlacement);
 
-    /// <summary>Reconciles the pool against a delivered definition (call at the delivery boundary, BEFORE the program
-    /// rebuild): the ANIMATED placements root statically, the ATTACHED ones root on their target body, and the BODY
+    /// <summary>Reconciles the pool against a delivered definition (call at the delivery boundary, before the program
+    /// rebuild): the animated placements root statically, the attached ones root on their target body, and the body
     /// stamps root on a population body. Diff-by-stable-key, cheap pose edits in place, release+recreate on
     /// creation-content change, symmetric release on removal. Row-rooted placements are admitted first; body stamps fill
     /// the remaining free slots.</summary>
@@ -192,12 +192,12 @@ internal sealed class WorldStampPool {
 
     /// <summary>Packs the pool's per-frame transforms: each live registration's root rides its placement pose (animated),
     /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
-    /// (attached), and each shape holds its CURRENT frame's snapshot (composed root ∘ per-shape pose, positions scaled by
+    /// (attached), and each shape holds its current frame's snapshot (composed root ∘ per-shape pose, positions scaled by
     /// the registration scale); unused slots — and an attached row whose target body is not live this frame — hide below
     /// the floor.</summary>
     /// <param name="transforms">The unified dynamic-transform buffer (the pool writes its own slot range).</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted and attached stamps.</param>
-    /// <param name="slotBase">The pool's FIRST dynamic-transform slot in <paramref name="transforms"/>, supplied by the
+    /// <param name="slotBase">The pool's first dynamic-transform slot in <paramref name="transforms"/>, supplied by the
     /// emitter that owns the pool (see <see cref="Emit"/>).</param>
     public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase) {
         m_packedSlotBase = slotBase;
@@ -208,11 +208,11 @@ internal sealed class WorldStampPool {
 
             // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
             // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
-            // The registration KEEPS its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
-            // range test is a belt-and-braces guard, not a live gap: since the F3 reconciliation (2026-08-06)
-            // WorldPopulationLimits.CapacityCeiling IS WorldClient.EntityCapacity, so the document validator's bound
-            // on population.capacity already keeps every body index inside this client's view — this stays as the
-            // one place that still checks it directly rather than trusting an upstream invariant transitively.
+            // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
+            // range test is a belt-and-braces guard, not a live gap: WorldPopulationLimits.CapacityCeiling is
+            // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
+            // every body index inside this client's view — this stays as the one place that still checks it
+            // directly rather than trusting an upstream invariant transitively.
             if ((live is { Row.Attach: { } parked }) &&
                 (((uint)parked.BodyIndex >= (uint)WorldClient.EntityCapacity) || !client.IsActive(index: parked.BodyIndex))) {
                 live = null;
@@ -263,10 +263,10 @@ internal sealed class WorldStampPool {
     /// group); parked placeholders elsewhere. The probe path takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
-    /// <param name="maxPlacementScale">LIVE-CONSUMED: the placement scale envelope's ceiling
+    /// <param name="maxPlacementScale">Live-consumed: the placement scale envelope's ceiling
     /// (<see cref="WorldAuthoringDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
     /// bound radii here, never a word-capacity term, so re-reading it live cannot desync the frozen probe.</param>
-    /// <param name="slotBase">The pool's FIRST dynamic-transform slot — the same value the matching
+    /// <param name="slotBase">The pool's first dynamic-transform slot — the same value the matching
     /// <see cref="PackTransforms"/> call packs against. Supplied by the owning emitter (which derives it from its own
     /// <see cref="Puck.SdfVm.SdfEmitContext.SlotBase"/>) rather than latched here, so the pool carries no assumption
     /// about where in the composed buffer its owner sits.</param>
@@ -282,7 +282,7 @@ internal sealed class WorldStampPool {
     /// <summary>Resolves a live registration's current-frame world position for one of its shapes (or its root when
     /// <paramref name="shapeId"/> is null) — the placement-anchor seam the audio director rides. Returns
     /// <see langword="false"/> when no live registration holds the placement (a static placement resolves through the
-    /// stamp math instead), and for an ATTACHED row whose target body is not active this frame (the row contributes
+    /// stamp math instead), and for an attached row whose target body is not active this frame (the row contributes
     /// nothing, the same verdict <see cref="PackTransforms"/> already renders as a hidden stamp).</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>

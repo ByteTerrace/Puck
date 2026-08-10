@@ -124,7 +124,7 @@ internal static class Hw {
     /// <summary>The fixed address of the VBlank interrupt handler (the vector at 0x0040 jumps here).</summary>
     public const ushort VBlankHandlerAddress = 0x0153;
 
-    /// <summary>Computes the background-map cell address for a (row, column) pair at BUILD time.</summary>
+    /// <summary>Computes the background-map cell address for a (row, column) pair at build time.</summary>
     /// <param name="row">The map row (0..31; rows 0..17 are on screen).</param>
     /// <param name="column">The map column (0..31; columns 0..19 are on screen).</param>
     /// <returns>The VRAM address of the cell.</returns>

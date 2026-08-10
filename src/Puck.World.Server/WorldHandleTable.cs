@@ -2,8 +2,8 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>A guest-facing reference into one <see cref="WorldHandleTable"/> slot — an index plus the GENERATION its
-/// slot carried when this value was minted (<see cref="WorldHandleTable.TryMint"/>), STAMPED with the identity of the
+/// <summary>A guest-facing reference into one <see cref="WorldHandleTable"/> slot — an index plus the generation its
+/// slot carried when this value was minted (<see cref="WorldHandleTable.TryMint"/>), stamped with the identity of the
 /// table that minted it. Only the index (and, once channels carry one, the generation) is meant to ever cross to a
 /// guest; the generation is how <see cref="WorldHandleTable.TryResolve"/> tells a handle minted before a rebuild apart
 /// from a fresh one that happens to reuse the same index — see <see cref="WorldHandleTable"/>'s own remarks.
@@ -13,10 +13,8 @@ namespace Puck.World.Server;
 /// bare <c>(Index, Generation)</c> pair is, by construction, interchangeable across every principal's and every
 /// capability's table: every table's generation counter starts at 0 and climbs slowly, so two different tables'
 /// same-index slots collide on generation far more often than not, and <see cref="WorldHandleTable.TryResolve"/> would
-/// silently answer whatever the WRONG table's matching slot holds. Docs/capability-channels-plan.md's Open Decision 1
-/// names this exactly: "a guest presenting a small index and generation lands in a table it does not own." Stamping
-/// the table's own identity into the value turns a mismatched resolve into a verification failure instead of a silent
-/// hit.</para></summary>
+/// silently answer whatever the wrong table's matching slot holds. Stamping the table's own identity into the value
+/// turns a mismatched resolve into a verification failure instead of a silent hit.</para></summary>
 /// <param name="Index">The 0-based slot index.</param>
 /// <param name="Generation">The slot's generation at mint time.</param>
 /// <param name="TablePrincipal">The principal of the <see cref="WorldHandleTable"/> that minted this handle.</param>
@@ -24,13 +22,13 @@ namespace Puck.World.Server;
 public readonly record struct WorldHandle(int Index, int Generation, WorldPrincipal TablePrincipal, WorldCapability TableCapability);
 
 /// <summary>
-/// A per-(principal, capability) HANDLE TABLE — the host-side, PURE PROJECTION of <see cref="WorldGrants"/> for one
-/// principal outside the trust boundary (docs/capability-channels-plan.md's "Authority is a handle, never a name"). A
-/// handle resolves a DESIGNATION — the <see cref="GrantSubject"/> a slot names — never a decision: the caller must
-/// still call <see cref="WorldGrants.Allows"/> before acting on what it resolves to, because <see cref="WorldGrants.Allows"/>
-/// carries the exclusivity override and a cached DECISION would go stale the moment another principal exclusively
-/// reserves the same subject. Resolving only the designation costs nothing to keep correct and loses none of the
-/// security property — a guest still cannot name what it was not handed.
+/// A per-(principal, capability) handle table — the host-side, pure projection of <see cref="WorldGrants"/> for one
+/// principal outside the trust boundary. A handle resolves a designation — the <see cref="GrantSubject"/> a slot
+/// names — never a decision: the caller must still call <see cref="WorldGrants.Allows"/> before acting on what it
+/// resolves to, because <see cref="WorldGrants.Allows"/> carries the exclusivity override and a cached decision
+/// would go stale the moment another principal exclusively reserves the same subject. Resolving only the
+/// designation costs nothing to keep correct and loses none of the security property — a guest still cannot name
+/// what it was not handed.
 /// </summary>
 /// <remarks>
 /// <para><b>Only a principal outside the trust boundary gets one.</b> The constructor refuses every
@@ -39,33 +37,33 @@ public readonly record struct WorldHandle(int Index, int Generation, WorldPrinci
 /// same project) — a fully-trusted <see cref="PrincipalKind.Console"/> or a locally-trusted
 /// <see cref="PrincipalKind.Seat"/> could grant itself anything, so handing either a handle table is ceremony, not
 /// security; both keep naming subjects directly.</para>
-/// <para><b>Host-side, never guest-writable.</b> Only an INDEX (and, once channels carry one, its generation) is ever
+/// <para><b>Host-side, never guest-writable.</b> Only an index (and, once channels carry one, its generation) is ever
 /// meant to cross to a guest. Guest memory is guest-writable and the guest runs between every host write and host
-/// read, so a table living in guest memory would be a table the guest can rewrite — bounds checks constrain WHERE it
-/// writes, never WHAT an index means. This table lives here instead, and the host alone resolves an index against
+/// read, so a table living in guest memory would be a table the guest can rewrite — bounds checks constrain where it
+/// writes, never what an index means. This table lives here instead, and the host alone resolves an index against
 /// it.</para>
 /// <para><b>A pure projection — no independent write path.</b> This type never mutates <see cref="WorldGrants"/> and
 /// carries no state <see cref="WorldGrants"/> does not already have; it only re-derives its slots from
 /// <see cref="WorldGrants.ProjectSubjects"/> whenever <see cref="WorldGrants.Revision"/> has moved since its last
 /// rebuild. <c>world.grant</c>/<c>world.revoke</c> (and the engagement-route helpers that touch the same per-principal
-/// storage) are the only way the projection changes; a cleared slot is what THIS table becomes on the next resolve
+/// storage) are the only way the projection changes; a cleared slot is what this table becomes on the next resolve
 /// after one, never an edit made here.</para>
-/// <para><b>Slots carry a generation.</b> A rebuild re-projects in a DETERMINISTIC order (see
+/// <para><b>Slots carry a generation.</b> A rebuild re-projects in a deterministic order (see
 /// <see cref="WorldGrants.ProjectSubjects"/>) — never <see cref="HashSet{T}"/> enumeration order, which is a
 /// free-list/insertion-history artifact not stable across a rebuild that ends at an identical subject set — so the
-/// SAME index can name a DIFFERENT subject after a rebuild if the held set shrank, grew, or simply re-sorted
-/// differently. <see cref="TryMint"/> stamps the slot's CURRENT generation into the returned <see cref="WorldHandle"/>;
-/// <see cref="TryResolve"/> refuses a handle whose generation no longer matches the slot's — a REVOKED grant is
+/// same index can name a different subject after a rebuild if the held set shrank, grew, or simply re-sorted
+/// differently. <see cref="TryMint"/> stamps the slot's current generation into the returned <see cref="WorldHandle"/>;
+/// <see cref="TryResolve"/> refuses a handle whose generation no longer matches the slot's — a revoked grant is
 /// exactly this case, and it must resolve to nothing rather than whatever now happens to occupy the same index. The
 /// generation counter is monotonic for the table's lifetime and never reused, so a stale handle can never
 /// coincidentally match a newly-minted one at the same index.</para>
-/// <para><b>A rebuild is triggered by ANY grant-table write, but a generation only moves for an index whose
+/// <para><b>A rebuild is triggered by any grant-table write, but a generation only moves for an index whose
 /// designation actually changed.</b> <see cref="WorldGrants.Revision"/> is process-global — bumped by every
-/// principal's grant, revoke, engagement route, and revoke miss — so a table for ONE (principal, capability) rebuilds
+/// principal's grant, revoke, engagement route, and revoke miss — so a table for one (principal, capability) rebuilds
 /// on a write that touches a completely different principal, or a different capability of the same one. Re-minting a
 /// fresh generation at every index regardless would invalidate every live handle on any unrelated write, which
 /// defeats "revocation is a cleared slot" by making an unrelated grant indistinguishable from a revocation. So a
-/// rebuild compares each index's newly-projected subject against what THAT index named before: unchanged, it keeps
+/// rebuild compares each index's newly-projected subject against what that index named before: unchanged, it keeps
 /// the old generation (a live handle survives an unrelated write); changed, it mints a fresh one (the only case that
 /// should invalidate anything). This is also what makes <see cref="TryResolve"/>'s generation check load-bearing for a
 /// caller that caches a handle across ticks instead of minting fresh every time — see
@@ -98,7 +96,7 @@ public sealed class WorldHandleTable {
 
         if (principal.Kind is not (PrincipalKind.Addon or PrincipalKind.Peer)) {
             throw new ArgumentException(
-                message: $"a handle table is only for a principal outside the trust boundary (addon or peer) — {principal.Describe()} could grant itself anything, so it keeps naming subjects directly (docs/capability-channels-plan.md)",
+                message: $"a handle table is only for a principal outside the trust boundary (addon or peer) — {principal.Describe()} could grant itself anything, so it keeps naming subjects directly (docs/campaign.md)",
                 paramName: nameof(principal)
             );
         }
@@ -108,17 +106,15 @@ public sealed class WorldHandleTable {
         m_capability = capability;
     }
 
-    /// <summary>Mints a handle for slot <paramref name="index"/> as the table stands RIGHT NOW (rebuilding first if
+    /// <summary>Mints a handle for slot <paramref name="index"/> as the table stands right now (rebuilding first if
     /// the grants changed). Call this fresh every time the caller wants "whatever this slot designates today" rather
-    /// than caching the result across a rebuild — index 0 is the LOWEST subject the principal holds this capability
+    /// than caching the result across a rebuild — index 0 is the lowest subject the principal holds this capability
     /// over, ordered by <see cref="WorldGrants.ProjectSubjects"/>'s deterministic sort.
-    /// <para>Every projected slot names ONE INSTANCE of a capability's domain — a body, a screen, a section, or a
+    /// <para>Every projected slot names one instance of a capability's domain — a body, a screen, a section, or a
     /// profile: <see cref="WorldGrants.ProjectSubjects"/> projects exactly that positive kind set (see its
     /// <c>IsProjectable</c>) and withholds every other kind by default, so a table never has a slot designating "the
-    /// whole domain" regardless of what the principal holds. (The first version filtered only
-    /// <see cref="GrantSubjectKind.All"/>, and an adversarial probe showed <see cref="GrantSubjectKind.Composition"/> —
-    /// also a whole-domain designation — sailing through; the positive statement is what makes the guarantee hold for
-    /// kinds nobody has invented yet.) That still says nothing about WHICH per-instance kind a slot carries, and
+    /// whole domain" regardless of what the principal holds — the positive statement is what makes the guarantee hold
+    /// for kinds nobody has invented yet. That still says nothing about which per-instance kind a slot carries, and
     /// callers must not assume a particular one: a Drive table only ever projects
     /// <see cref="GrantSubjectKind.Body"/> today because the grant door (<c>IsLegitimateSubject</c>) admits no other
     /// concrete shape for Drive, not because of anything this type enforces — a caller that needs a particular kind
@@ -141,8 +137,8 @@ public sealed class WorldHandleTable {
     }
 
     /// <summary>Mints a handle over the slot that currently designates <paramref name="subject"/>, as the table
-    /// stands RIGHT NOW (rebuilding first if the grants changed) — the mint-by-requested-subject shape: the caller
-    /// names WHAT it wants materialized and the table finds its own position, so no caller ever re-derives the
+    /// stands right now (rebuilding first if the grants changed) — the mint-by-requested-subject shape: the caller
+    /// names what it wants materialized and the table finds its own position, so no caller ever re-derives the
     /// projection (or allocates one) to locate a slot.</summary>
     /// <param name="subject">The subject to mint over.</param>
     /// <param name="handle">The minted handle, when a slot designates <paramref name="subject"/>.</param>
@@ -163,17 +159,17 @@ public sealed class WorldHandleTable {
         return false;
     }
 
-    /// <summary>Resolves <paramref name="handle"/> to the <see cref="GrantSubject"/> it designated AT MINT TIME.
+    /// <summary>Resolves <paramref name="handle"/> to the <see cref="GrantSubject"/> it designated at mint time.
     /// Fails — the caller's own attribution decides how loudly — when <paramref name="handle"/> was not minted by
-    /// THIS table (its stamped <see cref="WorldHandle.TablePrincipal"/>/<see cref="WorldHandle.TableCapability"/> do
+    /// this table (its stamped <see cref="WorldHandle.TablePrincipal"/>/<see cref="WorldHandle.TableCapability"/> do
     /// not match this table's own — see <see cref="WorldHandle"/>'s own remarks on why cross-table collision is
     /// otherwise guaranteed, not coincidental), when the index is out of range, or when a rebuild since minting
     /// repacked or cleared the slot (a revoked grant is exactly this case): a cleared slot resolves to nothing, never
-    /// to whatever now occupies the same index. This tells the caller only WHAT the handle designates; the caller must
+    /// to whatever now occupies the same index. This tells the caller only what the handle designates; the caller must
     /// still call <see cref="WorldGrants.Allows"/> before acting on it (see the type's own remarks).</summary>
     /// <param name="handle">The handle to resolve.</param>
     /// <param name="subject">The designated subject, when resolution succeeds.</param>
-    /// <returns><see langword="true"/> when the handle still designates a live slot of THIS table.</returns>
+    /// <returns><see langword="true"/> when the handle still designates a live slot of this table.</returns>
     public bool TryResolve(WorldHandle handle, out GrantSubject subject) {
         if ((handle.TablePrincipal != m_principal) || (handle.TableCapability != m_capability)) {
             subject = default;

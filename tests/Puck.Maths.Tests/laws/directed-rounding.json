@@ -1,0 +1,143 @@
+[
+  {
+    "Id": "directed-rounding.ceiling-square-root-is-least-upper-bound",
+    "Tier": "Default",
+    "Members": [ { "Type": "Puck.Maths.FixedDirectedRounding", "Name": "TryCeilingSquareRoot" } ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryCeilingSquareRoot (public) — the DIRECTION and the TIGHTNESS of the rounded-up square root at every output fraction bit count in [0, 64], over radicands folded onto the non-negative half of the carrier by one logical shift (which preserves the raw's own bit pattern, so the committed edge battery still lands on the seams)",
+        "Against": "Oracles.CeilingIntegerRoot — a bracketed integer search, doubling to a bracket and bisecting it, whose only predicate is one exact squaring; no square root is ever taken. The subject instead takes a floor root and carries it up when the radicand is not a perfect square. The law asserts result^2 >= radicand AND (result-1)^2 < radicand, so it is the LEAST representable upper bound, not merely near the true root — a kernel that rounded to nearest and added one unit in the last place fails the second half",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refuse/succeed verdict is a biconditional here, not an envelope: the subject declines exactly when the scaled radicand leaves UInt128 or the root leaves the raw, and a radicand at or past 2^128 forces a root at or past 2^64, which cannot fit the raw either — so the two refusal conditions coincide and no conservative corner exists. A refusal must leave the output at zero, asserted against the subject directly",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.ceiling-product-is-least-upper-bound",
+    "Tier": "Default",
+    "Members": [ { "Type": "Puck.Maths.FixedDirectedRounding", "Name": "TryCeilingProduct" } ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryCeilingProduct (public) — the direction and tightness of the rounded-up mixed-scale product over non-negative operands and every fraction bit count in [0, 64]",
+        "Against": "Oracles.CeilingRational — the exact rational value formed in BigInteger and ceilinged as a floor plus a remainder test, deliberately NOT as (n + d - 1)/d, which is the shape a fixed-width kernel reaches for and the shape that overflows. The law asserts result*denominator >= numerator AND (result-1)*denominator < numerator, then equality with the oracle",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refuse/succeed verdict is a biconditional: the subject's only overflow path is a left shift whose true magnitude passes 2^128, which puts the exact value far past the signed 64-bit raw, so declining and not-representable coincide. A refusal leaves the output at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.ceiling-quotient-is-least-upper-bound",
+    "Tier": "Default",
+    "Members": [ { "Type": "Puck.Maths.FixedDirectedRounding", "Name": "TryCeilingQuotient" } ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryCeilingQuotient (public) — the direction and tightness of the rounded-up mixed-scale quotient over a non-negative dividend, a strictly positive divisor and every fraction bit count in [0, 64]",
+        "Against": "Oracles.CeilingRational over the exact rational numerator*2^e / denominator. The subject scales the dividend when that exponent is non-negative and the DIVISOR when it is negative, so neither side is rounded before the single division; the oracle keeps both as an exact fraction and never shifts anything",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Both scaling extremes are answered rather than declined, and the law pins that: an oversized dividend forces a quotient of at least 2^65, past the raw, so refusal there IS the representability verdict; an oversized divisor puts the exact ratio strictly inside (0, 1), whose ceiling is exactly one, and the subject returns one rather than refusing. The verdict is therefore a biconditional against representability alone. directed-rounding.negative-operands-refuse pins the 1/3 witness where a nearest-rounding kernel would answer zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.ceiling-product-sum-is-least-upper-bound",
+    "Tier": "Default",
+    "Members": [ { "Type": "Puck.Maths.FixedDirectedRounding", "Name": "TryCeilingProductSum" } ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryCeilingProductSum (public) — the direction and tightness of the rounded-up a*b + addend over non-negative operands at three independent scales, with both terms lifted by a LOSSLESS left shift onto the finer of the two scales so the addition is exact and only the narrowing rounds",
+        "Against": "Oracles.CeilingRational over the exact rational (a*b*2^(m-p) + addend*2^(m-q)) * 2^(fractionBitsOut - m), computed in BigInteger with no width limit at all",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE, modelled exactly rather than tolerated: each lifted term must fit 127 bits, not UInt128's full 128, BECAUSE the two are then added and two 128-bit terms need a 129th bit the accumulator does not have. Where either term needs the 128th bit the subject REFUSES — a declined answer, never a wrong one, and one that can decline a value the raw could have held. The law computes both terms exactly and demands an answer only inside that budget, so a subject that widened the budget (and wrapped) or narrowed it (and declined more) would both fail",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.ceiling-magnitude-is-least-upper-bound",
+    "Tier": "Default",
+    "Members": [ { "Type": "Puck.Maths.FixedDirectedRounding", "Name": "TryCeilingMagnitude" } ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedDirectedRounding.TryCeilingMagnitude (public, both the two- and the three-component overload — one CoverRef credits both, since resolution is by name) — the direction and tightness of the rounded-up Euclidean norm at the components' own scale, over the FULL signed range of every component (a magnitude is non-negative whatever the signs are, which is why these two members alone in the family admit negative operands)",
+        "Against": "Oracles.CeilingIntegerRoot over the exact sum of squares in BigInteger — a bracketed search on one exact squaring, against the subject's floor root plus a settle. result^2 >= radicand AND (result-1)^2 < radicand are both asserted",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The directed norm never falls BELOW FixedVectorMath.TryMagnitude's round-to-nearest norm at the same components — the round-to-nearest sibling is left exactly as it was, and this is the one relation between them the family promises. Three squared 64-bit raws total at most 3*2^126, inside UInt128, so the sum is exact and no preconditioning is involved; the root can still leave the raw, which is refused with the output at zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "directed-rounding.negative-operands-refuse",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Every arithmetic member of the directed-up family refuses a negative operand — and TryCeilingQuotient a zero or negative divisor, and TryCeilingSquareRoot a negative fraction bit count — returning false with its output at zero, rather than choosing silently between 'up' meaning toward positive infinity and 'up' meaning away from zero. The two magnitude overloads are the deliberate exception and are checked to ACCEPT negative components, answering the exact 5 for (-3,-4). The claim also pins the discriminating witness for the whole family: the exact ratio 1/3 at zero output fraction bits must answer 1, where a kernel that quietly rounded to nearest would answer 0 and pass every proximity check",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

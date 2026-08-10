@@ -2,7 +2,9 @@
 
 This folder holds the numbers a simulation is allowed to keep. If a value gets
 advanced by a tick, compared, hashed into a state hash, or replayed later, it
-is carried by a type from here: a signed and an unsigned Q48.16 scalar, three
+is carried by a type from here: a signed and an unsigned Q48.16 scalar, a
+signed Q16.48 scalar that leans the opposite way — range traded for
+resolution — and a signed Q32.32 scalar splitting the two evenly, three
 fraction types that live on the unit interval, two- and three-component
 vectors, the three planar number systems (complex, dual, and split),
 quaternions and the rigid transforms built on them, a hierarchical world
@@ -120,6 +122,8 @@ give each type its full contract.
 |------|------|---------------|
 | `FixedQ4816` | `readonly record struct` | The signed Q48.16 scalar, and the carrier every other type here is built from. It is a `long` in two's complement — the standard signed-integer layout, in which the highest bit carries a negative weight — with 48 integer bits including that sign bit and 16 fraction bits. It offers the complete `INumber<T>` and `ISignedNumber<T>` surface plus `IPowerFunctions<T>`, and the transcendentals `Sqrt`, `Atan2`, `Sin`/`Cos`/`SinCos`, `Log2`, `Exp2` and `Pow`, all computed with integer arithmetic only. |
 | `UFixedQ4816` | `readonly record struct` | The unsigned UQ48.16 companion, range `[0, 2⁴⁸)`. Its top bit is an ordinary magnitude bit rather than a sign. It offers `INumber<T>` and `IUnsignedNumber<T>` plus the bitwise and shift operator families, and the two truncating pairs `DivideUnchecked` / `MultiplyUnchecked`, each of which can hand the remainder back. |
+| `FixedQ1648` | `readonly record struct` | The signed Q16.48 scalar — the same 64-bit carrier split the other way, with 16 integer bits including the sign and 48 fraction bits, so its range is about `±32768` and its resolution `2⁻⁴⁸`. That trade suits a quantity whose useful values sit close to zero but span many decades of magnitude — a reciprocal such as an inverse mass or an inverse inertia entry is a motivating example: it spans roughly ten decades across plausible bodies, and Q48.16's `2⁻¹⁶` floor rounds the small end to zero — a five-unit block's inverse inertia is `0.126` raw there, which is to say nothing at all, leaving the body infinitely resistant to torque. It offers `INumber<T>` and `ISignedNumber<T>` but no transcendentals, and converts to and from `FixedQ4816` with the narrowing rounded once and the widening range-gated. |
+| `FixedQ3232` | `readonly record struct` | The signed Q32.32 scalar — the same 64-bit carrier split evenly, with 32 integer bits including the sign and 32 fraction bits, so its range is about `±2,147,483,648` and its resolution `2⁻³²`. It is the balanced point between `FixedQ4816`'s range-leaning Q48.16 split and `FixedQ1648`'s resolution-leaning Q16.48 split, suited to a quantity that needs both meaningfully wide range and finer-than-Q48.16 resolution at once. It offers `INumber<T>` and `ISignedNumber<T>` but no transcendentals, and converts to and from `FixedQ4816` with the narrowing rounded once and the widening range-gated. |
 | `UnitFraction16` | `readonly record struct` | UQ0.16 — a real number in `[0, 1)` in sixteen bits. The interval is *half-open*: zero is included, one is not. Every bit is fractional, so there is no representable one and therefore no `One`, no `MultiplicativeIdentity` and no `++`. Multiplication is *closed*, meaning the product of two values in the range is always back in the range, so it cannot overflow. |
 | `UnitFraction32` | `readonly record struct` | UQ0.32 — the same half-open contract at a resolution of `2⁻³²`, stored in a `uint`. This is the grid the samplers draw on. |
 | `UnitInterval32` | `readonly record struct` | The **closed** interval `[0, 1]` — one included this time — on that same `2⁻³²` grid, stored in a `ulong` under a single invariant: `Value ≤ 2³²`. The thirty-third bit buys a multiplicative identity, exact absorbing elements at both ends (an absorbing element swallows whatever it meets, the way zero times anything is zero), and closure of `Multiply`. There are no arithmetic operators at all; every combining operation is a named method. |
@@ -135,8 +139,9 @@ give each type its full contract.
 | `FixedRateAccumulator` | `struct` | Exact-tick integration of a Q48.16 per-second rate. The part of the division too small to represent is kept as a remainder across calls, so a constant rate advances by exactly one unit after `ticksPerSecond` one-tick steps. That remainder is authoritative simulation state. |
 | `FixedVector3RateAccumulator` | `struct` | Three independent axes of the same integration under one shared time base, bound once. Four readers, four selective resets. |
 | `FixedVectorMath` | `internal static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
-| `FusedArithmetic` (with `LimbBig`) | `internal static` | **Substrate.** The fused one-rounding kernels: branchless raw magnitude, sign-plus-`UInt128` product sums, the exact restoring division that rounds a ratio to Q16 once, power-of-two scaling, and the Q48 → Q16 narrowing (`FixedQ4816.RoundProduct` at shift 32). `LimbBig`, sharing the file, is the exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes — no `FusedArithmetic` kernel calls it. |
-| `FixedPointText` | `internal static` | **Substrate.** Exact, allocation-free decimal parsing and rendering shared by all four formattable carriers. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and the terminating fraction-digit emission; each carrier keeps its own integer prefix, sign and length policy. |
+| `FusedArithmetic` (with `LimbBig`) | `internal static` | **Substrate.** The fused one-rounding kernels: branchless raw magnitude, sign-plus-`UInt128` product sums, the exact restoring division that rounds a ratio to Q16 once (and its generalized sibling, `TryDivideMagnitudeRounded`, at any caller-supplied fraction bit count), power-of-two scaling, and the Q48 → Q16 narrowing (`FixedQ4816.RoundProduct` at shift 32). `LimbBig`, sharing the file, is the exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes — no `FusedArithmetic` kernel calls it. |
+| `FixedSymmetricSolve` | `internal static` | **Substrate.** Scale-free 2×2/3×3 symmetric linear solve and invert — `TrySolveSymmetric2/3` and `TryInvertSymmetric2/3` — for the effective-mass matrices a rigid-body solver inverts. Raw-`long` operands at any shared caller scale; preconditions by one common power of two, forms the determinant and adjugate as exact sign-plus-`UInt128` triple and double products, and rounds each returned component exactly once through `FusedArithmetic.TryDivideMagnitudeRounded`. Refuses (returns `false`, every `out` at zero) on an exactly singular matrix or an unrepresentable result; Invert additionally refuses in a narrow large-magnitude corner its own remarks document. Kept `internal` deliberately — the solve is transient and never stored, so there is no persisted format for a caller to confuse it with. |
+| `FixedPointText` | `internal static` | **Substrate.** Exact decimal parsing and rendering shared by all six formattable carriers. Rendering is always allocation-free. Parsing is allocation-free too, in `UInt128`, for every carrier at or below thirty-seven fraction bits — `FixedQ4816`, `UFixedQ4816`, `UnitFraction16`, `UnitFraction32` and `FixedQ3232` all sit under that today. Only `FixedQ1648`'s Q16.48 crosses it: a format reads `F + 1` decimal digits, and forty-nine of them no longer fit `UInt128`, so its accumulation and rounding alone route through `BigInteger` (and therefore allocate) — a strict generalization of the narrow path that changes no result where both could run. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and the terminating fraction-digit emission; each carrier keeps its own integer prefix, sign and length policy. |
 | `FixedPointConvert` | `internal static` | **Substrate.** The recognized-source predicates the two Q48.16 carriers' generic conversion hooks dispatch on, and the exact scaling step their *truncating* conversions are defined on: a known BCL numeric's exact value at the target's scale, produced as an `Int128` with no range clamp anywhere, so the caller reduces it to its own carrier's width. A `decimal` source is read from its own bits and rounded once — the same single rounding `FixedQ4816`'s checked and saturating decimal lanes share, each applying its own range policy — and an integer source keeps its low 128 bits, which is always enough because nothing above `2¹²⁸` can reach a 64-bit raw. |
 
 ## Choosing a scalar
@@ -589,7 +594,12 @@ and the full computation agree component for component, and a zero result
 never encodes a failure. `Normalize` is Q16-accurate at every representable
 input scale and answers `Identity` at zero.
 
-`ToQuaternion` is the single-precision presentation boundary.
+`ToQuaternion` is the single-precision presentation boundary, and
+`FromQuaternion` is the inbound one — the counterpart to
+`FixedVector3.FromVector3`, so an authored rotation's rounding into the
+contract is decided once here rather than per caller. It does not
+renormalize: Q16 quantization moves a unit rotation off the sphere, so callers
+pair it with `Normalize`.
 
 ---
 
@@ -810,6 +820,38 @@ charged folds (`Oracle/MaterialOps.cs`). It is the shift-32 face of
 `FixedQ4816.RoundProductSum(Int128)` at shift 16 — which is why the
 wrap-parity argument below covers both.
 
+`TryDivideMagnitudeRounded` generalizes `DivideProductSumCore`'s own fixed
+16-bit count to any caller-supplied non-negative fraction bit count, returning
+the rounded `UInt128` magnitude unnarrowed (so the caller decides how — and
+whether — to fit it into its own carrier) and refusing outright on a zero
+denominator or on a shift that would overflow `UInt128` before it starts.
+`FixedSymmetricSolve` is its one caller outside this file's own fixed-16 use.
+
+### `FixedSymmetricSolve`
+
+Scale-free symmetric linear-solve and -invert kernels for 2×2 and 3×3 systems,
+`TrySolveSymmetric2/3` and `TryInvertSymmetric2/3` — the shape a rigid-body
+solver forms when it inverts an effective-mass matrix. `internal`
+deliberately: the solve is transient and never stored, so unlike
+`FixedQ1648` there is no persisted format for a caller to confuse it with, and
+wrapping it in a type would fight the property that makes it work.
+
+Every kernel preconditions its operands by one common power-of-two shift
+(mirroring `FixedVectorMath`'s own shape, but with its OWN target bit — reusing
+`DirectionShift`'s bit 45 would overflow a 3×3 determinant, whose six triple
+products need `3k`, not `2k`, bits of headroom), forms the determinant and the
+adjugate cofactors as exact sign-plus-`UInt128` products through
+`FusedArithmetic`, and rounds each returned component exactly once through
+`TryDivideMagnitudeRounded`. Solve's ratio is exactly scale-invariant under any
+shared preconditioning shift (the matrix's degree-`n` homogeneity and the
+right-hand side's missing degree cancel exactly) whenever that shift is itself
+exact — a lossless left shift, true whenever every operand's own magnitude is
+already within the type's target band, which any realistic effective-mass or
+velocity entry is. Invert has no right-hand side to supply the missing degree,
+so it folds the shift into its own fraction-bit request and refuses outright
+rather than manufacture an answer when that would go negative. Both refuse
+(every `out` parameter zero) on an exactly singular matrix.
+
 `LimbBig` shares the file but serves a different floor: it is the exact signed
 multi-limb accumulator behind `Algebra/MonogenicAlgebra`'s higher-degree
 lanes, and no `FusedArithmetic` kernel calls it — the widest kernel here,
@@ -826,7 +868,7 @@ buffer.
 
 ### `FixedPointText`
 
-Exact, allocation-free decimal parsing shared by all four formattable
+Exact decimal parsing shared by all six formattable
 carriers, plus the two rendering pieces that are the same for all of them:
 `ValidateGeneralFormat`, which refuses any specifier but empty/`G`/`g`, and
 `WriteFractionDigits`, which emits the point and the terminating expansion of
@@ -836,7 +878,19 @@ validates the culture and style syntax
 and supplies **only the sign**; its rounded magnitude is never used. The
 original digits are then quantized directly against the reduced denominator
 `2·5^(F+1)`, so an arbitrarily long tail of digits sitting on a midpoint
-cannot be rounded twice. `FixedPointParseStatus` distinguishes `Invalid` from
+cannot be rounded twice.
+
+`Parse`'s fraction-digit accumulation and rounding branch on `F`: at or below
+thirty-seven fraction bits it stays in `UInt128` and allocates nothing —
+`FixedQ4816`, `UFixedQ4816`, both unit-fraction carriers, and `FixedQ3232`,
+every format below `FixedQ1648`. Above it, `F + 1` decimal digits can reach `10^(F+1) − 1`,
+which overflows `UInt128` (`FixedQ1648`'s forty-eight fraction bits needs
+forty-nine digits, about 163 bits), so only that one carrier's accumulation
+and rounding route through `BigInteger` and allocate. Both branches share one
+formula and differ only in carrier width; the quotient either narrows to is
+provably below `2^F`, so switching branches at the limit changes no result.
+
+`FixedPointParseStatus` distinguishes `Invalid` from
 `Overflow`, which is what lets the two Q48.16 carriers' `NumberStyles`
 overloads throw `FormatException` and `OverflowException` apart while
 `TryParse` returns `false` for both. Only the surfaces that route through
@@ -937,11 +991,12 @@ types. Each one is a real dependency in the sources, not a resemblance.
   the same internal band check the scalar restore uses, handing it that axis's
   own parameter name so the refusal identifies the axis. The two consume
   `FixedQ4816` and `FixedVector3` respectively, and produce the same.
-- **`FixedPointText` serves four carriers.** `FixedQ4816`, `UFixedQ4816`,
-  `UnitFraction16` and `UnitFraction32` each hold a `ParsingDenominator`
-  built by `CreateParsingDenominator(FractionBitCount)` and route every parse
-  through the one `Parse` entry point, so the "validate with the platform,
-  quantize the original digits" rule has exactly one implementation.
+- **`FixedPointText` serves six carriers.** `FixedQ4816`, `UFixedQ4816`,
+  `UnitFraction16`, `UnitFraction32`, `FixedQ1648` and `FixedQ3232` each hold a
+  `ParsingDenominator` built by `CreateParsingDenominator(FractionBitCount)`
+  and route every parse through the one `Parse` entry point, so the "validate
+  with the platform, quantize the original digits" rule has exactly one
+  implementation.
 - **`FixedPosition` and `FixedVector3` are the position/displacement pair.**
   The heterogeneous operators are the only way to combine them, and the
   displacement type is the ordinary vector, so a delta drops straight into the
@@ -1094,6 +1149,8 @@ or by nothing:
 |---|---|
 | `scalar.*` | `FixedQ4816`: construction, the four arithmetic operators and their checked forms, order and magnitude selection, the text ladder, and each transcendental against a shared-nothing `BigInteger` oracle. |
 | `unsigned-scalar.*` | `UFixedQ4816`: the same shape, plus the five division entry points, the two unchecked pairs, and the `double` boundary. |
+| `q1648.*` | `FixedQ1648`: the same non-transcendental shape as `scalar.*`, retargeted at forty-eight fraction bits and a sixteen-bit integer range, plus the `FixedQ4816` peer conversion. |
+| `q3232.*` | `FixedQ3232`: the same non-transcendental shape as `scalar.*`, retargeted at thirty-two fraction bits and a thirty-two-bit integer range, plus the `FixedQ4816` peer conversion. |
 | `unit-fraction16.*` / `unit-fraction32.*` | The half-open fractions: the grid, the exact operations, order, the shift masks, the refusal ladder, and text. |
 | `closed-unit.*` | `UnitInterval32`: the pairwise and triple products, the exact bounded operations, the kinship conversions, and the construction refusals. |
 | `complex.*` / `split.*` / `dual.*` | The planar trio: products, division, the exponential maps, norms, and the conjugation identities. |
@@ -1102,6 +1159,7 @@ or by nothing:
 | `vector.*` | Componentwise algebra, the fused plane and space products, norms, normalization, and the divergence canaries that prove the fused discipline is load-bearing. |
 | `position.*` | Canonicalization, `Delta`, `Translate`, the group structure, and the render-relative ladder. |
 | `rate.*` | Scalar and vector integration against an exact `BigInteger` ledger, the unit-advance closure, and both refusal ladders. |
+| `symmetric-solve.*` | `FixedSymmetricSolve` (internal): the 2×2 and 3×3 solve and invert kernels against an independent `BigInteger` Cramer's-rule oracle, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope. |
 | `smoke.*` | The fast mirrors — a ties-to-even witness for four of the five rounding carriers (`FixedQ4816`'s multiply and its divide, `UFixedQ4816`, `UnitFraction32`, `UnitInterval32`), a fused-product witness, and the twin spot checks. `UnitFraction16` has **no** smoke witness; its only mirror is `deep.unit-fraction16-exhaustive`, which lives in the Deep tier. |
 | `deep.*` | The exhaustive and full-range mirrors of everything above, including the complete `UnitFraction16` sweep. |
 

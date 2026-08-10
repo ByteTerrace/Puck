@@ -26,7 +26,9 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             bindability: CommandBindability.Unbindable,
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever values (world.target's present Hz + world.timing's armed state) — so an author sees which fields the CLI overrode and which levers have drifted.",
-            handler: (_, _) => new CommandResult(Output: DescribeHost())
+            handler: (_, args) => (args.Count == 0
+                ? new CommandResult(Output: DescribeHost())
+                : CommandResult.Error(output: $"[world.host: unrecognized '{args[0]}' — expected no arguments]"))
         );
     }
 

@@ -23,7 +23,7 @@ namespace Puck.World;
 /// <param name="PointerSelection">The authored spatial-selection policy in force.</param>
 /// <param name="Placement">The authored hub-placement policy in force.</param>
 /// <param name="RingSelection">The authored explicit/excursion ring-selection policy in force.</param>
-/// <param name="Center">The radial hub in FRAME pixels (meaningful while open).</param>
+/// <param name="Center">The radial hub in frame pixels (meaningful while open).</param>
 /// <param name="CenterKnown">Whether the hub is anchored.</param>
 internal readonly record struct WorldWheelStatus(
     int Slot,
@@ -99,7 +99,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="cursor">The cursor feed whose published status anchors the hub and drives pointer hover.</param>
     /// <param name="viewports">The per-seat viewport publication the pixel geometry derives from.</param>
     /// <param name="store">The wheel store the overlay reads.</param>
-    /// <param name="router">The input router a committed sector's activation enters — LAZY, because the command
+    /// <param name="router">The input router a committed sector's activation enters — lazy, because the command
     /// registry aggregates <see cref="WorldWheelCommandModule"/>, which consumes this feed; a direct dependency
     /// would cycle the container.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>

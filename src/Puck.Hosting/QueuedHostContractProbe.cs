@@ -476,12 +476,12 @@ public static class QueuedHostContractProbe {
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IFeedbackMachine {
         // Held input over a long horizon (60 Hz submissions vs the ~59.73 Hz native cadence, so the authority completes
         // a native frame only ~every submission) plus a fast-forward pass: the measured lead must stay pinned to N the
-        // whole way, within one native frame. The reported lead is now the FORK's own native-frame index minus the
-        // authority's (H-03) — not a synthetic per-RunFrame counter that reads N regardless of where the fork actually
-        // sits — so it reports the TRUE lead. Because the layer drives the fork to its own index reaching authority+N,
-        // that true lead is N, or N+1 in the instant an instruction's overshoot carries the boundary-reaching frame past
-        // the target (it self-corrects to N the next submission). The bug this pins would let the lead drift without
-        // bound under a mismatched cadence; the honest fork-index read holds it to exactly [N, N+1].
+        // whole way, within one native frame. The reported lead is the fork's own native-frame index minus the
+        // authority's — not a synthetic per-RunFrame counter that would read N regardless of where the fork actually
+        // sits — so it reports the true lead. Because the layer drives the fork to its own index reaching authority+N,
+        // that true lead is N, or N+1 in the instant an instruction's overshoot carries the boundary-reaching frame
+        // past the target (it self-corrects to N the next submission); the fork-index read holds it to exactly
+        // [N, N+1] regardless of cadence mismatch.
         var held = MachinePadState.Neutral with { Buttons = MachineButtons.South };
 
         foreach (var factor in (int[])[1, FastForwardFactor]) {

@@ -10,21 +10,21 @@ public enum AxisComponent : byte {
 }
 
 /// <summary>
-/// Parses a <see cref="BindingPageEntryDefinition.Source"/>'s optional axis-COMPONENT suffix — <c>leftStick.x</c>
-/// naming the X component of the two-dimensional <c>gamepad.leftStick</c> control, feeding a CHANNEL destination
+/// Parses a <see cref="BindingPageEntryDefinition.Source"/>'s optional axis-component suffix — <c>leftStick.x</c>
+/// naming the X component of the two-dimensional <c>gamepad.leftStick</c> control, feeding a channel destination
 /// with that component's analog magnitude instead of the constant a bare Axis2D source falls back to (see
 /// <see cref="InputRouter"/>'s <c>ResolveValue</c>). The suffix is a pure string convention over the existing
 /// physical-source vocabulary — <c>Puck.Commands</c> carries no knowledge of which source ids the engine actually
 /// declares (that lives in <c>Puck.Input.InputSources</c>, an assembly this project cannot reference); the
-/// vocabulary half — does the BASE id name a real, two-dimensional control — is
+/// vocabulary half — does the base id name a real, two-dimensional control — is
 /// <see cref="BindingVocabularyCheck"/>'s job, fed the same split this type computes.
 /// </summary>
 /// <remarks>
-/// A component reference is exactly a THIRD dot-separated segment whose value is <c>x</c> or <c>y</c> (lowercase,
+/// A component reference is exactly a third dot-separated segment whose value is <c>x</c> or <c>y</c> (lowercase,
 /// ordinal) — <c>gamepad.leftStick.x</c> splits to base <c>gamepad.leftStick</c> and <see cref="AxisComponent.X"/>.
 /// A source with only one dot (<c>gamepad.leftStick</c>, <c>keyboard.f10</c>) has no third segment and is an
-/// ordinary source, not a component reference. A source with two OR MORE dots whose final segment is anything
-/// other than <c>x</c>/<c>y</c> is MALFORMED — refused by <see cref="BindingProfile.Compile"/> by name, the same
+/// ordinary source, not a component reference. A source with two or more dots whose final segment is anything
+/// other than <c>x</c>/<c>y</c> is malformed — refused by <see cref="BindingProfile.Compile"/> by name, the same
 /// way an unrecognized activator or chord shape is, rather than silently resolving as an unknown plain source.
 /// </remarks>
 public static class BindingSourceComponent {
@@ -35,7 +35,7 @@ public static class BindingSourceComponent {
     /// <param name="component">The named component, or <see langword="null"/> when <paramref name="source"/> names
     /// no component (an ordinary source with at most one dot).</param>
     /// <returns><see langword="false"/> when <paramref name="source"/> has two or more dots but its final segment
-    /// is not exactly <c>x</c> or <c>y</c> — a MALFORMED component reference. <see langword="true"/> otherwise,
+    /// is not exactly <c>x</c> or <c>y</c> — a malformed component reference. <see langword="true"/> otherwise,
     /// whether or not a component was found.</returns>
     public static bool TrySplit(string source, out string baseSource, out AxisComponent? component) {
         baseSource = source;

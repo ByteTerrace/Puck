@@ -177,7 +177,7 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)U.Value * U.Value) - ((Int128)V.Value * V.Value)))));
         }
     }
-    /// <summary>Gets whether this element is a unit — invertible, off the light cone.</summary>
+    /// <summary>Gets a value indicating whether this element is a unit — invertible, off the light cone.</summary>
     public bool IsUnit => ((U.Value != V.Value) && (U.Value != -V.Value));
 
     /// <summary>Returns the conjugate <c>u − v·j</c>. The product <c>s·Conjugate()</c> is <c>(Norm, 0)</c>, so the

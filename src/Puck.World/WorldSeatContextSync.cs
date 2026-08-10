@@ -5,14 +5,14 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// Publishes each seat's admitted context-family states (<see cref="WorldContextFamilies"/>) AND its resolved
+/// Publishes each seat's admitted context-family states (<see cref="WorldContextFamilies"/>) and its resolved
 /// perception anchor (<see cref="WorldPerceptionAnchor"/>) — the one derivation feed, shared by the post-step sync
 /// (<see cref="WorldSimulation"/>, every tick, so a state change flips the derived group and swaps the anchor the
 /// same tick it applied) and the post-build wiring (once at boot, so a pre-first-tick read-back reports the boot
 /// census truthfully instead of the resolvers' cold defaults). Roster is the client roster's own lifecycle tuple
-/// made one value; engagement AND the anchor are both READS over the server grant table's single-valued Control
+/// made one value; engagement and the anchor are both reads over the server grant table's single-valued Control
 /// route for the seat's acting principal — the same in-process loopback discipline as <c>CheckEngage</c>, never a
-/// parallel latch, and the anchor rides this SAME read rather than opening a second one (one source of truth).
+/// parallel latch, and the anchor rides this same read rather than opening a second one (one source of truth).
 /// <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged state, so an ordinary tick costs
 /// two string compares, one route lookup, and one array write per seat.
 /// </summary>

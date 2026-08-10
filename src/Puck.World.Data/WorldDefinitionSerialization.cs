@@ -11,23 +11,23 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The System.Text.Json SOURCE-GENERATION context for the world document (<c>puck.world.def.v1</c>) — the only
+/// The System.Text.Json source-generation context for the world document (<c>puck.world.def.v1</c>) — the only
 /// sanctioned entry point for (de)serializing a <see cref="WorldDefinition"/>. Source-gen (not runtime reflection) keeps
 /// the load/save boundary trimming/AOT-clean; every row type in the document graph rejects an unmapped member by
-/// default (<c>UnmappedMemberHandling = Disallow</c> below) — an authoring typo or a stale field fails LOUD, by name
+/// default (<c>UnmappedMemberHandling = Disallow</c> below) — an authoring typo or a stale field fails loud, by name
 /// and by row type, rather than vanishing silently. The one carve-out is <see cref="WorldDefinition"/>'s own root:
 /// its <see cref="WorldDefinition.Extensions"/> property carries <c>[JsonExtensionData]</c>, which STJ always prefers
-/// over the ambient Disallow default — an unmapped TOP-LEVEL member still round-trips into that bag and is judged by
+/// over the ambient Disallow default — an unmapped top-level member still round-trips into that bag and is judged by
 /// <see cref="Puck.Abstractions.Documents.DocumentExtensionsPolicy"/> instead (a reserved '$'/'_' prefix passes; any
 /// other key is a validator rejection). Nothing else in the graph carries that attribute, so every nested row is
 /// unconditionally strict. Every enum the document graph carries declares its own strict by-name
-/// conversion (writes the exact declared member name, REFUSES a numeric token on read) — most at the enum's own
+/// conversion (writes the exact declared member name, refuses a numeric token on read) — most at the enum's own
 /// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="BodyMotionOp"/>,
 /// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="ActionFact"/>,
 /// <see cref="ShadowTier"/>, <see cref="Puck.Abstractions.Presentation.WorldRenderScaleTier"/>,
 /// <see cref="Puck.Abstractions.Presentation.PresentMode"/>, <see cref="Puck.World.Protocol.WorldCapability"/>); one —
 /// <see cref="CommandPhase"/> (<c>Puck.Commands</c>) — lives in a project that does not reference
-/// <c>Puck.Abstractions</c>, so its closed <see cref="StrictEnumConverter{TEnum}"/> instance is listed on THIS
+/// <c>Puck.Abstractions</c>, so its closed <see cref="StrictEnumConverter{TEnum}"/> instance is listed on this
 /// context below instead (a source-gen context may register a closed generic converter for a type it does not own,
 /// unlike the non-generic factory this replaced, which the generator refused unconditionally).
 /// <c>UseStringEnumConverter</c> writes by name too but has no <c>allowIntegerValues</c> knob, so it still accepts a
@@ -128,7 +128,12 @@ namespace Puck.World;
 // The rules section rows (the world.row.set rules payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldRule accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldRule))]
-[JsonSerializable(typeof(WorldInputHoldSettings))]
+// The inputHold section row (the world.row.set inputHold payload shape + the document `inputHold` section) — its
+// AUTHORED shape (seconds, never the compiled simulation-tick fields WorldInputHoldSettings carries; see
+// WorldInputHoldAuthoring's remarks). WorldInputHoldSettings itself is never a JSON target any more (nothing
+// serializes the compiled shape directly), so it carries no entry here.
+[JsonSerializable(typeof(WorldInputHoldAuthoring))]
+[JsonSerializable(typeof(WorldInputHoldParticipantAuthoring))]
 // The groups section (the world.row.set groups.kinds payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldGroupKind accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldGroupsSection))]
@@ -146,14 +151,13 @@ namespace Puck.World;
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>
     // instance here instead keeps the strict posture without that edge.
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldPortalLifetimeJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
+    Converters = new[] { typeof(Vector3JsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    // The OTHER half of strict parse, and the one that was missing. UnmappedMemberHandling below refuses a member the
-    // model does not have; this refuses a member the model REQUIRES and the document does not carry. Without it, a
-    // constructor parameter with no C# default is silently filled — an enum lands on 0, a reference on null — so the
-    // generated schema (which marks such a parameter `required`, correctly) and the loader disagreed about the
-    // contract, and the document lost the argument. Absence answered with someone else's numbers, and no battery
-    // could see it: strict parse only ever caught EXTRA members.
+    // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
+    // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
+    // no C# default is silently filled — an enum lands on 0, a reference on null — so the generated schema (which
+    // marks such a parameter `required`, correctly) and the loader would disagree about the contract, and the
+    // document would lose the argument with absence answered by someone else's numbers, invisible to any battery.
     //
     // The consequence is that "no C# default" now MEANS required, everywhere in the document graph. A member that is
     // genuinely optional says so with an explicit default; a member that is genuinely required is authored in every
@@ -268,12 +272,12 @@ internal sealed class ChannelConsentMaskJsonConverter : JsonConverter<ChannelCon
 }
 
 /// <summary>
-/// Reads and writes a <see cref="MutationKindMask"/> as the SAME comma-separated kind-NAME token
+/// Reads and writes a <see cref="MutationKindMask"/> as the same comma-separated kind-name token
 /// <c>world.grant</c>'s <c>verbs:&lt;name,…&gt;</c> takes (<c>"UpsertStateRow,RemoveStateRow"</c>) rather than the
 /// raw <c>{"bits":211106232532992}</c> object this context's member policies would emit. A raw lane is exactly where
 /// the mask-vocabulary confusion this type's own remarks describe was invisible: two grant rows carrying
 /// <c>{"bits":3}</c> mean entirely different things depending on their subject kind, and no reviewer can see it. A
-/// name list cannot be misread, and an unknown name refuses BY NAME at parse rather than folding to a silently
+/// name list cannot be misread, and an unknown name refuses by name at parse rather than folding to a silently
 /// narrower mask.
 /// </summary>
 internal sealed class MutationKindMaskJsonConverter : JsonConverter<MutationKindMask> {
@@ -294,7 +298,7 @@ internal sealed class MutationKindMaskJsonConverter : JsonConverter<MutationKind
 }
 
 /// <summary>
-/// Reads and writes a <see cref="DocumentWriteMask"/> as the SAME comma-separated operation-NAME token
+/// Reads and writes a <see cref="DocumentWriteMask"/> as the same comma-separated operation-name token
 /// <c>world.grant</c>'s <c>writes:&lt;name,…&gt;</c> takes (<c>"Set,Add"</c>) — the cross-document durable-state
 /// channel's own vocabulary, visibly different on the page from a
 /// <see cref="MutationKindMaskJsonConverter">verb mask</see> rather than an identically-shaped bit lane.
@@ -317,26 +321,26 @@ internal sealed class DocumentWriteMaskJsonConverter : JsonConverter<DocumentWri
 }
 
 /// <summary>
-/// Reads and writes <see cref="WorldStateRow"/> — the CELL substrate's one C# type — as ONE authored JSON shape (see
+/// Reads and writes <see cref="WorldStateRow"/> — the cell substrate's one C# type — as one authored JSON shape (see
 /// <see cref="WorldStateRow"/>'s remarks): a <c>name</c>, a <c>kind</c> (<c>int</c>|<c>fixed</c>|<c>bool</c>|
 /// <c>text</c>), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>nonNegative</c>), and
-/// EITHER a bare <c>value</c> — sugar for the one cell keyed <see cref="WorldStateRow.SlotKey"/> — OR a <c>cells</c>
+/// either a bare <c>value</c> — sugar for the one cell keyed <see cref="WorldStateRow.SlotKey"/> — or a <c>cells</c>
 /// array of <c>{"key","value"}</c> objects. Two optional fields, never two discriminators: a row carrying both is
 /// refused by name, as is a <c>value</c> beside a <c>capacity</c> (declaring a capacity is declaring a keyed row).
 /// Omitting both is a declared-but-empty row. There is no <c>$type</c> and no <c>rows</c> member — the two retired
 /// spellings of the pre-collapse shape refuse as unmapped members like any other stale field.
-/// <para>A fixed-kind value (<c>value</c>, <c>min</c>, <c>max</c>, or a cell's own <c>value</c>) is a DECIMAL STRING
+/// <para>A fixed-kind value (<c>value</c>, <c>min</c>, <c>max</c>, or a cell's own <c>value</c>) is a decimal string
 /// parsed/formatted through
 /// <see cref="FixedQ4816.TryParse(string?,IFormatProvider?,out FixedQ4816)"/>/<see cref="FixedQ4816.ToString()"/> —
 /// never the raw Q48.16 bit pattern; only the per-cell mutation wire and the addon ABI channel convention stay raw
 /// (see <c>Puck.World.Protocol.WorldMutation.UpsertStateCell</c>'s remarks). An int-kind value is a plain JSON
 /// number (a timer's non-negative floor is <see cref="WorldStateRow.NonNegative"/>, enforced at validation, never a
 /// parse-time concern here). Unmapped members and a wrong-shaped value are hard parse failures, by name, matching
-/// every other row in the document graph's strict posture — a custom converter opts OUT of the context-wide
+/// every other row in the document graph's strict posture — a custom converter opts out of the context-wide
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
 
     public override WorldStateRow Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartObject) {
@@ -516,6 +520,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             string? key = null;
             JsonElement? cellValue = null;
             JsonElement? cellAdvance = null;
+            string? provenance = null;
 
             foreach (var member in entry.EnumerateObject()) {
                 switch (member.Name) {
@@ -527,6 +532,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                         break;
                     case "advance":
                         cellAdvance = member.Value;
+                        break;
+                    case "provenance":
+                        provenance = ((member.Value.ValueKind == JsonValueKind.String) ? member.Value.GetString() : null);
                         break;
                     default:
                         throw new JsonException(message: $"state row '{name}'.cells[{index}] contains unmapped member '{member.Name}'.");
@@ -548,17 +556,17 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     ?? throw new JsonException(message: $"state row '{name}'.cells[{index}].advance must be an object."))
                 : null);
 
-            cells.Add(item: ReadCell(cellKind: cellKind, key: cellKey, element: cellValueElement, context: $"state row '{name}'.cells[{index}].value", advance: advance));
+            cells.Add(item: ReadCell(cellKind: cellKind, key: cellKey, element: cellValueElement, context: $"state row '{name}'.cells[{index}].value", advance: advance, provenance: provenance));
             index++;
         }
 
         return cells;
     }
 
-    private static WorldStateCell ReadCell(CellKind cellKind, WorldCellName key, JsonElement element, string context, WorldStateAdvance? advance = null) => cellKind switch {
-        CellKind.Text => new WorldStateCell(Key: key, Text: RequireString(element: element, context: context), Advance: advance),
-        CellKind.Bool => new WorldStateCell(Key: key, Value: (RequireBool(element: element, context: context) ? 1 : 0), Advance: advance),
-        _ => new WorldStateCell(Key: key, Value: RequireNumeric(kind: cellKind, element: element, context: context), Advance: advance),
+    private static WorldStateCell ReadCell(CellKind cellKind, WorldCellName key, JsonElement element, string context, WorldStateAdvance? advance = null, string? provenance = null) => cellKind switch {
+        CellKind.Text => new WorldStateCell(Key: key, Text: RequireString(element: element, context: context), Advance: advance, Provenance: provenance),
+        CellKind.Bool => new WorldStateCell(Key: key, Value: (RequireBool(element: element, context: context) ? 1 : 0), Advance: advance, Provenance: provenance),
+        _ => new WorldStateCell(Key: key, Value: RequireNumeric(kind: cellKind, element: element, context: context), Advance: advance, Provenance: provenance),
     };
 
     public override void Write(Utf8JsonWriter writer, WorldStateRow value, JsonSerializerOptions options) {
@@ -601,6 +609,10 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 if (cell.Advance is { } cellAdvance) {
                     writer.WritePropertyName(propertyName: "advance");
                     JsonSerializer.Serialize(writer: writer, value: cellAdvance, jsonTypeInfo: WorldJsonContext.Default.WorldStateAdvance);
+                }
+
+                if (cell.Provenance is { } provenance) {
+                    writer.WriteString(propertyName: "provenance", value: provenance);
                 }
 
                 writer.WriteEndObject();
@@ -730,6 +742,57 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         ((element.ValueKind == JsonValueKind.String) ? (element.GetString() ?? string.Empty) : throw new JsonException(message: $"{context} must be a string."));
 }
 
+/// <summary>One participant-specific input-hold override, authored shape — see
+/// <see cref="WorldInputHoldAuthoring"/>. Mirrors <see cref="WorldInputHoldParticipant"/> field for field except
+/// <see cref="Seconds"/> in place of the compiled <see cref="WorldInputHoldParticipant.Ticks"/>.</summary>
+public sealed record WorldInputHoldParticipantAuthoring(int BodyIndex, float Seconds, bool Equalized);
+
+/// <summary>
+/// <see cref="WorldInputHoldSettings"/>'s authored shape — <c>ceilingSeconds</c>/<c>lowerAfterSeconds</c>/
+/// <c>defaultSeconds</c> and each participant's own <c>seconds</c>, never the <c>*Ticks</c> fields the runtime
+/// actually consumes. The shape <see cref="WorldDefinition.InputHold"/> itself stores — ordinary strict-parsed STJ,
+/// no custom converter: compiling to ticks needs a simulation rate, and a JSON converter mid-parse of the whole
+/// document has no reliable way to see a sibling section (the rate) that has not necessarily parsed yet. Compiling
+/// is deferred instead to <see cref="Compile"/>, called by <see cref="WorldDefinition.CompiledInputHold"/> once the
+/// full document (and so its <see cref="WorldDefinition.SimulationRateHz"/>) exists.
+/// </summary>
+public sealed record WorldInputHoldAuthoring(
+    float CeilingSeconds,
+    float LowerAfterSeconds,
+    float DefaultSeconds,
+    bool EqualizeByDefault,
+    IReadOnlyList<WorldInputHoldParticipantAuthoring> Participants
+) {
+    /// <summary>Compiles this authored (seconds) row to its compiled (ticks) shape at <paramref name="ratePerSecond"/>
+    /// — the inverse of <see cref="WorldInputHoldSettings.ToAuthoring"/>. Every checked-in world authors durations
+    /// that divide the rate they are authored against exactly, so this round-trips exactly for everything this
+    /// codebase ships today (see <see cref="WorldSimulationTickConversion.SecondsFromTicks"/>'s remarks for the one
+    /// narrow exception, reachable only through the addon-mutation ABI's raw ticks).</summary>
+    /// <param name="ratePerSecond">The simulation rate (Hz) this row compiles against — a world's own
+    /// <see cref="WorldDefinition.SimulationRateHz"/>.</param>
+    public WorldInputHoldSettings Compile(uint ratePerSecond) {
+        var participants = new WorldInputHoldParticipant[Participants.Count];
+
+        for (var index = 0; (index < participants.Length); index++) {
+            var participant = Participants[index];
+
+            participants[index] = new WorldInputHoldParticipant(
+                BodyIndex: participant.BodyIndex,
+                Ticks: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: participant.Seconds, ratePerSecond: ratePerSecond)),
+                Equalized: participant.Equalized
+            );
+        }
+
+        return new WorldInputHoldSettings(
+            CeilingTicks: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: CeilingSeconds, ratePerSecond: ratePerSecond)),
+            LowerAfterTicks: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: LowerAfterSeconds, ratePerSecond: ratePerSecond)),
+            DefaultTicks: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: DefaultSeconds, ratePerSecond: ratePerSecond)),
+            EqualizeByDefault: EqualizeByDefault,
+            Participants: participants
+        );
+    }
+}
+
 /// <summary>
 /// Reads and writes a <see cref="Vector3"/> as a three-element JSON array <c>[x, y, z]</c>. Numbers ride STJ's default
 /// shortest-round-trip invariant formatting — the canonical number form. Registered on <see cref="WorldJsonContext"/> so
@@ -778,7 +841,10 @@ internal sealed class Vector3JsonConverter : JsonConverter<Vector3> {
 /// <c>host.backendDraw</c> resolver and the <c>world.host</c> read-back all speak the same map, so nothing that reads
 /// or prints a backend disagrees with the document.
 /// </summary>
-internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldBackendPreference> {
+internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldBackendPreference>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan];
+
     /// <inheritdoc/>
     public override WorldBackendPreference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         return (WorldHostTokens.ParseBackend(token: reader.GetString())
@@ -798,7 +864,13 @@ internal sealed class WorldBackendPreferenceJsonConverter : JsonConverter<WorldB
 /// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
 /// <c>world.host</c> read-back prints through the same map.
 /// </summary>
-internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat> {
+internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat>, IJsonSchemaStringConverter {
+    // Deliberately NOT SurfaceFormat.Unknown, and deliberately NOT every enum member Write's own fallback arm could
+    // in principle produce — this list is the READ-accepted set (see IJsonSchemaStringConverter's own remarks),
+    // and Read below refuses Unknown by name exactly like the validator does.
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra];
+
     /// <inheritdoc/>
     public override SurfaceFormat Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         return (WorldHostTokens.ParseSurfaceFormat(token: reader.GetString())
@@ -812,53 +884,101 @@ internal sealed class SurfaceFormatJsonConverter : JsonConverter<SurfaceFormat> 
 }
 
 /// <summary>
-/// Reads and writes a <see cref="WorldPortalLifetime"/> as the lowercase token <c>Puck.World.WorldInstanceHost</c>'s
-/// <c>world.transfer</c> verb already speaks (<c>fresh</c> / <c>persistent</c>) rather than the context's camelCase
-/// enum policy, so an authored portal facet and the console grammar its eventual diegetic trigger drives never
-/// disagree on spelling. See <see cref="WorldPortalTokens"/>.
+/// Reads and writes a <see cref="WorldDestinationDurability"/> as the lowercase token
+/// <c>Puck.World.WorldInstanceHost</c>'s <c>world.transfer</c> verb already speaks (<c>ephemeral</c> /
+/// <c>persisted</c>) rather than the context's camelCase enum policy, so an authored destination row and the console
+/// grammar its diegetic trigger drives never disagree on spelling. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalLifetimeJsonConverter : JsonConverter<WorldPortalLifetime> {
+internal sealed class WorldDestinationDurabilityJsonConverter : JsonConverter<WorldDestinationDurability>, IJsonSchemaStringConverter {
     /// <inheritdoc/>
-    public override WorldPortalLifetime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldPortalTokens.ParseLifetime(token: reader.GetString())
-            ?? throw new JsonException(message: $"portal lifetime '{reader.GetString()}' must be '{WorldPortalTokens.LifetimeFresh}' or '{WorldPortalTokens.LifetimePersistent}'."));
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted];
+
+    /// <inheritdoc/>
+    public override WorldDestinationDurability Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldDestinationTokens.ParseDurability(token: reader.GetString())
+            ?? throw new JsonException(message: $"destination durability '{reader.GetString()}' must be '{WorldDestinationTokens.DurabilityEphemeral}' or '{WorldDestinationTokens.DurabilityPersisted}'."));
     }
 
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldPortalLifetime value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldPortalTokens.LifetimeToken(lifetime: value));
+    public override void Write(Utf8JsonWriter writer, WorldDestinationDurability value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldDestinationTokens.DurabilityToken(durability: value));
     }
 }
 
 /// <summary>
 /// Reads and writes a <see cref="WorldPortalTravel"/> as the lowercase token <c>world.transfer</c>'s <c>party</c>
 /// slot argument already speaks (<c>party</c> / <c>body</c>) rather than the context's camelCase enum policy. See
-/// <see cref="WorldPortalTokens"/>.
+/// <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalTravelJsonConverter : JsonConverter<WorldPortalTravel> {
+internal sealed class WorldPortalTravelJsonConverter : JsonConverter<WorldPortalTravel>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody];
+
     /// <inheritdoc/>
     public override WorldPortalTravel Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        return (WorldPortalTokens.ParseTravel(token: reader.GetString())
-            ?? throw new JsonException(message: $"portal travel '{reader.GetString()}' must be '{WorldPortalTokens.TravelParty}' or '{WorldPortalTokens.TravelBody}'."));
+        return (WorldDestinationTokens.ParseTravel(token: reader.GetString())
+            ?? throw new JsonException(message: $"portal travel '{reader.GetString()}' must be '{WorldDestinationTokens.TravelParty}' or '{WorldDestinationTokens.TravelBody}'."));
     }
 
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, WorldPortalTravel value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: WorldPortalTokens.TravelToken(travel: value));
+        writer.WriteStringValue(value: WorldDestinationTokens.TravelToken(travel: value));
     }
 }
 
 /// <summary>
-/// Reads and writes a <see cref="GrantSubject"/> as the SAME compact token <c>world.grant</c> takes — <c>all</c>,
+/// Reads and writes a <see cref="WorldPortalArrival"/> as the lowercase token <c>spawn</c>/<c>mapped</c> rather than
+/// the context's camelCase enum policy, mirroring <see cref="WorldPortalTravelJsonConverter"/>. See
+/// <see cref="WorldDestinationTokens"/>.
+/// </summary>
+internal sealed class WorldPortalArrivalJsonConverter : JsonConverter<WorldPortalArrival>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped];
+
+    /// <inheritdoc/>
+    public override WorldPortalArrival Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldDestinationTokens.ParseArrival(token: reader.GetString())
+            ?? throw new JsonException(message: $"portal arrival '{reader.GetString()}' must be '{WorldDestinationTokens.ArrivalSpawn}' or '{WorldDestinationTokens.ArrivalMapped}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldPortalArrival value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldDestinationTokens.ArrivalToken(arrival: value));
+    }
+}
+
+/// <summary>
+/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/world-model.md's "Durability,
+/// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>) rather than the context's camelCase enum
+/// policy, mirroring <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
+/// </summary>
+internal sealed class WorldDestinationScopeJsonConverter : JsonConverter<WorldDestinationScope>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens { get; } = [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal];
+
+    /// <inheritdoc/>
+    public override WorldDestinationScope Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        return (WorldDestinationTokens.ParseScope(token: reader.GetString())
+            ?? throw new JsonException(message: $"destination scope '{reader.GetString()}' must be '{WorldDestinationTokens.ScopeUser}', '{WorldDestinationTokens.ScopeGroup}', or '{WorldDestinationTokens.ScopeGlobal}'."));
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldDestinationScope value, JsonSerializerOptions options) {
+        writer.WriteStringValue(value: WorldDestinationTokens.ScopeToken(scope: value));
+    }
+}
+
+/// <summary>
+/// Reads and writes a <see cref="GrantSubject"/> as the same compact token <c>world.grant</c> takes — <c>all</c>,
 /// <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>profile:&lt;id&gt;</c> — rather than
 /// this context's member policies, which would emit a raw <c>{"kind":0,"value":5,"id":null}</c> object and a bare
 /// numeric <see cref="WorldSection"/> ordinal for a section subject (opaque without the enum's declaration order open
 /// beside it). Parsing rides <see cref="GrantSubject.TryParse"/> — the identical grammar the console
-/// itself grants through — so a document-sourced subject can only ever be the SAME canonical shape a live grant uses;
+/// itself grants through — so a document-sourced subject can only ever be the same canonical shape a live grant uses;
 /// there is no way to author the denormalized encoding a raw-object shape would have permitted (a stray non-zero
 /// <c>Value</c>/<c>Id</c> the wildcard or section kinds never carry), which is exactly what would have seated a
 /// phantom grant a HashSet/dictionary lookup can never match. Writing rides <see cref="GrantSubject.Describe"/> — the
-/// SAME label the console's own accept/reject lines print, so a saved document and a printed line never disagree on
+/// same label the console's own accept/reject lines print, so a saved document and a printed line never disagree on
 /// spelling. <see cref="GrantSubjectKind.Composition"/> is never emitted (nothing constructs it outside the grant
 /// table's own boot seed) and is rejected on read like any other token the grammar does not recognize.
 /// </summary>
@@ -881,11 +1001,11 @@ internal sealed class GrantSubjectJsonConverter : JsonConverter<GrantSubject> {
 }
 
 /// <summary>
-/// Reads and writes a <see cref="WorldPrincipal"/> as the SAME compact token <c>world.grant</c> takes —
+/// Reads and writes a <see cref="WorldPrincipal"/> as the same compact token <c>world.grant</c> takes —
 /// <c>seat1</c>..<c>seat4</c>, <c>console</c>, <c>addon:&lt;name&gt;</c>, <c>peer:&lt;n&gt;:&lt;generation&gt;</c> — rather than this
 /// context's member policies, which would emit a raw <c>{"kind":0,"index":0,"name":null}</c> object. Parsing rides
 /// <see cref="WorldPrincipal.TryParse"/> — the identical grammar the console itself grants through —
-/// so a document-sourced principal (a <see cref="WorldGrant.Principal"/> row) can only ever be the SAME canonical
+/// so a document-sourced principal (a <see cref="WorldGrant.Principal"/> row) can only ever be the same canonical
 /// shape a live grant uses, matching <see cref="GrantSubjectJsonConverter"/>'s reasoning exactly. Writing rides
 /// <see cref="WorldPrincipal.Describe"/>, the same label the console's own accept/reject lines print.
 /// </summary>
@@ -909,8 +1029,8 @@ internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal
 
 /// <summary>
 /// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldCreation.Document"/>) through
-/// the creation contract's OWN serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/> — member
-/// order, string enums, and the LOAD-BEARING <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
+/// the creation contract's own serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/> — member
+/// order, string enums, and the load-bearing <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Forge.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
@@ -927,7 +1047,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.A
 
 /// <summary>
 /// Bridges an embedded <see cref="Puck.Forge.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
-/// audio contract's OWN serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/>) instead of this
+/// audio contract's own serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/>) instead of this
 /// context's policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Forge.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
 /// </summary>
@@ -943,7 +1063,7 @@ internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Forge.Auth
 
 /// <summary>
 /// Bridges an embedded <see cref="Puck.Forge.Authoring.SynthPatchDocument"/> (a <see cref="WorldPatch.Document"/>) through
-/// the synth contract's OWN serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
+/// the synth contract's own serializer shape — see <see cref="AudioDocumentJsonConverter"/>.
 /// </summary>
 internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Forge.Authoring.SynthPatchDocument> {
     /// <inheritdoc/>
@@ -989,10 +1109,13 @@ public static class WorldDefinitionSerialization {
         return stream.ToArray();
     }
 
-    /// <summary>Deserializes and validates a definition from its canonical UTF-8 JSON bytes — the inverse of
-    /// <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes ride a
-    /// file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as one
-    /// <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.</summary>
+    /// <summary>Deserializes, migrates, and validates a definition from its canonical UTF-8 JSON bytes — the inverse
+    /// of <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes
+    /// ride a file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as
+    /// one <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.
+    /// <see cref="WorldDefinitionMigrations.Apply"/> runs before validation, exactly as it does in
+    /// <see cref="WorldDefinitionFileSource.TryLoad"/>, so a stale embedded document from before a field existed
+    /// validates the same way a stale file does.</summary>
     /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
     /// <returns>The deserialized, validated definition.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
@@ -1004,7 +1127,12 @@ public static class WorldDefinitionSerialization {
             var definition = (JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
                 ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null."));
 
-            WorldDefinitionValidator.Validate(definition: definition);
+            definition = WorldDefinitionMigrations.Apply(definition: definition);
+
+            // No neighbour resolver: a rehydrated replay/embedded document is re-validated against ITSELF only — the
+            // tape already carries whatever cross-document proof its own boot established, and this path has no
+            // storage context to reach a neighbour with even if it wanted to.
+            WorldDefinitionValidator.Validate(definition: definition, neighbours: null);
 
             return definition;
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {

@@ -8,7 +8,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// proves the save-state layer is complete (no live field left unserialized) and faithful — the prerequisite for the
 /// mid-frame rewind / netplay the machine is committed to.
 /// <para>
-/// Also carries the L-01 format assertion: the section-name sequence a snapshot's table records (metadata riding
+/// Also asserts the snapshot format: the section-name sequence a snapshot's table records (metadata riding
 /// alongside the bytes; see <see cref="SnapshotSection"/>) must match the exact, ordered <see cref="ExpectedSectionRoster"/>
 /// derived from <c>HumbleGamingBrickComponents</c>'s registration order — the increment-on-layout-change contract
 /// (<see cref="MachineIdentity.CurrentVersion"/>) has no other automatic guard, so a component silently added, removed,

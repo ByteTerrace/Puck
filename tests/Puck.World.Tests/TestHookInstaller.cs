@@ -16,6 +16,16 @@ namespace Puck.World.Tests;
 /// command-registry lint that no-ops until a composition root exists); nothing here needs it. This is the ONE
 /// legitimate reason this project reads <c>Puck.Commands</c> types despite not depending on presentation.
 /// </summary>
+/// <remarks>
+/// A consequence worth knowing before trusting a refusal from this process: a document whose binding overlays
+/// lean on vocabulary the real engine default supplies cannot be validated here. <c>WorldDefaultBindings</c>
+/// (installed by <c>src/Puck.World/WorldDataHookInstaller.cs</c>) declares the <c>play</c> group and the
+/// <c>play-wheel</c> hold page; the stand-in below declares neither, and
+/// <see cref="WorldDefinitionValidator"/> composes the default as the first layer. Loading such a document
+/// through this project therefore refuses with a message about an invalid hold page, and that refusal is
+/// indistinguishable in shape from a genuine authoring defect in the document. It is not one. Boot composes
+/// against the real default and accepts the same bytes.
+/// </remarks>
 internal static class TestHookInstaller {
     [ModuleInitializer]
     internal static void Install() {

@@ -111,10 +111,10 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             case 0x12Au: m_dataSend = value; break;
             case 0x134u: WriteRcnt(value: value); break;
             case 0x140u: WriteJoyControl(value: value); break;
-            // JOY_RECV/JOY_TRANS are populated by an attached JOY-bus master's own protocol engine, never by an
-            // ordinary CPU store — real hardware ignores a write here regardless of RCNT mode. With no JOY-bus
-            // master modelled, m_joyRecv/m_joyTrans stay at their reset value of 0 (the JOY-bus idles low, the
-            // mirror image of how a cable-less Normal/Multiplayer transfer idles high).
+            // JOY_RECV/JOY_TRANS are populated by an attached JOY-bus master's own protocol engine; real hardware
+            // ignores a CPU write here regardless of RCNT mode. With no JOY-bus master modelled, they stay at their
+            // reset value of 0 (the JOY-bus idles low, the mirror of how a cable-less Normal/Multiplayer transfer
+            // idles high).
             case 0x150u: break;
             case 0x152u: break;
             case 0x154u: break;
@@ -160,12 +160,11 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         m_sioMode = (value >> 12) & 0x3;
         m_irqEnable = ((value & 0x4000u) != 0u);
 
-        // Re-evaluate the transfer on every write while the start bit is set — not just on its rising edge. The
-        // hardware begins a Normal master transfer the moment the internal clock is selected with start already set,
-        // which is exactly how the RFU adapter detection arms it: it sets start while still external-clocked
-        // (SIOCNT=0x5080), then switches to internal master (|= SIO_38400_BPS) with start held. An edge-only trigger
-        // sees only the external write and never starts the transfer, so the serial IRQ never fires and the RFU
-        // state machine (a representative commercial cartridge's boot) stalls forever. BeginTransfer no-ops if one is already in flight.
+        // Re-evaluate the transfer on every write while the start bit is set — not just on its rising edge. Hardware
+        // begins a Normal master transfer the moment the internal clock is selected with start already held: the RFU
+        // adapter probe sets start while still external-clocked (SIOCNT=0x5080), then switches to internal master
+        // (|= SIO_38400_BPS) with start held, so an edge-only trigger misses the second write, never starts the
+        // transfer, and never raises the serial IRQ. BeginTransfer no-ops if one is already in flight.
         if (m_startBit) {
             BeginTransfer();
         } else {
@@ -199,9 +198,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
                 // Normal: the master (internal clock) self-clocks the transfer and on real hardware it always
                 // completes, shifting in idle-high 0xFFFF when no partner is attached (and raising the serial IRQ).
                 // A slave (external clock) has no clock source with no partner, so it correctly stays pending.
-                // (Some reference models have no transfer engine at all and never complete — a documented
-                // simplification, not the hardware behavior; a representative commercial cartridge's boot
-                // link-probe needs the real completion + idle-high data.)
                 if (!m_shiftClockInternal && !m_link.HasPartner) {
                     return;
                 }
@@ -307,7 +303,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
     void IAgbLinkClient.CompleteMultiplayerRound(ReadOnlySpan<ushort> slots, int playerId) {
         // The parent's round lands whether or not this child wrote its own start bit (hardware exchanges with every
         // connected console); any locally-scheduled completion is superseded by the parent's clock. This mutates only
-        // THIS machine's registers, scheduler, and interrupt controller — nothing aliases across the cable.
+        // this machine's registers, scheduler, and interrupt controller — nothing aliases across the cable.
         m_scheduler.Deschedule(e: m_transferEvent);
 
         m_startBit = false;

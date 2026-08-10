@@ -234,5 +234,32 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "core.fixed-tick-conversion-exact-refuses-inexact-decimals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedTickConversion", "Name": "TryDurationEngineTicksExact" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedTickConversion.TryDurationEngineTicksExact at a curated edge set (zero; a negative duration; every dyadic value already authored in a shipped or scenario document — 0.25, 0.5, 1.0, 3.0; the finest terminating-decimal grid that is ALWAYS exact — 0.00125 (1/800 s) and eleven further multiples of it; each of 50400's non-trivial divisors expressed as a terminating decimal — 0.1, 0.01, 0.02, 0.04, 0.05, 0.2, 0.5; curated INEXACT decimals at 3-6 fraction digits, including a decimal approximation of 1/24 s and of 35/12 s; and exact values whose tick counts exceed UInt64, including Decimal.MaxValue) plus a dense sweep of every 37th millisecond (0.001 s steps, mostly inexact since 1000 does not divide 50400) across the first two seconds",
+        "Against": "an independent BigInteger recomputation that never calls decimal multiplication or Truncate: decimal.GetBits decomposes the authored value into its sign, base-10 scale, and unscaled 96-bit integer with no precision loss, then unscaled * TicksPerSecond is tested for exact divisibility by 10^scale via BigInteger remainder — the SAME question the subject answers through decimal arithmetic, transcribed from the definition through a completely different numeric path",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "this is the exactness seam owner ruling 2026-08-08 (authored-duration engine-tick storage) added: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

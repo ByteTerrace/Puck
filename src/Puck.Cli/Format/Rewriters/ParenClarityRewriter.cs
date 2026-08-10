@@ -4,14 +4,11 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Puck.Cli.Format.Rewriters;
 
-// The clarity-parens normalizer (the `paren-clarity` pass): wraps comparison / arithmetic / shift /
-// bitwise / is-pattern expressions and ternaries in their own parentheses for explicit precedence — the
-// house style the interop tree follows by hand (e.g. `((0 == a) || (0 == b))`, `var x = (a + b);`,
-// `return (cond ? p : q);`). An expression is left bare only where it is ALREADY delimited: inside
-// existing parens, or as the sole condition of if/while/do/switch/lock (the statement keyword's own
-// parentheses). Same-operator logical chains (`a || b || c`) are not re-nested — only their leaf
-// operands get wrapped — and unary operators (`!x`, `-1`) are left alone. Purely syntactic and
-// idempotent: a second run sees the delimiting parens and stops.
+// The `paren-clarity` pass: wraps comparison / arithmetic / shift / bitwise / is-pattern expressions and
+// ternaries in their own parentheses for explicit precedence (`((0 == a) || (0 == b))`, `var x = (a + b);`,
+// `return (cond ? p : q);`). Left bare only where already delimited: inside existing parens, or as the sole
+// condition of if/while/do/switch/lock. Same-operator chains (`a || b || c`) are not re-nested — only leaf
+// operands get wrapped — and unary operators are left alone. Purely syntactic and idempotent.
 internal sealed class ParenClarityRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node) =>
         MaybeWrap(original: node, visited: (ExpressionSyntax)base.VisitBinaryExpression(node: node)!);

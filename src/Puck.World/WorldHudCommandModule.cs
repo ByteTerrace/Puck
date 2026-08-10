@@ -7,18 +7,18 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>hud</c> section's READ-BACK surface. <c>world.hud</c> is an <see cref="CommandRouting.Immediate"/> read of
-/// the live definition PLUS every bound element's live-resolved value (through the SAME
-/// <see cref="IHudBindingResolver"/> the renderer uses) and the schema-cap reservation usage — PLUS, with a
-/// <c>seat:&lt;n&gt;</c> filter, the same read-back for that LOCAL seat's PRIVATE player-scope panel (edited through
-/// <c>identity.hud &lt;panel-json&gt; [player]</c> (<see cref="IdentityCommandModule"/>), an UNGATED owner-side door
+/// The <c>hud</c> section's read-back surface. <c>world.hud</c> is an <see cref="CommandRouting.Immediate"/> read of
+/// the live definition plus every bound element's live-resolved value (through the same
+/// <see cref="IHudBindingResolver"/> the renderer uses) and the schema-cap reservation usage — plus, with a
+/// <c>seat:&lt;n&gt;</c> filter, the same read-back for that local seat's private player-scope panel (edited through
+/// <c>identity.hud &lt;panel-json&gt; [player]</c> (<see cref="IdentityCommandModule"/>), an ungated owner-side door
 /// — this module writes no player-scope mutation itself, it only reads the live handle that door already wrote). The
 /// world-scope section is authored through the general <see cref="WorldRowCommandModule"/> —
 /// <c>world.row.set</c>/<c>world.row.remove</c> over <c>hud.panels</c>, and <c>world.row.set hud.defaults
 /// &lt;json&gt;</c> — with an element riding its owning panel's whole-row upsert rather than a door of its own.
-/// A SEPARATE module from
+/// A separate module from
 /// <see cref="WorldMutationCommandModule"/> to keep every class under its analyzer ceilings. <c>world.hud.template</c>
-/// is the one verb here with no document row behind it at all: an AD HOC template string, checked against the closed
+/// is the one verb here with no document row behind it at all: an ad hoc template string, checked against the closed
 /// <see cref="HudBindingVocabulary"/> and the live document's own <c>state</c> section, resolved on demand and never
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>

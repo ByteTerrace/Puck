@@ -45,7 +45,7 @@ internal static partial class Diagnostics {
 
         // Diagnostic: capture every TM0CNT_L (0x04000100) read tagged with how many test results had been written
         // at the time. The wait-state test (result index 7) reads the timer 24 times — one per setting — so the
-        // reads tagged 7 are exactly the 24 values it compares against wait_control_timer_values[3][8].
+        // reads tagged 7 are exactly the 24 values it compares against its expected wait-control timer table.
         var timerReads = new List<(int afterResults, uint value)>();
         // Also capture all I/O timer register reads (0x04000100–0x04000110) and IF (0x04000202) for the
         // timer_connect diagnostic (#17). Key: address, value, result-count at time of read.

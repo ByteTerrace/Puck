@@ -16,7 +16,7 @@ namespace Puck.Scripting;
 /// <remarks>
 /// <para><b>Mounting is two-phase.</b> Construction (and <see cref="Enable"/>) runs the handshake — export
 /// validation, channel-descriptor decode, channel-name-table decode, and every region bounds/overlap check —
-/// WITHOUT calling <c>puck_init</c>. The consumer runs its own gates (attenuation, quota, disclosure) against the
+/// without calling <c>puck_init</c>. The consumer runs its own gates (attenuation, quota, disclosure) against the
 /// decoded declarations and then calls <see cref="Admit"/>, which runs the guest's optional <c>puck_init</c> under the
 /// fuel budget and makes the instance tickable. A guest therefore cannot emit anything before every mount-time gate is
 /// in place: output cells only ever cross when a <c>puck_on_tick</c> return announces them, and
@@ -55,7 +55,7 @@ public sealed class AddonInstance : IDisposable {
     private Store? m_store;
 
     /// <summary>Initializes and instantiates an addon from a compiled module and its load request, running the
-    /// handshake but NOT <c>puck_init</c> — see the type remarks for the two-phase mount contract.</summary>
+    /// handshake but not <c>puck_init</c> — see the type remarks for the two-phase mount contract.</summary>
     /// <param name="engine">The engine the store is created against.</param>
     /// <param name="moduleInfo">The compiled module and its content identity.</param>
     /// <param name="channelResolver">The host channel table the input channel's declared names are resolved against.</param>
@@ -142,7 +142,7 @@ public sealed class AddonInstance : IDisposable {
     public AddonState State => m_state;
 
     /// <summary>Admits the instance to the tick set: runs the guest's optional <c>puck_init</c> under the fuel
-    /// budget and marks the instance tickable. Called exactly once per store, AFTER the consumer's own mount gates
+    /// budget and marks the instance tickable. Called exactly once per store, after the consumer's own mount gates
     /// (attenuation, quota, disclosure) — see the type remarks. A trap during <c>puck_init</c> faults the instance
     /// exactly like a tick trap. No-op on a faulted or disabled instance.</summary>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
@@ -183,7 +183,7 @@ public sealed class AddonInstance : IDisposable {
     }
 
     /// <summary>Re-enables the addon by disposing any prior store and instantiating a fresh one from the cached
-    /// module — a clean reset to the module's initial state, back to the UNADMITTED phase (the consumer re-runs its
+    /// module — a clean reset to the module's initial state, back to the unadmitted phase (the consumer re-runs its
     /// gates and calls <see cref="Admit"/> again). A load-faulted addon (no module) stays faulted.</summary>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     public void Enable() {
@@ -297,10 +297,10 @@ public sealed class AddonInstance : IDisposable {
     }
 
     /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
-    /// memory into <paramref name="destination"/>, IMMEDIATELY — no live span is ever handed back, so nothing
+    /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
     /// outlives this call that could observe a later guest write. The addon mutation seam's stage-5 pointer-safety
-    /// copy: both <paramref name="pointer"/> and <paramref name="length"/> are GUEST-SUPPLIED and cross the ABI as
-    /// signed <c>i64</c> wire lanes reinterpreted unsigned, so every bound is checked BEFORE any read — negative,
+    /// copy: both <paramref name="pointer"/> and <paramref name="length"/> are guest-supplied and cross the ABI as
+    /// signed <c>i64</c> wire lanes reinterpreted unsigned, so every bound is checked before any read — negative,
     /// over-capacity, and overflowing-end are all refused the identical way, never truncated into something that
     /// happens to fit.</summary>
     /// <param name="pointer">The guest-memory byte offset (an unsigned value carried in a signed wire lane).</param>

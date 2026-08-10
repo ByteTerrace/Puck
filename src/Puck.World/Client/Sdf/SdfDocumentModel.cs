@@ -8,7 +8,7 @@ namespace Puck.World.Client.Sdf;
 /// document's own palette; a field-scope imbalance; a declared array past this prototype's fixed reservation) and,
 /// wrapped with the refusing op's index and name, for any exception a decoded builder call itself throws — the
 /// front door's whole validation surface, structural and inherited alike, surfaces through this one type.
-/// <see cref="Reason"/> is REQUIRED (not optional) — every throw site names one of the finite <see cref="SdfRefusal"/>
+/// <see cref="Reason"/> is required (not optional) — every throw site names one of the finite <see cref="SdfRefusal"/>
 /// members, so there is no code path that raises this exception with a reason <c>world.refusals</c>' catalog (which
 /// reads that enum) would not already list.</summary>
 /// <param name="reason">Which of this door's finite refusal reasons fired.</param>
@@ -54,14 +54,14 @@ internal enum SdfDocumentOpKind {
     Reset,
     /// <summary><see cref="SdfProgramBuilder.Translate"/> — <see cref="SdfDocumentOp.Vector0"/> is the offset.</summary>
     Translate,
-    /// <summary><see cref="SdfProgramBuilder.Rotate"/> — <see cref="SdfDocumentOp.Vector0"/> is the axis (normalized
+    /// <summary><see cref="SdfProgramBuilder.Rotate(Quaternion)"/> — <see cref="SdfDocumentOp.Vector0"/> is the axis (normalized
     /// at replay), <see cref="SdfDocumentOp.Scalar0"/> the angle in degrees.</summary>
     Rotate,
     /// <summary><see cref="SdfProgramBuilder.Scale"/> — <see cref="SdfDocumentOp.Vector0"/> is the scale.</summary>
     Scale,
     /// <summary><see cref="SdfProgramBuilder.PushField"/> — <see cref="SdfDocumentOp.Blend"/>/<see cref="SdfDocumentOp.Smooth"/>
-    /// are the compose blend/radius. Opens the document's ONE allowed field-scope nesting level (decision 9): a
-    /// document's non-union blend is refused OUTSIDE a push/pop pair and freely available inside one.</summary>
+    /// are the compose blend/radius. Opens the document's one allowed field-scope nesting level: a
+    /// document's non-union blend is refused outside a push/pop pair and freely available inside one.</summary>
     Push,
     /// <summary><see cref="SdfProgramBuilder.PopField"/> — no fields.</summary>
     Pop,
@@ -87,8 +87,8 @@ internal enum SdfDocumentOpKind {
 /// <param name="Materials">The document's own material palette, in declaration order (ordinal <c>k</c> is what
 /// <see cref="SdfDocumentOp.Material"/> indexes).</param>
 /// <param name="Ops">The decoded op stream, in document order.</param>
-/// <param name="ContentHash">The 64-bit FNV-1a hash of the document's received UTF-8 bytes, computed BEFORE any
-/// decoding (decision 7) — identity is over the bytes, never a re-serialization.</param>
+/// <param name="ContentHash">The 64-bit FNV-1a hash of the document's received UTF-8 bytes, computed before any
+/// decoding — identity is over the bytes, never a re-serialization.</param>
 internal sealed record SdfDocumentProgram(
     IReadOnlyList<SdfMaterial> Materials,
     IReadOnlyList<SdfDocumentOp> Ops,

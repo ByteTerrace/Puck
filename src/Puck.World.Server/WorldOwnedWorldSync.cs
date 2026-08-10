@@ -28,31 +28,33 @@ public enum WorldSyncWriteOutcome {
 /// per world under <c>puck/worlds/</c>, carrying the storage version token so a stale writer is refused rather than
 /// clobbering a newer copy (refuse-and-surface; a refusal names the remedy). First contact is fail-closed: a push with
 /// no tracked token uses create-only, so a cloud copy this catalog has never seen is never overwritten. Tokens persist
-/// in a sidecar beside the owned worlds because they are storage facts; the last-synced cursor is SESSION-LOCAL — the
+/// in a sidecar beside the owned worlds because they are storage facts; the last-synced cursor is session-local — the
 /// catalog revision it compares against is a process counter, so a persisted cursor would compare two unrelated
 /// boots. A fresh session therefore reports dirty until its first fully successful whole-catalog push or pull, which
 /// errs on the side that prompts a sync rather than the side that fakes one. Per-world detail lines are the truth;
 /// the cursor is the catalog-level approximation.
-/// <para>One blob name per world id means the id must NAME the blob unambiguously, and
+/// <para>One blob name per world id means the id must name the blob unambiguously, and
 /// <see cref="WorldOwnedWorldFileName"/> is lossy (every reserved character collapses to <c>'_'</c>), so an id
-/// that does not survive it — or that escapes onto a name another catalog id already claims — is refused BY NAME at
-/// both push and pull rather than quietly sharing a stranger's key. A whole-catalog <see cref="Pull"/> also DISCOVERS
+/// that does not survive it — or that escapes onto a name another catalog id already claims — is refused by name at
+/// both push and pull rather than quietly sharing a stranger's key. A whole-catalog <see cref="Pull"/> also discovers
 /// cloud-only worlds by listing the <c>puck/worlds/</c> namespace and inverting that same mapping; a listed name the
 /// mapping could never have emitted belongs to no reachable id and is refused by name too, so an operator learns the
 /// object exists instead of watching it vanish.</para>
-/// <para>The key an operation addresses is chosen from the REQUESTED id, so a pull also refuses a cloud document whose
+/// <para>The key an operation addresses is chosen from the requested id, so a pull also refuses a cloud document whose
 /// own identity <c>id</c> is not that id: adopting it would key the document under one name and the version token
 /// under another, overwriting whichever local world the document happens to name and leaving the adopted copy
 /// unpushable. Adoption keys the document under its own identity <c>id</c> and runs only <see cref="WorldOwnedWorlds.ReplaceFromSync"/>'s
 /// save-side rule — it replaces the same-id entry or adds a new one, refusing merely a document with no identity
-/// section, and does NOT apply <see cref="WorldOwnedWorlds.Create"/>'s display-name-collision check.</para>
+/// section, and does not apply <see cref="WorldOwnedWorlds.Create"/>'s display-name-collision check.</para>
 /// <para>Operations block the console pump — and with it the frame loop it drains on — for up to 15 seconds each;
 /// transport errors surface as refusals, never silently.</para>
 /// </summary>
 public sealed class WorldOwnedWorldSync {
     // Engine-owned data sits under a puck/ root so the per-user container stays shared with the platform's own
-    // namespaces (private/keys, private/message.txt) rather than colonizing the container root.
-    private const string WorldsNamespace = "puck/worlds";
+    // namespaces (private/keys, private/message.txt) rather than colonizing the container root. Internal (not
+    // private): WorldStorageNeighbourResolver addresses a neighbour's blob under this SAME namespace, and quoting
+    // one constant is how the two never drift apart.
+    internal const string WorldsNamespace = "puck/worlds";
     // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
     private const int DiscoveryDetailLengthLimit = 200;
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
@@ -158,10 +160,17 @@ public sealed class WorldOwnedWorldSync {
         return outcomes;
     }
 
-    private static ObjectBlobAddress AddressFor(Guid containerId, WorldSafeName id) => new(ObjectId: containerId, Key: $"{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: id)}");
+    /// <summary>Computes the blob address an owned world's id addresses — the one writer-side encoding every
+    /// push/pull goes through, and the address a test seeding a fake store for a resolver test should call rather
+    /// than recompute independently: seeding at a hand-spelled key that happens to match today's reader encoding
+    /// would stay green even if that encoding drifted, since the seed and the read would drift together.</summary>
+    /// <param name="containerId">The per-user container id.</param>
+    /// <param name="id">The owned world id.</param>
+    /// <returns>The blob address.</returns>
+    public static ObjectBlobAddress AddressFor(Guid containerId, WorldSafeName id) => new(ObjectId: containerId, Key: $"{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: id)}");
 
     /// <summary>Parses a candidate id into a <see cref="WorldSafeName"/>, refusing by name (naming the offending
-    /// character) exactly like every other door in this family — the id arrives here UNTYPED (a console-verb
+    /// character) exactly like every other door in this family — the id arrives here untyped (a console-verb
     /// argument, a sidecar-tracked key, or a candidate <see cref="DiscoverCloudIds"/> extracted from a cloud blob
     /// name), so this is the one place left that still validates rather than trusts. Once parsed, two distinct safe
     /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/>'s mapping is injective over
@@ -236,11 +245,15 @@ public sealed class WorldOwnedWorldSync {
         }
 
         // The boot loader's gate (strict parse + validation) decides admission; a temp file that never matches the
-        // catalog's *.world.json glob carries the bytes through it.
+        // catalog's *.world.json glob carries the bytes through it. Reuses this engine's OWN store/target/container
+        // (already resolved, since a pull cannot run without them) to prove the pulled document's own border-margin
+        // claims — a genuine document LOAD, the same "settled once, not on the tick path" case WorldServer.Neighbours'
+        // own remarks describe, and cheap here: no extra wiring, the triple already sits on this instance.
+        var neighbours = new WorldStorageNeighbourResolver(store: m_store, target: m_target, containerId: m_containerId);
         var probePath = Path.Combine(path1: m_worlds.FilePath, path2: $"{WorldOwnedWorldFileName.For(id: safe)}.pull-probe");
         try {
             File.WriteAllBytes(path: probePath, bytes: content.Content.ToArray());
-            if (!WorldDefinitionFileSource.TryLoad(path: probePath, definition: out var document, contentHash: out _, reason: out var reason) || (document is null)) {
+            if (!WorldDefinitionFileSource.TryLoad(path: probePath, definition: out var document, contentHash: out _, reason: out var reason, neighbours: neighbours) || (document is null)) {
                 return new WorldSyncOutcome(Id: id, Ok: false, Detail: $"cloud copy refused by the document gate — {reason}");
             }
             // The key was chosen from the REQUESTED id and the token is filed under it, but adoption keys on the
@@ -286,7 +299,7 @@ public sealed class WorldOwnedWorldSync {
     /// <paramref name="ids"/>. An id is only recoverable when re-escaping the candidate extracted from a blob name
     /// reproduces that exact name through <see cref="WorldOwnedWorldFileName.For"/>. A name that does not is one
     /// nothing here could have written — this engine refuses to push such an id in the first place — so it was placed
-    /// by something that does not share this mapping, and NO owned-world id addresses it. It is surfaced as a NAMED
+    /// by something that does not share this mapping, and no owned-world id addresses it. It is surfaced as a named
     /// refusal in <paramref name="refusals"/> rather than silently skipped, because "you have a cloud object this
     /// engine cannot reach" is exactly the fact an operator needs.</summary>
     private void DiscoverCloudIds(SortedSet<string> ids, List<WorldSyncOutcome> refusals) {

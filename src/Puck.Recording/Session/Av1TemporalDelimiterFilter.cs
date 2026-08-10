@@ -4,7 +4,7 @@ namespace Puck.Recording.Session;
 /// Strips temporal-delimiter OBUs (<c>OBU_TEMPORAL_DELIMITER</c>, type 2) from an AV1 temporal unit before it
 /// becomes a Matroska/WebM block. Each Matroska SimpleBlock already IS one temporal unit, so the in-band delimiter
 /// is redundant and the AV1-in-Matroska/WebM carriage mapping prefers it removed; some players reject or mis-seek a
-/// stream that keeps it. The walk mirrors <c>Av1ConfigRecord</c>'s OBU parser (header + optional extension byte +
+/// stream that keeps it. The walk mirrors <c>Av1Bitstream</c>'s OBU parser (header + optional extension byte +
 /// optional leb128 size); it copies every non-delimiter OBU verbatim and preserves order, and bails (returning
 /// <c>-1</c>, keep-original) on any byte it cannot parse so a non-AV1 or truncated payload is never corrupted.
 /// </summary>

@@ -1,18 +1,18 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-/// <summary>
-/// Tier-C stage: the link cable — two consoles, one deterministic multiplayer exchange. A parent and a child each
-/// boot their half of the <see cref="MicroRoms"/> link protocol and are advanced together through an
-/// <see cref="AgbLinkSession"/> in per-frame budgets (the same shape a host engine drives). The parent clocks
-/// <see cref="MicroRoms.LinkRounds"/> SIO multiplayer rounds; every round must deliver BOTH sides' send words into
-/// BOTH sides' SIOMULTI slots — and because each child reply after the first is a transform of the parent word it
-/// received the round before, the recorded slots prove data really crossed the cable, not idle lines. Both sides must
-/// also observe one serial IRQ request per round and read back the correct daisy-chain id bits (parent 0, child 1)
-/// with the busy bit clear. The whole linked scenario then runs a SECOND time from fresh machines with the identical
-/// budget schedule and must reproduce byte-identical final whole-machine snapshots on both consoles — the
+/// <summary>Tier-C stage: the link cable — two consoles, one deterministic multiplayer exchange.</summary>
+/// <remarks>
+/// A parent and a child each boot their half of the <see cref="MicroRoms"/> link protocol and are advanced together
+/// through an <see cref="AgbLinkSession"/> in per-frame budgets (the same shape a host engine drives). The parent
+/// clocks <see cref="MicroRoms.LinkRounds"/> SIO multiplayer rounds; every round must deliver both sides' send words
+/// into both sides' SIOMULTI slots — and because each child reply after the first is a transform of the parent word
+/// it received the round before, the recorded slots prove data really crossed the cable, not idle lines. Both sides
+/// must also observe one serial IRQ request per round and read back the correct daisy-chain id bits (parent 0, child
+/// 1) with the busy bit clear. The whole linked scenario then runs a second time from fresh machines with the
+/// identical budget schedule and must reproduce byte-identical final whole-machine snapshots on both consoles — the
 /// replay-identical proof that the link (and its furthest-behind interleave) adds no nondeterminism. Self-contained:
 /// the protocol polls IF rather than taking interrupts, so it runs on the zeroed stub BIOS, anywhere.
-/// </summary>
+/// </remarks>
 internal sealed class LinkReplayStage : IPostStage {
     private const int Frames = 4;
     private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0

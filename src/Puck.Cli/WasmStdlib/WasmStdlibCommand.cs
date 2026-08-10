@@ -10,9 +10,8 @@ namespace Puck.Cli.WasmStdlib;
 // (the two FixedQ4816 Rust-port files via Puck.Maths.FixedQ4816RustPort.EmitGenerated()/
 // EmitVectors(), and the addon-ABI Rust mirror — wire enums, capability mask, layout constants — via
 // AddonAbiRustPort.EmitGenerated()). Running this verb twice against an unchanged build must produce
-// byte-identical files; nothing checks that today — the drift gate that compared the registry's output
-// against what is committed left the build. Adding a future artifact is a one-line addition to the
-// registry — this verb never changes.
+// byte-identical files; nothing checks that today. Adding a future artifact is a one-line addition to
+// the registry — this verb never changes.
 // Exit 0 on success, 2 on a usage error, a missing repository root, or a missing destination directory.
 internal static class WasmStdlibCommand {
     public static int Run(string[] args) {

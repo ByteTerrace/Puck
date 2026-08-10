@@ -50,7 +50,7 @@ public sealed class LightLegendState {
         _ = m_heldModifiers.Add(item: source);
     }
 
-    /// <summary>Gets whether the state carries any binding (a fully-empty legend paints only idle/ambient).</summary>
+    /// <summary>Gets a value indicating whether the state carries any binding (a fully-empty legend paints only idle/ambient).</summary>
     public bool HasBindings => (m_bindings.Count != 0);
 
     /// <summary>Tries to read the binding for a source.</summary>
@@ -61,14 +61,14 @@ public sealed class LightLegendState {
         return m_bindings.TryGetValue(key: source, value: out entry);
     }
 
-    /// <summary>Gets whether a source fired a command this tick.</summary>
+    /// <summary>Returns a value indicating whether a source fired a command this tick.</summary>
     /// <param name="source">The neutral keyboard source string.</param>
     /// <returns><see langword="true"/> when the source flashed.</returns>
     public bool WasFlashed(string source) {
         return m_flashed.Contains(item: source);
     }
 
-    /// <summary>Gets whether a source is a currently-held chord modifier.</summary>
+    /// <summary>Returns a value indicating whether a source is a currently-held chord modifier.</summary>
     /// <param name="source">The neutral keyboard source string.</param>
     /// <returns><see langword="true"/> when the source is a held modifier.</returns>
     public bool IsHeldModifier(string source) {

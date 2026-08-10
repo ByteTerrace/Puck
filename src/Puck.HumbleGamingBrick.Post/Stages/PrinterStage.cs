@@ -14,7 +14,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// snapshot, and the final printer state are bit-identical across a plain replay AND across a mid-image
 /// snapshot/restore/reconnect churn, proving the printer's whole state serializes.
 /// <para>
-/// H-05: two further scenarios drive 13 and 14 consecutive valid DATA bands (one at the image buffer's ~12.5-band
+/// Two further scenarios drive 13 and 14 consecutive valid DATA bands (one at the image buffer's ~12.5-band
 /// capacity boundary, one past it) through <c>INIT</c>/DATA×N/<c>PRINT</c>/STATUS with no crash, checking the printed
 /// image against an independent reference model of <c>GamePrinterDevice.UnpackBand</c>'s circular-buffer wrap
 /// policy, and replaying each once for determinism.

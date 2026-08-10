@@ -62,11 +62,13 @@ public sealed class WorldIdentity {
     /// <summary>Gets the accent color.</summary>
     public Vector3 NoseColor => (Color * m_noseFactor);
     /// <summary>Gets the locomotion speed.</summary>
-    public float MoveSpeed { get => (float)(double)m_moveSpeed; set { m_moveSpeed = FixedQ4816.FromDouble(value: value); WriteFixed(slot: Document?.Identity?.MoveSpeedState, value: m_moveSpeed); } }
+    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
+    public float MoveSpeed { get => (float)(double)m_moveSpeed; set { m_moveSpeed = RequirePositiveRate(value: value, name: nameof(MoveSpeed)); WriteFixed(slot: Document?.Identity?.MoveSpeedState, value: m_moveSpeed); } }
     /// <summary>Gets the deterministic locomotion speed.</summary>
     public FixedQ4816 FixedMoveSpeed => m_moveSpeed;
     /// <summary>Gets the turn speed.</summary>
-    public float TurnSpeed { get => (float)(double)m_turnSpeed; set { m_turnSpeed = FixedQ4816.FromDouble(value: value); WriteFixed(slot: Document?.Identity?.TurnSpeedState, value: m_turnSpeed); } }
+    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
+    public float TurnSpeed { get => (float)(double)m_turnSpeed; set { m_turnSpeed = RequirePositiveRate(value: value, name: nameof(TurnSpeed)); WriteFixed(slot: Document?.Identity?.TurnSpeedState, value: m_turnSpeed); } }
     /// <summary>Gets the deterministic turn speed.</summary>
     public FixedQ4816 FixedTurnSpeed => m_turnSpeed;
     /// <summary>Gets a value indicating whether look X is inverted.</summary>
@@ -196,6 +198,17 @@ public sealed class WorldIdentity {
         WriteState(row: new WorldStateRow(Name: seqRowName, Kind: CellKind.Int, NonNegative: true, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: next)]));
 
         return WorldCellName.TryParse(candidate: next.ToString(provider: CultureInfo.InvariantCulture), name: out key, reason: out reason);
+    }
+
+    // The type-level wall for a live locomotion rate: the verb door (identity.motion) refuses this range with a
+    // named console error before any assignment, so reaching this throw means a NEW caller wrote the property
+    // without walking a door — the invariant lives here so no door can be forgotten.
+    private static FixedQ4816 RequirePositiveRate(float value, string name) {
+        if (!float.IsFinite(f: value) || (value <= 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: name, actualValue: value, message: "a locomotion rate must be finite and positive");
+        }
+
+        return FixedQ4816.FromDouble(value: value);
     }
 
     private void WriteFixed(WorldCellName? slot, FixedQ4816 value) {

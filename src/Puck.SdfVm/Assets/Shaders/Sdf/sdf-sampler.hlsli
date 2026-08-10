@@ -110,8 +110,8 @@ float3 sdfSunDiscDirection(uint2 netPoint) {
     precise float sine = asfloat(sdfSamplerTable[64u + (azimuthIndex * 2u) + 1u]);
     precise float axial = asfloat(sdfSamplerTable[8256u + (radiusIndex * 2u)]);
     precise float radial = asfloat(sdfSamplerTable[8256u + (radiusIndex * 2u) + 1u]);
-    precise float3 offset = ((cosine * SdfSunTangent) + (sine * SdfSunBitangent));
-    precise float3 direction = ((axial * SdfSunDirection) + (radial * offset));
+    precise float3 offset = ((cosine * worldSunTangent()) + (sine * worldSunBitangent()));
+    precise float3 direction = ((axial * worldSunDirection()) + (radial * offset));
 
     return direction;
 }

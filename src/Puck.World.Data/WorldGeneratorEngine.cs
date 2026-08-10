@@ -3,8 +3,8 @@ using Puck.Maths;
 namespace Puck.World;
 
 /// <summary>
-/// The ONE deterministic sampling core behind every <see cref="WorldDraw"/> site — shared by the LIVE <c>Generate</c>
-/// mutation (<c>Puck.World.Server.WorldServer</c>) and the BOOT/first-fill resolver
+/// The one deterministic sampling core behind every <see cref="WorldDraw"/> site — shared by the live <c>Generate</c>
+/// mutation (<c>Puck.World.Server.WorldServer</c>) and the boot/first-fill resolver
 /// (<c>Puck.World.WorldDrawBootResolver</c>), which runs before a <c>Server.WorldServer</c> exists at all and
 /// therefore cannot reach into that project. Living here — the lowest layer both reach — is what keeps there from
 /// ever being a second implementation of "how a draw draws" to disagree with the first.
@@ -12,31 +12,31 @@ namespace Puck.World;
 /// <remarks>
 /// <para><b>The seed ladder, four rungs.</b> <see cref="ComputeSeedState"/> folds, in order:
 /// <list type="number">
-/// <item><description>the ENGINE CONSTANT — never authored, never varies by document; it exists only so this
+/// <item><description>the engine constant — never authored, never varies by document; it exists only so this
 /// system's streams cannot collide by accident with any other seeded system that folds the same document
 /// values;</description></item>
 /// <item><description>the document's own <c>generation.worldSeed</c> — the author's single "reroll the whole world"
 /// lever, moving every site at once;</description></item>
-/// <item><description>the running INSTANCE's identity — the boot instance's constant name, or a spawned
-/// <c>world.instance.start</c> instance's own name. NOT document data: it is what lets three instances of ONE
+/// <item><description>the running instance's identity — the boot instance's constant name, or a spawned
+/// <c>world.instance.start</c> instance's own name. Not document data: it is what lets three instances of one
 /// document draw differently while each stays exactly reproducible from (document, instance name, draw
 /// history);</description></item>
-/// <item><description>the SITE DESCRIPTOR (see <see cref="WorldDrawSites"/>) — what separates two sites. An identity,
+/// <item><description>the site descriptor (see <see cref="WorldDrawSites"/>) — what separates two sites. An identity,
 /// never a position: a positional ordinal is read off the live document's site set, which moves whenever the boot
 /// resolver clears a settled facet, a <c>world.row.remove state</c> retires a draw row, or an <c>UpsertStateRow</c> adds
 /// one — silently re-pointing a live site's stream while its cursor kept counting.</description></item>
 /// </list>
-/// Every rung is LENGTH-DELIMITED before its bytes, so no two different rung sequences can fold to the same
+/// Every rung is length-delimited before its bytes, so no two different rung sequences can fold to the same
 /// pre-image: without the delimiter an instance named <c>ab</c> at site <c>c</c> and one named <c>a</c> at site
 /// <c>bc</c> present the same byte stream to the hash.</para>
-/// <para><b>The stream id is derived from the site alone</b> and MASKED small
+/// <para><b>The stream id is derived from the site alone</b> and masked small
 /// (<see cref="SiteStreamIdMask"/>) — <c>Pcg32XshRr</c> collapses increments whose ids sit <c>2^62</c> apart, which a
-/// masked id can never reach. A stream-id collision between two sites is harmless because their SEEDS still differ by
+/// masked id can never reach. A stream-id collision between two sites is harmless because their seeds still differ by
 /// the descriptor rung above.</para>
-/// <para><b>Seeking, not replaying.</b> Every source costs a FIXED number of generator advances per sample
+/// <para><b>Seeking, not replaying.</b> Every source costs a fixed number of generator advances per sample
 /// (<see cref="AdvancesPerSample"/>) — the uniform range is a multiply-high map rather than a rejection-sampled
 /// bounded draw precisely so this stays true. Resuming a site at cursor <c>n</c> is therefore one
-/// <c>Pcg32XshRr.Advance(n * cost)</c>, an O(1) jump, and NEVER a replay of the earlier draws. There is no per-tick
+/// <c>Pcg32XshRr.Advance(n * cost)</c>, an O(1) jump, and never a replay of the earlier draws. There is no per-tick
 /// cadence ceiling: a rule redrawing a site on every tick costs the same at cursor 1,000,000 as at cursor 0.</para>
 /// </remarks>
 public static class WorldGeneratorEngine {
@@ -56,7 +56,7 @@ public static class WorldGeneratorEngine {
     /// (every numeric source, and a Markov source under <see cref="WorldGeneratorMode.WithReplacement"/>).</param>
     public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<long>? Decks);
 
-    /// <summary>Returns how many <c>Pcg32XshRr</c> advances ONE sample of <paramref name="source"/> costs — the fixed-cost
+    /// <summary>Returns how many <c>Pcg32XshRr</c> advances one sample of <paramref name="source"/> costs — the fixed-cost
     /// figure cursor seeking depends on being exact.</summary>
     /// <param name="source">The source shape.</param>
     /// <returns>The per-sample advance cost.</returns>
@@ -68,14 +68,14 @@ public static class WorldGeneratorEngine {
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(source), actualValue: source, message: "unrecognized generator source"),
     };
 
-    /// <summary>Determines whether one emission of <paramref name="source"/> is TEXT rather than a numeric value — the single
+    /// <summary>Determines whether one emission of <paramref name="source"/> is text rather than a numeric value — the single
     /// fact behind the source/site kind rule (see <see cref="TryCheckTargetKind"/>).</summary>
     /// <param name="source">The source shape.</param>
     /// <returns><see langword="true"/> for <see cref="WorldGeneratorSource.Markov"/>.</returns>
     public static bool WritesText(WorldGeneratorSource source) => (source == WorldGeneratorSource.Markov);
 
-    /// <summary>Returns the ONE source-to-site kind rule, asked by every door that can reach a draw: document validation, a
-    /// rule's <c>generate</c> effect at rule-COMPILE time, the boot resolver, and the live mutation. Stated once
+    /// <summary>Returns the one source-to-site kind rule, asked by every door that can reach a draw: document validation, a
+    /// rule's <c>generate</c> effect at rule-compile time, the boot resolver, and the live mutation. Stated once
     /// because four readings of it is how they drift.</summary>
     /// <param name="source">The source shape.</param>
     /// <param name="targetKind">The site's declared cell kind.</param>
@@ -106,7 +106,7 @@ public static class WorldGeneratorEngine {
     }
 
     /// <summary>Resolves the source a site's facet draws from — the named row of the document's <c>generators</c>
-    /// section, or the facet's own inline source. The ONE resolution both validation and every firing door share, so
+    /// section, or the facet's own inline source. The one resolution both validation and every firing door share, so
     /// "which source is this site's" is never answered twice.</summary>
     /// <param name="generators">The document's declared sources.</param>
     /// <param name="draw">The site's facet.</param>
@@ -181,7 +181,7 @@ public static class WorldGeneratorEngine {
         return (hash.Value & SiteStreamIdMask);
     }
 
-    /// <summary>Fires ONE emission of <paramref name="generator"/> at a site already seeked to
+    /// <summary>Fires one emission of <paramref name="generator"/> at a site already seeked to
     /// <paramref name="cursor"/>.</summary>
     /// <param name="generator">The resolved source.</param>
     /// <param name="targetKind">The site's declared cell kind; a mismatch refuses by name before any draw runs.</param>

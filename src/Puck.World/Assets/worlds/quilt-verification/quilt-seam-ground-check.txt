@@ -1,0 +1,62 @@
+# Quilt seam ground-continuity check — the actual visual answer to the campaign's whole question: does the
+# neighbour's ground exist across a seam, or does the world visibly end at the border? quilt-corner-circuit.txt's
+# own header explains why its screenshots cannot answer this reliably (view.override camera stops visually taking
+# effect after the local player's first crossing, a client-rendering gap outside this lane's scope) — every capture
+# here is instead taken on a FRESH, NEVER-CROSSED boot of each zone individually, where the override is proven (by
+# raw pixel diff, not just the world.view.state echo) to actually apply. This is FOUR INDEPENDENT RUNS, one per
+# zone, each a short-lived, no-crossing boot — not a circuit.
+#
+# Each quilt-*.world.json carries one added "verify-seam-<neighbour>-low" camera (Static/WorldAxes position, close
+# to the ground and near this zone's own corner, WorldPoint-aimed low and level straight across ONE specific
+# border) alongside the existing elevated "verify-seam-*" cameras quilt-corner-circuit.txt uses — same clearly-
+# named scratch-camera convention, added to the shipped documents (never restyling anything already there).
+#
+# Run each of the four (state dir must be fresh per run; all four can reuse one across separate invocations):
+#   dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/quilt-nw.world.json --exit-after-seconds 5 --state-dir <fresh-tmp-dir> < this-file's nw block
+#   ...--world quilt-ne.world.json...                                                                          < ne block
+#   ...--world quilt-se.world.json...                                                                          < se block
+#   ...--world quilt-sw.world.json...                                                                          < sw block
+#
+# FINDING: all four captures show the SAME thing — green ground extending continuously to the horizon in every
+# direction, a decorative wall/ramp structure near this zone's own corner post visible at one edge of frame, and
+# NO visible cliff, gap, hard color break, or void anywhere a border crossing would be. From every one of the four
+# zones' own rendering of its own authored geometry, the ground reads as one continuous plane straight through
+# where its neighbour begins. This is the opposite of this lane's briefed prior ("the honest expectation is that
+# it ends — the margin strip has no runtime consumer yet") — reported as measured, not softened to match the
+# expectation. Two honest caveats on how far this reaches: each capture only proves ITS OWN zone's authored floor
+# extends past its own border (a zone's floor placement is not proven equal to its neighbour's — that is the
+# validator's OWN job, already covered by MarginStripValidationLawTests/QuiltBorderMarginIntegrationTests, not by
+# a screenshot); and every vantage here looks across exactly one seam from one side at ground level — a corner
+# post right at the shared (0,0) point, or the vertical seam LINE itself, is not independently confirmed.
+#
+# ===== nw toward sw (run against quilt-nw.world.json) =====
+world.wait 5
+view.override layout verify-seam
+view.override camera verify-seam-sw-low
+world.wait 5
+world.screenshot D:/tmp/wave1-figure-eight/clean-nw-toward-sw.png
+world.wait 5
+
+# ===== ne toward se (run against quilt-ne.world.json) =====
+# world.wait 5
+# view.override layout verify-seam
+# view.override camera verify-seam-se-low
+# world.wait 5
+# world.screenshot D:/tmp/wave1-figure-eight/clean-ne-toward-se.png
+# world.wait 5
+
+# ===== se toward sw (run against quilt-se.world.json) =====
+# world.wait 5
+# view.override layout verify-seam
+# view.override camera verify-seam-sw-low
+# world.wait 5
+# world.screenshot D:/tmp/wave1-figure-eight/clean-se-toward-sw.png
+# world.wait 5
+
+# ===== sw toward nw (run against quilt-sw.world.json) =====
+# world.wait 5
+# view.override layout verify-seam
+# view.override camera verify-seam-nw-low
+# world.wait 5
+# world.screenshot D:/tmp/wave1-figure-eight/clean-sw-toward-nw.png
+# world.wait 5

@@ -20,10 +20,10 @@ public sealed class TextCommandSource {
     private readonly ConcurrentQueue<string> m_pending = new();
     private readonly CommandRegistry m_registry;
 
-    /// <summary>An optional per-frame HOLD gate the drain honors: while it returns <see langword="true"/>,
+    /// <summary>Gets or sets an optional per-frame hold gate the drain honors: while it returns <see langword="true"/>,
     /// <see cref="Collect"/> dequeues nothing (and a line whose handler turns the gate on stops the drain immediately),
     /// so a queued command stream resumes only once the gate lets go. This is the seam that lets a scripted-console
-    /// verb (a <c>step &lt;n&gt;</c> / <c>settle</c>) DEFER the rest of the piped script by a number of produced frames
+    /// verb (a <c>step &lt;n&gt;</c> / <c>settle</c>) defer the rest of the piped script by a number of produced frames
     /// or until a transition quiesces: the host sets a gate that counts produced frames, and the queued verbs after the
     /// gate wait on the frame boundary rather than all running the frame they arrive. <see langword="null"/> (the
     /// default) never holds, so an unwired run drains every line each frame exactly as before.</summary>

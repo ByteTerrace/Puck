@@ -16,7 +16,8 @@
         ],
         "properties": {
           "name": {
-            "description": "The interaction\u0027s stable name \u2014 unique within the section (a SEPARATE namespace from Name: an interaction desugars into its OWN synthesized rule rather than sharing the authored rule list, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the ENGINE mints, and nothing mints an interaction."
+            "description": "The interaction\u0027s stable name \u2014 unique within the section (a SEPARATE namespace from Name: an interaction desugars into its OWN synthesized rule rather than sharing the authored rule list, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the ENGINE mints, and nothing mints an interaction.",
+            "type": "string"
           },
           "left": {
             "description": "A property name, validated against the declared properties registry \u2014 the carrier a candidate co-occurrence is searched FROM (the $argmax: resolution \u2014 \u0022the carrier most strongly tagged Left\u0022).",

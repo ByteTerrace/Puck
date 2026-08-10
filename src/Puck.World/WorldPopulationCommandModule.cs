@@ -72,12 +72,9 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity player.control does not survive
                 // the global flip; a count alone leaves existing peers' sources be. A census beyond the live ceiling is
                 // CLAMPED, not refused — the ceiling is the tighter of the authored networkPlayers admission cap and
-                // the inhabitant floor, and shrinking to fit is the right behavior. But the clamp used to be silent
-                // behind a success echo, so a script could believe it summoned a crowd it never got: the echo now
-                // leads with requested-vs-granted whenever the two differ. A DENIED request is a THIRD, distinct
-                // outcome from "granted the full count" and "clamped to a lower one" — reading only AssignedIndex used
-                // to misreport a flat refusal (SessionReply.Accepted false, AssignedIndex -1) as "clamped to -1"; the
-                // peer-source reply was discarded outright, so a refusal there was invisible.
+                // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with
+                // requested-vs-granted whenever the two differ, and a DENIED request is a THIRD, distinct
+                // outcome from "granted the full count" and "clamped to a lower one".
                 var actingPrincipal = context.ActingPrincipal();
                 string? notice = null;
 
@@ -199,7 +196,12 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
     // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
-    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence.
+    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence. A body
+    // parked with NO deadline (a positive reconnect grace compiled at simulation rate 0 — see
+    // CompiledTickDuration.IsNever) reads null from WorldPopulation.ParkedRemainingTicks and renders "never" for
+    // both fields — a concrete expiry that will never arrive would be worse than saying nothing. The same null is
+    // POSITIVE INFINITY on the $parked: rule channel (Server.WorldServer.ReadWorldFact's Parked arm), so the
+    // console and the rules substrate say the same thing in their own vocabularies.
     private string DescribeParked() {
         var tick = server.NextInputTick;
         var rows = new List<string>();
@@ -209,15 +211,16 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 continue;
             }
 
-            var remaining = population.ParkedRemainingTicks(index: index, tick: tick);
-            var deadline = (tick + (ulong)remaining);
+            var window = ((population.ParkedRemainingTicks(index: index, tick: tick) is { } remaining)
+                ? $"remaining={remaining} deadline={(tick + (ulong)remaining)}"
+                : "remaining=never deadline=never");
             var body = population.EntryBody(index: index);
             var profile = body?.Profile?.Name;
             var pose = (body?.DescribePose() ?? "pos=(?, ?) yaw=?°");
 
             rows.Add(item: ((profile is null)
-                ? $"body:{index} remaining={remaining} deadline={deadline} {pose}"
-                : $"body:{index} remaining={remaining} deadline={deadline} profile={profile} {pose}"));
+                ? $"body:{index} {window} {pose}"
+                : $"body:{index} {window} profile={profile} {pose}"));
         }
 
         return $"[world.parked: {string.Join(separator: " | ", values: rows)}]";

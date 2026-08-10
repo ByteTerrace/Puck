@@ -5,18 +5,18 @@ namespace Puck.Maths;
 /// <summary>
 /// The non-metric complement of a finite graded presentation, and the join and meet it generates. It uses no metric at
 /// all: the complement of a basis blade is the blade on the complementary generator set, charged by whatever the
-/// presentation's OWN cell says the two multiply to. Signature never enters, which is why a degenerate generator is
+/// presentation's own cell says the two multiply to. Signature never enters, which is why a degenerate generator is
 /// served exactly as a non-degenerate one is.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <typeparam name="TOps">The material.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>The sign convention, which is grade-dependent and is the thing to read twice.</b> The RIGHT complement is defined
-/// by <c>x ∧ rightComplement(x) = pseudoscalar</c> and the LEFT complement by
+/// <b>The sign convention, which is grade-dependent and is the thing to read twice.</b> The right complement is defined
+/// by <c>x ∧ rightComplement(x) = pseudoscalar</c> and the left complement by
 /// <c>leftComplement(x) ∧ x = pseudoscalar</c>; each is charged so that its own equation holds exactly, with no
 /// convention smuggled in. The two are mutual inverses, so <c>leftComplement(rightComplement(x)) = x</c> exactly, at
-/// every grade and for every element. Applying the SAME complement twice does not return the argument: on a basis blade
+/// every grade and for every element. Applying the same complement twice does not return the argument: on a basis blade
 /// of grade <c>g</c> over <c>n</c> generators it returns <c>(−1)^(g·(n−g))</c> times it. So double complement is plus or
 /// minus the identity per grade, and it is the identity outright only when every grade present has <c>g·(n−g)</c> even.
 /// </para>

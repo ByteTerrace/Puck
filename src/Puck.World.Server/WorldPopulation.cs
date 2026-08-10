@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>What a <see cref="WorldPopulation"/> entry stands for — the local seats driven by client-submitted intents,
-/// and the peer slice that hosts every OTHER joined body: remote-human peers and the loopback-joined inhabitants alike.
+/// and the peer slice that hosts every other joined body: remote-human peers and the loopback-joined inhabitants alike.
 /// Every entry is an authoritative body advanced from a <see cref="PlayerIntent"/>; a driver (a client seat, a network
 /// peer, AI, an inhabitant's attend producer, a replay tape) may only produce intents, never write a pose. An inhabitant
 /// is not a separate kind — it is a <see cref="NetworkPeer"/> whose body is bound to a placement (see
@@ -62,11 +62,11 @@ public sealed class WorldPopulation {
     /// <summary>The authored peer slice behind the reserved local seats.</summary>
     public int PeerCapacity => (Capacity - LocalSeatCount);
 
-    /// <summary>The most census/remote peers that fit RIGHT NOW behind the four local seats and BELOW the lowest inhabited
+    /// <summary>The most census/remote peers that fit right now behind the four local seats and below the lowest inhabited
     /// body. Inhabited bodies (loopback-joined players) allocate downward from slot 127, census peers upward from slot 4,
-    /// so this floor is exactly where the two packings meet; it moves only with LIVE inhabitant occupancy, never a boot
-    /// reservation. A live <c>world.population &lt;n&gt;</c> clamps against it AND against the remote admission cap
-    /// (<c>networkPlayers</c>). Reading the FLOOR (not a count) keeps existing inhabitant slots stable — a retired
+    /// so this floor is exactly where the two packings meet; it moves only with live inhabitant occupancy, never a boot
+    /// reservation. A live <c>world.population &lt;n&gt;</c> clamps against it and against the remote admission cap
+    /// (<c>networkPlayers</c>). Reading the floor (not a count) keeps existing inhabitant slots stable — a retired
     /// inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
     public int MaxSimulated => (m_inhabitantFloor - LocalSeatCount);
 
@@ -102,7 +102,14 @@ public sealed class WorldPopulation {
     // The world contact field derived from the definition's solid geometry and collision tuning. Built by
     // CompileFixedTables and handed to every live body, so a live solid-geometry or collision-tuning edit takes
     // effect on the next tick with no restart. Grounded bodies solve their swept position against it.
+    // m_contactField is the EFFECTIVE field a body resolves against — m_baseContactField wrapped by
+    // WorldBorderMarginContactField when a border resolver is configured AND the live definition authors a margin
+    // band, or m_baseContactField unwrapped otherwise (byte-identical to the pre-margin-strip behavior). Composed by
+    // ComposeContactField, the ONE place either input changes.
+    private IContactField? m_baseContactField;
     private IContactField? m_contactField;
+    private WorldDefinition? m_borderMarginDefinition;
+    private IWorldBorderMarginSource? m_borderMargin;
     private FixedQ4816? m_waterline;
     private WorldContactCensus m_contactCensus;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
@@ -114,10 +121,12 @@ public sealed class WorldPopulation {
     private WorldRowAssignment m_lookAssignment = null!;
     private byte[]? m_lookAssignmentRows;
     private int m_simulatedCount;
-    // The authored population.reconnectGraceTicks (see its own remarks) — how long a disconnected body stays PARKED
-    // before ReclaimExpiredParks tears it down. Refreshed by CompileFixedTables on a swap/rebuild, on the SAME
-    // "boot-time constant, live for future disconnects only" terms the rest of this section already reads under.
-    private int m_reconnectGraceTicks;
+    // The compiled population.reconnectGraceSeconds (see WorldDefinition.PopulationReconnectGraceTicks' own
+    // remarks) — how long a disconnected body stays PARKED before ReclaimExpiredParks tears it down, or NEVER (a
+    // positive authored grace compiled against simulation.rateHz 0 has no tick mapping — see CompiledTickDuration).
+    // Refreshed by CompileFixedTables on a swap/rebuild, on the SAME "boot-time constant, live for future
+    // disconnects only" terms the rest of this section already reads under.
+    private CompiledTickDuration m_reconnectGraceTicks;
     // The remote-principal admission cap (the document's networkPlayers): the most census/remote peers world.population
     // may raise. It is a CEILING, never a boot reservation — at boot the census stands at zero (only the joined seats are
     // live) so the peer slice is entirely free for inhabitants. Refreshed by CompileFixedTables on a swap/rebuild.
@@ -138,7 +147,7 @@ public sealed class WorldPopulation {
 
     /// <summary>Initializes a new instance of the <see cref="WorldPopulation"/> class: the four local slots reserved for
     /// session joins, every peer slot seeded with its deterministic color, kit, activity phase, and spawn pose. The census
-    /// stands at ZERO at boot — <c>networkPlayers</c> is the remote admission CAP, not a static reservation, so the whole
+    /// stands at zero at boot — <c>networkPlayers</c> is the remote admission cap, not a static reservation, so the whole
     /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for all 128
     /// from frame 1, since the program's material capacity is probed from a worst-case all-avatars build. An entry
     /// receives its <see cref="WorldBody"/> when activated.</summary>
@@ -193,7 +202,7 @@ public sealed class WorldPopulation {
         m_peerVariation = definition.Population.PeerVariation;
         m_seatVariation = definition.Population.SeatVariation;
         m_peerColors = definition.Population.PeerColors;
-        m_reconnectGraceTicks = definition.Population.ReconnectGraceTicks;
+        m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
         foreach (var program in definition.BodyMotionPrograms) {
@@ -218,7 +227,9 @@ public sealed class WorldPopulation {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
             }
         }
-        m_contactField = ResolveContactField(definition: definition, solids: derivedSolids);
+        m_baseContactField = ResolveContactField(definition: definition, solids: derivedSolids);
+        m_borderMarginDefinition = definition;
+        ComposeContactField();
         // The compiled waterline rides beside the contact field: one optional world fact every body carries, read only
         // by a swim-model kit's stages.
         m_waterline = ((definition.Water is { } water) ? FixedQ4816.FromDouble(value: water.Level) : (FixedQ4816?)null);
@@ -287,6 +298,52 @@ public sealed class WorldPopulation {
         return WorldColliderSet.Build(definition: definition);
     }
 
+    // Recomposes m_contactField from the current m_baseContactField + m_borderMargin + m_borderMarginDefinition — the
+    // ONE place any of the three changes. A definition authoring no margin band, or no injected resolver, leaves
+    // m_contactField pointing at m_baseContactField directly: byte-identical to the pre-margin-strip behavior.
+    private void ComposeContactField() {
+        if ((m_baseContactField is not { } baseField) || (m_borderMarginDefinition is not { } definition)) {
+            m_contactField = m_baseContactField;
+
+            return;
+        }
+
+        var bands = ((m_borderMargin is not null) ? WorldBorderMarginBands.CollectFrom(definition: definition) : []);
+
+        m_contactField = ((m_borderMargin is { } source) && (bands.Count > 0))
+            ? new WorldBorderMarginContactField(inner: baseField, bands: bands, source: source)
+            : baseField;
+    }
+
+    /// <summary>Configures (or clears) the injected border-margin neighbour resolver every live body's contact
+    /// resolution consults while standing inside a mapped portal facet's authored margin — see
+    /// <see cref="WorldServer.BorderMargin"/>, the one writer. Recomposes <see cref="m_contactField"/> immediately
+    /// against the current definition/base field, without rebuilding either — a border resolver becoming reachable
+    /// (or unreachable) never itself re-derives the world's own solid geometry.</summary>
+    /// <param name="source">The resolver, or <see langword="null"/> to fall back to this world's own geometry alone.</param>
+    public void ConfigureBorderMargin(IWorldBorderMarginSource? source) {
+        if (ReferenceEquals(objA: m_borderMargin, objB: source)) {
+            return;
+        }
+
+        m_borderMargin = source;
+        ComposeContactField();
+
+        // The composition root configures the runtime margin source after the boot seats already exist. Bodies retain
+        // their own field reference, so recomposing only the population's field would leave those live bodies on the
+        // old base field forever. Hand the effective field to every live body on the same terms as Rebuild; pose,
+        // velocity, intent, and every other body property remain untouched.
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is { Active: true, Body: { } body }) {
+                body.SetContactField(field: m_contactField);
+            }
+        }
+    }
+
+    /// <summary>Gets the currently configured border-margin resolver — see <see cref="ConfigureBorderMargin"/>, the
+    /// one writer.</summary>
+    public IWorldBorderMarginSource? BorderMargin => m_borderMargin;
+
     private int[] NewDesignations() {
         var values = new int[m_targets.Count];
         Array.Fill(array: values, value: -1);
@@ -300,12 +357,12 @@ public sealed class WorldPopulation {
 
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
     /// motion/wander retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
-    /// re-resolves every entry's kit index, re-derives the kit/wander-dependent per-entry statics WITHOUT resetting the
-    /// running wander phase, and swaps every LIVE body's compiled tuning/actions/program in place — bodies keep their
+    /// re-resolves every entry's kit index, re-derives the kit/wander-dependent per-entry statics without resetting the
+    /// running wander phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
     /// <param name="definition">The new live definition.</param>
-    /// <param name="solids">The server's pre-built SDF contact field for the FIELD provider (built once at apply time so
+    /// <param name="solids">The server's pre-built SDF contact field for the field provider (built once at apply time so
     /// a runtime edit never rebuilds it twice), or <see langword="null"/> under the analytic provider.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
@@ -372,11 +429,11 @@ public sealed class WorldPopulation {
     }
 
     /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
-    /// Install AFTER <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's INHABIT facet joins bodies
+    /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
     /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
     /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// its kit's attend producer. Bodies claim the HIGHEST FREE slots (127 downward) so an existing inhabitant never
-    /// renumbers; admission is bounded ONLY by the table itself and rejects loudly when it is genuinely full — there is no
+    /// its kit's attend producer. Bodies claim the highest free slots (127 downward) so an existing inhabitant never
+    /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
     /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows the resulting inhabitant floor (physical
@@ -543,8 +600,8 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —
-    /// the general body-to-body spatial primitive a world rule's <c>$los:</c> operand rides, reusing the SAME
+    /// <summary>Returns a value indicating whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —
+    /// the general body-to-body spatial primitive a world rule's <c>$los:</c> operand rides, reusing the same
     /// contact-field query and local sight-offset a sensed target's own cone-sense check already uses. Either index
     /// out of range or naming an inactive slot reads as <see langword="false"/> (no sight line to nothing) rather
     /// than throwing — the "an ineligible candidate reads as absent" precedent this population's own field reads
@@ -665,7 +722,7 @@ public sealed class WorldPopulation {
         throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition.");
     }
 
-    /// <summary>The boot-built SDF contact field when the definition selects the FIELD provider, else
+    /// <summary>The boot-built SDF contact field when the definition selects the field provider, else
     /// <see langword="null"/> — the seam <see cref="WorldServer"/> adopts at construction so it owns the field lifecycle
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
@@ -708,19 +765,19 @@ public sealed class WorldPopulation {
     public WorldMotionModel KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
 
     /// <summary>Looks up a declared body motion program by name — the same table every kit's <see cref="WorldBody"/>
-    /// resolves against, exposed so a caller (the <c>player.motion</c> switch door) can validate coherence BEFORE
+    /// resolves against, exposed so a caller (the <c>player.motion</c> switch door) can validate coherence before
     /// asking a body to switch.</summary>
     /// <param name="name">The declared program name.</param>
     /// <param name="program">The compiled program, or <see langword="null"/> when <paramref name="name"/> is undeclared.</param>
     /// <returns><see langword="true"/> when <paramref name="name"/> names a declared program.</returns>
     public bool TryGetBodyMotionProgram(string name, out CompiledBodyMotionProgram? program) => m_bodyMotionPrograms.TryGetValue(key: name, value: out program);
 
-    /// <summary>The resolved LOOK row index for a stable population slot — carried out on the snapshot for the client's
-    /// renderer (PRESENTATION-ONLY).</summary>
+    /// <summary>The resolved look row index for a stable population slot — carried out on the snapshot for the client's
+    /// renderer (presentation-only).</summary>
     /// <param name="index">The 0-based population index.</param>
     public byte LookIndex(int index) => m_entries[index].LookIndex;
 
-    /// <summary>The live LOOK rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
+    /// <summary>The live look rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
     public IReadOnlyList<WorldLook> LookRows => m_lookRows;
 
     /// <summary>Counts the active entities per kit row for console diagnostics (one slot per definition row).</summary>
@@ -736,7 +793,7 @@ public sealed class WorldPopulation {
         return counts;
     }
 
-    /// <summary>Counts the active entities per LOOK row for the <c>world.looks</c> census (one slot per look row,
+    /// <summary>Counts the active entities per look row for the <c>world.looks</c> census (one slot per look row,
     /// mirroring <see cref="ActiveKitCounts"/>).</summary>
     public int[] ActiveLookCounts() {
         var counts = new int[m_lookRows.Count];
@@ -757,15 +814,15 @@ public sealed class WorldPopulation {
         return (rows is null) ? (byte)selected : rows[selected];
     }
 
-    /// <summary>Whether the entry at <paramref name="index"/> is active (drawn this frame).</summary>
+    /// <summary>Returns a value indicating whether the entry at <paramref name="index"/> is active (drawn this frame).</summary>
     /// <param name="index">The population index (0-based, <c>0..</c><see cref="Capacity"/>).</param>
     /// <returns><see langword="true"/> when the entry is active.</returns>
     public bool IsActive(int index) => m_entries[index].Active;
 
-    /// <summary>The count of active entries THIS tick — a read-only aggregate over <see cref="IsActive"/>, computed
+    /// <summary>The count of active entries this tick — a read-only aggregate over <see cref="IsActive"/>, computed
     /// on demand (never cached) since a world rule's <c>"$population"</c> reserved channel reads it at most once per
     /// tick. Each <c>WorldServer</c> — the boot instance's and every spawned <c>Puck.World.WorldInstance</c>'s alike —
-    /// owns its own <see cref="WorldPopulation"/>, so this is ALREADY per-instance scoped under multi-world: reading it
+    /// owns its own <see cref="WorldPopulation"/>, so this is already per-instance scoped under multi-world: reading it
     /// off one instance's population never observes another's occupancy. <c>WorldInstanceHost</c>'s reap-on-empty rule
     /// reads exactly this.</summary>
     /// <returns>The active-entry count.</returns>
@@ -808,7 +865,7 @@ public sealed class WorldPopulation {
     /// <summary>Records the outcome of the latest <c>player.motion</c> switch attempt for a body — an empty
     /// <paramref name="reason"/> on success, the named refusal otherwise. <c>player.motion</c>'s handler reads this
     /// back through <see cref="MotionRefusal(int)"/> immediately after its synchronous submit (<c>WorldServer.Submit</c>
-    /// drains inline) so its immediate echo reports the TRUE outcome instead of assuming success.</summary>
+    /// drains inline) so its immediate echo reports the true outcome instead of assuming success.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     /// <param name="reason">The refusal reason, or <see cref="string.Empty"/> on success.</param>
     public void NoteMotionRefusal(int bodyIndex, string reason) {
@@ -822,9 +879,9 @@ public sealed class WorldPopulation {
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string MotionRefusal(int bodyIndex) => (((uint)bodyIndex < (uint)m_entries.Length) ? m_entries[bodyIndex].MotionRefusal : string.Empty);
 
-    /// <summary>Records the outcome of a SUCCESSFUL <c>player.stop</c> for a body — the same synchronous-submit
-    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>player.stop</c>'s handler can quote the TRUE
-    /// released/cleared counts instead of a fixed template string. ALWAYS clears any refusal note the body's stop
+    /// <summary>Records the outcome of a successful <c>player.stop</c> for a body — the same synchronous-submit
+    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>player.stop</c>'s handler can quote the true
+    /// released/cleared counts instead of a fixed template string. Always clears any refusal note the body's stop
     /// slot carried, so a denial from an earlier attempt can never bleed into a fresh success's echo.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     /// <param name="outcome">The counts <see cref="WorldBody.Stop"/> computed.</param>
@@ -835,8 +892,8 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Records a REFUSED <c>player.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
-    /// calls this from EVERY early return a <see cref="WorldCommand.Stop"/> can take (the grant-table denial, the
+    /// <summary>Records a refused <c>player.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
+    /// calls this from every early return a <see cref="WorldCommand.Stop"/> can take (the grant-table denial, the
     /// missing/inactive body) before it ever reaches <see cref="NoteStopOutcome"/>, so the slot is written on every
     /// single outcome a Stop command can have — never left holding a stale success from some earlier, unrelated
     /// attempt. Also resets the outcome counts to zero, so a handler that reads them without checking the refusal
@@ -851,7 +908,7 @@ public sealed class WorldPopulation {
     }
 
     /// <summary>The most recent <c>player.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.stop</c>'s handler checks this BEFORE
+    /// attempt succeeded (or none has been made). <c>player.stop</c>'s handler checks this before
     /// <see cref="LastStopOutcome"/> — a non-empty refusal means the counts were never applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string StopRefusal(int bodyIndex) => (((uint)bodyIndex < (uint)m_entries.Length) ? m_entries[bodyIndex].StopRefusal : string.Empty);
@@ -861,10 +918,10 @@ public sealed class WorldPopulation {
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public StopOutcome LastStopOutcome(int bodyIndex) => (((uint)bodyIndex < (uint)m_entries.Length) ? m_entries[bodyIndex].StopOutcome : default);
 
-    /// <summary>Records the outcome of a SUCCESSFUL timed <c>player.press</c> — the effective hold (post
+    /// <summary>Records the outcome of a successful timed <c>player.press</c> — the effective hold (post
     /// grant-ceiling and engine-backstop clamping) and which cap, if any, decided it — the same synchronous-submit
     /// read-back shape as <see cref="NoteMotionRefusal"/>, so the handler can name a silent truncation instead of
-    /// echoing the requested duration as if it were honored. ALWAYS clears any refusal note the body's press slot
+    /// echoing the requested duration as if it were honored. Always clears any refusal note the body's press slot
     /// carried.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     /// <param name="outcome">The outcome <see cref="WorldBody.PressChannel(int, FixedQ4816, float, FixedQ4816)"/> returned.</param>
@@ -875,9 +932,9 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Records a SUCCESSFUL untimed <c>player.press</c> (the host-step tap, which carries no numeric
+    /// <summary>Records a successful untimed <c>player.press</c> (the host-step tap, which carries no numeric
     /// outcome of its own) — clears any refusal note the body's press slot carried, the same way
-    /// <see cref="NotePressOutcome"/> does for the timed path, so the ONE shared refusal slot both press paths read
+    /// <see cref="NotePressOutcome"/> does for the timed path, so the one shared refusal slot both press paths read
     /// back through is always fresh regardless of which one last ran.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public void NotePressSuccess(int bodyIndex) {
@@ -886,8 +943,8 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Records a REFUSED <c>player.press</c> attempt (timed or untimed alike — they share one refusal
-    /// slot) for a body — <see cref="WorldServer.ApplyCommand"/> calls this from EVERY early return a
+    /// <summary>Records a refused <c>player.press</c> attempt (timed or untimed alike — they share one refusal
+    /// slot) for a body — <see cref="WorldServer.ApplyCommand"/> calls this from every early return a
     /// <see cref="WorldCommand.PressChannel"/> can take, so the slot is written on every single outcome the command
     /// can have. Also resets the timed-path's outcome to a neutral default, so a handler that reads it without
     /// checking the refusal first still sees nothing rather than a fabricated affirmative.</summary>
@@ -901,7 +958,7 @@ public sealed class WorldPopulation {
     }
 
     /// <summary>The most recent <c>player.press</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.press</c>'s handler checks this BEFORE
+    /// attempt succeeded (or none has been made). <c>player.press</c>'s handler checks this before
     /// <see cref="LastPressOutcome"/> — a non-empty refusal means no press was applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string PressRefusal(int bodyIndex) => (((uint)bodyIndex < (uint)m_entries.Length) ? m_entries[bodyIndex].PressRefusal : string.Empty);
@@ -961,37 +1018,36 @@ public sealed class WorldPopulation {
         return Math.Clamp(value: (float)(double)requested, min: 0f, max: authoredMaximum);
     }
 
-    /// <summary>Whether <paramref name="bodyIndex"/> is HUMAN-OCCUPIED — the co-driving fold's occupancy
-    /// discriminator (and, since owner ruling 2026-08-02, the bot-overwrite door in
-    /// <c>WorldServer.ApplyIntentSubmission</c>), pinned as a thing to DEFINE rather than read: a body is
-    /// human-occupied iff a LOCAL SEAT slot is <see cref="IsActive"/> AND bound to it, OR the body is bound to an
-    /// <see cref="IsAdmittedPeer"/> — never <see cref="WorldBody.Source"/> (what fills gaps; its
-    /// <see cref="IntentSource.Live"/> value ALSO covers a remote peer) and never engagement (an orthogonal axis).
-    /// The pool this gates EXISTS only when this returns <see langword="true"/>: an unoccupied body is a bot at full
+    /// <summary>Returns a value indicating whether <paramref name="bodyIndex"/> is human-occupied — the co-driving
+    /// fold's occupancy discriminator (and the bot-overwrite door in <c>WorldServer.ApplyIntentSubmission</c>): a
+    /// body is human-occupied iff a local seat slot is <see cref="IsActive"/> and bound to it, or the body is bound
+    /// to an <see cref="IsAdmittedPeer"/> — never <see cref="WorldBody.Source"/> (what fills gaps; its
+    /// <see cref="IntentSource.Live"/> value also covers a remote peer) and never engagement (an orthogonal axis).
+    /// The pool this gates exists only when this returns <see langword="true"/>: an unoccupied body is a bot at full
     /// authority by construction, not by an undefined ceiling.
-    /// <para><b>A PARKED body (see <see cref="Entry.Parked"/>) still reads <see langword="true"/> here</b> — the
-    /// owner's occupancy ruling for park-with-grace: <see cref="IsActive"/>/<see cref="IsAdmittedPeer"/> are exactly
-    /// what a park leaves untouched, by construction, so no separate parked-aware branch exists in this method. A
-    /// disconnected-but-parked body stays targetable and its CC pool keeps running offline through the grace window;
-    /// only <see cref="ReclaimExpiredParks"/>'s eventual teardown removes it from the pool.</para></summary>
+    /// <para><b>A parked body (see <see cref="Entry.Parked"/>) still reads <see langword="true"/> here</b> —
+    /// <see cref="IsActive"/>/<see cref="IsAdmittedPeer"/> are exactly what a park leaves untouched, by construction,
+    /// so no separate parked-aware branch exists in this method. A disconnected-but-parked body stays targetable and
+    /// its CC pool keeps running offline through the grace window; only <see cref="ReclaimExpiredParks"/>'s eventual
+    /// teardown removes it from the pool.</para></summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     /// <returns><see langword="true"/> when the index is bound to a live local seat or an admitted peer.</returns>
     public bool IsHumanOccupied(int bodyIndex) =>
         ((((uint)bodyIndex < LocalSeatCount) && IsActive(index: bodyIndex)) || IsAdmittedPeer(bodyIndex: bodyIndex));
 
-    /// <summary>Whether <paramref name="bodyIndex"/> is bound to a REMOTE-ADMITTED human — the P7 socket phase's own
-    /// concept (design doc P7, "Socket at divisor 1"). Live for a body a <see cref="TryAdmitRemotePeer"/> call is
-    /// still holding (see <see cref="Entry.IsRemoteHuman"/>); a socket door's disconnect clears it through
+    /// <summary>Returns a value indicating whether <paramref name="bodyIndex"/> is bound to a remote-admitted human.
+    /// Live for a body a <see cref="TryAdmitRemotePeer"/> call is still holding (see
+    /// <see cref="Entry.IsRemoteHuman"/>); a socket door's disconnect clears it through
     /// <see cref="ApplyPeerDisconnected"/> exactly as admission set it.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public bool IsAdmittedPeer(int bodyIndex) => (((uint)bodyIndex < Capacity) && m_entries[bodyIndex].IsRemoteHuman);
 
-    /// <summary>The current generation-bearing peer identity for a peer slot.</summary>
+    /// <summary>Gets the current generation-bearing peer identity for a peer slot.</summary>
     /// <param name="index">The peer body index.</param>
     /// <returns>The current peer principal.</returns>
     public WorldPrincipal PeerPrincipal(int index) => WorldPrincipal.Peer(index: index, generation: m_entries[index].Generation);
 
-    /// <summary>The <see cref="WorldBody"/> an entry owns while active, or <see langword="null"/> for an inactive
+    /// <summary>Returns the <see cref="WorldBody"/> an entry owns while active, or <see langword="null"/> for an inactive
     /// entry. The <c>player.*</c> command wire resolves an index <c>1..128</c> to the entry's own body and produces
     /// intents on it (a warp/run/face/stop command), never a pose stream.</summary>
     /// <param name="index">The population index (0-based, <c>0..</c><see cref="Capacity"/>).</param>
@@ -1094,16 +1150,20 @@ public sealed class WorldPopulation {
     }
 
     /// <summary>Deactivates a local seat — the session leave's server half. A no-op if the seat is not active.
-    /// PARK-WITH-GRACE: when <c>population.reconnectGraceTicks</c> is positive, this does NOT drop the body — it
-    /// marks the entry <see cref="Entry.Parked"/> and stamps <see cref="Entry.ParkedUntilTick"/>, keeping the body
-    /// (pose, durable state) in the sim/collider set and <see cref="IsHumanOccupied"/> reading <see langword="true"/>
-    /// exactly as before the leave. The FULL teardown this method used to perform unconditionally now fires from
-    /// <see cref="ReclaimExpiredParks"/> once the grace window passes with no matching re-Join (see
-    /// <see cref="TryResumeParkedSeat"/>). <c>reconnectGraceTicks == 0</c> keeps the immediate-teardown behavior
+    /// Park-with-grace: when the compiled grace (<see cref="m_reconnectGraceTicks"/>) is positive or
+    /// <see cref="CompiledTickDuration.IsNever"/>, this does not drop the body — it marks the entry
+    /// <see cref="Entry.Parked"/> and, for a finite grace, stamps <see cref="Entry.ParkedUntilTick"/> (left
+    /// <see langword="null"/> for never — a rate-0 world has no tick to stamp a deadline at, so the body parks
+    /// forever instead of tearing down), keeping the body (pose, durable state) in the sim/collider set and
+    /// <see cref="IsHumanOccupied"/> reading <see langword="true"/> exactly as before the leave. The full teardown
+    /// this method used to perform unconditionally now fires from <see cref="ReclaimExpiredParks"/> once a finite
+    /// grace window passes with no matching re-Join (see <see cref="TryResumeParkedSeat"/>) — never, for never. An
+    /// authored-disabled grace (<see cref="CompiledTickDuration.IsZero"/>, distinct from never: a positive authored
+    /// grace at rate 0 is never, an authored zero is disabled at any rate) keeps the immediate-teardown behavior
     /// exactly as authored (the grace window is opt-in, not a forced behavior change for a world that authors none).
     /// Bumps the revision either way.</summary>
     /// <param name="slot">The seat index (0-based).</param>
-    /// <param name="tick">The current tick — the basis <see cref="Entry.ParkedUntilTick"/> is stamped from
+    /// <param name="tick">The current tick — the basis a finite <see cref="Entry.ParkedUntilTick"/> is stamped from
     /// (<c>tick + reconnectGraceTicks</c>).</param>
     public void DeactivateSeat(int slot, ulong tick) {
         var entry = m_entries[slot];
@@ -1112,33 +1172,51 @@ public sealed class WorldPopulation {
             return;
         }
 
-        if (m_reconnectGraceTicks <= 0) {
+        if (m_reconnectGraceTicks.IsNever) {
+            entry.Parked = true;
+            entry.ParkedUntilTick = null;
+            m_revision++;
+
+            return;
+        }
+
+        if (m_reconnectGraceTicks.IsZero) {
             entry.Body = null;
             entry.Active = false;
             entry.Parked = false;
-            entry.ParkedUntilTick = 0L;
+            entry.ParkedUntilTick = null;
             m_revision++;
 
             return;
         }
 
         entry.Parked = true;
-        entry.ParkedUntilTick = unchecked((long)tick + m_reconnectGraceTicks);
+        entry.ParkedUntilTick = unchecked((long)tick + m_reconnectGraceTicks.Ticks);
         m_revision++;
     }
 
-    /// <summary>Detaches a local seat's body for a SAME-PROCESS, SAME-HOST-TICK transfer to another world instance —
-    /// the LEAVE half of atomic body transfer (the composition root's per-host pending-transfer drain). Unlike
-    /// <see cref="DeactivateSeat"/>, this NEVER parks and never consults <c>reconnectGraceTicks</c>: it unconditionally
+    /// <summary>Detaches a local seat's body for a same-process, same-host-tick transfer to another world instance —
+    /// the leave half of atomic body transfer (the composition root's per-host pending-transfer drain). Unlike
+    /// <see cref="DeactivateSeat"/>, this never parks and never consults <c>reconnectGraceTicks</c>: it unconditionally
     /// clears <see cref="Entry.Body"/> and <see cref="Entry.Active"/> so the body stops being advanced (or counted
-    /// active) in THIS instance from the moment it returns — a park would leave <see cref="Entry.Active"/> true and
+    /// active) in this instance from the moment it returns — a park would leave <see cref="Entry.Active"/> true and
     /// <see cref="AdvanceSeats"/> would keep integrating it here, which is exactly the double-embodiment a transfer
-    /// must not allow once the SAME identity is about to be re-activated in another instance's population. Only the
-    /// seat binding (the caller already holds the slot) and the body's own <see cref="WorldBody.Profile"/> survive —
-    /// pose, velocity, action-track state, and tape are discarded here by design (the destination world re-embodies
-    /// the identity through its OWN normal join/kit-assignment; none of that state is meaningful under a different
-    /// kit). A no-op returning <see langword="false"/> when the seat holds no active body — nothing captured, nothing
-    /// changed.</summary>
+    /// must not allow once the same identity is about to be re-activated in another instance's population. Only the
+    /// seat binding (the caller already holds the slot) and the body's own <see cref="WorldBody.Profile"/> survive
+    /// this call — pose, velocity, action-track state, and tape are discarded here by design (the destination world
+    /// re-embodies the identity through its own normal join/kit-assignment; none of that state is meaningful under a
+    /// different kit). A caller preparing for a possible abort reads <see cref="WorldBody.CaptureTransferState"/>
+    /// (and the body's own pose) off the still-active body before calling this — this method itself does not do so,
+    /// since a committed transfer never needs it and this stays the single unconditional "leave" primitive either way
+    /// (see <see cref="RestoreDetachedSeat"/> for where a captured state re-enters). This method also clears
+    /// <see cref="Entry.Designations"/> (via <see cref="ClearDesignations"/>) unconditionally, before the caller
+    /// knows whether the transfer will abort — an abort-preparing caller that wants designations to survive an abort
+    /// must read <see cref="CaptureDesignations"/> before calling this, exactly like it already does for
+    /// <see cref="WorldBody.CaptureTransferState"/>. <see cref="Entry.Designations"/> and
+    /// <see cref="Entry.ProducerState"/> live on this class's own <see cref="Entry"/>, entirely outside
+    /// <see cref="WorldBody"/>'s own reach, which is why they are addressed here rather than in
+    /// <see cref="WorldBody.TransferState"/>. A no-op returning <see langword="false"/> when the seat holds no active
+    /// body — nothing captured, nothing changed.</summary>
     /// <param name="slot">The seat index (0-based).</param>
     /// <param name="profile">The detached body's own retained identity, or <see langword="null"/> for an anonymous
     /// seat.</param>
@@ -1156,34 +1234,167 @@ public sealed class WorldPopulation {
         entry.Body = null;
         entry.Active = false;
         entry.Parked = false;
-        entry.ParkedUntilTick = 0L;
+        entry.ParkedUntilTick = null;
         ClearDesignations(entry: entry);
         m_revision++;
 
         return true;
     }
 
-    /// <summary>Whether <paramref name="slot"/> holds a body currently PARKED (see <see cref="Entry.Parked"/>) —
+    /// <summary>Reads a live seat's own <see cref="Entry.Designations"/> register — a defensive copy, safe to hold
+    /// past the register's own future mutation. The one moment an abort-preparing caller can read it, mirroring
+    /// <see cref="WorldBody.CaptureTransferState"/>'s own "read live, right now, never cached" contract: call this
+    /// before <see cref="TryDetachSeatForTransfer"/>, which clears the live register unconditionally regardless of
+    /// whether the transfer that follows ever aborts (see that method's own remarks) — pass the result to
+    /// <see cref="RestoreDetachedSeat"/> on an abort so the seat's designations survive the round trip.</summary>
+    /// <param name="slot">The seat index (0-based).</param>
+    /// <returns>A defensive copy of the slot's current designation register, or an empty array for an out-of-range
+    /// slot.</returns>
+    public int[] CaptureDesignations(int slot) => (((uint)slot < m_entries.Length) ? [.. m_entries[slot].Designations] : []);
+
+    /// <summary>Restores a body <see cref="TryDetachSeatForTransfer"/> just detached back onto its original seat at
+    /// the exact pose it held at detach — the abort half of a same-process transfer's atomic move. Unlike
+    /// <see cref="ActivateSeat"/>'s fresh-spawn path, the body is posed at <paramref name="position"/>/<paramref name="yawRadians"/>
+    /// instead of the seat's authored spawn point, so a transfer that must abort after this seat already departed
+    /// restores play exactly where it left off rather than teleporting it home. The seat kit every local seat
+    /// constructs today authors no <c>vehicle</c>/<c>swim</c> model, so <see cref="WorldBody.FixedOrientation"/> is
+    /// always a pure yaw rotation (pitch = roll = 0) for a seat body — capturing position and yaw alone therefore
+    /// reconstructs the departed body's orientation bit-for-bit, the identical construction <see cref="ActivateSeat"/>'s
+    /// own spawn already relies on. A seat kit that someday adopts a genuine free/vehicle attitude for a local seat
+    /// would need this method (or a sibling) to accept the full orientation instead.
+    /// <para><b>Dynamic state.</b>
+    /// <paramref name="dynamicState"/> carries the perceivable subset <see cref="WorldBody.CaptureTransferState"/>
+    /// read off the departed body before <see cref="TryDetachSeatForTransfer"/> discarded it — velocity, a live dash
+    /// overlay, and in-flight timed-press state (see that struct's own remarks for exactly what and why). It is
+    /// applied via <see cref="WorldBody.ApplyTransferState"/> after <see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>
+    /// below — the abort-refire invariant's own ordering: <c>Pose</c> is the same hard-teleport commit
+    /// <see cref="WorldBody.Reconcile"/> and every other discontinuity in this engine routes through
+    /// (<see cref="WorldBody.FixedPreviousPosition"/> collapses to the landing point, so the restored body's own
+    /// swept portal-crossing segment starts exactly here rather than ghosting back through the volume it just left —
+    /// this is what stops an aborted transfer's stale pre-detach origin from re-firing the door it was just refused
+    /// by), and velocity/overlay/timer state is only meaningful once that discontinuity has already run.</para>
+    /// <para><b>Park stays derived.</b> This method never writes <see cref="Entry.Parked"/>
+    /// or <see cref="Entry.ParkedUntilTick"/> — <see cref="TryDetachSeatForTransfer"/> already cleared both at detach
+    /// time and nothing here reinstates them from <paramref name="dynamicState"/> or any other capture, because park
+    /// is a live-compiled-grace fact the next <see cref="DeactivateSeat"/> re-derives, never a snapshot to replay.</para>
+    /// A no-op returning <see langword="false"/> when the slot is already active — nothing to restore onto; the
+    /// caller's own bookkeeping (never restoring the same detach twice) is what keeps this from firing over a live
+    /// occupant.</summary>
+    /// <param name="slot">The seat index (0-based) — the same slot the detach came from.</param>
+    /// <param name="profile">The detached body's own retained identity, exactly as <see cref="TryDetachSeatForTransfer"/>
+    /// returned it.</param>
+    /// <param name="position">The captured pre-detach position.</param>
+    /// <param name="yawRadians">The captured pre-detach yaw.</param>
+    /// <param name="dynamicState">The captured pre-detach dynamic state (velocity, overlay, action-track) — see
+    /// <see cref="WorldBody.TransferState"/>.</param>
+    /// <param name="designations">The seat's own pre-detach <see cref="Entry.Designations"/> register, from
+    /// <see cref="CaptureDesignations"/>, or <see langword="null"/> to leave the register at its cleared default (a
+    /// non-abort restore caller has nothing to pass — every actual caller today is abort-only, so this defaults to
+    /// <see langword="null"/> only for a hypothetical future caller, never today's).</param>
+    /// <returns><see langword="true"/> when the seat was restored.</returns>
+    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+        var entry = m_entries[slot];
+
+        if (entry.Active) {
+            return false;
+        }
+
+        var body = new WorldBody(motion: m_kitRows[m_seatKit].Motion, program: m_kits[m_seatKit].BodyMotionProgram, programs: m_bodyMotionPrograms, actions: m_kits[m_seatKit].Actions, actionThresholds: m_kits[m_seatKit].ActionThresholds, actionShapes: m_kits[m_seatKit].ActionShapes, roleMask: m_kits[m_seatKit].RoleMask, roleOrdinals: m_kits[m_seatKit].RoleOrdinals, actionState: m_kits[m_seatKit].ActionState, collider: m_kits[m_seatKit].Collider, maxSmoothError: m_fixedMotion.MaxSmoothError, sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal, driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal) {
+            Profile = profile,
+        };
+
+        body.SetContactField(field: m_contactField);
+        body.SetWaterline(level: m_waterline);
+        body.Pose(
+            position: position,
+            yawRadians: yawRadians,
+            pitchRadians: FixedQ4816.Zero,
+            rollRadians: FixedQ4816.Zero
+        );
+        // AFTER Pose's own CommitTeleport — see this method's own "Dynamic state" remarks above.
+        body.ApplyTransferState(state: dynamicState);
+        ClearDesignations(entry: entry);
+
+        // Reapply the CAPTURED pre-detach register on top of the defensive clear above — the same
+        // "restore on top of the reset" ordering ApplyTransferState's own fields already follow.
+        // Absent (null) means the caller captured nothing to restore (never today's abort-only caller, which always
+        // reads CaptureDesignations before detaching) — leaves the cleared default alone rather than throwing.
+        if (designations is not null) {
+            var count = Math.Min(val1: designations.Count, val2: entry.Designations.Length);
+
+            for (var index = 0; (index < count); index++) {
+                entry.Designations[index] = designations[index];
+            }
+        }
+
+        // resetPhase:false: entry.ProducerState is NEVER cleared by TryDetachSeatForTransfer (it only clears
+        // Body/Active/Parked/Designations — see that method's own remarks), so the pre-detach wander
+        // phase/activity/acquired-target are still sitting right here, untouched, the moment this runs — reseeding
+        // them would needlessly discard state that was never actually lost, only about to be overwritten.
+        // WeaveFrequency/PreferredAltitude are still recomputed either way (a pure function of slot+kit,
+        // safe/idempotent to redo), matching SeedSeatWander's other resetPhase:false caller (the ApplyPeerAdmitted-adjacent path).
+        SeedSeatWander(slot: slot, resetPhase: false);
+        entry.Body = body;
+        entry.BodyColor = (profile?.Color ?? Vector3.Zero);
+        entry.Active = true;
+        m_revision++;
+
+        return true;
+    }
+
+    /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal
+    /// transfer (see <c>Puck.World.WorldPlacementPortal.Arrival</c>): called by <c>Puck.World.WorldInstanceHost</c>
+    /// after the destination's own ordinary <see cref="ActivateSeat"/> join already embodied the traveler fresh
+    /// under its own kit (appearance, grants, action-track state) — this call carries across only the
+    /// positional-continuity facts <c>Puck.World.Server.WorldPortalArrivalMath.ComputeArrival</c> computed: pose,
+    /// and captured velocity rotated into the destination's frame. Never touches kit, appearance, grants, or any
+    /// other dynamic-state facet (dash overlay, timers, tape) — those stay the destination's own fresh values,
+    /// exactly like an ordinary spawn arrival. <see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>
+    /// runs first (the hard-teleport commit), <see cref="WorldBody.SetArrivalVelocity"/> after — the same
+    /// "after Pose, never before" ordering <see cref="WorldBody.ApplyTransferState"/> already follows, so the
+    /// discontinuity has already reset <see cref="WorldBody.FixedPreviousPosition"/> before velocity is written. A
+    /// no-op returning <see langword="false"/> for an inactive slot — nothing to override.</summary>
+    /// <param name="slot">The seat index (0-based) — the same slot the destination's own join just activated.</param>
+    /// <param name="position">The mapped arrival position, fixed point.</param>
+    /// <param name="yawRadians">The mapped arrival yaw, fixed-point radians.</param>
+    /// <param name="planarVelocity">The mapped (rotated) planar velocity.</param>
+    /// <param name="verticalVelocity">The mapped (rotation-invariant) vertical velocity.</param>
+    /// <returns><see langword="true"/> when the seat was active and its body was overridden.</returns>
+    public bool ApplyMappedArrival(int slot, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity) {
+        var entry = m_entries[slot];
+
+        if (!entry.Active || (entry.Body is not { } body)) {
+            return false;
+        }
+
+        body.Pose(position: position, yawRadians: yawRadians, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        // AFTER Pose's own CommitTeleport — see this method's own remarks.
+        body.SetArrivalVelocity(planarVelocity: planarVelocity, verticalVelocity: verticalVelocity);
+
+        return true;
+    }
+
+    /// <summary>Returns a value indicating whether <paramref name="slot"/> holds a body currently parked (see <see cref="Entry.Parked"/>) —
     /// the resume-eligibility gate a re-Join checks before <see cref="ActivateSeat"/> would mint a fresh body.
     /// <see langword="false"/> for an out-of-range slot, an inactive slot, or an active-but-never-left one.</summary>
     /// <param name="slot">The seat index (0-based).</param>
     public bool IsSeatParked(int slot) => (((uint)slot < LocalSeatCount) && m_entries[slot] is { Active: true, Parked: true });
 
-    /// <summary>Attempts to resume a PARKED seat's retained body for a re-Join — BODY-RESUME, the reconnect
+    /// <summary>Attempts to resume a parked seat's retained body for a re-Join — body-resume, the reconnect
     /// primitive's third half. The match rule is deliberately narrow and precise: the incoming
-    /// <paramref name="profile"/>'s <see cref="WorldIdentity.Id"/> must equal the parked body's OWN retained
+    /// <paramref name="profile"/>'s <see cref="WorldIdentity.Id"/> must equal the parked body's own retained
     /// <see cref="WorldBody.Profile"/>.<see cref="WorldIdentity.Id"/> — read directly off the body the park never
     /// dropped, so no separate "remembered identity" field is needed. Both <see langword="null"/> (an anonymous seat
     /// reconnecting anonymously) counts as a match too. On a match: clears <see cref="Entry.Parked"/> and returns
     /// <see langword="true"/>, leaving pose/durable state exactly as parked (no fresh spawn, no
-    /// <c>ResetDurableState</c> — that reset is keyed on an ACTUAL id change, and this is the SAME id). On a
+    /// <c>ResetDurableState</c> — that reset is keyed on an actual id change, and this is the same id). On a
     /// mismatch, the parked body is left untouched (so a later, correctly-identified re-Join can still recover it
     /// before grace expires) and <paramref name="mismatch"/> is set, letting the caller report a distinct refusal
     /// from "nothing to resume". <see langword="false"/> for a slot that is not parked at all — the caller falls
     /// back to <see cref="ActivateSeat"/>.</summary>
     /// <param name="slot">The seat index (0-based).</param>
     /// <param name="profile">The re-Join's resolved identity, or <see langword="null"/> for an anonymous seat.</param>
-    /// <param name="mismatch">Set <see langword="true"/> when the slot IS parked but the identity does not match.</param>
+    /// <param name="mismatch">Set <see langword="true"/> when the slot is parked but the identity does not match.</param>
     /// <returns><see langword="true"/> when the parked body was resumed.</returns>
     public bool TryResumeParkedSeat(int slot, WorldIdentity? profile, out bool mismatch) {
         mismatch = false;
@@ -1201,7 +1412,7 @@ public sealed class WorldPopulation {
         }
 
         entry.Parked = false;
-        entry.ParkedUntilTick = 0L;
+        entry.ParkedUntilTick = null;
 
         // The retained body already carries this identity (that is what the match just proved) — a re-seat only
         // matters when the caller resolved a DIFFERENT WorldIdentity instance for the same id (a profile edit
@@ -1345,7 +1556,7 @@ public sealed class WorldPopulation {
         return clamped;
     }
 
-    /// <summary>Sets the peer intent-source default AND sweeps every peer (4..127) to it — last-writer-wins, so a
+    /// <summary>Sets the peer intent-source default and sweeps every peer (4..127) to it — last-writer-wins, so a
     /// per-entity source (a possession, an earlier flip) does not survive the global. Seats are never touched.
     /// Render-inert: it reshapes only the intent producers, so it does not bump the revision. A live
     /// <c>player.fly</c> tape still drives regardless.</summary>
@@ -1375,9 +1586,9 @@ public sealed class WorldPopulation {
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
     /// still between tape segments yet its tapes still play. The local seats are advanced separately by
     /// <see cref="AdvanceSeats"/>.</summary>
-    /// <remarks>Runs FIRST, before any body (peer or seat) advances this tick, so an ATTACHED solid placement's
+    /// <remarks>Runs first, before any body (peer or seat) advances this tick, so an attached solid placement's
     /// colliders (<see cref="WorldColliderSet.RefreshAttached"/>) are refreshed exactly once and every body's push
-    /// this tick resolves against the SAME snapshot — the analytic contact provider only; the field provider compiles
+    /// this tick resolves against the same snapshot — the analytic contact provider only; the field provider compiles
     /// its whole SDF program once and a bad-op world already fails loudly at boot/apply if it cannot (attach+solid
     /// stays refused there, see the document validator).</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
@@ -1514,8 +1725,8 @@ public sealed class WorldPopulation {
         entry.Generation = (generation ?? checked(entry.Generation + 1));
     }
 
-    /// <summary>Admits ONE remote-human peer body at the point of effect — the P7 socket door's own primitive,
-    /// parallel to <see cref="ReconcileInhabitants"/>'s inhabited-body admission: the body claims the HIGHEST FREE
+    /// <summary>Admits one remote-human peer body at the point of effect — the P7 socket door's own primitive,
+    /// parallel to <see cref="ReconcileInhabitants"/>'s inhabited-body admission: the body claims the highest free
     /// slot (127 downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
     /// collides with the census's own upward allocation (<see cref="SetSimulatedCount"/> now skips any slot this
     /// method marks <see cref="Entry.IsRemoteHuman"/>). Refused by name on whichever bound fails: no free slot in the
@@ -1523,10 +1734,23 @@ public sealed class WorldPopulation {
     /// remote humans share that one cap — see <see cref="CountActiveCensus"/>).</summary>
     /// <param name="source">The intent source the body starts with (<see cref="IntentSource.Live"/> for a genuine
     /// remote human — a submitted intent/command fills its gaps, never a wander/attend producer).</param>
+    /// <param name="grantTemplates">The verified admission entry's own grant templates for this connection (see
+    /// <see cref="WorldAdmissionDoor"/>) — stored on the activated slot so a later whole-document rebuild can
+    /// compare the then-live rows with the policy baseline before re-authorizing
+    /// (<see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>). Empty (never null) for the identical reason a
+    /// verified-but-granted-nothing identity is a legitimate outcome — see <see cref="WorldAdmissionEntry.Grants"/>.</param>
+    /// <param name="identityDomain">The verified admission identity's own domain (see
+    /// <see cref="WorldAdmissionDoor"/>) — stored alongside <paramref name="grantTemplates"/> so a later rebuild can
+    /// re-match this identity against the current admission policy instead of trusting the connection-time
+    /// verdict still holds (<see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>).</param>
+    /// <param name="identitySubject">The verified admission identity's own subject (empty for a Vouches root's
+    /// chain-resolved subject).</param>
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    public bool TryAdmitRemotePeer(IntentSource source, out WorldPeerEventEntry admitted, out string refusal) {
+    public bool TryAdmitRemotePeer(IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+
         var slot = HighestFreeSlot();
 
         if (slot < 0) {
@@ -1549,6 +1773,13 @@ public sealed class WorldPopulation {
 
         entry.Active = true;
         entry.IsRemoteHuman = true;
+        // The server-authored PeerAdmitted event applies the requested rows through the live grant door immediately
+        // after this allocation and then records ONLY the rows that succeeded. Nothing is installed yet at this
+        // point, so the revocation baseline must begin empty rather than containing authored attempts.
+        entry.AdmissionInstalledGrantTemplates = [];
+        entry.AdmissionRevokedKeys.Clear();
+        entry.IdentityDomain = (identityDomain ?? string.Empty);
+        entry.IdentitySubject = (identitySubject ?? string.Empty);
         m_simulatedCount = CountActiveCensus();
         m_revision++;
         admitted = PeerEventEntry(index: slot);
@@ -1557,13 +1788,67 @@ public sealed class WorldPopulation {
         return true;
     }
 
+    /// <summary>The admission templates that actually reached the live grant table for the connection bound to
+    /// <paramref name="bodyIndex"/> (see <see cref="TryAdmitRemotePeer"/>), or empty when the slot is not a
+    /// remote-admitted peer. <see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>'s one read.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    public IReadOnlyList<WorldAdmissionGrant> PeerAdmissionInstalledGrantTemplates(int bodyIndex) =>
+        (((uint)bodyIndex < Capacity) ? m_entries[bodyIndex].AdmissionInstalledGrantTemplates : []);
+
+    /// <summary>Gets admission-grant keys explicitly revoked during this connection. Unlike the current policy
+    /// baseline, these survive a policy generation that temporarily removes the row, and are cleared when the live
+    /// table shows the row was explicitly granted back.</summary>
+    /// <param name="bodyIndex">The 0-based remote-peer body index.</param>
+    public IReadOnlySet<(WorldCapability Capability, GrantSubject Subject)> PeerAdmissionRevokedKeys(int bodyIndex) =>
+        (((uint)bodyIndex < Capacity) ? m_entries[bodyIndex].AdmissionRevokedKeys : EmptyAdmissionRevokedKeys);
+
+    private static IReadOnlySet<(WorldCapability Capability, GrantSubject Subject)> EmptyAdmissionRevokedKeys { get; } = new HashSet<(WorldCapability Capability, GrantSubject Subject)>();
+
+    /// <summary>Updates the successfully-installed admission baseline for one connected peer after authorization.
+    /// A later rebuild compares only these rows with the then-live table: an authored attempt rejected by the grant
+    /// door was never present and therefore cannot be inferred as an explicit runtime revoke.</summary>
+    /// <param name="bodyIndex">The 0-based remote-peer body index.</param>
+    /// <param name="grantTemplates">The templates successfully installed from the current matched policy.</param>
+    public void SetPeerAdmissionInstalledGrantTemplates(int bodyIndex, IReadOnlyList<WorldAdmissionGrant> grantTemplates) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+
+        if ((uint)bodyIndex < Capacity) {
+            m_entries[bodyIndex].AdmissionInstalledGrantTemplates = grantTemplates;
+        }
+    }
+
+    /// <summary>Replaces one connected peer's persistent explicit-revocation set after rebuild re-authorization.</summary>
+    /// <param name="bodyIndex">The 0-based remote-peer body index.</param>
+    /// <param name="revokedKeys">The currently remembered revoked keys.</param>
+    public void SetPeerAdmissionRevokedKeys(int bodyIndex, IReadOnlySet<(WorldCapability Capability, GrantSubject Subject)> revokedKeys) {
+        ArgumentNullException.ThrowIfNull(argument: revokedKeys);
+
+        if ((uint)bodyIndex < Capacity) {
+            m_entries[bodyIndex].AdmissionRevokedKeys = new HashSet<(WorldCapability Capability, GrantSubject Subject)>(collection: revokedKeys);
+        }
+    }
+
+    /// <summary>The verified admission identity's own (Domain, Subject) for the connection currently bound to
+    /// <paramref name="bodyIndex"/> (see <see cref="TryAdmitRemotePeer"/>), or two empty strings when the slot is
+    /// not a remote-admitted peer. <see cref="Server.WorldServer.RemintPeerAdmissionGrants"/>'s re-authorization
+    /// key — it re-matches this pair against the rebuild candidate's own admission entries
+    /// (<see cref="WorldAdmissionDoor.TryMatchEntry"/>) rather than trusting <see cref="PeerAdmissionInstalledGrantTemplates"/>
+    /// is still what the current document would mint.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    public (string Domain, string Subject) PeerIdentity(int bodyIndex) =>
+        (((uint)bodyIndex < Capacity) ? (m_entries[bodyIndex].IdentityDomain, m_entries[bodyIndex].IdentitySubject) : (string.Empty, string.Empty));
+
     /// <summary>Re-applies one recorded admission through the population door. A live event reaches this after the
     /// point of effect and is idempotent (<see cref="TryAdmitRemotePeer"/> already set every field this touches);
     /// replay reaches it before the effect and reconstructs the body — including the <see cref="Entry.IsRemoteHuman"/>
     /// marker, inferred from <see cref="WorldPeerEventEntry.Source"/> being <see cref="IntentSource.Live"/> (the
     /// document-authored census/inhabitant defaults are never <see cref="IntentSource.Live"/>).</summary>
     /// <param name="peer">The recorded peer entry.</param>
-    public void ApplyPeerAdmitted(in WorldPeerEventEntry peer) {
+    /// <param name="grantTemplates">The admission templates reconstructed from this event's concrete minted grant
+    /// rows. Empty for a document-authored/simulated peer and for a legitimately zero-grant remote identity.</param>
+    public void ApplyPeerAdmitted(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+
         if ((uint)(peer.BodyIndex - LocalSeatCount) >= PeerCapacity) {
             return;
         }
@@ -1577,21 +1862,32 @@ public sealed class WorldPopulation {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
+
+        // Live admission already installed these fields before emitting the event, so this is idempotent there.
+        // Replay reaches this path with a fresh population and needs the verified identity restored so a later
+        // recorded rebuild re-authorizes the peer against the same facts the live rebuild consulted.
+        entry.AdmissionInstalledGrantTemplates = grantTemplates;
+        entry.AdmissionRevokedKeys.Clear();
+        entry.IdentityDomain = peer.IdentityDomain;
+        entry.IdentitySubject = peer.IdentitySubject;
     }
 
-    /// <summary>Re-applies one recorded disconnect through the population door. PARK-WITH-GRACE: on the SAME terms as
+    /// <summary>Re-applies one recorded disconnect through the population door. Park-with-grace: on the same terms as
     /// <see cref="DeactivateSeat"/>, this defers the body/occupancy half of the teardown (<see cref="Entry.Body"/>,
-    /// <see cref="Entry.Active"/>, <see cref="Entry.IsRemoteHuman"/>) to <see cref="ReclaimExpiredParks"/> when
-    /// <c>population.reconnectGraceTicks</c> is positive — the entry marks <see cref="Entry.Parked"/> instead, and
-    /// <see cref="IsAdmittedPeer"/> (hence <see cref="IsHumanOccupied"/>) keeps reading <see langword="true"/>
-    /// through the grace window since <see cref="Entry.IsRemoteHuman"/> is untouched. The GRANT half of the teardown
-    /// is deliberately NOT deferred here — the caller (<c>Server.WorldServer.ApplyServerEvent</c>) still revokes the
-    /// disconnected generation's grants immediately, unchanged from the pre-park behavior; deferring THAT too would
-    /// mean reshaping <c>WorldServerEvent.PeerDisconnected</c>'s ordered-domain/replay-tape contract, which this
-    /// population-local change does not reach into. See the reconnect-primitives change notes for this as a named,
-    /// deliberate scope line, not a silent gap.</summary>
+    /// <see cref="Entry.Active"/>, <see cref="Entry.IsRemoteHuman"/>) to <see cref="ReclaimExpiredParks"/> when the
+    /// compiled grace is positive or <see cref="CompiledTickDuration.IsNever"/> (a positive authored grace at
+    /// simulation rate 0 — see <see cref="DeactivateSeat"/>'s own remarks) — the entry marks
+    /// <see cref="Entry.Parked"/> instead, and <see cref="IsAdmittedPeer"/> (hence <see cref="IsHumanOccupied"/>)
+    /// keeps reading <see langword="true"/> through the grace window since <see cref="Entry.IsRemoteHuman"/> is
+    /// untouched. The grant half of the teardown is deliberately not deferred here — the caller
+    /// (<c>Server.WorldServer.ApplyServerEvent</c>) still revokes the disconnected generation's grants immediately,
+    /// unchanged from the pre-park behavior; deferring that too would mean reshaping
+    /// <c>WorldServerEvent.PeerDisconnected</c>'s ordered-domain/replay-tape contract, which this population-local
+    /// change does not reach into. See the reconnect-primitives change notes for this as a named, deliberate scope
+    /// line, not a silent gap.</summary>
     /// <param name="peer">The recorded peer entry.</param>
-    /// <param name="tick">The current tick — the basis <see cref="Entry.ParkedUntilTick"/> is stamped from.</param>
+    /// <param name="tick">The current tick — the basis a finite <see cref="Entry.ParkedUntilTick"/> is stamped
+    /// from.</param>
     public void ApplyPeerDisconnected(in WorldPeerEventEntry peer, ulong tick) {
         if ((uint)(peer.BodyIndex - LocalSeatCount) >= PeerCapacity) {
             return;
@@ -1600,15 +1896,22 @@ public sealed class WorldPopulation {
         var entry = m_entries[peer.BodyIndex];
 
         if (entry.Active && (entry.Generation == peer.Generation)) {
-            if (m_reconnectGraceTicks <= 0) {
+            if (m_reconnectGraceTicks.IsNever) {
+                entry.Parked = true;
+                entry.ParkedUntilTick = null;
+            } else if (m_reconnectGraceTicks.IsZero) {
                 entry.Body = null;
                 entry.Active = false;
                 entry.IsRemoteHuman = false;
+                entry.AdmissionInstalledGrantTemplates = [];
+                entry.AdmissionRevokedKeys.Clear();
+                entry.IdentityDomain = string.Empty;
+                entry.IdentitySubject = string.Empty;
                 entry.Parked = false;
-                entry.ParkedUntilTick = 0L;
+                entry.ParkedUntilTick = null;
             } else {
                 entry.Parked = true;
-                entry.ParkedUntilTick = unchecked((long)tick + m_reconnectGraceTicks);
+                entry.ParkedUntilTick = unchecked((long)tick + m_reconnectGraceTicks.Ticks);
             }
 
             m_simulatedCount = CountActiveCensus();
@@ -1616,17 +1919,30 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Tears down every entry PARKED past its grace deadline — the deferred half of
+    /// <summary>Tears down every entry parked past its grace deadline — the deferred half of
     /// <see cref="DeactivateSeat"/>/<see cref="ApplyPeerDisconnected"/>'s teardown (see <see cref="Entry.Parked"/>'s
     /// own remarks): drops the body, clears <see cref="Entry.Active"/> and (for a peer) <see cref="Entry.IsRemoteHuman"/>,
-    /// exactly as an immediate disconnect already did before park-with-grace existed. Covers BOTH local seats and
+    /// exactly as an immediate disconnect already did before park-with-grace existed. Covers both local seats and
     /// peers in one pass — the same <c>Active &amp;&amp; Parked</c> gate discriminates a park regardless of
-    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. A disconnected PEER generation's grants
+    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. A disconnected peer generation's grants
     /// are revoked at disconnect time already (see <see cref="ApplyPeerDisconnected"/>'s own remarks on why that
     /// revocation is not deferred here); a local seat never held generation-scoped grants to revoke, so nothing
     /// grant-shaped happens here for either kind. Driven purely by <paramref name="tick"/> — no wall clock, no
     /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
-    /// which this mirrors and is swept beside every tick.</summary>
+    /// which this mirrors and is swept beside every tick.
+    /// <para><b>Revival re-stamp.</b> This method is per-tick and so never runs for a rate-0 world (the step loop
+    /// that calls it is itself skipped — see <c>WorldInstanceHost</c>'s stepping gate); a seat that parked with
+    /// <see cref="Entry.ParkedUntilTick"/> <see langword="null"/> (a positive reconnect grace compiled against rate
+    /// 0 — <see cref="CompiledTickDuration.IsNever"/>) therefore stays exactly as parked, untouched, until the world
+    /// steps again. <see cref="Rebuild"/> recompiles <see cref="m_reconnectGraceTicks"/> against whatever rate a
+    /// reload delivers, but it only ever touches the compiled tables — it does not walk live entries — so the first
+    /// sweep after a revival to a positive rate is exactly the moment a null-forever deadline is resolved against
+    /// the now-finite grace: it is dropped and re-derived, never left stranded. A null deadline with a still-never
+    /// compiled grace (the world reloaded but is still rate 0, or reloaded at a positive rate with the grace itself
+    /// re-authored as never — not possible today, since never only arises at rate 0, but the branch reads correctly
+    /// either way) is left null, exactly as before. A freshly-stamped entry is deliberately not evaluated for
+    /// teardown in the same pass — the visitor's window restarts at the revival tick, so it must survive at least
+    /// one full sweep before it can expire.</para></summary>
     /// <param name="tick">The current (just-completed) simulation tick.</param>
     public void ReclaimExpiredParks(ulong tick) {
         var signedTick = unchecked((long)tick);
@@ -1635,14 +1951,37 @@ public sealed class WorldPopulation {
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
-            if (entry is { Active: true, Parked: true } && (signedTick >= entry.ParkedUntilTick)) {
+            if (!(entry is { Active: true, Parked: true })) {
+                continue;
+            }
+
+            if (entry.ParkedUntilTick is not { } deadline) {
+                // A NEVER park (see this method's own "Revival re-stamp" remarks). Only re-derivable once the
+                // compiled grace itself is no longer NEVER — a rate-0 world never reaches this method at all, so
+                // reading m_reconnectGraceTicks.IsNever here is exactly "has this world been revived to a positive
+                // rate since the park happened".
+                if (m_reconnectGraceTicks.IsNever) {
+                    continue;
+                }
+
+                entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
+                changed = true;
+
+                continue;
+            }
+
+            if (signedTick >= deadline) {
                 entry.Body = null;
                 entry.Active = false;
                 entry.Parked = false;
-                entry.ParkedUntilTick = 0L;
+                entry.ParkedUntilTick = null;
 
                 if (entry.IsRemoteHuman) {
                     entry.IsRemoteHuman = false;
+                    entry.AdmissionInstalledGrantTemplates = [];
+                    entry.AdmissionRevokedKeys.Clear();
+                    entry.IdentityDomain = string.Empty;
+                    entry.IdentitySubject = string.Empty;
                 }
 
                 changed = true;
@@ -1655,23 +1994,37 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Whether <paramref name="index"/> currently holds a PARKED body (see <see cref="Entry.Parked"/>) —
-    /// the general form of <see cref="IsSeatParked"/>, valid for a local seat OR a peer index alike. The read-back
+    /// <summary>Returns a value indicating whether <paramref name="index"/> currently holds a parked body (see <see cref="Entry.Parked"/>) —
+    /// the general form of <see cref="IsSeatParked"/>, valid for a local seat or a peer index alike. The read-back
     /// verb's own enumeration gate.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns><see langword="true"/> when the index holds a parked body.</returns>
     public bool IsParked(int index) => (((uint)index < Capacity) && m_entries[index] is { Active: true, Parked: true });
 
     /// <summary>Reads the reconnect-park reserved rule channel's live value for one body — the remaining grace ticks
-    /// (<c>ParkedUntilTick - tick</c>, floored at zero) when the body is parked, <c>0</c> for an active, unparked, or
-    /// out-of-range body alike. The <c>Server.WorldServer.ReadWorldFact</c> door for
-    /// <c>WorldRuleFactKind.Parked</c> (<see cref="WorldRuleFacts.ParkedPrefix"/>) calls this directly, after its own
-    /// body-reference resolution (a literal index or an argmax/argmin winner) — this method takes only the resolved
-    /// index, mirroring every other reserved-channel reader's shape.</summary>
+    /// (<c>ParkedUntilTick - tick</c>, floored at zero) when the body is parked with a finite deadline, <c>0</c> for
+    /// an active, unparked, or out-of-range body alike, and <see langword="null"/> for a body parked forever
+    /// (<see cref="Entry.ParkedUntilTick"/> is <see langword="null"/> — a positive grace compiled at simulation rate
+    /// 0; see <see cref="DeactivateSeat"/>'s own remarks).
+    /// <para><b>Forever is not a number, and every consumer says so in its own vocabulary.</b> <c>world.parked</c>
+    /// renders <c>never</c> for both fields; the <c>$parked:</c> reserved rule channel
+    /// (<see cref="WorldRuleFacts.ParkedPrefix"/>, read through <c>Server.WorldServer.ReadWorldFact</c>'s
+    /// <c>WorldRuleFactKind.Parked</c> arm) carries it as positive infinity — <c>remaining &gt; 0</c> holds (the
+    /// seat is parked, more so than any other), <c>remaining &gt; any finite</c> holds, <c>remaining &lt;= any
+    /// finite</c> does not, and a copy operand alone cannot fire because there is no representable number to store
+    /// (the <c>ActionStateComparisons</c> infinity-aware overload owns the comparison semantics). That is exactly
+    /// what the expiry sweep already says on the deadline side, where <c>signedTick &gt;= ParkedUntilTick</c> never
+    /// fires against a null deadline: the channel repeats what the sweep says rather than inventing a third answer.
+    /// Reading forever as no fact was considered and rejected — it would make the most-parked seat of all invisible
+    /// to a rule gated on <c>remaining &gt; 0</c>, a lie by omission rather than by sentinel; and a numeric sentinel
+    /// was rejected because a rule could not tell it from an authored literal.</para></summary>
     /// <param name="index">The resolved 0-based entity index, or a negative sentinel for "no body".</param>
     /// <param name="tick">The current tick.</param>
-    /// <returns>The remaining grace ticks when the body is parked; <c>0</c> for an active, unparked, or out-of-range body.</returns>
-    public long ParkedRemainingTicks(int index, ulong tick) {
+    /// <returns>The remaining grace ticks when the body is parked with a finite deadline; <see langword="null"/>
+    /// when parked forever (a deadline that will never arrive is not a count — see <c>ParkedUntilTick</c>'s own
+    /// remarks for why no numeric sentinel is admissible); <c>0</c> for an active, unparked, or out-of-range
+    /// body.</returns>
+    public long? ParkedRemainingTicks(int index, ulong tick) {
         if ((uint)index >= Capacity) {
             return 0L;
         }
@@ -1682,14 +2035,18 @@ public sealed class WorldPopulation {
             return 0L;
         }
 
-        return Math.Max(val1: 0L, val2: (entry.ParkedUntilTick - unchecked((long)tick)));
+        if (entry.ParkedUntilTick is not { } deadline) {
+            return null;
+        }
+
+        return Math.Max(val1: 0L, val2: (deadline - unchecked((long)tick)));
     }
 
     private WorldPeerEventEntry PeerEventEntry(int index) {
         var entry = m_entries[index];
         var identity = WorldPrincipal.Peer(index: index, generation: entry.Generation);
 
-        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity);
+        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity, IdentityDomain: entry.IdentityDomain, IdentitySubject: entry.IdentitySubject);
     }
 
     private int CountActiveCensus() {
@@ -1815,16 +2172,40 @@ public sealed class WorldPopulation {
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.
         public bool IsRemoteHuman { get; set; }
-        // PARK-WITH-GRACE: set by DeactivateSeat/ApplyPeerDisconnected instead of the immediate teardown those
-        // methods used to perform unconditionally. While Parked, Active (and, for a peer, IsRemoteHuman) STAY true
+        // Admission templates that ACTUALLY reached the live table for THIS connection (empty for a plain census/
+        // inhabitant activation, which never carries a verified remote identity). Updated after initial admission
+        // and every rebuild re-authorization from successful grant-door outcomes only; an authored-but-rejected row
+        // is not a revocation candidate. Read back only by WorldServer.RemintPeerAdmissionGrants before the rebuild
+        // wipes the live table. Cleared alongside IsRemoteHuman on every teardown path.
+        public IReadOnlyList<WorldAdmissionGrant> AdmissionInstalledGrantTemplates { get; set; } = [];
+        // Explicit runtime revocations inferred at each rebuild from baseline templates absent in the live table.
+        // Kept separately from the moving installed-row baseline so temporarily removing/re-adding a policy row does not
+        // forget a revocation, and cleared when a later live snapshot shows the row was explicitly granted back.
+        public HashSet<(WorldCapability Capability, GrantSubject Subject)> AdmissionRevokedKeys { get; set; } = [];
+        // The verified admission identity's own (Domain, Subject) for THIS connection — set at TryAdmitRemotePeer,
+        // restored by ApplyPeerAdmitted during replay, and cleared everywhere the installed baseline is cleared.
+        // RemintPeerAdmissionGrants' re-authorization key: it re-matches THESE against the rebuild candidate's own
+        // admission entries (WorldAdmissionDoor.TryMatchEntry) rather than trusting the stored templates are still
+        // what the current document would mint.
+        public string IdentityDomain { get; set; } = string.Empty;
+        public string IdentitySubject { get; set; } = string.Empty;
+        // PARK-WITH-GRACE: set by DeactivateSeat/ApplyPeerDisconnected instead of tearing the entry down immediately.
+        // While Parked, Active (and, for a peer, IsRemoteHuman) STAY true
         // and Body stays retained (pose/state intact, still in the sim/collider set) — a disconnected body reads
         // IsHumanOccupied exactly as an occupied one does (the owner's occupancy ruling: parked stays targetable,
         // CC continues offline). Cleared by TryResumeParkedSeat on a matching re-Join, or by ReclaimExpiredParks
         // once ParkedUntilTick passes with no reconnect — see both their own remarks.
         public bool Parked { get; set; }
         // The tick AT OR AFTER which ReclaimExpiredParks tears this entry down — the SAME "DeadlineTick" shape
-        // OwnershipEscrow already uses for its own tick-driven sweep. Meaningless while !Parked.
-        public long ParkedUntilTick { get; set; }
+        // OwnershipEscrow already uses for its own tick-driven sweep. Meaningless while !Parked. NULL means parked
+        // FOREVER (a positive reconnect grace compiled at simulation.rateHz 0 has no tick mapping — see
+        // CompiledTickDuration): deliberately NOT a numeric sentinel (e.g. long.MaxValue). This field is stamped by
+        // `unchecked((long)tick + grace)` and read by subtraction in ParkedRemainingTicks, so a sentinel large
+        // enough to mean "forever" would be exactly the value most likely to wrap under that addition, or to
+        // silently produce a plausible-but-wrong remaining count under that subtraction. A nullable never
+        // participates in that arithmetic at all — the NEVER case is assigned directly, with no addition performed,
+        // and every reader must unwrap it explicitly before doing arithmetic.
+        public long? ParkedUntilTick { get; set; }
         public BodyProducerState ProducerState;
         public required int[] Designations { get; set; }
         public string DesignationRefusal { get; set; } = string.Empty;

@@ -3,7 +3,7 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-A stage: the 128-bit win-condition REGION is exactly what the engine's win check reads — the top 16 bytes of the
+/// Tier-A stage: the 128-bit win-condition region is exactly what the engine's win check reads — the top 16 bytes of the
 /// highest SRAM address of an MBC5 128&#160;KiB cartridge, read bank-independently and side-effect-free. On such a cart the
 /// region is physical <c>0x1FFF0</c>–<c>0x1FFFF</c> = RAM bank <c>0x0F</c> offset <c>0x1FF0</c>, seen in the CPU window at
 /// <c>0xBFF0</c>–<c>0xBFFF</c> when bank <c>0x0F</c> is paged. This stage writes a recognizable 128-bit value there through
@@ -12,10 +12,10 @@ namespace Puck.HumbleGamingBrick.Post;
 ///   <item><see cref="ICartridge.ReadExternalRam"/> at <c>ExternalRamByteCount - 16</c> returns those bytes, and so does the
 ///   tail of <see cref="ICartridge.ExportExternalRam"/> — the host's two read paths agree on the highest address.</item>
 ///   <item>the CPU-window read at <c>0xBFF0</c> matches only while bank <c>0x0F</c> is paged, yet <c>ReadExternalRam</c> is
-///   UNAFFECTED by re-paging — so the host poll never fights the running game over bank selection.</item>
+///   unaffected by re-paging — so the host poll never fights the running game over bank selection.</item>
 ///   <item>the region round-trips through a battery save into a fresh machine (the persistence the demo's <c>.sav</c> stands on).</item>
 /// </list>
-/// The gate MATH (order-independent convergence, subset-proof meta XOR) is proven separately by the engine battery's
+/// The gate math (order-independent convergence, subset-proof meta XOR) is proven separately by the engine battery's
 /// <c>victory-gate</c> stage; this is the hardware-mapping half.
 /// </summary>
 internal sealed class VictoryRegionStage : IPostStage {

@@ -75,9 +75,18 @@ var connectOption = new Option<string?>(name: "--connect") {
     DefaultValueFactory = static _ => null,
     Description = "Connect to a remote TCP host instead of booting locally (an \"ip:port\" pair). Skips the whole normal composition in favor of a minimal stdin/socket client (Puck.World.WorldRemoteClient); every other option is ignored.",
 };
+// SESSION CREDENTIAL MATERIAL, never durable world configuration — a private key cannot live in the document, so
+// this rides beside --connect as the one narrow exception to "no PUCK_* configuration surface, durable values are
+// document fields": the identity a real client would hold locally, not a property of the world being authored.
+// Only meaningful with --connect; ignored (and unused) otherwise.
+var connectIdentityDirOption = new Option<string?>(name: "--connect-identity-dir") {
+    DefaultValueFactory = static _ => null,
+    Description = "With --connect: a directory carrying the identity to answer the TCP door's admission challenge with (private-key.pkcs8, domain.txt, subject.txt, algorithm.txt, optional chain/1.envelope + chain/2.envelope). Absent, the client signs with a freshly minted, unregistered throwaway key instead — a deliberate way to exercise the identity door's refusal path.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
+    connectIdentityDirOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -105,7 +114,7 @@ if (parseResult.Errors.Count > 0) {
 
 // --connect bypasses the whole normal composition — a minimal socket client, not a second world boot.
 if (parseResult.GetValue(option: connectOption) is { } connectTarget) {
-    return await WorldRemoteClient.RunAsync(connect: connectTarget);
+    return await WorldRemoteClient.RunAsync(connect: connectTarget, identityDir: parseResult.GetValue(option: connectIdentityDirOption));
 }
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
@@ -240,10 +249,9 @@ var seatBindings = new WorldSeatBindings(engineDefault: WorldDefaultBindings.Bui
 services.AddSingleton(implementationInstance: seatFeel);
 services.AddSingleton(implementationInstance: seatBindings);
 
-// BOOT SHAPE RESOLVES BEFORE REGISTRATION: the authoritative core registers in EVERY shape;
-// the GPU host, render root, overlays, audio device, screens/machines, gamepads, and editor register ONLY when
-// presentation is composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared
-// every-shape wiring that used to live inside the (presentation-only) render-root factory.
+// Boot shape resolves before registration: the authoritative core registers in every shape; the GPU host, render
+// root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
+// composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
 if (hostSettings.Headless) {
     // NO window, NO GPU device, NO swapchain, NO allocator, NO backend presenter, NO audio device — the headless
@@ -276,9 +284,15 @@ if (hostSettings.Headless) {
 }
 var host = builder.Build();
 
-// The EVERY-SHAPE post-build wiring step: affordance install, the lever-sink attachment, and the
-// server's echo/cue taps — moved out of the old presentation-only render-root factory so wire.errors stays honest
-// headless. Runs before the host starts, so it observes the FULLY built container in either boot shape.
-WorldPostBuildWiring.Install(services: host.Services);
+// The every-shape post-build wiring step: affordance install, the boot document's genuine binding-vocabulary
+// re-validation (WorldAffordances.Installed is only true from here on — see WorldPostBuildWiring.Install's remarks
+// for why the first validation at WorldDefinitionLoader.TryResolve above could not have caught this), the
+// lever-sink attachment, and the server's echo/cue taps, so wire.errors stays honest headless. Runs before the
+// host starts, so it observes the fully built container in either boot shape. A refused re-validation prints its
+// reason on stderr and fails the boot here, identically in both shapes, rather than starting a host whose own boot
+// document the real vocabulary would have refused.
+if (!WorldPostBuildWiring.Install(services: host.Services)) {
+    return 1;
+}
 await host.RunAsync();
 return 0;

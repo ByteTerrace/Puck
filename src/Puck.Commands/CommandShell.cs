@@ -5,12 +5,10 @@ namespace Puck.Commands;
 /// enqueued on the <see cref="TextCommandSource"/> and submits them through the registry's text path.
 /// </summary>
 /// <remarks>
-/// It pumps TEXT and nothing else, deliberately. Physical input has one capture point — <see cref="InputRouter"/>'s
+/// It pumps text and nothing else, deliberately. Physical input has one capture point — <see cref="InputRouter"/>'s
 /// per-tick mixer — because that is where a signal becomes deterministic snapshot state carrying a stamped
-/// <see cref="CommandPrincipal"/>. The shell's predecessor also owned a frame-driven binding dispatch path that
-/// pushed activations straight at the registry; that path had no tick, no recording, and no principal, so it was
-/// deleted rather than retrofitted. A composition root without an <see cref="InputRouter"/> therefore has no way to
-/// dispatch bound input at all — that shape is INEXPRESSIBLE BY DESIGN, and a root that wants controls registers a
+/// <see cref="CommandPrincipal"/>. A composition root without an <see cref="InputRouter"/> therefore has no way to
+/// dispatch bound input at all — that shape is inexpressible by design, and a root that wants controls registers a
 /// router.
 /// </remarks>
 public sealed class CommandShell {

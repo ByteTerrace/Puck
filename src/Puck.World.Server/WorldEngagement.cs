@@ -9,51 +9,48 @@ namespace Puck.World.Server;
 /// currently engaged on <see cref="ScreenIndex"/> translates to (the multiplayer-cabinet shape:
 /// <see cref="WorldEngagement.FoldTick"/> is the writer). Sparse: a screen with nobody engaged carries no entry at
 /// all rather than an explicit neutral one, so the common (nobody-engaged) tick costs nothing to encode.
-/// SERVER-INTERNAL (authoritative-machines campaign, 2026-08-03): this used to be a WIRE shape
-/// (<c>Protocol.WorldSnapshot.EngagedPads</c>), read by the presentation-side screen binder off the client's latest
-/// snapshot. Machine stepping now runs inside <see cref="WorldServer.Step"/> itself
-/// (<see cref="WorldMachineHost.Advance"/> reads <see cref="WorldEngagement.BuildPadSnapshot"/> directly, in-process),
-/// so there is no longer a client-side consumer and this never needs to cross the loopback.</summary>
+/// Server-internal: <see cref="WorldMachineHost.Advance"/> reads <see cref="WorldEngagement.BuildPadSnapshot"/>
+/// directly, in-process, so this never crosses the loopback.</summary>
 /// <param name="ScreenIndex">The engine screen-surface index.</param>
 /// <param name="Pad">The merged controller image for this tick's machine step.</param>
 public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState Pad);
 
 /// <summary>
-/// The ROUTE fold — where an entity's resolved intent GOES, distinct from the <see cref="IntentSource"/> axis (what
-/// fills it). It is a VIEW over the server's ONE capability table (<see cref="WorldGrants"/>, reached through
+/// The route fold — where an entity's resolved intent goes, distinct from the <see cref="IntentSource"/> axis (what
+/// fills it). It is a view over the server's one capability table (<see cref="WorldGrants"/>, reached through
 /// <see cref="IWorldGrantsView"/>): an entity's route is an exclusive-per-body <see cref="WorldCapability.Control"/>
-/// grant over a TARGET SUBJECT — a screen (today's machine-engagement UX) or another body (possession) — no parallel
-/// route table. Screen-machine engagement is the historical special case of the general primitive: a channel-masked
-/// tap on the one intent wire, carrying a CAPTURE policy (does the source body idle, or keep integrating?) and a
-/// CHANNEL MASK (which ordinals the route reaches at all). While a route CAPTURES its body, that body's per-tick
+/// grant over a target subject — a screen (today's machine-engagement UX) or another body (possession) — no parallel
+/// route table. Screen-machine engagement is a special case of the general primitive: a channel-masked
+/// tap on the one intent wire, carrying a capture policy (does the source body idle, or keep integrating?) and a
+/// channel mask (which ordinals the route reaches at all). While a route captures its body, that body's per-tick
 /// <see cref="WorldBody.EngagedIntent"/> is translated/passed through to the target once per tick
-/// (<see cref="FoldTick"/>) instead of driving the avatar, which stands idle; while MIRRORED (capture:false) the body
-/// keeps integrating normally AND its resolved intent still reaches the target. A screen target's fold publishes on
+/// (<see cref="FoldTick"/>) instead of driving the avatar, which stands idle; while mirrored (capture:false) the body
+/// keeps integrating normally and its resolved intent still reaches the target. A screen target's fold publishes on
 /// <see cref="BuildPadSnapshot"/> for <see cref="WorldMachineHost.Advance"/> to read, in-process, inside
-/// <see cref="WorldServer.Step"/>; a body target's fold is a co-drive CONTRIBUTION queued for the target's next tick, through the exact same Drive-gated
-/// contribution path an addon or a co-driving seat already uses (<see cref="WorldServer.StageContribution"/>) — no
-/// second write path.
+/// <see cref="WorldServer.Step"/>; a body target's fold is a co-drive contribution queued for the target's next tick,
+/// through the exact same Drive-gated contribution path an addon or a co-driving seat already uses
+/// (<see cref="WorldServer.StageContribution"/>) — no second write path.
 /// </summary>
 /// <remarks>
-/// DISSOLVED OFF LOOPBACK-ONLY (headless design §1.8). The write half (<see cref="Engage"/>/<see cref="Disengage"/>) is
+/// The write half (<see cref="Engage"/>/<see cref="Disengage"/>) is
 /// server-side authority reached only through <see cref="WorldServer.ApplyCommand"/>'s <see cref="WorldCommand.Engage"/>/
-/// <see cref="WorldCommand.Disengage"/> arms — the SAME ordered domain, tape, and eventual socket door every other
+/// <see cref="WorldCommand.Disengage"/> arms — the same ordered domain, tape, and eventual socket door every other
 /// authority command travels through, so a future remote client inherits routing for free with no special-case
-/// loopback shortcut. The route OWNER identity (<c>TargetPrincipal</c> on both command kinds) is resolved by the
-/// CALLER (a local seat's own claimed identity via <c>Puck.World.Client.PlayerRoster.PrincipalOf</c>, or a population
+/// loopback shortcut. The route owner identity (<c>TargetPrincipal</c> on both command kinds) is resolved by the
+/// caller (a local seat's own claimed identity via <c>Puck.World.Client.PlayerRoster.PrincipalOf</c>, or a population
 /// entry's Peer identity) rather than by this class, because that resolution needs the local roster's claim state —
 /// client-only bookkeeping this class has no business holding. The read half's entity→principal resolution needs no
-/// such indirection: a body/entity index IS a <see cref="WorldPrincipal.Index"/> directly for both
+/// such indirection: a body/entity index is a <see cref="WorldPrincipal.Index"/> directly for both
 /// <see cref="PrincipalKind.Seat"/> (0..3, <see cref="WorldPopulation.LocalSeatCount"/>-bounded) and
 /// <see cref="PrincipalKind.Peer"/> (4..127) principals, so <see cref="PlayersOn"/>/<see cref="FoldTick"/>/
 /// <see cref="DisengageScreen"/> resolve bodies with plain index arithmetic and never consult a roster.
-/// <para><b>Replay visibility (context-routes widening).</b> A body-target route's per-tick channel passthrough is
+/// <para><b>Replay visibility.</b> A body-target route's per-tick channel passthrough is
 /// synthesized directly into <see cref="WorldServer"/>'s own intent queue (never through <c>LoopbackTransport</c>'s
-/// <c>IntentTap</c>), so it is structurally EXCLUDED from the replay tape's recorded intent list — exactly like a
-/// mounted addon's driving. It is RE-DERIVED at replay time by re-running this same fold against the source seat's
-/// OWN recorded submission (which IS captured, ordinarily) and the recorded route state (the <see cref="Engage"/>
+/// <c>IntentTap</c>), so it is structurally excluded from the replay tape's recorded intent list — exactly like a
+/// mounted addon's driving. It is re-derived at replay time by re-running this same fold against the source seat's
+/// own recorded submission (which is captured, ordinarily) and the recorded route state (the <see cref="Engage"/>
 /// command itself, and any Grant/Revoke touching the route's Control subject, all travel as ordinary tape entries) —
-/// the stronger property the addon precedent already established, not a new exception. The pose hash needs no format
+/// the same property the addon precedent already established, not a new exception. The pose hash needs no format
 /// change either: it already hashes every active body's position/orientation each tick, so a possessed body's motion
 /// and a captured source's stillness are covered automatically, the same as any other cause of a body moving.</para>
 /// <para>Single-threaded, like the grant table it views: <see cref="WorldServer.ApplyCommand"/> mutates it on the
@@ -87,7 +84,7 @@ public sealed class WorldEngagement {
     // co-drive/StageContribution path; see the class remarks on replay visibility for why this is never taped here).
     private readonly List<BodyRouteContribution> m_bodyContributions = new();
 
-    /// <summary>Initializes the routing fold over the population (bodies 0..127) and the ONE grant table the routes
+    /// <summary>Initializes the routing fold over the population (bodies 0..127) and the one grant table the routes
     /// live in.</summary>
     /// <param name="population">The entity table.</param>
     /// <param name="grants">The capability table's view (route reads/writes plus the Control-over-target check).</param>
@@ -152,23 +149,23 @@ public sealed class WorldEngagement {
         return new ChannelReachMask(Bits: bits);
     }
 
-    /// <summary>Determines whether <paramref name="actingPrincipal"/> — the SUBMITTER, never the target entity's own principal —
+    /// <summary>Determines whether <paramref name="actingPrincipal"/> — the submitter, never the target entity's own principal —
     /// holds <see cref="WorldCapability.Control"/> over <paramref name="target"/> (the default permissive Control/all
     /// satisfies it for a seat/console actor). A read-only check a caller may run before side effects (e.g. the
     /// client's auto-insert-boot precheck ahead of <see cref="WorldCommand.Engage"/>'s submission); <see cref="Engage"/>
     /// re-runs the identical check server-side itself, so this is never the only gate a mutation passes through.</summary>
     /// <param name="target">The route target subject (a screen or a body) to check.</param>
-    /// <param name="actingPrincipal">The principal ASKING to route/unroute.</param>
+    /// <param name="actingPrincipal">The principal asking to route/unroute.</param>
     public GrantVerdict CheckEngage(GrantSubject target, WorldPrincipal actingPrincipal) =>
         m_grants.Allows(principal: actingPrincipal, capability: WorldCapability.Control, subject: target);
 
     /// <summary>Routes an entity (by 0-based body index) to <paramref name="target"/>: checks
     /// <paramref name="actingPrincipal"/> holds <see cref="WorldCapability.Control"/> over <paramref name="target"/>
-    /// BEFORE any mutation, then latches the body's <see cref="WorldBody.SetEngaged"/> capture policy so its intent
-    /// diverts (capture:true) or ALSO reaches the target while still driving the avatar (capture:false, the MIRRORED
+    /// before any mutation, then latches the body's <see cref="WorldBody.SetEngaged"/> capture policy so its intent
+    /// diverts (capture:true) or also reaches the target while still driving the avatar (capture:false, the mirrored
     /// policy), and records the route under <paramref name="targetPrincipal"/> (re-pointing an already-routed entity
     /// just replaces the route) — the identity <see cref="PlayersOn"/>/<see cref="FoldTick"/> later resolve the route
-    /// back to a live body through. The route's channel mask is resolved HERE, from document data (a screen's
+    /// back to a live body through. The route's channel mask is resolved here, from document data (a screen's
     /// authored <see cref="WorldScreenRoute.Channels"/>, or every ordinal for a body target — bodies carry no route
     /// document row to author one from). Screen policy (engageable, proximity, and machine presence) remains the
     /// caller's concern; <see cref="WorldServer.ApplyCommand"/> and its context-button probe share the authoritative
@@ -178,8 +175,8 @@ public sealed class WorldEngagement {
     /// <param name="entityIndex">The 0-based entity index to route.</param>
     /// <param name="target">The route target subject — a screen or a body.</param>
     /// <param name="capture">Whether the route captures the source body (idles it) or mirrors it (leaves it driving).</param>
-    /// <param name="actingPrincipal">The principal ASKING to route — checked instead of the target's own principal so
-    /// one seat cannot force another onto (or off) a target merely because the TARGET happens to still hold the
+    /// <param name="actingPrincipal">The principal asking to route — checked instead of the target's own principal so
+    /// one seat cannot force another onto (or off) a target merely because the target happens to still hold the
     /// seeded permissive default.</param>
     /// <param name="targetPrincipal">The identity the route is recorded under — the entity's own resolved identity.</param>
     /// <returns>Whether the route was permitted and recorded.</returns>
@@ -204,24 +201,24 @@ public sealed class WorldEngagement {
 
     /// <summary>Disengages an entity: reads its capture latch and <paramref name="targetPrincipal"/>'s Control route
     /// together and decides among four outcomes (see the class remarks and the outcome shape's own docs) — the
-    /// mutating half. Applies the SAME check-then-mutate decision <see cref="PeekDisengage"/> reports without
+    /// mutating half. Applies the same check-then-mutate decision <see cref="PeekDisengage"/> reports without
     /// mutating.</summary>
     /// <param name="entityIndex">The 0-based entity index to disengage.</param>
-    /// <param name="actingPrincipal">The principal ASKING to disengage — checked wherever the decision needs it.</param>
+    /// <param name="actingPrincipal">The principal asking to disengage — checked wherever the decision needs it.</param>
     /// <param name="targetPrincipal">The identity the route is recorded under.</param>
     /// <returns>The outcome (see <see cref="DisengageOutcome"/>).</returns>
     public DisengageOutcome Disengage(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal) =>
         ResolveDisengage(entityIndex: entityIndex, actingPrincipal: actingPrincipal, targetPrincipal: targetPrincipal, apply: true);
 
-    /// <summary>Returns the READ-ONLY twin of <see cref="Disengage"/>: computes the identical outcome without mutating
+    /// <summary>Returns the read-only twin of <see cref="Disengage"/>: computes the identical outcome without mutating
     /// anything. The client submits <see cref="WorldCommand.Disengage"/> for the actual (server-authoritative)
-    /// mutation regardless of what this reports — the command's own apply re-derives the SAME decision from the SAME
+    /// mutation regardless of what this reports — the command's own apply re-derives the same decision from the same
     /// state, since nothing can intervene between a local peek and its immediately-following submit over loopback —
     /// but the client needs this ahead of time to format its console echo and decide whether to drop its own
     /// client-side held device state (only <see cref="DisengageOutcome.RepairedLatch"/>/<see cref="DisengageOutcome.Disengaged"/>
     /// warrant that; <see cref="DisengageOutcome.RepairedRoute"/> must not, since the entity was never truly captured).</summary>
     /// <param name="entityIndex">The 0-based entity index.</param>
-    /// <param name="actingPrincipal">The principal ASKING to disengage.</param>
+    /// <param name="actingPrincipal">The principal asking to disengage.</param>
     /// <param name="targetPrincipal">The identity the route is recorded under.</param>
     /// <returns>The outcome disengaging would produce.</returns>
     public DisengageOutcome PeekDisengage(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal) =>
@@ -231,18 +228,18 @@ public sealed class WorldEngagement {
     /// the grant table's Control route row are two independent pieces of state <see cref="Engage"/> sets together and
     /// an ordinary disengage clears together — but nothing enforces that they move together in between. An admin
     /// <c>world.revoke &lt;principal&gt; control screen:&lt;n&gt;</c> (or <c>control body:&lt;n&gt;</c>) can pull the
-    /// route out from under a genuinely captured body (the route dies, the latch does not — a STUCK latch with no way
+    /// route out from under a genuinely captured body (the route dies, the latch does not — a stuck latch with no way
     /// to release it, since a route-less body reads <see cref="DisengageOutcome.NotEngaged"/> forever otherwise); a
-    /// plain <c>world.grant &lt;principal&gt; control screen:&lt;n&gt;</c> can mint a route with NO latch behind it at
+    /// plain <c>world.grant &lt;principal&gt; control screen:&lt;n&gt;</c> can mint a route with no latch behind it at
     /// all (equally true of capture:false's mirrored route, which never sets the latch in the first place — disengage
     /// clears it just the same, unconditionally, since <c>WorldBody.SetEngaged(false)</c> is a no-op when already
     /// clear).
-    /// <para>The two directions are NOT symmetric. The STUCK-LATCH direction (latch set, no route) touches only
+    /// <para>The two directions are not symmetric. The stuck-latch direction (latch set, no route) touches only
     /// <see cref="WorldBody.Engaged"/> — pure body state, nothing in the grant table — so it self-heals
-    /// UNCONDITIONALLY: whatever cleared the route already exercised authority over the target, and there is no
-    /// grant-table mutation left here for an actor check to gate. The ROUTE-WITHOUT-LATCH direction is DIFFERENT: a
+    /// unconditionally: whatever cleared the route already exercised authority over the target, and there is no
+    /// grant-table mutation left here for an actor check to gate. The route-without-latch direction is different: a
     /// route can exist through a perfectly legitimate <c>world.grant</c> with no matching <see cref="Engage"/> call
-    /// yet — a real, authorized row, not always debris — and clearing it mutates the SAME per-principal Control
+    /// yet — a real, authorized row, not always debris — and clearing it mutates the same per-principal Control
     /// subject set an ordinary <c>world.revoke</c> touches. This direction requires <paramref name="actingPrincipal"/>
     /// to hold Control over that target (the identical pair an ordinary disengage/revoke already checks) before
     /// clearing it; lacking it answers <see cref="DisengageOutcome.Denied"/>.</para></summary>
@@ -266,14 +263,11 @@ public sealed class WorldEngagement {
                 return DisengageOutcome.Denied;
             }
 
-            // A route with no latch is ordinarily debris (see the class remarks) — UNLESS it was deliberately
-            // established this way: an Engage(capture:false) MIRROR route never sets the latch by design, so its
-            // routine disengage must not read as an inconsistency repair. m_grants.RouteCapture reports the
-            // ESTABLISHED route's own recorded policy here (true for a bare world.grant with no Engage behind it,
-            // which is the genuine repair case this branch otherwise handles) — see PrincipalGrants.m_routeMirror's
-            // remarks for why the default sides with the repair reading. Read BEFORE clearing: nothing here relies
-            // on it surviving the clear, but reading first keeps the decision independent of ClearRoutes' own
-            // implementation.
+            // A route with no latch is ordinarily debris — unless it was deliberately established this way: an
+            // Engage(capture:false) mirror route never sets the latch by design, so its routine disengage must not
+            // read as an inconsistency repair. m_grants.RouteCapture reports the established route's own recorded
+            // policy (true for a bare world.grant with no Engage behind it, the genuine repair case). Read before
+            // clearing so the decision does not depend on ClearRoutes' own implementation.
             var wasMirrored = !m_grants.RouteCapture(principal: targetPrincipal);
 
             if (apply) {
@@ -299,7 +293,7 @@ public sealed class WorldEngagement {
         return DisengageOutcome.Disengaged;
     }
 
-    /// <summary>Disengages EVERY entity routed to <paramref name="screenIndex"/> — the administrative teardown a
+    /// <summary>Disengages every entity routed to <paramref name="screenIndex"/> — the administrative teardown a
     /// screen removal runs before its slot is disposed. No actor check: whatever authorized the removal (a
     /// Mutate-over-Screens grant) already exercised the authority this cleanup is a consequence of. Each routed
     /// body's latch is cleared (its avatar resumes normal intent) and the Control route grant is cleared. Iterates a
@@ -319,9 +313,9 @@ public sealed class WorldEngagement {
         m_holderScratch.Clear();
     }
 
-    /// <summary>Returns every entity currently routed to <paramref name="screenIndex"/>, reported as 1-based DISPLAY numbers
+    /// <summary>Returns every entity currently routed to <paramref name="screenIndex"/>, reported as 1-based display numbers
     /// (1..128, matching the <c>player.*</c> verb convention — a Seat/Peer principal's <see cref="WorldPrincipal.Index"/>
-    /// plus one) alongside whether the route CAPTURES it (its avatar idle, the classic engage) or MIRRORS it (its
+    /// plus one) alongside whether the route captures it (its avatar idle, the classic engage) or mirrors it (its
     /// avatar still driving, capture:false), in ascending display order. Prunes any route that no longer resolves to a
     /// live body.</summary>
     /// <param name="screenIndex">The engine screen index.</param>
@@ -357,12 +351,12 @@ public sealed class WorldEngagement {
         m_staleScratch.Clear();
     }
 
-    /// <summary>Folds every routed body's channel-masked intent onto its target for THIS tick — a screen target
+    /// <summary>Folds every routed body's channel-masked intent onto its target for this tick — a screen target
     /// merges into <see cref="m_screenPads"/> (the multiplayer-cabinet OR-merge, <see cref="MachinePadState.Merge"/>);
     /// a body target queues a co-drive contribution into <see cref="BodyContributions"/> for
-    /// <see cref="WorldServer.Step"/> to enqueue onto the target's NEXT tick, through the ordinary Drive-gated
-    /// contribution path. Visits EVERY routed body, captured or mirrored alike — capture only decides whether the
-    /// AVATAR also idled; the route itself always folds. Run once per <see cref="WorldServer.Step"/>, before the
+    /// <see cref="WorldServer.Step"/> to enqueue onto the target's next tick, through the ordinary Drive-gated
+    /// contribution path. Visits every routed body, captured or mirrored alike — capture only decides whether the
+    /// avatar also idled; the route itself always folds. Run once per <see cref="WorldServer.Step"/>, before the
     /// tick's <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
     /// routed intents. Scans the whole population once (allocation-free after warmup, like every other per-tick
     /// population scan in <see cref="WorldServer"/>) rather than per-target, because a body/entity index resolves its
@@ -397,8 +391,8 @@ public sealed class WorldEngagement {
     }
 
     /// <summary>Gets this tick's body-target route contributions — <see cref="WorldServer.Step"/> drains this right after
-    /// <see cref="FoldTick"/> and enqueues each as an ordinary <see cref="IntentSubmission"/> for the NEXT tick's
-    /// drain, landing in <see cref="WorldServer.StageContribution"/> under the SAME Drive-over-body check every
+    /// <see cref="FoldTick"/> and enqueues each as an ordinary <see cref="IntentSubmission"/> for the next tick's
+    /// drain, landing in <see cref="WorldServer.StageContribution"/> under the same Drive-over-body check every
     /// co-driving seat or addon contribution passes through — possession is Drive-over-body plus this route, never a
     /// second authority path.</summary>
     public IReadOnlyList<BodyRouteContribution> BodyContributions => m_bodyContributions;
@@ -418,7 +412,7 @@ public sealed class WorldEngagement {
         return masked;
     }
 
-    /// <summary>Returns this tick's per-screen merged pad lane, sliced from a reused backing array — read DIRECTLY by
+    /// <summary>Returns this tick's per-screen merged pad lane, sliced from a reused backing array — read directly by
     /// <see cref="WorldMachineHost.Advance"/> from inside <see cref="WorldServer.Step"/>, in-process. Must be read
     /// (or copied) before the next <see cref="FoldTick"/> call, exactly like <c>WorldServer.BuildSnapshot</c>'s own
     /// reused entity array.</summary>
@@ -438,7 +432,7 @@ public sealed class WorldEngagement {
     }
 
     /// <summary>Translates a resolved <see cref="PlayerIntent"/> to a neutral standard-controller image through
-    /// <paramref name="screenIndex"/>'s COMPILED translation table (<see cref="CompileTranslation"/>) — authored data
+    /// <paramref name="screenIndex"/>'s compiled translation table (<see cref="CompileTranslation"/>) — authored data
     /// (<see cref="WorldScreenRoute.Translation"/>) when the screen declares one, otherwise the engine's baked default
     /// (the two movement roles to the left stick only; a route whose machine needs a face button or any other
     /// element must author that row itself). Digital elements compare against

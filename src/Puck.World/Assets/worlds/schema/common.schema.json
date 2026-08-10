@@ -225,6 +225,45 @@
       ],
       "additionalProperties": false
     },
+    "WorldScreenProjection": {
+      "description": "How the destination render projects onto this face (see WorldScreenProjection). Default Camera \u2014 unauthored worlds and every session facet authored before this member existed render byte-identically. OPTIONAL and TRAILING (the same widen-without-moving-existing-members shape CameraName itself already follows). Window requires THIS SAME face\u0027s Portal to author Mapped with a Counterpart \u2014 refused by name otherwise (see WorldDefinitionValidator); a top-level screens row or magazine entry carries no face to pair with, so window is refused there unconditionally.",
+      "enum": [
+        "Camera",
+        "Window"
+      ],
+      "default": "Camera"
+    },
+    "Session": {
+      "description": "A live rendered view of another world, resolved through a destinations row (docs/world-model.md, \u0022Observation and display\u0022 \u2014 Campaign 1 item 4). The face/screen resolves the SAME resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its STATIC authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+      "properties": {
+        "$type": {
+          "const": "session"
+        },
+        "destination": {
+          "description": "The Name this face/screen observes. Must resolve to a declared destinations row \u2014 an undeclared name refuses at BOOT (validated, like a portal facet\u0027s own destination).",
+          "type": "string"
+        },
+        "camera": {
+          "description": "The destination\u0027s own placeable-camera name to render through, or null for its default projection (its first declared camera, else a fixed overview derived from its spawn points). Wire name camera \u2014 plain Camera would collide with the sibling Camera arm\u0027s own type name inside this enclosing record. Validated ONLY as non-empty when present at author time \u2014 the destination\u0027s own definition is not joined at boot (references assert naming intent, not reachability), so an UNKNOWN camera name is refused loudly at BIND time instead, once the destination is actually resolved, falling back to the default projection rather than refusing the whole bind. Ignored under Window (see Projection).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "projection": {
+          "$ref": "#/$defs/WorldScreenProjection"
+        },
+        "resolution": {
+          "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
+          "default": null
+        }
+      },
+      "required": [
+        "destination"
+      ],
+      "additionalProperties": false
+    },
     "Entity": {
       "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
       "properties": {
@@ -825,7 +864,8 @@
           "type": "integer"
         },
         "next": {
-          "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling)."
+          "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+          "type": "string"
         }
       },
       "required": [
@@ -843,7 +883,8 @@
       ],
       "properties": {
         "key": {
-          "description": "The stable context key, unique within the generator."
+          "description": "The stable context key, unique within the generator.",
+          "type": "string"
         },
         "alternatives": {
           "description": "The weighted alternatives out of this context, or empty for a terminal context.",
@@ -926,7 +967,12 @@
           "$ref": "#/$defs/WorldGeneratorSource"
         },
         "start": {
-          "default": null
+          "description": "Markov only: the context every emission begins from. Must name a declared context.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "bound": {
           "description": "Markov only: the maximum tokens ONE emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
@@ -1365,6 +1411,14 @@
             "null"
           ],
           "default": null
+        },
+        "valueSeconds": {
+          "description": "WORLD SCOPE ONLY (refused at body scope, on the same terms as Value and FromState \u2014 exactly one of the three is authored): an alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in SECONDS \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning every cooldown \u2014 and converted ONCE at rule compile time to an EXACT whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is REFUSED rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either. See WorldRuleCompiler.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1420,6 +1474,38 @@
         },
         "fromKey": {
           "description": "The CELL inside FromState \u2014 see FromKey.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "valueSeconds": {
+          "description": "WORLD SCOPE ONLY \u2014 see ValueSeconds\u0027s remarks; here the converted tick count is the addend rather than the replacement.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "CountdownState": {
+      "description": "Decrements a world-state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. WORLD SCOPE ONLY: the destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the world\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+      "properties": {
+        "$type": {
+          "const": "countdownState"
+        },
+        "state": {
+          "description": "The countdown state-row name.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The cell inside State; null addresses its slot.",
           "type": [
             "string",
             "null"
@@ -1884,7 +1970,32 @@
         },
         {
           "$ref": "#/$defs/Qr"
+        },
+        {
+          "$ref": "#/$defs/Session"
         }
+      ]
+    },
+    "WorldPortalTravel": {
+      "description": "Who travels through (see WorldPortalTravel). Absent resolves against the world\u0027s own portals.portalDefaults.travel (see WorldPortalsSection), or Body when the world declares no portals section at all \u2014 see WorldDefinitionValidator\u0027s resolution order, echoed by world.portals. Omitted from the wire when null.",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "party",
+        "body",
+        null
+      ]
+    },
+    "WorldPortalArrival": {
+      "description": "Where a traveler lands at the destination (see WorldPortalArrival). Default Spawn \u2014 unauthored worlds and every facet authored before this member existed are unchanged. OPTIONAL and TRAILING (the same widen-without-moving-existing-members shape Travel itself already follows).",
+      "default": "spawn",
+      "type": "string",
+      "enum": [
+        "spawn",
+        "mapped"
       ]
     },
     "WorldPlacementPortal": {
@@ -1895,22 +2006,34 @@
       ],
       "properties": {
         "destination": {
-          "description": "The Name of the references row naming the destination world. Must resolve to an existing row \u2014 an undeclared name refuses by name (see WorldDefinitionValidator). No boot-time file-existence check on the referenced document itself, exactly like WorldReference \u2014 resolving the DOCUMENT is a future consumer\u0027s job; resolving the NAME, against this document\u0027s own references section, is this facet\u0027s own.",
+          "description": "The Name of the destinations row naming the selected destination. Must resolve to an existing row \u2014 an undeclared name refuses by name (see WorldDefinitionValidator). No boot-time file-existence check on the destination\u0027s own referenced document \u2014 resolving the DOCUMENT is a future consumer\u0027s job; resolving the NAME, against this document\u0027s own destinations section, is this facet\u0027s own.",
           "type": "string"
         },
-        "lifetime": {
-          "description": "How the destination instance is minted (see WorldPortalLifetime)."
+        "travel": {
+          "$ref": "#/$defs/WorldPortalTravel"
         },
-        "instance": {
+        "arrival": {
+          "$ref": "#/$defs/WorldPortalArrival"
+        },
+        "counterpart": {
+          "description": "The DESTINATION document\u0027s border face this facet\u0027s frame maps onto under Mapped \u2014 \u0022\u003CplacementId\u003E/\u003Cface\u003E\u0022, the placement id and declared face name whose own placement transform (position \u002B yaw) is the arrival anchor. REQUIRED exactly when Arrival is Mapped (refused by name otherwise, in either direction \u2014 see WorldDefinitionValidator). No boot-time cross-document existence check: the named document is not resolved at boot (same reason Destination is not), so an absent placement/face refuses AT TRANSFER TIME instead, against the destination\u0027s own delivered definition (see WorldPortalCounterpart). Omitted from the wire when null.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
-        "travel": {
+        "marginDepth": {
+          "description": "The depth (world units) of the SHARED GROUND STRIP this face and its Counterpart face both author for a contiguous border \u2014 the terrain either side keeps solid so a body straddling the seam always has ground under it, never a wall it happens to be authoring past. Meaningful only when Arrival is Mapped (refused by name otherwise, the same rule Counterpart follows), and only for a Global destination while contact fields remain shared by one authority. REQUIRED \u2014 when a reachable IWorldNeighbourResolver is supplied \u2014 to be no shallower than the DERIVED floor (interaction reach plus max closing speed times tape latency, all read from this document and the neighbour\u0027s own; see WorldDefinitionValidator), BIT-IDENTICAL to the value the neighbour document authors on the counterpart face, and reciprocal: that face must map back to this exact face. A strip only one side widens, or whose other half points at a different face, is not shared. null (the default) authors no strip: an unmapped or unauthored face is unchanged. Omitted from the wire when null.",
+          "type": [
+            "number",
+            "null"
+          ],
           "default": null
         }
       },
       "required": [
-        "destination",
-        "lifetime"
+        "destination"
       ],
       "additionalProperties": false,
       "default": null
@@ -2116,6 +2239,9 @@
         },
         {
           "$ref": "#/$defs/AddState"
+        },
+        {
+          "$ref": "#/$defs/CountdownState"
         },
         {
           "$ref": "#/$defs/StartTimer"

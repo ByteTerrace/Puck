@@ -12,7 +12,8 @@
     ],
     "properties": {
       "name": {
-        "description": "The reference\u0027s own name \u2014 WorldSafeName-shaped, unique within the section."
+        "description": "The reference\u0027s own name \u2014 WorldSafeName-shaped, unique within the section.",
+        "type": "string"
       },
       "document": {
         "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim.",

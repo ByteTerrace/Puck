@@ -20,13 +20,6 @@ namespace Puck.HumbleGamingBrick;
 public readonly record struct MachineIdentity(int Version, int Model, ulong BootRomHash, ulong RomHash, int RomLength) {
     /// <summary>The current snapshot format version. Increment it whenever the serialized field layout changes so an
     /// incompatible snapshot is rejected rather than misread.</summary>
-    /// <remarks>3: Mbc5Cartridge gained a latched rumble-motor bool (G1); Mbc7Cartridge's accelerometer latch reads
-    /// through the new ITiltSensor seam rather than a fixed constant, but its serialized fields are unchanged (G3).
-    /// 4 (L-01 correction): <c>5187341</c> added the CGB infrared port as a new <c>ISnapshotable</c> section
-    /// (<see cref="InfraredPort"/>'s RP register byte + cart LED latch, two bytes, inserted between
-    /// <c>SerialComponent</c> and <c>ApuComponent</c> in registration order) without bumping this constant, so v3 for a
-    /// while silently labeled two different layouts. This bump corrects that retroactively; a v3 snapshot taken before
-    /// <c>5187341</c> is now correctly refused rather than misread two bytes short.</remarks>
     public const int CurrentVersion = 4;
 
     /// <summary>Computes an identity for a console model and its immutable ROM images using a stable FNV-1a fingerprint.</summary>

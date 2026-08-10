@@ -10,9 +10,9 @@ namespace Puck.Commands;
 /// the rounding rule (nearest, ties to even) has exactly one definition site.
 /// </summary>
 /// <remarks>
-/// The fence this type enforces is INTERIM and POSITIONAL: today it is enforced by every door calling here rather
-/// than by a type that makes a float impossible to hold below the door. Unit 6's command-channel retrofit (the
-/// typed router-lane split) supersedes this with a STRUCTURAL fence; until then, this is the reminder that the
+/// The fence this type enforces is interim and positional: today it is enforced by every door calling here rather
+/// than by a type that makes a float impossible to hold below the door. A future command-channel retrofit (the
+/// typed router-lane split) supersedes this with a structural fence; until then, this is the reminder that the
 /// positional fence is not the end state.
 /// </remarks>
 public static class CommandValueQuantization {

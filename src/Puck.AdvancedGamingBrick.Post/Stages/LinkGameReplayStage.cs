@@ -3,28 +3,28 @@ using Puck.Maths;
 namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
-/// Tier-C stage: the real link cable exercised by a REAL commercial multiplayer game. Two ARM7TDMI consoles boot the
+/// Tier-C stage: the real link cable exercised by a real commercial multiplayer game. Two ARM7TDMI consoles boot the
 /// same cartridge (named by <c>PUCK_AGB_LINK_GAME</c>) through the real BIOS — a full-boot commercial game, not the
 /// hand-assembled <see cref="MicroRoms"/> protocol — joined on one <see cref="AgbLinkCable"/> and advanced together
 /// through an <see cref="AgbLinkSession"/> in a fixed sub-frame budget schedule. The stage proves two things about the
 /// link stack under a genuine game:
 /// <list type="number">
-/// <item>the game's own SIO link stack ENGAGES over the cable — each console reaches Multiplayer-mode setup AND clocks
+/// <item>the game's own SIO link stack engages over the cable — each console reaches Multiplayer-mode setup and clocks
 /// real normal-mode transfers whose completions cross the cable (not a lone-console idle read); and</item>
-/// <item>the whole linked scenario is REPLAY-IDENTICAL: re-run from fresh consoles with the identical budget schedule,
+/// <item>the whole linked scenario is replay-identical: re-run from fresh consoles with the identical budget schedule,
 /// both final whole-machine snapshots reproduce byte-for-byte (the link session adds no nondeterminism, even under a
 /// 4&#160;MiB commercial ROM booting the real BIOS).</item>
 /// </list>
 /// <para>
-/// It does NOT assert a completed multiplayer lobby handshake, because a real cartridge (the captured link-session
+/// It does not assert a completed multiplayer lobby handshake, because a real cartridge (the captured link-session
 /// cart; see the fallback path) does not reach one on the modeled SIO: the game detects a cable partner by polling the Multiplayer
 /// SIOCNT ready-line status (SD/SI) — the hardware signal that children are physically connected and ready — and never
 /// clocks a Multiplayer data round during detection (its SIOCNT writes are Multiplayer-mode setup with the start bit
-/// NEVER set, plus symmetric normal-mode pings). The emulated <see cref="AgbSerialController"/> models the data-exchange
+/// never set, plus symmetric normal-mode pings). The emulated <see cref="AgbSerialController"/> models the data-exchange
 /// surface faithfully (the <c>link-replay</c> micro-ROM gate proves rounds cross both ways) but does not derive those
 /// SD/SI ready-line bits from link-partner presence, so the game never advances to a lobby. The stage records how far
 /// the handshake reached as its pass detail; the divergence is a documented core gap, not a stage failure. The stage
-/// SKIPS cleanly when the ROM (<c>PUCK_AGB_LINK_GAME</c>) or a real boot BIOS (<c>PUCK_AGB_BIOS</c>) is absent.
+/// skips cleanly when the ROM (<c>PUCK_AGB_LINK_GAME</c>) or a real boot BIOS (<c>PUCK_AGB_BIOS</c>) is absent.
 /// </para>
 /// </summary>
 internal sealed class LinkGameReplayStage : IPostStage {

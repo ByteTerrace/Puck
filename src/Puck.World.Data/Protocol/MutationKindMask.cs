@@ -6,20 +6,18 @@ namespace Puck.World.Protocol;
 /// <c>0..</c><see cref="WorldMutationKindCatalog.MaxOrdinal"/>) a <see cref="WorldGrant.KindMask"/> row admits —
 /// the same <see cref="ChannelReachMask"/>-style closed bitset this codebase already uses for a per-ordinal
 /// reach/consent grant payload, applied here to the mutation dispatch door instead of the channel fold.
-/// A grant that HOLDS <see cref="WorldCapability.Mutate"/> over a section (or <see cref="WorldCapability.Edit"/> over
+/// A grant that holds <see cref="WorldCapability.Mutate"/> over a section (or <see cref="WorldCapability.Edit"/> over
 /// a concrete state row) answers "may this principal touch the section/row at all"; the mask answers the narrower
-/// "which KINDS within it" — the same attenuation shape the addon wire already uses for capability requests
+/// "which kinds within it" — the same attenuation shape the addon wire already uses for capability requests
 /// (<c>requested ∧ granted</c>): a bit this mask does not carry is a kind the row may never dispatch, no matter how
 /// broad the underlying hold is.
-/// <para><b>This type's ordinals are MUTATION-KIND ordinals and nothing else.</b> Its sibling
-/// <see cref="DocumentWriteMask"/> is a bitset over <see cref="WorldDocumentWriteKind"/> — a DIFFERENT vocabulary on
-/// a DIFFERENT door (the cross-document durable-state write-back channel), which still rides a 64-bit lane; this one
-/// no longer does. The two were once one <c>ulong</c> field whose meaning depended on the carrying grant's subject
-/// kind, so bit 0 read as <c>UpsertKit</c> on a section row and <c>Set</c> on a state row. They are two distinct
-/// types now precisely so no call site can confuse them: handing one where the other is expected does not
-/// compile.</para></summary>
+/// <para><b>This type's ordinals are mutation-kind ordinals and nothing else.</b> Its sibling
+/// <see cref="DocumentWriteMask"/> is a bitset over <see cref="WorldDocumentWriteKind"/> — a different vocabulary on
+/// a different door (the cross-document durable-state write-back channel), which still rides a 64-bit lane; this one
+/// no longer does. The two are distinct types so no call site can confuse them: handing one where the other is
+/// expected does not compile.</para></summary>
 /// <remarks>The lane is <see cref="UInt128"/> because the kind catalog outgrew 64: ordinals 0-63 filled it exactly,
-/// and a 65th kind on a <c>ulong</c> lane does not overflow loudly — <c>1UL &lt;&lt; 64</c> MASKS the shift count to
+/// and a 65th kind on a <c>ulong</c> lane does not overflow loudly — <c>1UL &lt;&lt; 64</c> masks the shift count to
 /// <c>1UL &lt;&lt; 0</c> and silently admits <c>UpsertKit</c> instead. Widening was therefore the only way to add a
 /// kind at all. Bits 0-63 keep their exact meanings and their exact wire positions; nothing was renumbered.</remarks>
 /// <param name="Bits">The raw 128-bit lane, one bit per declared mutation-kind ordinal.</param>
@@ -29,7 +27,7 @@ public readonly record struct MutationKindMask(UInt128 Bits) {
     /// ceiling/budget precedent this mirrors).</summary>
     public static MutationKindMask Empty { get; } = new(Bits: UInt128.Zero);
 
-    /// <summary>Gets whether this mask admits no kind at all.</summary>
+    /// <summary>Gets a value indicating whether this mask admits no kind at all.</summary>
     public bool IsEmpty => (Bits == UInt128.Zero);
 
     /// <summary>Determines whether <paramref name="ordinal"/> is admitted.</summary>
@@ -51,7 +49,7 @@ public readonly record struct MutationKindMask(UInt128 Bits) {
         return (((uint)ordinal < 128u) ? (UInt128.One << ordinal) : UInt128.Zero);
     }
 
-    /// <summary>Returns the intersection with <paramref name="other"/> — the ordinals BOTH masks admit. Used to bound a
+    /// <summary>Returns the intersection with <paramref name="other"/> — the ordinals both masks admit. Used to bound a
     /// grant-authored mask against a section's own declared kind-set (<see cref="WorldMutationKindCatalog.KindsOf"/>):
     /// a bit this meet drops was never legitimately admissible in the first place, never a live attenuation the
     /// dispatch door re-derives per call.</summary>
@@ -59,8 +57,8 @@ public readonly record struct MutationKindMask(UInt128 Bits) {
     /// <returns>The intersection.</returns>
     public MutationKindMask Meet(MutationKindMask other) => new(Bits: (Bits & other.Bits));
 
-    /// <summary>Describes the admitted kinds by their declared record NAMES, comma-separated
-    /// (<c>UpsertStateCell,RemoveStateCell</c>) — the SAME spelling <c>world.grant</c>'s own
+    /// <summary>Describes the admitted kinds by their declared record names, comma-separated
+    /// (<c>UpsertStateCell,RemoveStateCell</c>) — the same spelling <c>world.grant</c>'s own
     /// <c>verbs:&lt;name,…&gt;</c> token takes, so a read-back and the token that authored it never disagree, and a
     /// refusal can name the verb it denied rather than a hex lane nobody can decode by eye. A bit the catalog does
     /// not declare is skipped (it cannot be authored through the grant door, which refuses an inadmissible bit by
@@ -80,7 +78,7 @@ public readonly record struct MutationKindMask(UInt128 Bits) {
         return ((builder.Length == 0) ? "<none>" : builder.ToString());
     }
 
-    /// <summary>Parses the comma-separated kind-name form <see cref="Describe"/> writes — the SAME grammar
+    /// <summary>Parses the comma-separated kind-name form <see cref="Describe"/> writes — the same grammar
     /// <c>world.grant</c>'s <c>verbs:&lt;name,…&gt;</c> token takes, so a document-authored mask and a typed one
     /// canonicalize identically and neither can express a raw bit lane whose vocabulary is a guess. An unknown name
     /// refuses (naming it) rather than folding to nothing.</summary>

@@ -5,106 +5,107 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// One world-scoped rule: a condition over world facts and the effects that follow — the SAME primitive a kit's
+/// One world-scoped rule: a condition over world facts and the effects that follow — the same primitive a kit's
 /// per-body actions already run on (<see cref="ActionPredicate"/>, <see cref="ActionEffect"/>,
 /// <see cref="ActionTriggerMode"/>), widened to the world's own scope rather than a sibling engine with its own
 /// vocabulary. There is no scheduler and no trigger taxonomy beside this: time is just another fact.
 /// </summary>
 /// <remarks>
-/// <para><b>What lifts unchanged, and what is refused BY NAME.</b> <see cref="Gate"/> reuses
+/// <para><b>What lifts unchanged, and what is refused by name.</b> <see cref="Gate"/> reuses
 /// <see cref="ActionPredicate"/> as the authored ADT — no new predicate type exists. Two of its five cases are
 /// admissible at world scope: <see cref="ActionPredicate.All"/> (a pure combinator) and
-/// <see cref="ActionPredicate.CompareState"/> (whose <c>State</c> resolves against the WORLD's <c>state</c> section,
+/// <see cref="ActionPredicate.CompareState"/> (whose <c>State</c> resolves against the world's <c>state</c> section,
 /// or one of <see cref="WorldRuleFacts"/>'s reserved channels). <see cref="ActionPredicate.Now"/>/
 /// <see cref="ActionPredicate.Recently"/> read a per-body <see cref="ActionFact"/> that has no meaning without a body,
 /// and <see cref="ActionPredicate.TimerElapsed"/> reads a per-body timer slot; all three are refused at compile time,
 /// never reinterpreted. <see cref="Effects"/> likewise reuses <see cref="ActionEffect"/>, admitting
 /// <see cref="ActionEffect.SetState"/>/<see cref="ActionEffect.AddState"/> (a world state write),
-/// <see cref="ActionEffect.Generate"/> (firing a generator row — the join that makes generation and rules ONE arc),
-/// and — riding the SAME "admit an existing <see cref="WorldMutation"/> kind into the rule effect set" seam —
+/// <see cref="ActionEffect.Generate"/> (firing a generator row — the join that makes generation and rules one arc),
+/// and — riding the same "admit an existing <see cref="WorldMutation"/> kind into the rule effect set" seam —
 /// <see cref="ActionEffect.UpsertHudPanel"/>/<see cref="ActionEffect.RemoveHudPanel"/> (a world rule authors/removes a
 /// HUD panel) and <see cref="ActionEffect.UpsertPlacement"/>/<see cref="ActionEffect.RemovePlacement"/> (a world rule
 /// spawns/removes a placement row); the velocity/impulse/designate/timer effects remain irreducibly per-body and are
-/// refused. <see cref="ActionEffect.Save"/> admits on DIFFERENT terms again — not an existing mutation kind at all,
+/// refused. <see cref="ActionEffect.Save"/> admits on different terms again — not an existing mutation kind at all,
 /// but engine I/O (a session snapshot of the world to its own file) with no document effect and no
 /// <see cref="WorldMutation"/> of its own; see its own remarks for why that is not a door.</para>
-/// <para><b>Addressing is a (row, key) PAIR.</b> A world-scope <c>setState</c>/<c>addState</c>/<c>compareState</c>
-/// names the row in <c>State</c> and the CELL in <c>Key</c>; a null key means the row's slot cell, which a keyed row
+/// <para><b>Addressing is a (row, key) pair.</b> A world-scope <c>setState</c>/<c>addState</c>/<c>compareState</c>
+/// names the row in <c>State</c> and the cell in <c>Key</c>; a null key means the row's slot cell, which a keyed row
 /// does not have and is refused for rather than silently reading the row's first cell. Rules therefore reach keyed
-/// rows — an inventory, a per-player tally — not only scalars. A READ operand (a gate subject, a comparand, a
-/// <c>fromState</c>) must additionally address a cell the row DECLARES — an undeclared cell would read 0 forever
-/// with no refusal anywhere, so it refuses at compile as <see cref="WorldRuleRefusal.StateCellUndeclared"/> (owner
-/// ruling 2026-08-06); write destinations mint their cells and stay exempt. Because rules recompile under
-/// whole-document revalidation, removing a cell a rule reads refuses the removal, naming the rule.</para>
-/// <para><b>A comparand can MOVE — periodicity, cooldowns, round boundaries.</b> A
-/// <see cref="ActionPredicate.CompareState"/>'s comparand is EITHER an authored constant (<c>Value</c>) OR a second
-/// live operand (<c>ComparandState</c>/<c>ComparandKey</c>: a row or reserved channel, resolved through the SAME
+/// rows — an inventory, a per-player tally — not only scalars. A read operand (a gate subject, a comparand, a
+/// <c>fromState</c>) must additionally address a cell the row declares — an undeclared cell would read 0 forever
+/// with no refusal anywhere, so it refuses at compile as <see cref="WorldRuleRefusal.StateCellUndeclared"/>; write
+/// destinations mint their cells and stay exempt. Because rules recompile under whole-document revalidation, removing
+/// a cell a rule reads refuses the removal, naming the rule.</para>
+/// <para><b>A comparand can move — periodicity, cooldowns, round boundaries.</b> A
+/// <see cref="ActionPredicate.CompareState"/>'s comparand is either an authored constant (<c>Value</c>) or a second
+/// live operand (<c>ComparandState</c>/<c>ComparandKey</c>: a row or reserved channel, resolved through the same
 /// operand walk as the primary side) — never both, never neither. That one widening is the whole periodicity
 /// vocabulary; there is no scheduler and no new fact kind. Two patterns, and the footgun between them:</para>
 /// <para><b>Every N ticks (moving threshold vs <c>$tick</c>).</b> Gate <c>$tick &gt;= nextBeat</c> against an
-/// <c>int</c> schedule row the rule's OWN effect advances by N on fire (<c>addState nextBeat += N</c>),
-/// <see cref="ActionTriggerMode.Edge"/>. The advance lands SYNCHRONOUSLY inside the same <c>EvaluateWorldRules</c>
+/// <c>int</c> schedule row the rule's own effect advances by N on fire (<c>addState nextBeat += N</c>),
+/// <see cref="ActionTriggerMode.Edge"/>. The advance lands synchronously inside the same <c>EvaluateWorldRules</c>
 /// pass, so for N &gt;= 2 the gate self-closes the tick after it opens and the rule fires floor(elapsed/N) times over
-/// a window. Edge is wanted for the ordinary reason (see <see cref="WorldRule.Mode"/>) AND a second one specific to a
-/// moving threshold: if the advance is ever DENIED (a grant revoked mid-session) the gate stays stuck open, and
+/// a window. Edge is wanted for the ordinary reason (see <see cref="WorldRule.Mode"/>) and a second one specific to a
+/// moving threshold: if the advance is ever denied (a grant revoked mid-session) the gate stays stuck open, and
 /// Edge's latch — armed the instant the gate opened, before the effect that was to close it ever ran — stops the
 /// runaway re-fire that <see cref="ActionTriggerMode.Level"/> would spam. A period of exactly 1 tick never closes its
 /// own gate (tick and schedule move in lockstep) and wants Level, not Edge, to keep firing at all.</para>
-/// <para><b>A cooldown is NOT a <c>$tick</c> threshold — it is a relative COUNTDOWN.</b> The tempting spelling — a
-/// <c>nextAllowed</c> row set to <c>$tick</c>+N on use, gated <c>$tick &gt;= nextAllowed</c> — is a FOOTGUN for a
-/// REQUEST-gated ability: once a session has accrued background ticks, <c>$tick</c> already sits far past any freshly
+/// <para><b>A cooldown is not a <c>$tick</c> threshold — it is a relative countdown.</b> The tempting spelling — a
+/// <c>nextAllowed</c> row set to <c>$tick</c>+N on use, gated <c>$tick &gt;= nextAllowed</c> — is a footgun for a
+/// request-gated ability: once a session has accrued background ticks, <c>$tick</c> already sits far past any freshly
 /// set <c>nextAllowed</c>, so the gate is open the instant the request arrives and never spends the cooldown. Build a
 /// cooldown as a countdown instead: a <c>NonNegative</c> <c>int</c> row <c>cooldownRemaining</c>, a
-/// <see cref="ActionTriggerMode.Level"/> rule gated <c>cooldownRemaining &gt; 0</c> that decrements it each tick
-/// (<c>addState cooldownRemaining += -1</c>), and the ability gated on <c>cooldownRemaining &lt;= 0</c>; using the
-/// ability re-arms it (<c>setState cooldownRemaining = N</c>). The decrement's <c>&gt; 0</c> gate is load-bearing:
-/// <c>NonNegative</c> REFUSES a negative candidate (it does not silently clamp), so an UNGATED decrement would refuse
-/// loudly every tick once the row reached 0 — the gate floors it cleanly at 0 with no refusal. A relative countdown
-/// is immune to absolute-tick drift by construction: it measures elapsed ticks, never an absolute deadline.</para>
-/// <para><b>An effect can COPY a live operand too — the round-boundary reset.</b> <see cref="ActionEffect.SetState"/>/
-/// <see cref="ActionEffect.AddState"/> carry the SAME value/comparand duality <see cref="ActionPredicate.CompareState"/>
+/// <see cref="ActionTriggerMode.Level"/> rule gated <c>cooldownRemaining &gt; 0</c> that consumes it each simulation
+/// tick with <see cref="ActionEffect.CountdownState"/> (the effect reads that tick's engine-tick step width from the
+/// runtime, so it stays rate-independent and saturates a final partial step at zero), and the ability gated on
+/// <c>cooldownRemaining &lt;= 0</c>; using the ability re-arms it (<c>setState cooldownRemaining valueSeconds=N</c>
+/// or, when <c>N</c> has no terminating decimal spelling, <c>setState cooldownRemaining = &lt;N * 50400&gt;</c> raw).
+/// The <c>&gt; 0</c> gate avoids firing an inert effect after the row reaches zero. A relative countdown is immune to
+/// absolute-tick drift by construction: it measures elapsed engine ticks, never an absolute deadline.</para>
+/// <para><b>An effect can copy a live operand too — the round-boundary reset.</b> <see cref="ActionEffect.SetState"/>/
+/// <see cref="ActionEffect.AddState"/> carry the same value/comparand duality <see cref="ActionPredicate.CompareState"/>
 /// already does: <c>Value</c> (an authored constant) XOR <c>FromState</c>/<c>FromKey</c> (another row or reserved
-/// channel, read LIVE at fire time through the SAME operand walk the comparand side uses) — never both, never
+/// channel, read live at fire time through the same operand walk the comparand side uses) — never both, never
 /// neither. This is what closes the shadow-row footgun a moving-comparand gate otherwise falls into: a rule reacting
-/// to <c>round</c> changing by ANY amount, from ANY writer (<c>compareState round != roundReflect</c>, a rule that
-/// does not itself own the advance), can reset a whole SET of other rows to authored literals AND resync its own
-/// shadow row to <c>round</c>'s CURRENT value in the SAME firing (<c>setState roundReflect fromState=round</c>)
+/// to <c>round</c> changing by any amount, from any writer (<c>compareState round != roundReflect</c>, a rule that
+/// does not itself own the advance), can reset a whole set of other rows to authored literals and resync its own
+/// shadow row to <c>round</c>'s current value in the same firing (<c>setState roundReflect fromState=round</c>)
 /// instead of a standing <c>addState roundReflect += 1</c> that only tracks a disciplined +1 counter and silently
 /// desyncs — gate stuck open, latch held, no further resets, no refusal anywhere — the moment something else advances
-/// <c>round</c> by more than one or sets it outright. When the rule that ADVANCES the round is itself authored as a
-/// rule, the resets can live as ordinary additional effects in that SAME rule's <c>Effects</c> list instead (a rule
-/// is not limited to one row write); the copy operand exists for the DECOUPLED case, where the resetting rule is not
-/// the thing that changed the counter. A copy is also the only EXACT write spelling: <c>Value</c> is a
+/// <c>round</c> by more than one or sets it outright. When the rule that advances the round is itself authored as a
+/// rule, the resets can live as ordinary additional effects in that same rule's <c>Effects</c> list instead (a rule
+/// is not limited to one row write); the copy operand exists for the decoupled case, where the resetting rule is not
+/// the thing that changed the counter. A copy is also the only exact write spelling: <c>Value</c> is a
 /// <see langword="float"/>, so an authored literal above 2^24 is already rounded by the time the compiler sees it
 /// (16777217 compiles to 16777216), while the copy path carries the source cell's bits through unchanged (see
-/// <c>WorldServer.ConvertWorldFactToRaw</c>). A copy reads the SAME same-tick state a gate does, so an earlier
+/// <c>WorldServer.ConvertWorldFactToRaw</c>). A copy reads the same same-tick state a gate does, so an earlier
 /// rule's write is visible to a later rule's copy — declaration order decides it, deterministically.</para>
-/// <para><b>Coverage, precisely.</b> A rule's effects submit ordinary mutations, so the JOURNAL records them and
-/// <c>world.undo</c> rewinds them like any other write. The REPLAY TAPE does not cover them: the tape carries
+/// <para><b>Coverage, precisely.</b> A rule's effects submit ordinary mutations, so the journal records them and
+/// <c>world.undo</c> rewinds them like any other write. The replay tape does not cover them: the tape carries
 /// commands, intents and session traffic, and has no mutation arm at all — a rule's writes are re-derived by
 /// re-execution on replay, exactly like the world-events feed.</para>
 /// <para><b>The trait boundary.</b> A <see cref="WorldStateRow"/>'s slot cell may separately declare
-/// <see cref="WorldStateRow.Advance"/>, and a KEYED row's own cell may independently declare
-/// <see cref="WorldStateCell.Advance"/> (see <c>WorldState.cs</c>) — a CONTINUOUS accumulation between observations,
-/// needing no schedule row and firing no per-tick write. Rules own the DISCRETE half of this vocabulary (a moving
+/// <see cref="WorldStateRow.Advance"/>, and a keyed row's own cell may independently declare
+/// <see cref="WorldStateCell.Advance"/> (see <c>WorldState.cs</c>) — a continuous accumulation between observations,
+/// needing no schedule row and firing no per-tick write. Rules own the discrete half of this vocabulary (a moving
 /// $tick threshold, a decrementing countdown); the two compose, never duplicate: a read operand resolves through
-/// <see cref="WorldStateReader"/> like every other, which computes an advancing cell's LIVE value rather than its
+/// <see cref="WorldStateReader"/> like every other, which computes an advancing cell's live value rather than its
 /// stored base regardless of which of the two traits it carries, so "fire once health regenerates past half" needs
 /// only an ordinary Edge rule gated on a cell the trait — not the rule — knows how to advance, and a
 /// <c>$reduce:</c>/<c>$argmax:</c>/<c>$argmin:</c> operand over a table of independently advancing cells sees every
-/// cell's LIVE value the same way. A rule's own <c>setState</c>/<c>addState</c> effect against such a cell is itself
-/// an explicit write, so it re-bases the trait's accumulation exactly like any other explicit Set would. The read
+/// cell's live value the same way. A rule's own <c>setState</c>/<c>addState</c> effect against such a cell is itself
+/// an explicit write, so it re-bases the trait's accumulation exactly like any other explicit set would. The read
 /// operand's declared-cell requirement bites here too: an advancing row that has never been written declares no slot
 /// cell yet, so a rule reading it refuses at compile (<see cref="WorldRuleRefusal.StateCellUndeclared"/>) until the
 /// row carries an authored or written base.</para>
 /// </remarks>
 /// <param name="Name">The rule's stable name — unique within the section, the
 /// <see cref="WorldMutation.UpsertWorldRule"/>/<see cref="WorldMutation.RemoveWorldRule"/> key, and the
-/// <c>world.rules</c> read-back line. A <see cref="WorldCellName"/>, the SAME validated-identifier type a state row
-/// and a cell key ride: dot-free and free of the reserved character set, refused BY NAME (naming the offending
+/// <c>world.rules</c> read-back line. A <see cref="WorldCellName"/>, the same validated-identifier type a state row
+/// and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending
 /// character) at the JSON converter before a document can hold one. The reserved <c>$</c> prefix is refused on top of
-/// that, by <see cref="WorldRuleCompiler.CompileAll"/> — exactly as it is for a state ROW name, and for the same
-/// reason: <c>$</c> marks what the ENGINE mints, and nothing mints a rule.</param>
+/// that, by <see cref="WorldRuleCompiler.CompileAll"/> — exactly as it is for a state row name, and for the same
+/// reason: <c>$</c> marks what the engine mints, and nothing mints a rule.</param>
 /// <param name="Effects">The effects applied in order when the rule fires.</param>
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
 /// <param name="Mode">Whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
@@ -126,7 +127,7 @@ public sealed record WorldRule(
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
 /// row aggregates/extrema, spatial facts between named bodies, and a body's own reconnect-park state, all folded into
-/// the SAME string channel <c>State</c> already carries, never a new fact enum and never a scheduler subsystem.
+/// the same string channel <c>State</c> already carries, never a new fact enum and never a scheduler subsystem.
 /// </summary>
 /// <remarks>Every one of them carries the <see cref="WorldStateRow.ReservedNamePrefix"/> that no authored row name may
 /// spell, so a reserved channel can never be shadowed by (or mistaken for) a real row — the validator refuses such a
@@ -141,21 +142,19 @@ public static class WorldRuleFacts {
 
     /// <summary>The prefix; <c>$region:&lt;placementId&gt;</c> compares that placement's live region occupant count —
     /// the same count the world-events feed already tracks per tick, read rather than duplicated.</summary>
-    /// <remarks><b>Discriminating-case evaluation, 2026-08 (entity-addressable/spatial-operand wave): does NOT
-    /// collapse into <see cref="DistancePrefix"/>.</b> A <c>WorldPlacementRegion</c> IS geometrically a sphere
-    /// (<c>Radius</c> from the placement's own position), so "is body N inside the region" alone would in fact
-    /// reduce to a distance test the new primitive can express. The count this channel reads does NOT: it is an
-    /// aggregate OVER THE WHOLE ACTIVE POPULATION (however many of up to 128 bodies currently sit inside), while
-    /// <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> only ever name TWO fixed bodies — there is no
-    /// "for every active body" quantifier in the rule vocabulary, and this channel's O(1) read is a CACHED counter
-    /// <c>Server.WorldEventFeed</c> already maintains incrementally as bodies cross the boundary, never recomputed.
-    /// Replacing it with the new primitive would mean scanning up to 128 bodies' distances PER RULE PER TICK to
-    /// recover a number the engine already tracks for free — a real regression for the one consumer that exists
-    /// today, for a channel that composes cleanly with nothing this wave adds. Kept as its own case,
-    /// deliberately.</remarks>
+    /// <remarks><b>Does not collapse into <see cref="DistancePrefix"/>.</b> A <c>WorldPlacementRegion</c> is
+    /// geometrically a sphere (<c>Radius</c> from the placement's own position), so "is body N inside the region"
+    /// alone would in fact reduce to a distance test the distance primitive can express. The count this channel reads
+    /// does not: it is an aggregate over the whole active population (however many of up to 128 bodies currently sit
+    /// inside), while <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> only ever name two fixed bodies —
+    /// there is no "for every active body" quantifier in the rule vocabulary, and this channel's O(1) read is a cached
+    /// counter <c>Server.WorldEventFeed</c> already maintains incrementally as bodies cross the boundary, never
+    /// recomputed. Replacing it with the distance primitive would mean scanning up to 128 bodies' distances per rule
+    /// per tick to recover a number the engine already tracks for free — a real regression for the one consumer that
+    /// exists today. Kept as its own case, deliberately.</remarks>
     public const string RegionPrefix = "$region:";
 
-    /// <summary>The prefix; <c>$machine:&lt;screen&gt;:&lt;address&gt;</c> compares ONE byte (0..255) read live off a
+    /// <summary>The prefix; <c>$machine:&lt;screen&gt;:&lt;address&gt;</c> compares one byte (0..255) read live off a
     /// declared <see cref="WorldScreen"/>'s booted machine — the same <c>IWorldMachineMemoryPeek.TryPeek</c> primitive
     /// <see cref="WorldAddonMemoryWatch"/> already rides, called directly instead of accumulated as a change event. A
     /// screen with no booted machine (or no memory-peek capability) reads as 0, the same "reads as zero rather than
@@ -164,49 +163,49 @@ public static class WorldRuleFacts {
     /// win flag) was 1 byte, and a multi-byte little-endian read is not a primitive anything here has needed yet.</summary>
     public const string MachinePrefix = "$machine:";
 
-    /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a KEYED (or slot) row
+    /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <see cref="CellKind"/>, <c>count</c> is always
     /// integer (the number of cells present, regardless of what they hold). The reserved-channel exemption from
-    /// <see cref="WorldRuleCompiler"/>'s ordinary (row, key) pair rule: a reduction addresses the WHOLE row rather
-    /// than one cell, so it is the one place a KEYED row is read with no key at all — admitted deliberately, not a
+    /// <see cref="WorldRuleCompiler"/>'s ordinary (row, key) pair rule: a reduction addresses the whole row rather
+    /// than one cell, so it is the one place a keyed row is read with no key at all — admitted deliberately, not a
     /// hole in the pair rule (see <c>WorldRuleCompiler.ResolveOperand</c>'s reduce branch).</summary>
     public const string ReducePrefix = "$reduce:";
 
-    /// <summary>The prefix; <c>$argmax:&lt;row&gt;</c> reads a KEYED row's cells and yields the WINNING CELL'S KEY —
-    /// not the winning value — as a body index. The genuinely new primitive: a rule can NAME a body. A row driving
+    /// <summary>The prefix; <c>$argmax:&lt;row&gt;</c> reads a keyed row's cells and yields the winning cell's key —
+    /// not the winning value — as a body index. The genuinely new primitive: a rule can name a body. A row driving
     /// this channel is a convention, enforced at compile time (<see cref="WorldRuleRefusal.ArgRowNotKeyed"/>) and at
     /// read time (a cell whose key does not parse as a non-negative index the population actually holds is simply
     /// excluded from consideration, never a hard refusal — the same "an ineligible candidate reads as absent, not an
     /// error" posture <see cref="MachinePrefix"/>'s unbooted-machine case already sets): author a keyed row whose
-    /// cell keys ARE body indices spelled as plain integers (<c>"0"</c>, <c>"3"</c>, …) — e.g. a per-body
+    /// cell keys are body indices spelled as plain integers (<c>"0"</c>, <c>"3"</c>, …) — e.g. a per-body
     /// <c>threat</c> tally — and <c>$argmax:threat</c> is "the body with the highest tally". Ties resolve to the
-    /// LOWEST eligible index, deterministically. An empty or entirely-ineligible row yields <c>-1</c> ("no body"),
+    /// lowest eligible index, deterministically. An empty or entirely-ineligible row yields <c>-1</c> ("no body"),
     /// which composes with <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>'s <c>argmax:&lt;row&gt;</c>
     /// body-reference token exactly as a literal <c>body:&lt;n&gt;</c> does — a spatial fact against "no body" simply
     /// never satisfies (see <c>WorldServer.ReadBodyDistance</c>'s sentinel).</summary>
     public const string ArgMaxPrefix = "$argmax:";
 
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
-    /// SMALLEST cell.</summary>
+    /// smallest cell.</summary>
     public const string ArgMinPrefix = "$argmin:";
 
     /// <summary>The prefix; <c>$distance:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> reads the live straight-line distance
     /// between two named bodies — each a <c>body:&lt;n&gt;</c> literal 0-based index (the floor) or an
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c> body reference (the entity-addressable widening — see
     /// <see cref="ArgMaxPrefix"/>), so <c>$distance:argmax:threat:body:3</c> gates on "how far is the highest-threat
-    /// body from body 3". A within-range gate is spelled directly through the SAME comparand vocabulary every other
+    /// body from body 3". A within-range gate is spelled directly through the same comparand vocabulary every other
     /// operand uses — <c>compareState($distance:body:0:body:3, lessOrEqual, 5.0)</c> — rather than a second reserved
     /// channel duplicating the threshold. Either body ref resolving to no live body (an out-of-range index, an
     /// inactive slot, or an empty argmax/argmin row) reads as the engine's largest representable
-    /// <see cref="Puck.Maths.FixedQ4816"/> — "infinitely far" — so a within-range gate correctly stays CLOSED rather
-    /// than spuriously opening the way a naive zero-reads-as-absent would (the OPPOSITE convention from
+    /// <see cref="Puck.Maths.FixedQ4816"/> — "infinitely far" — so a within-range gate correctly stays closed rather
+    /// than spuriously opening the way a naive zero-reads-as-absent would (the opposite convention from
     /// <see cref="MachinePrefix"/>/<see cref="RegionPrefix"/>, deliberately: those measure "how much", where zero is
     /// a correct neutral count, while a spatial gate's neutral-for-absence value must never read as "close").</summary>
     public const string DistancePrefix = "$distance:";
 
     /// <summary>The prefix; <c>$los:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> reads <c>1</c> when solid world geometry
-    /// leaves the sight-offset segment between two named bodies (the SAME body-reference grammar
-    /// <see cref="DistancePrefix"/> uses) unobstructed, <c>0</c> otherwise — the SAME
+    /// leaves the sight-offset segment between two named bodies (the same body-reference grammar
+    /// <see cref="DistancePrefix"/> uses) unobstructed, <c>0</c> otherwise — the same
     /// <c>Server.WorldPopulation.HasLineOfSight</c> primitive a sensed target's <c>RequiresLineOfSight</c> already
     /// rides, called directly. Either body ref resolving to no live body reads as <c>0</c> (no sight line to
     /// nothing) — the ordinary "absent reads as the falsy/neutral value" convention, unlike
@@ -214,17 +213,17 @@ public static class WorldRuleFacts {
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
 
-    /// <summary>The prefix; <c>$parked:&lt;bodyRef&gt;</c> reads the REMAINING RECONNECT-GRACE ticks for one named
-    /// body — the SAME body-reference grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> use
+    /// <summary>The prefix; <c>$parked:&lt;bodyRef&gt;</c> reads the remaining reconnect-grace ticks for one named
+    /// body — the same body-reference grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> use
     /// (<c>body:&lt;n&gt;</c> or <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>), so it composes with them
     /// directly: <c>$parked:argmax:threat</c> asks "is the highest-threat body currently parked", and an authored
-    /// gate can combine it with a <c>$distance:</c>/<c>$los:</c> conjunct against the SAME body reference in one
+    /// gate can combine it with a <c>$distance:</c>/<c>$los:</c> conjunct against the same body reference in one
     /// <c>all</c> predicate. A body that is not parked, or resolves to no live body at all, reads <c>0</c> — the
     /// ordinary "absent/inapplicable reads as the neutral falsy value" convention <see cref="MachinePrefix"/>/
     /// <see cref="RegionPrefix"/> already set, appropriate here because a "parked long enough" gate
-    /// (<c>compareState($parked:body:3, greaterOrEqual, 60)</c>) must stay CLOSED for a body that was never parked,
+    /// (<c>compareState($parked:body:3, greaterOrEqual, 60)</c>) must stay closed for a body that was never parked,
     /// not spuriously open. See <c>Server.WorldPopulation</c>'s park-with-grace remarks for what marks a body parked
-    /// and how the deadline is authored (<c>population.reconnectGraceTicks</c>).</summary>
+    /// and how the deadline is authored (<c>population.reconnectGraceSeconds</c>).</summary>
     public const string ParkedPrefix = "$parked:";
 }
 
@@ -249,14 +248,14 @@ public enum WorldStateReduceOp : byte {
     Count,
 }
 
-/// <summary>How a rule names ONE body — the entity-addressable primitive's own vocabulary, shared by
+/// <summary>How a rule names one body — the entity-addressable primitive's own vocabulary, shared by
 /// <see cref="WorldRuleFacts.DistancePrefix"/>/<see cref="WorldRuleFacts.LineOfSightPrefix"/>'s two body-reference
 /// tokens.</summary>
 public enum CompiledBodyRefKind : byte {
     /// <summary>A literal 0-based entity index — the floor: <c>body:&lt;n&gt;</c>.</summary>
     Literal,
 
-    /// <summary>The body naming the largest cell of a keyed row — <c>argmax:&lt;row&gt;</c>, the SAME resolution
+    /// <summary>The body naming the largest cell of a keyed row — <c>argmax:&lt;row&gt;</c>, the same resolution
     /// <see cref="WorldRuleFacts.ArgMaxPrefix"/> performs standalone.</summary>
     ArgMax,
 
@@ -292,12 +291,12 @@ public enum WorldRuleFactKind : byte {
     Reduction,
 
     /// <summary>The body naming a row's extremal cell (<see cref="WorldRuleFacts.ArgMaxPrefix"/>/
-    /// <see cref="WorldRuleFacts.ArgMinPrefix"/>) — a BODY KEY result, not a magnitude: the value is a 0-based entity
+    /// <see cref="WorldRuleFacts.ArgMinPrefix"/>) — a body-key result, not a magnitude: the value is a 0-based entity
     /// index (or <c>-1</c> for "no body"), and the two places that consume it (a spatial operand's body reference, an
-    /// author's own <c>compareState</c>) read it as an ADDRESS rather than a quantity. It still rides the SAME
+    /// author's own <c>compareState</c>) read it as an address rather than a quantity. It still rides the same
     /// <see cref="Puck.Maths.FixedQ4816"/> wire <c>Server.WorldServer.ReadWorldFact</c> already returns for every
     /// other operand — the "new result type" is real at the <see cref="WorldRuleFactKind"/> level (this member
-    /// distinguishes an ADDRESS from a magnitude), not a second parallel read path threaded through every gate/effect
+    /// distinguishes an address from a magnitude), not a second parallel read path threaded through every gate/effect
     /// site for a value that already has a canonical integer form.</summary>
     ArgBody,
 
@@ -313,9 +312,9 @@ public enum WorldRuleFactKind : byte {
 
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
-/// quantity <c>WorldServer.RuleGateOpen</c> reads to a <see cref="FixedQ4816"/>. BOTH sides of a
-/// <see cref="ActionPredicate.CompareState"/> conjunct — the primary and, when spelled, the comparand — are the SAME
-/// operand type, read by the SAME <c>ReadWorldFact</c> helper, so the two sides can never drift into two readings of
+/// quantity <c>WorldServer.RuleGateOpen</c> reads to a <see cref="FixedQ4816"/>. Both sides of a
+/// <see cref="ActionPredicate.CompareState"/> conjunct — the primary and, when spelled, the comparand — are the same
+/// operand type, read by the same <c>ReadWorldFact</c> helper, so the two sides can never drift into two readings of
 /// one name.</summary>
 /// <param name="Kind">Which live quantity this operand reads.</param>
 /// <param name="Row">The state row name for <see cref="WorldRuleFactKind.StateCell"/>, the placement id for
@@ -329,7 +328,7 @@ public enum WorldRuleFactKind : byte {
 /// <see cref="WorldRuleFactKind.ArgBody"/> (<see cref="WorldStateReduceOp.Max"/>/<see cref="WorldStateReduceOp.Min"/>
 /// only); <see cref="WorldStateReduceOp.None"/> otherwise.</param>
 /// <param name="BodyA">The first named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
-/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the ONE named body for <see cref="WorldRuleFactKind.Parked"/>
+/// <see cref="WorldRuleFactKind.LineOfSight"/>, or the one named body for <see cref="WorldRuleFactKind.Parked"/>
 /// (which reads no second body); <see langword="null"/> otherwise.</param>
 /// <param name="BodyB">The second named body for <see cref="WorldRuleFactKind.BodyDistance"/>/
 /// <see cref="WorldRuleFactKind.LineOfSight"/>; <see langword="null"/> otherwise (including
@@ -351,11 +350,11 @@ public readonly record struct CompiledWorldOperand(
 /// <param name="Comparison">The comparison to apply.</param>
 /// <param name="Value">The authored constant comparand, converted to fixed point at compile time — read only when
 /// <paramref name="Comparand"/> is <see langword="null"/> (the constant spelling).</param>
-/// <param name="Comparand">The comparand OPERAND — another row/reserved channel read live on the same terms as
+/// <param name="Comparand">The comparand operand — another row/reserved channel read live on the same terms as
 /// <paramref name="Left"/> (the <c>(ComparandState, ComparandKey)</c> spelling) — or <see langword="null"/> when the
 /// comparand is the authored constant <paramref name="Value"/> instead.</param>
 /// <param name="Describe">The authored spelling of this conjunct, for the <c>world.rules</c> read-back — an
-/// <see cref="ActionPredicate.All"/> gate prints ITS PREDICATES rather than a type name, which is the whole point of
+/// <see cref="ActionPredicate.All"/> gate prints its predicates rather than a type name, which is the whole point of
 /// keeping the text beside the compiled form.</param>
 public readonly record struct CompiledWorldPredicate(
     CompiledWorldOperand Left,
@@ -369,6 +368,10 @@ public readonly record struct CompiledWorldPredicate(
 public enum WorldRuleEffectKind : byte {
     /// <summary>Write a state cell (<see cref="ActionEffect.SetState"/>/<see cref="ActionEffect.AddState"/>).</summary>
     Write,
+
+    /// <summary>Consume a non-negative integer countdown by this simulation step's engine-tick width
+    /// (<see cref="ActionEffect.CountdownState"/>), saturating a final partial step at zero.</summary>
+    Countdown,
 
     /// <summary>Fire a generator row into a text cell (<see cref="ActionEffect.Generate"/>).</summary>
     Generate,
@@ -385,12 +388,12 @@ public enum WorldRuleEffectKind : byte {
     /// <summary>Remove a placement row (<see cref="ActionEffect.RemovePlacement"/>).</summary>
     RemovePlacement,
 
-    /// <summary>Write a session snapshot of the world to its own file (<see cref="ActionEffect.Save"/>) — the ONE
-    /// kind that submits NO mutation; see <see cref="ActionEffect.Save"/>'s own remarks for why.</summary>
+    /// <summary>Write a session snapshot of the world to its own file (<see cref="ActionEffect.Save"/>) — the one
+    /// kind that submits no mutation; see <see cref="ActionEffect.Save"/>'s own remarks for why.</summary>
     Save,
 }
 
-/// <summary>One compiled world-rule effect. Every kind but <see cref="WorldRuleEffectKind.Save"/> submits an ORDINARY
+/// <summary>One compiled world-rule effect. Every kind but <see cref="WorldRuleEffectKind.Save"/> submits an ordinary
 /// mutation (<see cref="WorldMutation.UpsertStateCell"/>, <see cref="WorldMutation.Generate"/>,
 /// <see cref="WorldMutation.UpsertHudPanel"/>/<see cref="WorldMutation.RemoveHudPanel"/>, or
 /// <see cref="WorldMutation.UpsertPlacement"/>/<see cref="WorldMutation.RemovePlacement"/>) under
@@ -408,8 +411,8 @@ public enum WorldRuleEffectKind : byte {
 /// <param name="Describe">The authored spelling, for the <c>world.rules</c> read-back.</param>
 /// <param name="HudPanel">The whole panel row, for <see cref="WorldRuleEffectKind.UpsertHudPanel"/>.</param>
 /// <param name="Placement">The whole placement row, for <see cref="WorldRuleEffectKind.UpsertPlacement"/>.</param>
-/// <param name="From">The live copy-source OPERAND — another row/reserved channel read fresh on every firing (the
-/// SAME <see cref="CompiledWorldOperand"/> and <c>ReadWorldFact</c> path a <see cref="CompiledWorldPredicate"/>'s
+/// <param name="From">The live copy-source operand — another row/reserved channel read fresh on every firing (the
+/// same <see cref="CompiledWorldOperand"/> and <c>ReadWorldFact</c> path a <see cref="CompiledWorldPredicate"/>'s
 /// comparand reads through) — or <see langword="null"/> when the effect writes the authored constant
 /// <paramref name="RawValue"/> instead. Applies only to <see cref="WorldRuleEffectKind.Write"/>.</param>
 public readonly record struct CompiledWorldEffect(
@@ -434,9 +437,8 @@ public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, Comp
 
 /// <summary>Names why a world rule was refused during compilation. Every member is tagged
 /// <see cref="RefusalAttribute"/> under the <c>world.rule.compile</c> door, so <c>world.refusals</c> lists the whole
-/// family — a pre-existing read-back gap (owner ruling 2026-08-06): this enum is the one exception constructor
-/// (<see cref="WorldRuleException"/>) callers pick a reason from, but nothing scanned it for the catalog until
-/// now.</summary>
+/// family: this enum is the one exception constructor (<see cref="WorldRuleException"/>) callers pick a reason
+/// from.</summary>
 public enum WorldRuleRefusal : byte {
     /// <summary>The rule declares no name.</summary>
     [Refusal(door: "world.rule.compile", condition: "a rule declares no name", kind: RefusalKind.Verdict)]
@@ -447,7 +449,7 @@ public enum WorldRuleRefusal : byte {
     NameDuplicated,
 
     /// <summary>The rule's name carries the reserved <see cref="WorldStateRow.ReservedNamePrefix"/> prefix, which
-    /// marks what the ENGINE mints — and nothing mints a rule.</summary>
+    /// marks what the engine mints — and nothing mints a rule.</summary>
     [Refusal(door: "world.rule.compile", condition: "a rule's name carries the reserved '$' prefix, which marks what the engine mints", kind: RefusalKind.Verdict)]
     NameReserved,
 
@@ -509,7 +511,7 @@ public enum WorldRuleRefusal : byte {
 
     /// <summary>A <c>setState</c>/<c>addState</c> effect names both an authored 'value' and a 'fromState', or
     /// neither — exactly one write-source spelling is admitted (a 'fromKey' with no 'fromState' is refused here too),
-    /// the SAME duality <see cref="WorldRuleRefusal.ComparandAmbiguous"/> enforces on the predicate side.</summary>
+    /// the same duality <see cref="WorldRuleRefusal.ComparandAmbiguous"/> enforces on the predicate side.</summary>
     [Refusal(door: "world.rule.compile", condition: "a setState/addState names both 'value' and 'fromState' (or neither), or a bare 'fromKey' with no 'fromState'", kind: RefusalKind.Verdict)]
     EffectSourceAmbiguous,
 
@@ -520,10 +522,24 @@ public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a setState/addState's live 'fromState' resolves to a cell kind that does not match the destination row's own kind", kind: RefusalKind.Verdict)]
     EffectSourceKindMismatch,
 
-    /// <summary>A READ operand — a <c>compareState</c> subject, a <c>comparandState</c>, or a <c>fromState</c> —
+    /// <summary>A <c>setState</c>/<c>addState</c> effect's <c>valueSeconds</c> is not an exact whole engine-tick
+    /// count — <see cref="Puck.Maths.FixedTickConversion.TryDurationEngineTicksExact"/> found no whole multiple of
+    /// <c>1/50400</c> second equal to the authored value — this refuses rather than rounds, so a duration that
+    /// silently drifted from what was authored can never happen. The message names the nearest exact
+    /// durations on either side; author one of those, or author the raw engine-tick count directly via 'value' when
+    /// no terminating decimal spells the intended duration exactly.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a setState/addState's 'valueSeconds' is not an exact whole engine-tick count (not a whole multiple of 1/50400 s), or is negative", kind: RefusalKind.Verdict)]
+    DurationNotExactEngineTicks,
+
+    /// <summary>A <c>setState</c>/<c>addState</c> effect's non-negative <c>valueSeconds</c> would compile beyond the
+    /// signed 64-bit raw carrier a <c>kind=int</c> state cell stores.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a setState/addState's non-negative 'valueSeconds' exceeds the signed 64-bit engine-tick carrier", kind: RefusalKind.Verdict)]
+    DurationEngineTicksOutOfRange,
+
+    /// <summary>A read operand — a <c>compareState</c> subject, a <c>comparandState</c>, or a <c>fromState</c> —
     /// addresses a cell its declared row does not carry. Reading an undeclared cell would be 0 forever with no
-    /// refusal anywhere (owner ruling 2026-08-06: refuse at compile; the mint-later pattern declares the cell first).
-    /// WRITE destinations are exempt — a write mints its cell, exactly as <c>world.state.cell.set</c> does.</summary>
+    /// refusal anywhere, so this refuses at compile instead; the mint-later pattern declares the cell first. Write
+    /// destinations are exempt — a write mints its cell, exactly as <c>world.state.cell.set</c> does.</summary>
     [Refusal(door: "world.rule.compile", condition: "a READ operand addresses a cell its declared row does not carry", kind: RefusalKind.Verdict)]
     StateCellUndeclared,
 
@@ -538,8 +554,8 @@ public enum WorldRuleRefusal : byte {
     ArgChannelMalformed,
 
     /// <summary>An <c>$argmax:</c>/<c>$argmin:</c> channel — standalone or embedded in a
-    /// <c>$distance:</c>/<c>$los:</c> body reference — names a row that is not KEYED. An argmax/argmin yields a
-    /// BODY, and a slot-shaped row's one cell carries the engine-minted <c>$value</c> key rather than a body index —
+    /// <c>$distance:</c>/<c>$los:</c> body reference — names a row that is not keyed. An argmax/argmin yields a
+    /// body, and a slot-shaped row's one cell carries the engine-minted <c>$value</c> key rather than a body index —
     /// author a keyed row (a per-body tally) instead.</summary>
     [Refusal(door: "world.rule.compile", condition: "an argmax/argmin body reference names a row that is not KEYED — a slot row's cell has no body-index key", kind: RefusalKind.Verdict)]
     ArgRowNotKeyed,
@@ -560,7 +576,7 @@ public enum WorldRuleRefusal : byte {
     BodyIndexUnknown,
 
     /// <summary>An interaction's <c>left</c>/<c>right</c> property reference names a value the declared
-    /// <c>properties</c> registry does not carry — the validated-vocabulary refusal (the SAME shape
+    /// <c>properties</c> registry does not carry — the validated-vocabulary refusal (the same shape
     /// <see cref="WorldRuleRefusal.StateRowUnknown"/> gives a bare state-row reference), catching an unknown or
     /// typo'd property name at the type rather than letting it silently compile against a same-named row that
     /// happens to exist, or never fire at all.</summary>
@@ -568,26 +584,26 @@ public enum WorldRuleRefusal : byte {
     PropertyUnknown,
 }
 
-/// <summary>Names why a world rule's EFFECT refused to fire at RUNTIME — distinct from <see cref="WorldRuleRefusal"/>
+/// <summary>Names why a world rule's effect refused to fire at runtime — distinct from <see cref="WorldRuleRefusal"/>
 /// (a compile-time refusal, which stops the rule from ever installing): a runtime effect refusal is a live,
-/// data-dependent decision the compiled rule could not have foreseen (whether a carrier happens to be possessed THIS
-/// tick), so it cannot be an exception at compile time — the rule installs, and the effect is silently SKIPPED (with
-/// this reason narrated) on the tick it would otherwise fire. Tagged for <c>world.refusals</c> on the SAME terms as
+/// data-dependent decision the compiled rule could not have foreseen (whether a carrier happens to be possessed this
+/// tick), so it cannot be an exception at compile time — the rule installs, and the effect is silently skipped (with
+/// this reason narrated) on the tick it would otherwise fire. Tagged for <c>world.refusals</c> on the same terms as
 /// <see cref="WorldRuleRefusal"/>, under its own door.</summary>
 public enum WorldRuleEffectRefusal : byte {
     /// <summary>A <c>removePlacement</c> effect targets a placement whose Inhabit facet binds a live body that a
     /// concrete <c>drive</c> grant currently possesses — despawning it would silently strand that grant against a
-    /// slot a later, unrelated inhabitant can claim. OWNER DECISION (this head, coordinating with the ownership-model
-    /// arc): REFUSE rather than orphan-to-escrow — an escrow principal is a new authority-model concept out of scope
-    /// here, and refusing is the honest minimum-surface answer; the operator's remedy is explicit
+    /// slot a later, unrelated inhabitant can claim. This refuses rather than orphans to escrow: an escrow principal
+    /// is a new authority-model concept out of scope here, and refusing is the honest minimum-surface answer; the
+    /// operator's remedy is explicit
     /// (<c>world.revoke &lt;principal&gt; drive body:&lt;n&gt;</c> first, or a rule that clears the possession itself
     /// before despawning).</summary>
     [Refusal(door: "world.rule.effect", condition: "a rule's 'removePlacement' effect targets a placement whose inhabited body a concrete drive grant currently possesses", kind: RefusalKind.Verdict)]
     CarrierPossessed,
 }
 
-/// <summary>Reports a world-rule (or, sharing this exact type, a world-INTERACTION — see the constructor's own
-/// <c>subject</c> parameter) compilation refusal — caught and reported BY NAME at validation, mirroring
+/// <summary>Reports a world-rule (or, sharing this exact type, a world-interaction — see the constructor's own
+/// <c>subject</c> parameter) compilation refusal — caught and reported by name at validation, mirroring
 /// <see cref="BodyMotionProgramException"/>'s role for kit programs.</summary>
 public sealed class WorldRuleException : ArgumentException {
     /// <summary>Initializes a world-rule refusal.</summary>
@@ -595,7 +611,7 @@ public sealed class WorldRuleException : ArgumentException {
     /// <param name="ruleName">The refusing rule's (or interaction's) name.</param>
     /// <param name="detail">What was wrong, in the author's own vocabulary.</param>
     /// <param name="subject">The authored-row noun this refusal names in its message — <c>"rule"</c> (the default)
-    /// or <c>"interaction"</c>. An interaction desugars into, and compiles through, the SAME rule machinery (see
+    /// or <c>"interaction"</c>. An interaction desugars into, and compiles through, the same rule machinery (see
     /// <c>WorldRuleCompiler.CompileAllInteractions</c>), so this type is shared rather than forked; only the wording
     /// differs.</param>
     public WorldRuleException(WorldRuleRefusal refusal, string ruleName, string detail, string subject = "rule")
@@ -610,7 +626,7 @@ public sealed class WorldRuleException : ArgumentException {
 /// <summary>Compiles authored <see cref="WorldRule"/> rows against a candidate <see cref="WorldDefinition"/> —
 /// construction at the document/mutation boundary, exactly where <c>CompiledActionSpec.Compile</c> sits for a kit's
 /// per-body actions. Called twice by design: once (wrapped, per rule) inside <c>WorldDefinitionValidator</c> so a
-/// malformed rule refuses the mutation or the boot BY NAME instead of throwing later, and once more (unwrapped —
+/// malformed rule refuses the mutation or the boot by name instead of throwing later, and once more (unwrapped —
 /// validation already proved success) inside the server's install path to obtain the live array the tick
 /// evaluates.</summary>
 public static class WorldRuleCompiler {
@@ -660,12 +676,12 @@ public static class WorldRuleCompiler {
     }
 
     /// <summary>Compiles every interaction in the definition's <c>interactions</c> section, in document order — the
-    /// generalized property-interaction table's ONE compile path. Each row DESUGARS into a synthesized
+    /// generalized property-interaction table's one compile path. Each row desugars into a synthesized
     /// <see cref="WorldRule"/> (its co-occurrence spelled as an ordinary <see cref="ActionPredicate.CompareState"/>/
-    /// <see cref="ActionPredicate.All"/> gate over the SAME <see cref="WorldRuleFacts.ArgMaxPrefix"/>/
+    /// <see cref="ActionPredicate.All"/> gate over the same <see cref="WorldRuleFacts.ArgMaxPrefix"/>/
     /// <see cref="WorldRuleFacts.DistancePrefix"/>/<see cref="WorldRuleFacts.RegionPrefix"/> reserved channels a
     /// hand-authored rule already reads) and rides <see cref="Compile"/> unchanged — there is no second evaluation
-    /// engine, only a second AUTHORING SURFACE compiling to the one rule substrate. Interactions occupy their OWN
+    /// engine, only a second authoring surface compiling to the one rule substrate. Interactions occupy their own
     /// name namespace, separate from <see cref="WorldRule.Name"/> (see <see cref="WorldInteraction"/>'s remarks).
     /// </summary>
     /// <param name="definition">The candidate document — its <c>properties</c>, <c>state</c>, and <c>placements</c>
@@ -1105,14 +1121,15 @@ public static class WorldRuleCompiler {
 
     private static string DescribeCellKind(CellKind kind) => kind.ToString().ToLowerInvariant();
 
-    // SetState/AddState/Generate lift, and — riding the SAME "admit an existing WorldMutation kind" seam Generate
+    // SetState/AddState/CountdownState/Generate lift, and — riding the SAME "admit an existing WorldMutation kind" seam Generate
     // proved — so do upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement: the rest of ActionEffect writes a
     // body's own kinematic or register state, which a world rule has none of. save admits on its OWN terms — not an
     // existing mutation kind at all, but engine I/O with no document effect (see ActionEffect.Save's remarks) —
     // compiling to a fixed, argument-free CompiledWorldEffect since it addresses no row.
     private static CompiledWorldEffect CompileEffect(ActionEffect effect, string ruleName, WorldDefinition definition) => effect switch {
-        ActionEffect.SetState set => ResolveWrite(rowName: set.State, key: set.Key, target: set.Target, write: WorldDocumentWriteKind.Set, value: set.Value, fromState: set.FromState, fromKey: set.FromKey, ruleName: ruleName, definition: definition, verb: "setState"),
-        ActionEffect.AddState add => ResolveWrite(rowName: add.State, key: add.Key, target: add.Target, write: WorldDocumentWriteKind.Add, value: add.Value, fromState: add.FromState, fromKey: add.FromKey, ruleName: ruleName, definition: definition, verb: "addState"),
+        ActionEffect.SetState set => ResolveWrite(rowName: set.State, key: set.Key, target: set.Target, write: WorldDocumentWriteKind.Set, value: set.Value, fromState: set.FromState, fromKey: set.FromKey, valueSeconds: set.ValueSeconds, ruleName: ruleName, definition: definition, verb: "setState"),
+        ActionEffect.AddState add => ResolveWrite(rowName: add.State, key: add.Key, target: add.Target, write: WorldDocumentWriteKind.Add, value: add.Value, fromState: add.FromState, fromKey: add.FromKey, valueSeconds: add.ValueSeconds, ruleName: ruleName, definition: definition, verb: "addState"),
+        ActionEffect.CountdownState countdown => ResolveCountdown(effect: countdown, ruleName: ruleName, definition: definition),
         ActionEffect.Generate generate => ResolveGenerate(generate: generate, ruleName: ruleName, definition: definition),
         ActionEffect.UpsertHudPanel upsertHud => ResolveUpsertHudPanel(effect: upsertHud, ruleName: ruleName),
         ActionEffect.RemoveHudPanel removeHud => ResolveRemoveHudPanel(effect: removeHud, ruleName: ruleName),
@@ -1120,8 +1137,30 @@ public static class WorldRuleCompiler {
         ActionEffect.RemovePlacement removePlacement => ResolveRemovePlacement(effect: removePlacement, ruleName: ruleName),
         ActionEffect.Save => new CompiledWorldEffect(Kind: WorldRuleEffectKind.Save, Row: string.Empty, Key: string.Empty, Write: default, RawValue: 0L, Generator: null, Describe: "save"),
         _ => throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: ruleName,
-            detail: $"'{effect.GetType().Name}' has no world-scope meaning — only 'setState', 'addState', 'generate', 'upsertHudPanel', 'removeHudPanel', 'upsertPlacement', 'removePlacement' and 'save' are admitted (the velocity, impulse, designate and timer effects all address a body's own state)"),
+            detail: $"'{effect.GetType().Name}' has no world-scope meaning — only 'setState', 'addState', 'countdownState', 'generate', 'upsertHudPanel', 'removeHudPanel', 'upsertPlacement', 'removePlacement' and 'save' are admitted (the velocity, impulse, designate and timer effects all address a body's own state)"),
     };
+
+    private static CompiledWorldEffect ResolveCountdown(ActionEffect.CountdownState effect, string ruleName, WorldDefinition definition) {
+        var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: effect.State)
+            ?? throw new WorldRuleException(refusal: WorldRuleRefusal.StateRowUnknown, ruleName: ruleName, detail: $"'countdownState' names no state row '{effect.State}' — declare it with world.row.set state <json> first");
+
+        if ((row.Kind != CellKind.Int) || !row.NonNegative) {
+            throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName,
+                detail: $"state row '{effect.State}' is kind={DescribeCellKind(kind: row.Kind)} nonNegative={row.NonNegative.ToString().ToLowerInvariant()} — 'countdownState' requires kind=int nonNegative=true so its computed final partial step can saturate at zero");
+        }
+
+        var resolvedKey = ResolveKey(row: row, key: effect.Key, ruleName: ruleName, verb: "countdownState", keyFieldLabel: "key");
+
+        return new CompiledWorldEffect(
+            Kind: WorldRuleEffectKind.Countdown,
+            Row: effect.State,
+            Key: resolvedKey,
+            Write: WorldDocumentWriteKind.Add,
+            RawValue: 0L,
+            Generator: null,
+            Describe: $"countdownState {effect.State}.{resolvedKey} by runtime step"
+        );
+    }
 
     // upsertHudPanel/upsertPlacement are whole-row upserts, exactly like WorldMutation.UpsertHudPanel/UpsertPlacement
     // submitted from the console or an addon — the row's own content (capacity, unknown binding, unresolved
@@ -1193,9 +1232,10 @@ public static class WorldRuleCompiler {
         );
     }
 
-    // value XOR (fromState, fromKey): the SAME duality ResolvePredicate enforces for compareState's comparand,
-    // applied to the write side. 'fromKey' is an appendage of 'fromState' on the same terms 'comparandKey' is.
-    private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, float? value, string? fromState, string? fromKey, string ruleName, WorldDefinition definition, string verb) {
+    // value XOR valueSeconds XOR (fromState, fromKey): the SAME duality ResolvePredicate enforces for compareState's
+    // comparand, applied to the write side and widened by one spelling. 'fromKey' is an appendage of 'fromState' on
+    // the same terms 'comparandKey' is.
+    private static CompiledWorldEffect ResolveWrite(string rowName, string? key, ActionTarget target, WorldDocumentWriteKind write, float? value, string? fromState, string? fromKey, decimal? valueSeconds, string ruleName, WorldDefinition definition, string verb) {
         if (target != ActionTarget.Self) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.TargetInadmissible, ruleName: ruleName, detail: $"'{verb}' carries target '{target}' — a world rule has no entity to address, so a target is refused rather than parsed and discarded");
         }
@@ -1210,17 +1250,48 @@ public static class WorldRuleCompiler {
         var resolvedKey = ResolveKey(row: row, key: key, ruleName: ruleName, verb: verb, keyFieldLabel: "key");
         var hasValue = (value is not null);
         var hasFrom = (fromState is not null);
+        var hasValueSeconds = (valueSeconds is not null);
 
         if ((fromKey is not null) && (fromState is null)) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.EffectSourceAmbiguous, ruleName: ruleName,
                 detail: $"'{verb}' names 'fromKey' without 'fromState' — a copy source key addresses a cell inside a source row, which must be named");
         }
 
-        if (hasValue == hasFrom) {
+        var spellingCount = ((hasValue ? 1 : 0) + (hasFrom ? 1 : 0) + (hasValueSeconds ? 1 : 0));
+
+        if (spellingCount != 1) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.EffectSourceAmbiguous, ruleName: ruleName,
-                detail: (hasValue
-                    ? $"'{verb}' names both 'value' and 'fromState' — an effect spells exactly one write source, never both"
-                    : $"'{verb}' names neither 'value' nor 'fromState' — an effect must spell exactly one write source"));
+                detail: $"'{verb}' must name EXACTLY ONE of 'value', 'valueSeconds', or 'fromState' — named {spellingCount}");
+        }
+
+        if (hasValueSeconds) {
+            if (row.Kind != CellKind.Int) {
+                throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName,
+                    detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — '{verb}' 'valueSeconds' authors a whole engine-tick countdown, meaningful only against a kind=int row");
+            }
+
+            var literalSeconds = valueSeconds!.Value;
+            var maximumSeconds = ((decimal)long.MaxValue / FixedTickConversion.TicksPerSecond);
+
+            if (literalSeconds > maximumSeconds) {
+                throw new WorldRuleException(refusal: WorldRuleRefusal.DurationEngineTicksOutOfRange, ruleName: ruleName,
+                    detail: $"'{verb}' authors {rowName} 'valueSeconds' {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} — the duration exceeds the signed 64-bit state carrier's maximum of {long.MaxValue} engine ticks (approximately {maximumSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} seconds)");
+            }
+
+            if (!FixedTickConversion.TryDurationEngineTicksExact(seconds: literalSeconds, ticks: out var ticks)) {
+                throw new WorldRuleException(refusal: WorldRuleRefusal.DurationNotExactEngineTicks, ruleName: ruleName,
+                    detail: DescribeInexactDuration(verb: verb, rowName: rowName, literalSeconds: literalSeconds));
+            }
+
+            return new CompiledWorldEffect(
+                Kind: WorldRuleEffectKind.Write,
+                Row: rowName,
+                Key: resolvedKey,
+                Write: write,
+                RawValue: checked((long)ticks),
+                Generator: null,
+                Describe: $"{verb} {rowName}.{resolvedKey} = {literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s ({ticks} engine ticks)"
+            );
         }
 
         if (hasValue) {
@@ -1259,6 +1330,33 @@ public static class WorldRuleCompiler {
             Describe: $"{verb} {rowName}.{resolvedKey} := {source.Describe}",
             From: source.Operand
         );
+    }
+
+    // Builds the world.rule.compile refusal detail for a 'valueSeconds' that is not an exact whole engine-tick
+    // count — names the authored value, the arithmetic that proves it inexact, and the nearest EXACT durations on
+    // either side (as engine-tick counts, which are always exact integers, plus an approximate seconds gloss for
+    // orientation — 1 engine tick is 1/50400 s, which itself has no terminating decimal spelling, so the gloss is
+    // never claimed exact). A negative duration is refused on separate, simpler terms: there is no "nearest exact"
+    // either side of a value that is not a duration at all.
+    private static string DescribeInexactDuration(string verb, string rowName, decimal literalSeconds) {
+        var secondsText = literalSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
+
+        if (literalSeconds < 0m) {
+            return $"'{verb}' authors {rowName} 'valueSeconds' {secondsText} — a duration must be non-negative.";
+        }
+
+        var scaledTicks = (literalSeconds * FixedTickConversion.TicksPerSecond);
+        var lowerTicks = decimal.Floor(d: scaledTicks);
+        var upperTicks = (lowerTicks + 1m);
+        var lowerSeconds = (lowerTicks / FixedTickConversion.TicksPerSecond);
+        var upperSeconds = (upperTicks / FixedTickConversion.TicksPerSecond);
+
+        return $"'{verb}' authors {rowName} 'valueSeconds' {secondsText} — {secondsText}s * {FixedTickConversion.TicksPerSecond} engine ticks/s = "
+            + $"{scaledTicks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} ticks, not a whole number, so no exact engine-tick duration exists for it; "
+            + $"the nearest EXACT durations are {lowerTicks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} engine ticks "
+            + $"(≈{lowerSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s) and {upperTicks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} engine ticks "
+            + $"(≈{upperSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}s) — author one of those as 'valueSeconds', or (when no terminating decimal spells the "
+            + "intended duration exactly) author the raw whole engine-tick count directly via 'value' on the row and its companion decrement rule.";
     }
 
     // A 'generate' effect names ONE thing: the SITE to redraw. The source is the site's own facet (named or

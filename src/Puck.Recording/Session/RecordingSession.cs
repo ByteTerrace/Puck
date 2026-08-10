@@ -9,17 +9,20 @@ using Puck.Recording.Overlay;
 namespace Puck.Recording.Session;
 
 /// <summary>
-/// The recording graph's session: it implements the engine's <see cref="ICaptureSink"/> frame tap and drives the
-/// whole pipeline — a copy-and-enqueue on the render thread, one encode thread (overlay composite then the video
-/// encoder then the muxer), and one audio thread (drain, mix, Opus, then the muxer). All muxer calls are serialized
-/// through one lock; the render thread never blocks (a full queue drops the newest frame and counts it). Every
-/// buffer is rented at start-up, so steady state does not allocate.
+/// The recording graph's session: implements the engine's <see cref="ICaptureSink"/> frame tap and drives the whole
+/// pipeline — a copy-and-enqueue on the render thread, one encode thread, and one audio thread.
 /// </summary>
 /// <remarks>
+/// The encode thread composites overlays, encodes video, and writes to the muxer, in that order; the audio thread
+/// drains, mixes, encodes to Opus, and writes to the muxer, in that order. All muxer calls are serialized through
+/// one lock; the render thread never blocks (a full queue drops the newest frame and counts it). Every buffer is
+/// rented at start-up, so steady state does not allocate.
+/// <para>
 /// Build one through <see cref="TryCreate"/>: it resolves the document's codec ladder and audio rows against the
 /// supplied platform factories, opening only what this machine can encode and capture, and reports a loud reason
 /// when the ladder or a device declines. Wire the returned sink into the engine's capturing render node; call
 /// <see cref="Stop"/> (or dispose) to finalize the container.
+/// </para>
 /// </remarks>
 public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private const int AudioBitrateBitsPerSecond = 160_000;

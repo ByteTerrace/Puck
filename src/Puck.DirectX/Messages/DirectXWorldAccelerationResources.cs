@@ -5,7 +5,7 @@ namespace Puck.DirectX.Messages;
 /// (instance transforms scale and place it over each primitive's world bound), the TLAS rebuilt over the instance
 /// buffer every frame, their backing and scratch buffers, and the persistently mapped upload buffers the world
 /// writes the AABB and instances through. The D3D12 peer of <c>VulkanWorldAccelerationResources</c>: an acceleration
-/// structure IS its buffer (a default-heap UAV resource left in the <c>RAYTRACING_ACCELERATION_STRUCTURE</c> state),
+/// structure is its buffer (a default-heap UAV resource left in the <c>RAYTRACING_ACCELERATION_STRUCTURE</c> state),
 /// referenced from the shader and from instance descriptors by its GPU virtual address.
 /// </summary>
 /// <param name="AabbBufferHandle">The native <c>ID3D12Resource</c> upload buffer holding the single unit-AABB build input.</param>

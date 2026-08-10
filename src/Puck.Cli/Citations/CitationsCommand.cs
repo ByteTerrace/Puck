@@ -5,23 +5,19 @@ namespace Puck.Cli.Citations;
 // The `puck citations` verb: every verb-shaped token a document CITES, checked against vocabularies swept
 // from the code itself.
 //
-// Two corpora, because a dead name hides in both and only one was ever scanned: markdown backticks under
-// .claude/skills (agent guidance, loaded as authoritative) and <c>…</c> tokens in src/ XML docs. The second
-// is the gap that let `world.cursor` — a verb that never existed — ship in two comments of the very landing
-// that introduced the verb it meant.
+// Two corpora, because a dead name can hide in either: markdown backticks under .claude/skills (agent
+// guidance, loaded as authoritative) and <c>…</c> tokens in src/ XML docs.
 //
 // There is NO suppression list, deliberately. A token passes by resolving in a live vocabulary, never by
-// being named in a file someone has to remember to update: a 17-entry exclusion list was measured for this
-// verb and rejected, because an exclusion that outlives its reason is indistinguishable from a defect it is
-// hiding. Every vocabulary below is derived from source, so it cannot drift from what the code does.
+// being named in a file someone has to remember to update — an exclusion that outlives its reason is
+// indistinguishable from a defect it is hiding. Every vocabulary below is derived from source, so it cannot
+// drift from what the code does.
 //
 // THE HONESTY CONTRACT, which is the whole reason this verb replaces a script:
 //
 //   A citation checker has two ways to be wrong, and they are not symmetric. It can miss a dead name
 //   (quiet, and the reason the check exists). Or it can accuse a CORRECT citation because its own input
-//   rotted — which is louder, wastes the author's time, and teaches everyone to distrust the check. The
-//   second happened: a re-recorded verb list lagged a landing, and the scan reported two accurate lines of
-//   documentation as citing a dead verb.
+//   rotted — which is louder, wastes the author's time, and teaches everyone to distrust the check.
 //
 //   So this verb refuses to report when it can prove its own input is stale (exit 3), and it names the
 //   INPUT as the suspect rather than the citation. It can prove staleness because the static sweep of verb
@@ -30,12 +26,9 @@ namespace Puck.Cli.Citations;
 //   that is a fact about the file, not about any document quoting it.
 //
 // WHAT THIS VERB CANNOT SEE, stated so nobody reads a pass as more than it is. A retired verb whose name
-// still sits in ANY string literal under src/ — a refusal message nobody updated, say, and the verb census
-// measured four of exactly those — resolves here, and so does every document citing it. The stale string
-// hides itself AND its citers. That is the price of a vocabulary broad enough to know a mechanism name from
-// a dead verb without a suppression list, and it is a real narrowing against the enumeration-only scan this
-// replaced, which had no such blind spot. Retiring a verb therefore still owes a sweep of src/ runtime
-// strings; this verb does not discharge that obligation and cannot.
+// still sits in ANY string literal under src/ — a refusal message nobody updated, say — resolves here, and
+// so does every document citing it. The stale string hides itself AND its citers. Retiring a verb therefore
+// still owes a sweep of src/ runtime strings; this verb does not discharge that obligation and cannot.
 //
 // Exit 0 every citation resolved, 1 unresolved citations (each named), 2 usage error or no repository root,
 // 3 the enumeration is provably stale and nothing was reported against it.
@@ -82,11 +75,9 @@ internal static class CitationsCommand {
     // ANCHORED TO LINE START, which is the whole discriminator: a command registration spells `name:` on its
     // own line inside a multi-line CommandDefinition call, while `name:` also appears mid-line as an ordinary
     // named argument to helpers that have nothing to do with verbs — `RequireGain(value: …, name:
-    // "audio.masterGain", …)` in the document validator, for one. An unanchored pattern swept those in and
-    // declared a CURRENT enumeration stale by 22 names, every one a document field. That failure is this
-    // verb's own thesis turned on itself: a sweep confident enough to refuse a run must be narrow enough to
-    // be right, or it becomes the accusing instrument it exists to replace. Measured after anchoring: 170
-    // registrations, all 170 present in a freshly recorded enumeration.
+    // "audio.masterGain", …)` in the document validator, for one. An unanchored pattern sweeps those in too:
+    // a sweep confident enough to refuse a run must be narrow enough to be right, or it becomes the accusing
+    // instrument it exists to replace.
     private static readonly Regex s_registration = new(
         pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""",
         options: RegexOptions.Compiled);
@@ -131,18 +122,15 @@ internal static class CitationsCommand {
             .OrderBy(keySelector: static path => path, comparer: StringComparer.Ordinal)
             .ToArray();
         // Command modules live in the COMPOSITION ROOT and nowhere else — src/Puck.World/ proper, never its
-        // .Data or .Server siblings (measured: zero line-start verb-shaped `name:` in either, all 170
-        // registrations in the root).
+        // .Data or .Server siblings.
         //
         // The narrowing is a real guard, not tidiness. Line-anchoring alone is FORMATTING-DEPENDENT: the
         // validator's `RequireGain(value: …, name: "audio.masterGain", …)` is family-shaped and escapes the
         // sweep only because it sits mid-line, and this repository's formatter wraps calls argument-per-line
         // as its dominant style. One catch-up pass over Puck.World.Data would put that `name:` at line start
-        // and exit-3 a perfectly current enumeration — the same over-broad sweep that made the first run of
-        // this verb declare 22 document fields stale, arriving a second time through a source I had already
-        // been bitten by. A gate whose correctness depends on how a neighbouring file happens to be wrapped
-        // is not a gate. Excluding the projects that cannot contain a registration closes the class outright
-        // rather than betting on layout.
+        // and exit-3 a perfectly current enumeration. A gate whose correctness depends on how a neighbouring
+        // file happens to be wrapped is not a gate. Excluding the projects that cannot contain a registration
+        // closes the class outright rather than betting on layout.
         var commandRoot = $"{Path.DirectorySeparatorChar}Puck.World{Path.DirectorySeparatorChar}";
         var commandFiles = sourceFiles.Where(predicate: path => path.Contains(value: commandRoot, comparisonType: StringComparison.Ordinal)).ToArray();
         var registered = SweepLiterals(files: commandFiles, pattern: s_registration);

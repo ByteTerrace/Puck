@@ -19,7 +19,7 @@ public readonly record struct WorldQueryDriftSample(FixedPosition Position, Fixe
 /// </summary>
 /// <param name="SampleCount">The total number of points the instrument was given.</param>
 /// <param name="EpsilonShell">The exclusion half-width applied around the zero set: a point whose
-/// <c>|EvaluatorDistance|</c> is at or under this is excluded from BOTH comparisons (see the type remarks on why a
+/// <c>|EvaluatorDistance|</c> is at or under this is excluded from both comparisons (see the type remarks on why a
 /// near-surface point cannot be a fair sign test for any coarser representation).</param>
 /// <param name="ExcludedByEpsilonShell">How many of <see cref="SampleCount"/> fell inside <see cref="EpsilonShell"/>
 /// and were excluded.</param>
@@ -52,19 +52,19 @@ public sealed record WorldQueryDriftHistogram(
 }
 
 /// <summary>
-/// Measures how much a <see cref="SdfFieldEvaluator"/>'s answer drifts from two INDEPENDENT representations of the
+/// Measures how much a <see cref="SdfFieldEvaluator"/>'s answer drifts from two independent representations of the
 /// same program: a GPU render of the live scene (the ground-truth channel — a different codebase, a different
 /// numeric domain, a different algorithm entirely) and a <see cref="BakedWorldQuery"/> artifact baked from the
-/// evaluator's own samples (the consistency channel — proves the query PLUMBING, not the field math, since the
+/// evaluator's own samples (the consistency channel — proves the query plumbing, not the field math, since the
 /// artifact is sourced from the evaluator itself; see <see cref="BakeGroundHeightArtifact"/>'s remarks).
 /// <para>
-/// THE EPSILON-SHELL EXCLUSION (why every comparison here is a SIGN test, not a magnitude test): a point sitting
-/// within a thin band of the true surface is not a fair test for ANY coarser representation. The evaluator resolves
+/// <b>The epsilon-shell exclusion</b> (why every comparison here is a sign test, not a magnitude test): a point sitting
+/// within a thin band of the true surface is not a fair test for any coarser representation. The evaluator resolves
 /// distance to Q48.16's raw floor; a GPU sphere-trace resolves a "how close" question to whatever its footprint-
 /// adaptive hit threshold and 8-bit dithered depth channel can distinguish (world units per LSB, not raw ticks); a
 /// baked artifact resolves position to whole grid cells (<see cref="WorldQueryBaker.CellSize"/> world units). Asking
 /// three representations at three different resolutions to agree on which side of a razor-thin band a point falls
-/// would fail even for CORRECT code — the failure mode this instrument exists to catch (a wrong sign, a swapped
+/// would fail even for correct code — the failure mode this instrument exists to catch (a wrong sign, a swapped
 /// inside/outside, a missing region) is gross and shows up far outside that band. <see cref="Evaluate"/> therefore
 /// excludes any point with <c>|evaluator distance| &lt;= epsilonShell</c> from both comparisons. The caller chooses the
 /// shell width appropriate to the representations being compared.
@@ -110,12 +110,12 @@ public static class WorldQueryDriftInstrument {
         return points;
     }
 
-    /// <summary>Bakes a <see cref="WorldQueryArtifact"/> heightfield FROM <paramref name="evaluator"/>'s own
+    /// <summary>Bakes a <see cref="WorldQueryArtifact"/> heightfield from <paramref name="evaluator"/>'s own
     /// <see cref="SdfFieldEvaluator.TryGroundHeight"/> answers over a grid of cell centers covering
     /// <c>[minX,maxX] x [minZ,maxZ]</c> — the "evaluator-vs-baked" cross-check's baked half. Because the artifact is
-    /// SOURCED from the evaluator, this cannot catch a systematic evaluator bug (that is the GPU channel's job); it
-    /// catches a divergence in the QUERY PLUMBING — <see cref="WorldQueryBaker"/>'s grid indexing/quantization or
-    /// <see cref="BakedWorldQuery"/>'s cell lookup disagreeing with the live evaluator for the SAME underlying
+    /// sourced from the evaluator, this cannot catch a systematic evaluator bug (that is the GPU channel's job); it
+    /// catches a divergence in the query plumbing — <see cref="WorldQueryBaker"/>'s grid indexing/quantization or
+    /// <see cref="BakedWorldQuery"/>'s cell lookup disagreeing with the live evaluator for the same underlying
     /// geometry.</summary>
     /// <param name="evaluator">The evaluator to sample.</param>
     /// <param name="minX">The grid's minimum X bound.</param>
@@ -160,7 +160,7 @@ public static class WorldQueryDriftInstrument {
     }
 
     /// <summary>Runs the drift comparison over <paramref name="points"/>: excludes anything inside
-    /// <paramref name="epsilonShell"/> of the evaluator's own zero set, then compares the SIGN each remaining point
+    /// <paramref name="epsilonShell"/> of the evaluator's own zero set, then compares the sign each remaining point
     /// resolves to against <paramref name="gpuInsideOrNear"/> (when supplied) and the ground-height agreement
     /// against <paramref name="baked"/> (when supplied). Both channels are independent and optional — a caller
     /// wanting only the GPU channel passes <see langword="null"/> for <paramref name="baked"/>, and vice versa.</summary>
@@ -169,8 +169,8 @@ public static class WorldQueryDriftInstrument {
     /// <param name="epsilonShell">The exclusion half-width (see the type remarks).</param>
     /// <param name="gpuInsideOrNear">Resolves whether the GPU channel classifies a point as "inside or within its own
     /// resolution floor of the surface" (<see langword="true"/>) or "outside" (<see langword="false"/>). Deriving it
-    /// from a render readback is the caller's job; the <c>world-field-drift</c> stage that did so left the build on
-    /// 2026-08-02, and this instrument has had no caller since.
+    /// from a render readback is the caller's job; no stage in the current build supplies one, so this instrument
+    /// currently has no caller.
     /// <see langword="null"/> skips the GPU comparison entirely.</param>
     /// <param name="baked">A baked artifact covering the same program (see <see cref="BakeGroundHeightArtifact"/>);
     /// <see langword="null"/> skips the baked comparison.</param>

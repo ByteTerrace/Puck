@@ -7,39 +7,39 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>world.save</c> session-capture fold. A running world holds live SESSION state that is
+/// The <c>world.save</c> session-capture fold. A running world holds live session state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
 /// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a
-/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census COUNT
-/// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately NOT folded — R-C made <c>networkPlayers</c> a durable
+/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census count
+/// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately not folded — <c>networkPlayers</c> is a durable
 /// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
 /// session-only. <see cref="Capture"/> composes a snapshot definition — the live definition
 /// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
-/// <remarks>SAVED-BYTES-ONLY (the default policy): capture composes the snapshot the writer serializes; it never mutates
-/// the in-memory definition or the journal (a save is a snapshot, not a mutation). Every OTHER dimension this class
-/// folds is exactly IDEMPOTENT on a freshly booted, untouched world — live session state equals the document defaults
-/// at boot — so the ouroboros round-trip (load→save→load byte-identity) still holds for those; <c>state</c>'s
-/// advancing-row settle (below) is the one dimension that is NOT idempotent at boot, and honestly so — SOME ticks have
+/// <remarks>Saved-bytes-only (the default policy): capture composes the snapshot the writer serializes; it never mutates
+/// the in-memory definition or the journal (a save is a snapshot, not a mutation). Every other dimension this class
+/// folds is exactly idempotent on a freshly booted, untouched world — live session state equals the document defaults
+/// at boot — so the load-save-load byte-identity round-trip still holds for those; <c>state</c>'s
+/// advancing-row settle (below) is the one dimension that is not idempotent at boot, and honestly so — some ticks have
 /// always elapsed by the time a save can be requested at all, so a document carrying an advancing row settles to a
 /// slightly larger value even on an otherwise-untouched world, never to the exact bytes it loaded from.
 /// <see cref="DescribeDrift"/> is the honest cheap witness of whether the live session has since diverged from the
 /// loaded document, reported by <c>world.status</c> at verb time; it does not (and need not) cover this dimension, since
-/// an advancing row is EXPECTED to keep moving regardless of any save.
-/// <para><b>Advancing state settles at save too (owner ruling, 2026-08-06).</b> A row/cell's <c>WorldStateAdvance</c>
-/// epoch is SESSION-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
-/// FROZEN until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
-/// 0. <see cref="CaptureState"/> folds every advancing row's slot cell AND every advancing KEYED cell's own base into
-/// what it reads AT the save tick, and resets the projected epoch to 0, so tick 0 of the NEXT session already reads
-/// that value and keeps advancing immediately. Projection only: the LIVE document's own base/epoch is never
+/// an advancing row is expected to keep moving regardless of any save.
+/// <para><b>Advancing state settles at save too.</b> A row/cell's <c>WorldStateAdvance</c>
+/// epoch is session-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
+/// frozen until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
+/// 0. <see cref="CaptureState"/> folds every advancing row's slot cell and every advancing keyed cell's own base into
+/// what it reads at the save tick, and resets the projected epoch to 0, so tick 0 of the next session already reads
+/// that value and keeps advancing immediately. Projection only: the live document's own base/epoch is never
 /// touched, exactly like every other dimension this class folds.</para></remarks>
 internal static class WorldSessionCapture {
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
     /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
     /// <see cref="WorldDefinition.Audio"/>'s master gain, and every advancing <see cref="WorldDefinition.State"/> row/cell
-    /// settled at <paramref name="tick"/> (see this type's remarks). The transient census COUNT is not folded (R-C).</summary>
+    /// settled at <paramref name="tick"/> (see this type's remarks). The transient census count is not folded.</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table (census + peer-source default).</param>

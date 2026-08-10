@@ -210,7 +210,10 @@ internal static class SchemaCommand {
             return;
         }
 
-        var onDisk = File.ReadAllText(path: file.FullPath);
+        // CRLF is checkout noise, never content: git normalizes line endings at commit, so a CRLF working copy of a
+        // canonical LF file must compare EQUAL — without this, every file on a Windows checkout reports stale and the
+        // one real finding drowns in false positives.
+        var onDisk = File.ReadAllText(path: file.FullPath).Replace(oldValue: "\r\n", newValue: "\n");
 
         if (string.Equals(a: onDisk, b: file.Text, comparisonType: StringComparison.Ordinal)) {
             return;
@@ -221,7 +224,8 @@ internal static class SchemaCommand {
         problems.Add(item: $"{CliPaths.ToDisplay(fullPath: file.FullPath)} is STALE — first difference at line {lineNumber}: checked-in [{onDiskLine}] vs generated [{generatedLine}].");
     }
 
-    // Both texts are already canonical (LF-only), so splitting on '\n' alone lines them up one-for-one.
+    // Both texts are LF-only by the time they arrive here (generated text by construction, on-disk text by
+    // CheckFile's CRLF normalization), so splitting on '\n' alone lines them up one-for-one.
     private static (int LineNumber, string OnDisk, string Generated) FirstDifference(string onDisk, string generated) {
         var onDiskLines = onDisk.Split(separator: '\n');
         var generatedLines = generated.Split(separator: '\n');

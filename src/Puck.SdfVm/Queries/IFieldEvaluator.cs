@@ -12,22 +12,22 @@ namespace Puck.SdfVm.Queries;
 public readonly record struct FieldEvaluatorCapabilities(bool WarpFree);
 
 /// <summary>
-/// Deterministic, fixed-point access to a live <see cref="SdfProgram"/>'s signed distance FIELD — the one primitive
+/// Deterministic, fixed-point access to a live <see cref="SdfProgram"/>'s signed distance field — the one primitive
 /// gravity, magnetism, wind, or any other "which way is down/toward/away" gameplay mechanic derives from, without
 /// the field itself ever encoding what a consumer intends to do with the answer. <see cref="SdfFieldEvaluator"/> is
 /// the built-in provider for live programs (see its type remarks for the interpreted subset).
 /// <para>
-/// THE GRAVITY DERIVATION — the whole reason this interface exists as its own seam rather than living inside a
+/// The gravity derivation is the whole reason this interface exists as its own seam rather than living inside a
 /// gravity-specific type: a consumer wanting "down" at a point computes <c>-gradient.Normalize()</c> from
-/// <see cref="TryFieldGradient"/>. That is ONE line, entirely the CONSUMER's, never the engine's — the field carries
+/// <see cref="TryFieldGradient"/>. That is one line, entirely the consumer's, never the engine's — the field carries
 /// no notion of "planet," "gravity," or "up." A consumer wanting the opposite sense (a rocket's escape thrust, a
-/// balloon's lift, a repulsor) just drops the sign; a consumer wanting the field's raw steepest-ASCENT direction
-/// uses the gradient unmodified. The engine names the PRIMITIVE (a scalar field and its gradient); nothing on this
+/// balloon's lift, a repulsor) just drops the sign; a consumer wanting the field's raw steepest-ascent direction
+/// uses the gradient unmodified. The engine names the primitive (a scalar field and its gradient); nothing on this
 /// interface, or in <see cref="SdfFieldEvaluator"/>, is aware that a caller might call the result "gravity."
 /// </para>
 /// </summary>
 public interface IFieldEvaluator {
-    /// <summary>What this evaluator can answer — check once, not per query.</summary>
+    /// <summary>Gets what this evaluator can answer — check once, not per query.</summary>
     FieldEvaluatorCapabilities Capabilities { get; }
 
     /// <summary>Evaluates the wrapped program's signed distance field at <paramref name="position"/>.</summary>

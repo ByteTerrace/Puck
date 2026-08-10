@@ -46,7 +46,7 @@ public sealed record ShapeDocument(
 ) {
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
     public const float MaxSmooth = 0.5f;
-    /// <summary>The largest twist rate, in radians per unit of local Y (NOT an isometry, so this stays moderate —
+    /// <summary>The largest twist rate, in radians per unit of local Y (not an isometry, so this stays moderate —
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
@@ -65,19 +65,19 @@ public sealed record ShapeDocument(
 public sealed record CreationPartDocument(string Id, int ShapeId);
 
 /// <summary>
-/// One engraved/embossed TEXT RUN a creation carries — a string laid ONTO one of the creation's own surfaces (a shop
+/// One engraved/embossed text run a creation carries — a string laid onto one of the creation's own surfaces (a shop
 /// facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into
-/// <see cref="SdfShapeType.Glyph"/> shapes via the SHARED font atlas + <c>Puck.Text.TextLayout</c> (never persisted
+/// <see cref="SdfShapeType.Glyph"/> shapes via the shared font atlas + <c>Puck.Text.TextLayout</c> (never persisted
 /// pre-expanded, so the run stays font-independent on the wire). The run sits on its own plane (<paramref name="Position"/>
 /// centre + <paramref name="Rotation"/>, in the creation's workbench space: local +X = advance, +Y = ascent, +Z = the
-/// relief normal). The glyph slab STRADDLES the host surface, so the lettering is proud (emboss / Union) or recessed
-/// (engrave / Subtraction) but NEVER coplanar — coincident zero-sets speckle (docs/sdf-wiki/text-and-glyphs.md).
+/// relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed
+/// (engrave / Subtraction) but never coplanar — coincident zero-sets speckle (docs/sdf-wiki/text-and-glyphs.md).
 /// </summary>
 /// <param name="Text">The run's text (whitespace / unmapped code points advance the pen without a glyph).</param>
-/// <param name="Position">The run's anchor CENTRE on the host surface (workbench space).</param>
+/// <param name="Position">The run's anchor centre on the host surface (workbench space).</param>
 /// <param name="Rotation">The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).</param>
 /// <param name="EmHeight">The world height of one em, in the creation's own (pre-placement) units.</param>
-/// <param name="Depth">The glyph extrude HALF-depth — the relief the slab straddles the surface by (null = a thin default).</param>
+/// <param name="Depth">The glyph extrude half-depth — the relief the slab straddles the surface by (null = a thin default).</param>
 /// <param name="Mode"><c>engrave</c> (Subtraction — a carved recess) or <c>emboss</c> (Union — proud relief); null = emboss.</param>
 /// <param name="Material">The palette slot the letters shade with (null = 0).</param>
 public sealed record TextRunDocument(
@@ -95,10 +95,10 @@ public sealed record TextRunDocument(
     /// <summary>The emboss mode name (Union — proud relief; the default).</summary>
     public const string ModeEmboss = "emboss";
 
-    /// <summary>The number of GLYPH shapes this run expands to for the per-stamp shape budget — its non-whitespace
+    /// <summary>The number of glyph shapes this run expands to for the per-stamp shape budget — its non-whitespace
     /// character count, a conservative upper bound of the atlas's laid-out placements (which skip whitespace and
     /// unmapped code points). Whitespace-only / empty text contributes nothing. Derived (recomputed from
-    /// <see cref="Text"/>), so it is kept OFF the wire.</summary>
+    /// <see cref="Text"/>), so it is kept off the wire.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public int GlyphCount {
         get {
@@ -119,8 +119,8 @@ public sealed record TextRunDocument(
     }
 }
 
-/// <summary>One IK chain on the wire (see <see cref="SculptChain"/>'s live DEFINITION — rest geometry is
-/// re-derived from the member shapes' CURRENT positions at load time, never persisted, so a loaded chain always
+/// <summary>One IK chain on the wire (see <see cref="SculptChain"/>'s live definition — rest geometry is
+/// re-derived from the member shapes' current positions at load time, never persisted, so a loaded chain always
 /// captures fresh against whatever pose the shapes loaded at).</summary>
 /// <param name="Id">The chain's stable id.</param>
 /// <param name="Name">The player-given name (null = unnamed).</param>
@@ -156,9 +156,9 @@ public sealed record FrameDocument(string Name, IReadOnlyList<FrameTransformDocu
 public sealed record FrameTransformDocument(int Id, Vector3 Position, Quaternion Rotation, Vector3 Scale);
 
 /// <summary>
-/// One camera EYE a creation carries — a posed viewpoint ANCHORED to one of the creation's own shapes (a
+/// One camera eye a creation carries — a posed viewpoint anchored to one of the creation's own shapes (a
 /// <see cref="ShapeDocument.Id"/>), so the eye rides that shape's live pose through IK/animation frames. This is the
-/// creation-side twin of a world document's placed camera: the lantern-fish's lens dangling off its lure becomes ONE
+/// creation-side twin of a world document's placed camera: the lantern-fish's lens dangling off its lure becomes one
 /// entry here rather than a hardcoded engine. The offset pose (position/yaw/pitch) is relative to the anchored
 /// shape's frame; the feed it produces is wired onto a screen by name through the creation's behavior manifest (see
 /// <see cref="CreationBehaviorDocument"/>) or a world's wiring table.
@@ -184,15 +184,15 @@ public sealed record CreationCameraDocument(
     string? Feed
 );
 
-/// <summary>One screen FACE a creation declares — a surface on the creation (backed by one of its shapes) that shows a
-/// feed. The robot's CRT face is one of these: it shows the named host <c>emotes</c> feed by DEFAULT, and is wirable to
-/// ANY camera feed (a creation camera's named feed, another creation's feed, a world camera) purely by naming a
+/// <summary>One screen face a creation declares — a surface on the creation (backed by one of its shapes) that shows a
+/// feed. The robot's CRT face is one of these: it shows the named host <c>emotes</c> feed by default, and is wirable to
+/// any camera feed (a creation camera's named feed, another creation's feed, a world camera) purely by naming a
 /// different default source. No robot-specific channel exists — a face is just a screen surface with a default wire,
 /// and the wiring model does the rest.</summary>
 /// <param name="Name">The face's name (a wiring handle — <c>face</c> by default).</param>
 /// <param name="ShapeId">The shape whose surface is the screen (a <see cref="ShapeDocument.Id"/>; -1/null = the whole
 /// creation's canonical face surface, resolved by the consumer).</param>
-/// <param name="DefaultSource">The feed this face shows when nothing else is wired, as a source token a CONSUMING WORLD
+/// <param name="DefaultSource">The feed this face shows when nothing else is wired, as a source token a consuming world
 /// resolves through a closed four-token map — <c>none</c> (no signal), <c>test</c> (the test pattern), and
 /// <c>camera:&lt;name&gt;</c> / <c>feed:&lt;name&gt;</c> (a View of the named camera, resolved against the placement's
 /// derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare
@@ -204,16 +204,16 @@ public sealed record CreationFaceDocument(
     string? DefaultSource
 );
 
-/// <summary>One SOUND a creation carries — a creature/phenomenon voice as data, following <see cref="CreationFaceDocument"/>'s
+/// <summary>One sound a creation carries — a creature/phenomenon voice as data, following <see cref="CreationFaceDocument"/>'s
 /// named-wiring shape: a name (the wiring handle), an optional anchoring shape the voice emits from (null = the
-/// creation's root), and the <c>puck.synth.v1</c> patch INLINE — creations stay portable, and the existing creation
+/// creation's root), and the <c>puck.synth.v1</c> patch inline — creations stay portable, and the existing creation
 /// hash covers the voice with no new pin machinery. A world placement of a sound-bearing creation auto-surfaces an
 /// audio emitter anchored to the placement (root or the named shape); the placement row's own emission facet remains
 /// the per-instance override channel.</summary>
 /// <param name="Name">The sound's name (a wiring handle — <c>sound</c> by default; unique within the creation).</param>
 /// <param name="ShapeId">The shape the voice emits from (a <see cref="ShapeDocument.Id"/>; null = the creation's
 /// root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).</param>
-/// <param name="Patch">The voice's <c>puck.synth.v1</c> patch, INLINE (validated through the synth family's own
+/// <param name="Patch">The voice's <c>puck.synth.v1</c> patch, inline (validated through the synth family's own
 /// canonicalizer as part of creation validation).</param>
 /// <param name="Level">The emitter level (null = 1 — unity).</param>
 /// <param name="Radius">The audible support radius in world units (null = the consuming world's default speaker
@@ -232,14 +232,14 @@ public sealed record CreationSoundDocument(
 }
 
 /// <summary>
-/// A creation's BEHAVIOR manifest — the behavioral facts a creation carries so consumers stop re-supplying them by
-/// hand. A loaded fish without one walks because nothing records that it SWIMS; this makes those facts DATA. Minimal
+/// A creation's behavior manifest — the behavioral facts a creation carries so consumers stop re-supplying them by
+/// hand. A loaded fish without one walks because nothing records that it swims; this makes those facts data. Minimal
 /// and normalized: a locomotion mode, the creation's declared faces (screen surfaces that show named feeds), and its
 /// declared sounds (synth voices that emit from its body).
 /// </summary>
-/// <param name="Locomotion">How the creation moves, as a free-text token a CONSUMING WORLD resolves AS A KIT NAME: a
+/// <param name="Locomotion">How the creation moves, as a free-text token a consuming world resolves as a kit name: a
 /// creation declaring <c>swim</c> inhabits the world's kit row named <c>swim</c> when a placement's inhabit facet omits
-/// an explicit kit (a world declaring no such kit rejects the placement loudly, naming every kit it declares). It is NOT
+/// an explicit kit (a world declaring no such kit rejects the placement loudly, naming every kit it declares). It is not
 /// a closed enum — the runtime answer to "how does it move" is the resolved <c>WorldKit.Model</c>, never this string
 /// parsed per frame. Null = walk.</param>
 /// <param name="Faces">The declared screen faces (null = none). A creation with a face shows a feed on its body; the
@@ -256,7 +256,7 @@ public sealed record CreationBehaviorDocument(
 /// <summary>
 /// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
 /// creation can be named, saved, reloaded, and handed to a bake/forge headlessly. Document doctrine applies
-/// throughout: every OPTIONAL member is declared nullable (the polymorphic parse path skips property initializers —
+/// throughout: every optional member is declared nullable (the polymorphic parse path skips property initializers —
 /// an omitted member arrives null regardless), validated only when present, and normalized at consumption (see
 /// <see cref="CreationCanonicalizer"/>).
 /// </summary>
@@ -307,7 +307,7 @@ public sealed record CreationDocument(
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
-    /// <summary>The creation's total per-stamp shape budget: its authored shapes PLUS every text run's expanded glyph
+    /// <summary>The creation's total per-stamp shape budget: its authored shapes plus every text run's expanded glyph
     /// count (a run counts as its letters — a world stamps text as real Glyph geometry, so it competes for the same
     /// per-stamp shape budget the boxes do).</summary>
     /// <returns>The total shape count a placement of this creation emits.</returns>

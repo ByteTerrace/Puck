@@ -78,7 +78,7 @@ public interface IWorldQuery {
     /// <returns><see langword="true"/> when the swept sphere hit something within <paramref name="maxDist"/>.</returns>
     bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit);
 
-    /// <summary>Whether a sphere of <paramref name="radius"/> centered at <paramref name="center"/> overlaps blocked
+    /// <summary>Returns a value indicating whether a sphere of <paramref name="radius"/> centered at <paramref name="center"/> overlaps blocked
     /// geometry — a placement/spawn/selection check, not a cast.</summary>
     /// <param name="center">The sphere's center.</param>
     /// <param name="radius">The sphere's radius.</param>
@@ -94,7 +94,7 @@ public interface IWorldQuery {
     /// <returns><see langword="true"/> when ground was found within the probe range.</returns>
     bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY);
 
-    /// <summary>Whether a straight line from <paramref name="from"/> to <paramref name="to"/> is unobstructed.</summary>
+    /// <summary>Returns a value indicating whether a straight line from <paramref name="from"/> to <paramref name="to"/> is unobstructed.</summary>
     /// <param name="from">The line's start point.</param>
     /// <param name="to">The line's end point.</param>
     /// <returns><see langword="true"/> when nothing blocked lies between the two points.</returns>

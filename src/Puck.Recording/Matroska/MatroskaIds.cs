@@ -24,6 +24,15 @@ internal static class MatroskaIds {
     public const uint SeekHead = 0x114D9B74;
     public const uint Tracks = 0x1654AE6B;
 
+    // SeekHead / Seek (the index of top-level element positions a demuxer reads before it parses any cluster).
+    public const uint Seek = 0x4DBB;
+    public const uint SeekId = 0x53AB;
+    public const uint SeekPosition = 0x53AC;
+
+    /// <summary>Padding: it occupies reserved space a demuxer must skip, used to retire a Seek entry whose target
+    /// was never written without moving anything that follows it.</summary>
+    public const uint Void = 0xEC;
+
     // Info.
     public const uint TimestampScale = 0x2AD7B1;
     public const uint Duration = 0x4489;

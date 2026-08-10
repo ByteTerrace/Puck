@@ -208,9 +208,9 @@ public static class QuadraticQuasicrystal {
     /// the approximate seam; membership and traversal are exact integer surd signs. Its scale is that unnormalized
     /// eigenvector rather than the short-tile unit <see cref="LongTileLength(long, long, long, long)"/> normalizes to. For a
     /// single-term period the walk reproduces the same tiling language as <see cref="MetallicQuasicrystal"/> — but in
-    /// tile-count coordinates, whereas <see cref="MetallicQuasicrystal"/> keeps the ring coordinate <c>a + b·δₙ</c> that
-    /// matches the former golden and silver files; general periods (with <c>C &gt; 1</c>) admit no such ring embedding, which
-    /// is why this surface addresses by tile count.
+    /// tile-count coordinates, whereas <see cref="MetallicQuasicrystal"/> keeps the ring coordinate <c>a + b·δₙ</c>;
+    /// general periods (with <c>C &gt; 1</c>) admit no such ring embedding, which is why this surface addresses by tile
+    /// count.
     /// </remarks>
     public readonly record struct Chain {
         private Chain(QuadraticInflation inflation, FixedQ4816 inflationFactor) {

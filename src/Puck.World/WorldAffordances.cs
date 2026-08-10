@@ -6,23 +6,23 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The process's COMMAND vocabulary, installed once by the composition root after the <see cref="CommandRegistry"/>
+/// The process's command vocabulary, installed once by the composition root after the <see cref="CommandRegistry"/>
 /// exists and consulted by every surface a binding document enters through (the live rebind probe, the per-seat
 /// recompose, the two document validators), feeding the shared <see cref="BindingVocabularyCheck"/> so a typo'd
 /// command name is refused with the same words at every door instead of resolving to a silently dead key.
 /// </summary>
 /// <remarks><para>The command registry is ambient by necessity, not preference: the document validators are static
 /// and also run where no registry can exist (the offline replay rehydrator, a pre-container boot parse), so it is a
-/// lookup that is PRESENT once the composition root installs it and ABSENT elsewhere. Absent means the command half
+/// lookup that is present once the composition root installs it and absent elsewhere. Absent means the command half
 /// of validation is skipped — structural validation still runs — never that it passed; the composition root's
 /// post-build sweep (<see cref="WorldSeatBindings.ValidateAffordancesLoudly"/>) re-covers the documents that entered
 /// before install. It is also genuinely process-scoped: there is exactly one console, so every world instance in this
 /// process dispatches through the same verb set.</para>
-/// <para>The CHANNEL vocabulary is deliberately NOT ambient, and the asymmetry is the point. A channel table is a
+/// <para>The channel vocabulary is deliberately not ambient, and the asymmetry is the point. A channel table is a
 /// pure function of the document that declares it, so it is a required parameter of <see cref="Validate"/>: a
 /// document's binding overlays are always checked against that document's own channels. Holding it in a static
 /// installed once from the boot world let a second world's document validate against the boot world's table, which
-/// both refused a self-consistent document and — the direction that actually loses state — ADMITTED a document
+/// both refused a self-consistent document and — the direction that actually loses state — admitted a document
 /// binding a channel it never declares, because some other world happened to declare it.</para>
 /// <para>Source kinds resolve through <see cref="AddonSourceCatalog"/> (derived from <c>InputSources</c>' own
 /// attributes); a source outside that catalog — a motion source, a future device — skips the kind half of the check

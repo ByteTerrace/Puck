@@ -37,7 +37,7 @@ reproducible measurements:
 
 - **[docs/sdf-wiki/](../sdf-wiki/README.md)** — technique references and
   current Puck applicability.
-- **`Puck.Bench` (quarantined 2026-08-02, off limits)** — the benchmark harness in
+- **`Puck.Bench` (quarantined 2026-08-02, read-only)** — the benchmark harness in
   code: timing seams, the switch sweep, scoring math, the report format. Both
   documents that described it — the procedure-and-measurements notes and the
   full design plan — were deleted on 2026-08-02, and the harness itself has no

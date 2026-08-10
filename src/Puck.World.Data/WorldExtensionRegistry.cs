@@ -8,7 +8,7 @@ namespace Puck.World;
 /// the extensions are or do: the key is whatever <c>keyOf</c> reads, so one type serves machine engines, renderers,
 /// backends, content sources, or any later extension point equally.
 /// </summary>
-/// <remarks>The registered set is FIXED at construction, which is what lets a document-side vocabulary check and a
+/// <remarks>The registered set is fixed at construction, which is what lets a document-side vocabulary check and a
 /// host-side resolution be answers to the same question — there is no window in which they can disagree. Building is
 /// single-threaded; reading needs no synchronization.</remarks>
 /// <typeparam name="TExtension">The registered implementation contract.</typeparam>
@@ -16,7 +16,7 @@ public sealed class WorldExtensionRegistry<TExtension> where TExtension : class 
     private readonly Dictionary<string, TExtension> m_byKey;
 
     /// <summary>Builds a registry from the host's collected extensions, keyed by <paramref name="keyOf"/>. Keys compare
-    /// ORDINALLY — a registry key is a token, never prose. Every refusal here describes the COMPOSITION ROOT and never
+    /// ordinally — a registry key is a token, never prose. Every refusal here describes the composition root and never
     /// a document: a null element, a null or blank key, and one key claimed twice are all authoring errors in the
     /// registration list, so each throws at construction naming the offending implementation types rather than
     /// last-writer-wins into a set that no longer matches what the host believes it registered.</summary>

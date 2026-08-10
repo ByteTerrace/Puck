@@ -5,8 +5,8 @@ namespace Puck.Commands;
 /// single per-seat engine state machine holding exactly one state value at a time (the host's admission registry is
 /// the closed vocabulary — this project never interprets the names); while the family currently holds
 /// <paramref name="State"/> for a seat, this row derives the seat's active group to <paramref name="Group"/>,
-/// overriding the seat's requested group and the profile default. Across families, precedence is AUTHORED ROW
-/// ORDER: the first matching row in document order wins, and a later matching row is SHADOWED — reported by the
+/// overriding the seat's requested group and the profile default. Across families, precedence is authored row
+/// order: the first matching row in document order wins, and a later matching row is shadowed — reported by the
 /// derivation read-back, never silently ignored. A <c>(family, state)</c> with no row contributes nothing (the
 /// seat falls through to its requested group, then the profile default).
 /// </summary>

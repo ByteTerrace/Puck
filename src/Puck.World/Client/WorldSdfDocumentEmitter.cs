@@ -13,21 +13,21 @@ namespace Puck.World.Client;
 /// for this prototype; see <see cref="SdfDocumentDecoder"/>'s remarks for the full covered/skipped op list.
 /// </summary>
 /// <remarks>
-/// THE PROBE CONTRACT: <see cref="Emit"/> under <see cref="SdfEmitContext.Probe"/> reserves a FIXED worst case —
+/// <see cref="Emit"/> under <see cref="SdfEmitContext.Probe"/> reserves a fixed worst case —
 /// <see cref="SdfDocumentDecoder.MaxOps"/> instructions and <see cref="SdfDocumentDecoder.MaxMaterials"/> materials —
 /// rather than a per-document ledger (deliberately out of scope; see the front door's report). Because
 /// <see cref="SdfDocumentDecoder.Decode"/> refuses any document declaring more ops or materials than those same two
-/// constants, a document that loads successfully in ISOLATION can never outgrow what this probe already reserved for
+/// constants, a document that loads successfully in isolation can never outgrow what this probe already reserved for
 /// this emitter alone.
 /// <para>
-/// THAT IS NOT ENOUGH: the probed envelope is shared with <see cref="WorldSceneEmitter"/> (one combined worst-case
-/// build — see <see cref="Puck.World.Client.WorldFrameSource"/>'s constructor), and a live scene mutation may have
-/// already spent capacity this emitter's own reservation covers but the scene's did not need at the time. So
-/// <see cref="Load"/> also runs a COMPOSED admission check (<see cref="Configure"/>) — the same joint measurer
-/// <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation, with the roles swapped: the candidate is
-/// the incoming document, composed against the CURRENT live world definition — before committing. Refused there, the
-/// previously loaded document (if any) keeps rendering unchanged, exactly like every other refusal this door can
-/// produce.
+/// That reservation alone is not enough: the probed envelope is shared with <see cref="WorldSceneEmitter"/> (one
+/// combined worst-case build — see <see cref="Puck.World.Client.WorldFrameSource"/>'s constructor), and a live scene
+/// mutation may have already spent capacity this emitter's own reservation covers but the scene's did not need at
+/// the time. So <see cref="Load"/> also runs a composed admission check (<see cref="Configure"/>) — the same joint
+/// measurer <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation, with the roles swapped: the
+/// candidate is the incoming document, composed against the current live world definition — before committing.
+/// Refused there, the previously loaded document (if any) keeps rendering unchanged, exactly like every other
+/// refusal this door can produce.
 /// </para>
 /// </remarks>
 internal sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
@@ -51,18 +51,18 @@ internal sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     public ulong? ContentHash => m_program?.ContentHash;
 
     /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet) —
-    /// read by <see cref="Puck.World.Client.WorldFrameSource"/>'s composed measurer so a SCENE mutation is checked
-    /// against whatever this emitter is ACTUALLY holding, never a stale or assumed value.</summary>
+    /// read by <see cref="Puck.World.Client.WorldFrameSource"/>'s composed measurer so a scene mutation is checked
+    /// against whatever this emitter is actually holding, never a stale or assumed value.</summary>
     internal SdfDocumentProgram? CurrentProgram => m_program;
 
     /// <summary>Records the probed envelope floors and the composed-candidate measurer: given a candidate document,
-    /// returns the program-word/instance counts of that document composed alongside the CURRENT live world
+    /// returns the program-word/instance counts of that document composed alongside the current live world
     /// definition. Configured once by <see cref="Puck.World.Client.WorldFrameSource"/>'s constructor, reusing the
     /// exact same joint-measurement method <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation
     /// (roles swapped) — see the type remarks. Unconfigured (a load somehow racing startup, or a probe-only test
     /// double), <see cref="Load"/> skips the composed check — the same "unconfigured reads as fits" posture
     /// <see cref="Puck.World.WorldRenderEnvelope"/> documents.</summary>
-    /// <param name="programWordCapacity">The probed program-word ceiling (the SAME frozen floor the scene-mutation
+    /// <param name="programWordCapacity">The probed program-word ceiling (the same frozen floor the scene-mutation
     /// check is measured against).</param>
     /// <param name="instanceCapacity">The probed instance ceiling.</param>
     /// <param name="measureComposed">Composes a candidate document against the current world definition and measures
@@ -143,9 +143,8 @@ internal sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     // THE ONE construction-time worst case (never rendered): SdfDocumentDecoder.MaxMaterials materials, then
     // (SdfDocumentDecoder.MaxOps + 1) consecutive BARE ResetPoints — not a reset+translate+sphere group.
     //
-    // RE-DERIVED (a prior reset+translate+sphere-group probe under-reserved by 293 uvec4 = 1,172 packed words against
-    // a legal 128×(reset+plane) document — see the commit this replaced it in): SdfProgram.AnalyzeBounds starts a new
-    // segment at every ResetPoint, and every segment — with or without a shape — buys a segment-directory row
+    // SdfProgram.AnalyzeBounds starts a new segment at every ResetPoint, and every segment — with or without a
+    // shape — buys a segment-directory row
     // (2 uvec4), a world-segment-list entry (1 uvec4; this emitter never declares instances, so every segment is a
     // world segment), and a rigid-plan directory row (1 uvec4) = 4 uvec4/segment; a shape inside a segment ALSO buys
     // a rigid-leaf record (3 uvec4) but never buys another segment. So at a FIXED total instruction count (the

@@ -1,22 +1,22 @@
 namespace Puck.Commands;
 
 /// <summary>
-/// Validates a binding document's COMMAND references against the live affordance vocabulary — the check that turns a
+/// Validates a binding document's command references against the live affordance vocabulary — the check that turns a
 /// typo'd command name from a silently dead key into a loud refusal, and an authority verb named as a binding
-/// destination into a refused page. <see cref="BindingProfile.Compile"/> is the STRUCTURAL gate (row shapes,
+/// destination into a refused page. <see cref="BindingProfile.Compile"/> is the structural gate (row shapes,
 /// uniqueness, chord well-formedness) and deliberately knows nothing about which commands exist; this is the
-/// VOCABULARY gate beside it, fed by the host's <see cref="CommandRegistry"/> through plain lookups so it can run
+/// vocabulary gate beside it, fed by the host's <see cref="CommandRegistry"/> through plain lookups so it can run
 /// anywhere a document enters (a live rebind, a recompose, a document validator) without coupling the document types
 /// to the registry.
 /// </summary>
-/// <remarks>Each of the three lookups is INDEPENDENTLY optional, and a caller missing one still gets the others: a
+/// <remarks>Each of the three lookups is independently optional, and a caller missing one still gets the others: a
 /// caller with no registry passes a null <c>command</c> and keeps the channel checks; a caller with no channel table
 /// passes null <c>channel</c> and keeps the command checks. Nothing here couples one half's absence to the other's.
-/// <para>Three predicates, all per reference: the command must EXIST (an entry naming an unregistered command is
+/// <para>Three predicates, all per reference: the command must exist (an entry naming an unregistered command is
 /// exactly the binding the <see cref="InputRouter"/> silently drops at resolve time today); it must be
 /// <see cref="CommandBindability.Bindable"/> (an authority verb reached from a page would be an escalation the grant
 /// table never sees, because the page — not the principal — chose the destination); and the value kind the binding
-/// DISPATCHES — its constant <c>Value</c> when it carries one, else the physical source's declared kind when the
+/// dispatches — its constant <c>Value</c> when it carries one, else the physical source's declared kind when the
 /// caller can resolve it — must equal the command's declared <see cref="CommandMetadata.ValueKind"/>. A source the
 /// caller's catalog cannot resolve (its lookup answering <see langword="null"/>) skips the kind half only: existence
 /// and eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
@@ -27,18 +27,18 @@ public static class BindingVocabularyCheck {
     /// <param name="document">The binding document to check.</param>
     /// <param name="command">Resolves a command name (or alias) to its declared facts, answering <see langword="null"/>
     /// when no such command is registered — typically <see cref="CommandRegistry.TryGetMetadata"/>. Pass
-    /// <see langword="null"/> to skip the COMMAND half entirely (a caller with no registry — an offline rehydrator, a
+    /// <see langword="null"/> to skip the command half entirely (a caller with no registry — an offline rehydrator, a
     /// pre-container boot parse); the channel and kind halves still run, so a caller that cannot check commands never
-    /// has to abandon the checks it CAN make.</param>
+    /// has to abandon the checks it can make.</param>
     /// <param name="sourceKind">Resolves a physical source id to its declared value kind, or <see langword="null"/>
     /// when the source is unknown to the caller's catalog (the kind check is then skipped for that entry); pass
     /// <see langword="null"/> to skip source-kind resolution entirely.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
-    /// <param name="channel">Resolves a declared CHANNEL name (a second, world-owned vocabulary a binding destination
+    /// <param name="channel">Resolves a declared channel name (a second, world-owned vocabulary a binding destination
     /// may name instead of a command — see <see cref="BindingPageEntryDefinition.Channel"/>), or <see langword="null"/>
     /// to skip channel-name resolution entirely (a caller with no channel table). A name this resolves
     /// <see langword="false"/> for gets the channel twin of the "names no registered command" refusal.</param>
-    /// <param name="channelBinary">Resolves a declared channel name to whether its shape is BINARY, or
+    /// <param name="channelBinary">Resolves a declared channel name to whether its shape is binary, or
     /// <see langword="null"/> to skip the shape check entirely (a caller with no channel table). A binary channel's
     /// scale is always the default (<c>+1</c>, or an omitted <see cref="BindingPageEntryDefinition.Scale"/>) —
     /// <see cref="BindingPageEntryDefinition.Scale"/>'s own doc names this rule; this is where it is enforced. Only

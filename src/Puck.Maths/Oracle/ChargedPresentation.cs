@@ -43,7 +43,7 @@ public readonly struct Generator {
 public enum RuleKind {
     /// <summary>The bracket-splicing charge. Not matched against a word: the term flattener multiplies this rule's
     /// charge in once per bracket it removes, so a charge of one flattens trees silently while a nontrivial charge makes
-    /// re-association observable. A rule carrying ONE charge is that charge at every splice; a rule carrying one charge
+    /// re-association observable. A rule carrying one charge is that charge at every splice; a rule carrying one charge
     /// per ordered generator triple — row-major, <c>((first·n) + second)·n + third</c> — is the associator 3-cochain
     /// itself, read at the three keys the splice actually joins.</summary>
     Reassociate,
@@ -57,7 +57,7 @@ public enum RuleKind {
 
 /// <summary>
 /// One oriented charged rewrite rule: a pattern word rewrites to a charged combination of replacement terms.
-/// Re-association, swap, reduction and annihilation are the SAME kind of datum.
+/// Re-association, swap, reduction and annihilation are the same kind of datum.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <remarks>
@@ -74,7 +74,7 @@ public enum RuleKind {
 /// its normalization is simply bounded, reporting a <see cref="NormalizationObstruction"/> rather than looping.
 /// </para>
 /// <para>
-/// An empty pattern matches the empty word ONLY, which is how a presentation whose unit is a sum of idempotents (a
+/// An empty pattern matches the empty word only, which is how a presentation whose unit is a sum of idempotents (a
 /// quiver's diagonal) states that fact as data instead of as a special case in the kernel.
 /// </para>
 /// </remarks>
@@ -189,7 +189,7 @@ public readonly record struct NormalFormBasisStatus(
 /// <para>
 /// <b>Normal forms and keys.</b> Construction closes the generators under right multiplication and normalization,
 /// discovering every irreducible word. When the dense basis is available the words are sorted into the canonical order —
-/// ascending by length, then lexicographically by generator symbol — and a normal form's KEY is its index in that
+/// ascending by length, then lexicographically by generator symbol — and a normal form's key is its index in that
 /// order, so a caller who knows the presentation can recompute any key without asking. When the dense basis is not
 /// available (<see cref="HasCompiledNormalFormBasis"/> is <see langword="false"/>) the key is instead the injective mixed-radix packing
 /// <c>Σ (symbolᵢ + 1)·(GeneratorCount + 1)ⁱ</c>, which sends the empty word to zero.
@@ -205,7 +205,7 @@ public readonly record struct NormalFormBasisStatus(
 /// concurrent readers.
 /// </para>
 /// <para>
-/// <b>The compiled cells.</b> Every ordered pair of normal forms is grafted and rewritten ONCE, at construction, by the
+/// <b>The compiled cells.</b> Every ordered pair of normal forms is grafted and rewritten once, at construction, by the
 /// interpreted normalizer; the resulting charged combinations are the compiled product table. Nothing about that build
 /// assumes the product associates, so a quasialgebra floor compiles exactly as an associative presentation does.
 /// </para>
@@ -219,7 +219,7 @@ public readonly record struct NormalFormBasisStatus(
 /// </para>
 /// <para>
 /// <b>Both shapes must be normalized at the unit</b>, which is the fourth refusal and is the one that keeps
-/// <see cref="PresentedAlgebra{TValue, TOps}.TryNormalize"/> a function of the ELEMENT rather than of its spelling. A
+/// <see cref="PresentedAlgebra{TValue, TOps}.TryNormalize"/> a function of the element rather than of its spelling. A
 /// factor equal to the unit is written either as its own generator letter or as the empty product, and the empty
 /// product carries no letter for a splice to charge with — so a charge sitting at a triple that names the unit is one
 /// the term representation cannot carry, and the two spellings of one element would answer differently. Hence a
@@ -227,8 +227,8 @@ public readonly record struct NormalFormBasisStatus(
 /// must BE the material's one. Neither is a budget: no scalar can relate two spellings of the same element.
 /// </para>
 /// <para>
-/// Those four are the facts that make the table READABLE, and they are all that is enforced. Whether a declared
-/// cochain is the associator OF THIS PRODUCT — whether <c>σ(b,c)·σ(a,b⊗c)</c> is <c>α(a,b,c)·σ(a,b)·σ(a⊗b,c)</c> on
+/// Those four are the facts that make the table readable, and they are all that is enforced. Whether a declared
+/// cochain is the associator of this product — whether <c>σ(b,c)·σ(a,b⊗c)</c> is <c>α(a,b,c)·σ(a,b)·σ(a⊗b,c)</c> on
 /// every triple — is a mathematical fact about the declared data, so it is computed rather than thrown: a term tree
 /// normalizes to the bracketing's own nested products exactly when the declaration is faithful, and
 /// <see cref="PresentationCertificate{TValue}.IsCoherent"/> reports separately whether the declaration is

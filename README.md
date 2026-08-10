@@ -52,8 +52,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 10
 - [src](src) — the engine and the game, split into focused `Puck.*` projects;
   see the [project map](docs/project-map.md)
 - [experimental](experimental) — the bare-metal runtime, and the quarantined
-  trees (`Puck.Demo`, `Puck.Post`, `tools`, `scripts`): out of the build and
-  off limits, see [experimental/README.md](experimental/README.md)
+  trees (`Puck.Demo`, `Puck.Post`, `tools`, `scripts`): out of the build, read
+  as prior art and never built or run, see
+  [experimental/README.md](experimental/README.md)
 - [docs](docs/README.md) — project map,
   [guide for contributors and agents](docs/agent-guide.md), and the handbooks
 

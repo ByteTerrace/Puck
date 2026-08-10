@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Puck.Commands;
 
 /// <summary>
-/// A stateful <see cref="IInputBindings"/> that resolves each signal against the page its slot's ACTIVE GROUP and
+/// A stateful <see cref="IInputBindings"/> that resolves each signal against the page its slot's active group and
 /// held modifier chord select, and fires the group's command-meaning chord rows as synthesized edges
 /// (<see cref="IChordEdgeSource"/>). It sits exactly where a flat table sits today — inside the
 /// <see cref="InputRouter"/>'s deterministic pre-snapshot fold — so recorded <see cref="CommandSnapshot"/>s
@@ -11,19 +11,19 @@ namespace Puck.Commands;
 /// </summary>
 /// <remarks>
 /// <para>The settled per-signal order when a signal drives a declared modifier: (1) the tracker advances (the
-/// held order updates); (2) the active PAGE re-resolves — the deepest page row whose chord is a press-order
+/// held order updates); (2) the active page re-resolves — the deepest page row whose chord is a press-order
 /// prefix of the held order (a page flip happens here); (3) chord-command transitions synthesize edges — first
 /// the releases of broken armed rows, then the presses of rows the new held order completes exactly; (4) the
 /// signal's own source lookup resolves against the post-flip page. So a page under a deeper command chord
 /// (<c>[lt]</c> page beneath a <c>[lt, rt]</c> command) flips first and fires second, and the pass-through stays
-/// coherent: sources keep answering through the deepest PAGE row while the command chord is held.</para>
+/// coherent: sources keep answering through the deepest page row while the command chord is held.</para>
 /// <para>Two latches make transitions safe:</para>
 /// <list type="bullet">
 /// <item><description>A source press latches the binding list it resolved, and the matching release resolves to
-/// that same list even if the page — or the ACTIVE GROUP — changed in between; a held action stays itself, new
+/// that same list even if the page — or the active group — changed in between; a held action stays itself, new
 /// presses use the new page. <see cref="SetActiveGroup"/> deliberately touches neither the latches nor the
 /// tracker: a mode flip is a pointer-level switch.</description></item>
-/// <item><description>A completed command chord stays ARMED until any member releases, regardless of page or
+/// <item><description>A completed command chord stays armed until any member releases, regardless of page or
 /// group flips in between — its release edge always fires against the row that pressed.</description></item>
 /// </list>
 /// All state mutates on the router's single snapshot thread; only the published <see cref="BindingPageView"/>
@@ -151,8 +151,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         return due;
     }
 
-    /// <summary>Sets a slot's ACTIVE GROUP — the runtime mode flip. A pointer-level switch on the compiled
-    /// profile: the active page re-resolves in the new group against the SAME held modifiers, while the press
+    /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
+    /// profile: the active page re-resolves in the new group against the same held modifiers, while the press
     /// latches, the chord tracker, and any armed command chords survive untouched (see remarks). The request is
     /// remembered per slot, so a later <see cref="Reload"/> re-applies it to the new profile.</summary>
     /// <param name="slot">The logical player slot.</param>
@@ -199,7 +199,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         return true;
     }
 
-    /// <summary>Whether the currently-loaded compiled profile declares <paramref name="group"/> — the probe a caller
+    /// <summary>Returns a value indicating whether the currently-loaded compiled profile declares <paramref name="group"/> — the probe a caller
     /// uses to validate a requested group without applying it (a context-derived override may currently shadow the
     /// request, so "apply and observe" cannot answer this).</summary>
     /// <param name="group">The group name to look up.</param>
@@ -220,7 +220,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             : m_profile.ViewOf(rowIndex: m_profile.RestingRowOf(groupIndex: ResolveGroupIndex(profile: m_profile, slot: slot))));
     }
 
-    /// <summary>Gets the wheel the slot's ACTIVE page presents, or <see langword="null"/> when the active page is
+    /// <summary>Gets the wheel the slot's active page presents, or <see langword="null"/> when the active page is
     /// no wheel's hold page — the radial presenter's one open/closed read (a slot holds a wheel open exactly while
     /// its held chord keeps the hold page selected, so this needs no state of its own).</summary>
     /// <param name="slot">The logical player slot.</param>
@@ -232,7 +232,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     }
 
     /// <summary>Releases a slot's chord, press latches, and armed command chords — wired to focus loss (via
-    /// <see cref="ResetAll"/>). Deliberately NOT wired to a single device's disconnect: <c>InputRouter</c>'s
+    /// <see cref="ResetAll"/>). Deliberately not wired to a single device's disconnect: <c>InputRouter</c>'s
     /// per-device release touches no binding state, because resetting a whole slot's chord tracker on one
     /// device's disconnect could wipe a different still-connected device's legitimately-held modifier on the same
     /// slot. Silent by design: the router's own held cancellation delivers the release edges.</summary>
@@ -256,7 +256,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         }
     }
 
-    /// <summary>Releases every slot this instance currently tracks — the ALL-SLOTS twin of <see cref="Reset(int)"/>,
+    /// <summary>Releases every slot this instance currently tracks — the all-slots twin of <see cref="Reset(int)"/>,
     /// wired to OS window focus loss (see <see cref="IInputBindings.ResetAll"/>).</summary>
     public void ResetAll() {
         foreach (var slot in m_slots.Keys) {

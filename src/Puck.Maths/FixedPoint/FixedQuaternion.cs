@@ -332,7 +332,7 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// <summary>Returns the multiplicative inverse; a zero quaternion inverts to <see cref="Identity"/>.</summary>
     /// <returns>The conjugate divided by the exact full-width squared norm, with each final component rounded once.
     /// An inverse smaller than half a raw Q16 unit quantizes to zero. When the four-square raw sum reaches the
-    /// 128-bit carrier's ceiling the member returns the zero quaternion directly, and that IS the rounding: at any
+    /// 128-bit carrier's ceiling the member returns the zero quaternion directly, and that is the rounding: at any
     /// such magnitude every exact inverse component is at most <c>2⁻³³</c> of a raw unit, so the early-out and the
     /// full computation agree lane for lane.</returns>
     public FixedQuaternion Inverse() {
@@ -455,6 +455,23 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         (FixedVectorMath.TryMagnitude(x: x, y: y, z: z, result: out var magnitude)
             ? magnitude
             : FixedQ4816.MaxValue);
+
+    /// <summary>Converts a single-precision <see cref="System.Numerics.Quaternion"/> componentwise into fixed point —
+    /// the inbound counterpart of <see cref="ToQuaternion"/>, and the one door an authored or renderer-side rotation
+    /// takes into the deterministic world, so the rounding a caller gets is not a per-caller decision (the same role
+    /// <see cref="FixedVector3.FromVector3"/> plays for a direction).</summary>
+    /// <param name="value">The rotation to convert.</param>
+    /// <returns>The nearest fixed-point quaternion, each component rounded to nearest with ties to even by
+    /// <see cref="FixedQ4816.FromDouble"/>. The result is not renormalized: a source already off the unit sphere stays
+    /// off it, and the Q16 quantization of the components moves it further, so call <see cref="Normalize"/> whenever
+    /// the rotation is about to be used — exactly as the single-precision callers do.</returns>
+    public static FixedQuaternion FromQuaternion(System.Numerics.Quaternion value) =>
+        new(
+        X: FixedQ4816.FromDouble(value: value.X),
+        Y: FixedQ4816.FromDouble(value: value.Y),
+        Z: FixedQ4816.FromDouble(value: value.Z),
+        W: FixedQ4816.FromDouble(value: value.W)
+    );
 
     /// <summary>Converts to a single-precision <see cref="System.Numerics.Quaternion"/> for presentation (the renderer).</summary>
     /// <returns>The nearest single-precision quaternion.</returns>

@@ -12,7 +12,7 @@ namespace Puck.Commands;
 /// receiving that activation's value on <see cref="CommandContext.Value"/> and its stamped identity on
 /// <see cref="CommandContext.Principal"/>.
 /// <para>Definitions are built through <see cref="Verb"/> and <see cref="WithWireArgs"/> only, and the handler they
-/// carry is internal: what a command IS (its <see cref="CommandMetadata"/>) is public, what it DOES is reachable
+/// carry is internal: what a command is (its <see cref="CommandMetadata"/>) is public, what it does is reachable
 /// solely through the registry's stamped dispatch.</para>
 /// </remarks>
 public sealed record CommandDefinition {
@@ -51,7 +51,7 @@ public sealed record CommandDefinition {
     /// <summary>Gets the human-readable description shown in help output.</summary>
     public string Description { get; init; }
 
-    /// <summary>Gets the delegate invoked on each activation. INTERNAL: dispatch happens through the registry, which
+    /// <summary>Gets the delegate invoked on each activation. Internal: dispatch happens through the registry, which
     /// is what stamps the <see cref="CommandContext.Principal"/> the handler acts on.</summary>
     internal Func<CommandContext, CommandResult> Handler { get; init; }
 
@@ -81,13 +81,13 @@ public sealed record CommandDefinition {
     public CommandRouting Routing { get; init; } = CommandRouting.Immediate;
 
     /// <summary>
-    /// Whether this verb's SUCCESS <see cref="CommandResult.Output"/> is a bare acknowledgement of a side effect —
+    /// Whether this verb's success <see cref="CommandResult.Output"/> is a bare acknowledgement of a side effect —
     /// noise a flooded scripted pipe does not read — so <c>wire.ack quiet</c> may drop it. Defaults to
-    /// <see langword="false"/>: the output is treated as an ANSWER (a read-back, a status line, a listing) and quiet
+    /// <see langword="false"/>: the output is treated as an answer (a read-back, a status line, a listing) and quiet
     /// never suppresses it. Errors are never suppressed either way.
     /// </summary>
     /// <remarks>
-    /// This is the ONE discriminator behind quiet mode. It is deliberately opt-in rather than derived from the
+    /// This is the one discriminator behind quiet mode. It is deliberately opt-in rather than derived from the
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
@@ -152,29 +152,29 @@ public sealed record CommandDefinition {
         };
     }
 
-    /// <summary>Creates a WIRE-NATIVE definition whose handler receives its trailing tokens as a zero-copy
+    /// <summary>Creates a wire-native definition whose handler receives its trailing tokens as a zero-copy
     /// <see cref="WireArgs"/> view rather than a materialized <see cref="string"/> array — the argument-bearing verb
     /// shape the stdin hot path dispatches without allocating (span tokenize → frozen alternate-lookup → this handler,
-    /// see <c>CommandRegistry.Submit</c>) — THE argument-bearing verb mechanism, with no sibling. It also registers a
+    /// see <c>CommandRegistry.Submit</c>) — the argument-bearing verb mechanism, with no sibling. It also registers a
     /// trailing-token text command, so quoted lines, the help listing, and System.CommandLine parse-error text keep
     /// working; on that fallback path the
     /// wrapped <see cref="Handler"/> adapts the parsed <see cref="string"/> array into an array-mode <see cref="WireArgs"/>
-    /// and invokes THIS handler — one wire handler is the single source of truth for both the fast and fallback paths.</summary>
+    /// and invokes this handler — one wire handler is the single source of truth for both the fast and fallback paths.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
     /// <param name="description">A human-readable description shown in help output.</param>
     /// <param name="handler">The delegate invoked on each activation, given a <see cref="WireArgs"/> over the trailing
-    /// tokens. A side-effecting verb MUST return <c>IsError: true</c> on every failure (so <c>wire.ack quiet</c> can
-    /// safely drop only its successes) and SHOULD gate its success-echo construction on <see cref="WireArgs.Echo"/>.</param>
+    /// tokens. A side-effecting verb must return <c>IsError: true</c> on every failure (so <c>wire.ack quiet</c> can
+    /// safely drop only its successes) and should gate its success-echo construction on <see cref="WireArgs.Echo"/>.</param>
     /// <param name="bindability">Whether a binding document may name this command. Required — every registration
     /// declares it, and <see cref="CommandBindability.Unspecified"/> is refused by name at registry construction.</param>
     /// <param name="map">The command map that gates snapshot-driven activation. Defaults to <see cref="CommandMaps.Global"/>.</param>
     /// <param name="routing">The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>.</param>
     /// <param name="ackOnly">Whether the verb's success output is a bare acknowledgement <c>wire.ack quiet</c> may drop
     /// (see <see cref="AcknowledgementOnly"/>). Leave <see langword="false"/> for anything a caller reads back.</param>
-    /// <param name="valueKind">The value kind a BOUND dispatch of this verb carries. Defaults to
+    /// <param name="valueKind">The value kind a bound dispatch of this verb carries. Defaults to
     /// <see cref="CommandValueKind.Digital"/> — correct for the overwhelming majority of wire-native verbs, which
     /// read their arguments from <see cref="WireArgs"/> and never look at <see cref="CommandContext.Value"/> at all.
-    /// Set this to the kind a binding row's CONSTANT <see cref="CommandValue"/> actually carries when a verb folds a
+    /// Set this to the kind a binding row's constant <see cref="CommandValue"/> actually carries when a verb folds a
     /// step/direction twin onto itself (a <c>.next</c>/<c>.prev</c>/<c>.up</c>/<c>.down</c> chord bound with no
     /// argument, reading the sign of <see cref="CommandContext.Value"/> instead — see
     /// <see cref="CommandBinding.Value"/>): <see cref="BindingVocabularyCheck"/> refuses a recompose whose dispatched
@@ -182,7 +182,7 @@ public sealed record CommandDefinition {
     /// <c>player.bind</c>/<c>world.row.set bindingOverlays</c>/profile load, not merely the boot-time narration. A handler
     /// distinguishing a bound dispatch from a typed one must read <see cref="CommandContext.Source"/> (non-null only
     /// for a bound dispatch), never <see cref="CommandContext.Value"/>'s kind — the text path computes its own
-    /// impulse value from THIS declared kind, so a typed call carries the same kind a bound one would.</param>
+    /// impulse value from this declared kind, so a typed call carries the same kind a bound one would.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,

@@ -4211,6 +4211,48 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingMagnitude(System.Int64,System.Int64,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-magnitude-is-least-upper-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingMagnitude(System.Int64,System.Int64,System.Int64,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-magnitude-is-least-upper-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingProduct(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-product-is-least-upper-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingProductSum(System.Int64,System.Int32,System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-product-sum-is-least-upper-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingQuotient(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-quotient-is-least-upper-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedDirectedRounding.TryCeilingSquareRoot(System.Int64,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "directed-rounding.ceiling-square-root-is-least-upper-bound"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedDual.Constant(TValue)",
       "State": "covered",
       "CoveredBy": [
@@ -4628,6 +4670,1250 @@
         "deep.position-delta-vs-oracle",
         "position.delta-vs-oracle",
         "position.group-structure-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648..ctor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Abs(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.AdditiveIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Ceiling(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Clamp(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.CompareTo(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.CompareTo(System.Object)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.CopySign(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Epsilon",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Floor(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.FractionBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Fractional(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.FromDouble(System.Double)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.FromFixedQ4816(Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.FromInteger(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.FromRawBits(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IntegerBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsCanonical(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsComplexNumber(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsEvenInteger(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsFinite(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsImaginaryNumber(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsInfinity(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsInteger(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsNaN(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsNegative(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsNegativeInfinity(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsNormal(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsOddInteger(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsPositive(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsPositiveInfinity(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsRealNumber(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsSubnormal(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.IsZero(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Lerp(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.lerp-endpoints-and-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Max(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MaxMagnitude(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MaxMagnitudeNumber(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MaxValue",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.decimal-conversion-modes",
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Min(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MinMagnitude(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MinMagnitudeNumber(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MinValue",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.decimal-conversion-modes",
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.MultiplicativeIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.NegativeOne",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.One",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Parse(System.ReadOnlySpan<System.Char>,System.Globalization.NumberStyles,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Parse(System.ReadOnlySpan<System.Char>,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Parse(System.String,System.Globalization.NumberStyles,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Parse(System.String,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Radix",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Round(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Sign(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.ToFixedQ4816()",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TotalBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Truncate(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryFormat(System.Span<System.Char>,System.Int32&,System.ReadOnlySpan<System.Char>,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryFromFixedQ4816(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ1648&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryParse(System.ReadOnlySpan<System.Char>,System.Globalization.NumberStyles,System.IFormatProvider,Puck.Maths.FixedQ1648&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryParse(System.ReadOnlySpan<System.Char>,System.IFormatProvider,Puck.Maths.FixedQ1648&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryParse(System.String,System.Globalization.NumberStyles,System.IFormatProvider,Puck.Maths.FixedQ1648&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.TryParse(System.String,System.IFormatProvider,Puck.Maths.FixedQ1648&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.styled-parse-is-genuine",
+        "q1648.text-parse-ties",
+        "q1648.text-refusals",
+        "q1648.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Value",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.Zero",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Addition(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.add-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedAddition(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedDecrement(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedDivision(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedIncrement(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedMultiply(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedSubtraction(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_CheckedUnaryNegation(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Decrement(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Division(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.divide-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Explicit(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_GreaterThan(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_GreaterThanOrEqual(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Increment(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_LessThan(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_LessThanOrEqual(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Modulus(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.modulus-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Multiply(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.mul-purity",
+        "q1648.mul-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_Subtraction(Puck.Maths.FixedQ1648,Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_UnaryNegation(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ1648.op_UnaryPlus(Puck.Maths.FixedQ1648)",
+      "State": "covered",
+      "CoveredBy": [
+        "q1648.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232..ctor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Abs(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.AdditiveIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Ceiling(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Clamp(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.CompareTo(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.CompareTo(System.Object)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.CopySign(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Epsilon",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Floor(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.FractionBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Fractional(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.FromDouble(System.Double)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.FromFixedQ4816(Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.FromInteger(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.FromRawBits(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IntegerBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsCanonical(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsComplexNumber(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsEvenInteger(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsFinite(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsImaginaryNumber(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsInfinity(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsInteger(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsNaN(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsNegative(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsNegativeInfinity(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsNormal(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsOddInteger(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsPositive(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsPositiveInfinity(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsRealNumber(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsSubnormal(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.IsZero(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.predicates-classify"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Lerp(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.lerp-endpoints-and-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Max(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MaxMagnitude(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MaxMagnitudeNumber(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MaxValue",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.decimal-conversion-modes",
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Min(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MinMagnitude(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MinMagnitudeNumber(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.magnitude-selection-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MinValue",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.decimal-conversion-modes",
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.MultiplicativeIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.NegativeOne",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.One",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Parse(System.ReadOnlySpan<System.Char>,System.Globalization.NumberStyles,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Parse(System.ReadOnlySpan<System.Char>,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Parse(System.String,System.Globalization.NumberStyles,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Parse(System.String,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Radix",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Round(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Sign(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.ToFixedQ4816()",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TotalBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Truncate(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.integral-parts-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryFormat(System.Span<System.Char>,System.Int32&,System.ReadOnlySpan<System.Char>,System.IFormatProvider)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryFromFixedQ4816(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ3232&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.peer-conversion-vs-fixedq4816"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryParse(System.ReadOnlySpan<System.Char>,System.Globalization.NumberStyles,System.IFormatProvider,Puck.Maths.FixedQ3232&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryParse(System.ReadOnlySpan<System.Char>,System.IFormatProvider,Puck.Maths.FixedQ3232&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryParse(System.String,System.Globalization.NumberStyles,System.IFormatProvider,Puck.Maths.FixedQ3232&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.TryParse(System.String,System.IFormatProvider,Puck.Maths.FixedQ3232&)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.styled-parse-is-genuine",
+        "q3232.text-parse-ties",
+        "q3232.text-refusals",
+        "q3232.text-round-trip"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Value",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.Zero",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Addition(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.add-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedAddition(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedDecrement(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedDivision(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedIncrement(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedMultiply(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedSubtraction(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_CheckedUnaryNegation(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.checked-ops-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Decrement(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Division(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.divide-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Explicit(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.grid-and-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_GreaterThan(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_GreaterThanOrEqual(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Increment(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_LessThan(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_LessThanOrEqual(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.order-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Modulus(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.modulus-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Multiply(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.mul-purity",
+        "q3232.mul-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_Subtraction(Puck.Maths.FixedQ3232,Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_UnaryNegation(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.additive-ops-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ3232.op_UnaryPlus(Puck.Maths.FixedQ3232)",
+      "State": "covered",
+      "CoveredBy": [
+        "q3232.additive-ops-vs-oracle"
       ]
     },
     {
@@ -5399,6 +6685,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedQuaternion.FromQuaternion(System.Numerics.Quaternion)",
+      "State": "covered",
+      "CoveredBy": [
+        "quaternion.adoption-ladder"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedQuaternion.FromTo(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
       "State": "covered",
       "CoveredBy": [
@@ -6093,6 +7386,13 @@
       "State": "covered",
       "CoveredBy": [
         "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedTickConversion.TryDurationEngineTicksExact(System.Decimal,System.UInt64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.fixed-tick-conversion-exact-refuses-inexact-decimals"
       ]
     },
     {

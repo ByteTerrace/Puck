@@ -7,19 +7,18 @@ namespace Puck.Commands;
 /// group table the per-slot resolution scopes to.
 /// </summary>
 /// <remarks>
-/// The two uniqueness rules a document must satisfy, rejected loudly otherwise: exactly ONE meaning per
-/// <c>(group, ordered chord)</c>, and exactly ONE resting (empty-chord) page per group — and the resting row must
+/// The two uniqueness rules a document must satisfy, rejected loudly otherwise: exactly one meaning per
+/// <c>(group, ordered chord)</c>, and exactly one resting (empty-chord) page per group — and the resting row must
 /// be a page, since an empty chord has no completion edge to fire a command with. Page ids are unique across the
-/// whole document (they address pages in editors and guided sessions). The first row's group is the DEFAULT group.
+/// whole document (they address pages in editors and guided sessions). The first row's group is the default group.
 /// </remarks>
 public static class BindingProfile {
-    /// <summary>The command-name prefix a CHANNEL destination compiles down to (see
+    /// <summary>The command-name prefix a channel destination compiles down to (see
     /// <see cref="BindingPageEntryDefinition.Channel"/>/<see cref="BindingCommandDefinition.Channel"/>). Compiling a
     /// channel destination to a synthesized command keeps the runtime dispatch machinery here (<see cref="CommandBinding"/>,
     /// <see cref="InputRouter"/>, <see cref="CommandRegistry"/>) entirely command-shaped — this project never learns
-    /// what a "channel" is — while the consuming layer (a world/kit document's channel table) registers the matching
-    /// handler per declared channel under this exact prefix, so the two sides agree without either referencing the
-    /// other's vocabulary type.</summary>
+    /// what a "channel" is. This portable name-shaped form is the default; <see cref="Compile"/> also accepts a host
+    /// lowering callback so a fixed command vocabulary can represent a per-seat or remotely discovered table.</summary>
     public const string ChannelCommandPrefix = "channel.";
 
     /// <summary>The synthesized command name a channel destination named <paramref name="channel"/> compiles down to.</summary>
@@ -30,11 +29,17 @@ public static class BindingProfile {
 
     /// <summary>Validates and compiles a profile document.</summary>
     /// <param name="document">The profile document to compile.</param>
+    /// <param name="channelCommandName">Optional runtime lowering for an authored channel reference. When omitted,
+    /// the portable name-shaped command returned by <see cref="ChannelCommandName"/> is used. A host whose channel
+    /// vocabulary changes per seat may instead lower the already-validated name to a fixed ordinal command, keeping
+    /// the command registry immutable while the authored document remains name-shaped.</param>
     /// <returns>The compiled profile.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="document"/> is invalid.</exception>
-    public static CompiledBindingProfile Compile(BindingProfileDocument document) {
+    public static CompiledBindingProfile Compile(BindingProfileDocument document, Func<ChannelRef, string>? channelCommandName = null) {
         ArgumentNullException.ThrowIfNull(document);
+
+        channelCommandName ??= ChannelCommandName;
 
         if (document.Version != BindingProfileDocument.CurrentVersion) {
             throw new ArgumentException(message: $"Unsupported binding profile version \"{document.Version}\"; expected \"{BindingProfileDocument.CurrentVersion}\".", paramName: nameof(document));
@@ -162,7 +167,7 @@ public static class BindingProfile {
                 if (chordCommand.Channel is { } channel) {
                     ValidateChannelRef(channel: channel, path: $"Chord row {rowIndex} (group \"{row.Group}\")", paramName: nameof(document));
 
-                    if ((chordCommand.Scale is { } scale) && ((scale < -1f) || (scale > 1f))) {
+                    if ((chordCommand.Scale is { } scale) && (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))) {
                         throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(document));
                     }
                 } else if (string.IsNullOrEmpty(value: chordCommand.Command)) {
@@ -422,7 +427,7 @@ public static class BindingProfile {
                     continue;
                 }
 
-                var effectiveCommand = ((command.Channel is { } channel) ? ChannelCommandName(channel: channel) : command.Command!);
+                var effectiveCommand = ((command.Channel is { } channel) ? channelCommandName(arg: channel) : command.Command!);
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
@@ -448,7 +453,7 @@ public static class BindingProfile {
             var groupIndex = rowGroups[rowIndex];
 
             if (row.Page is { } page) {
-                var (table, activators) = BuildTable(page: page, nextActivatorIndex: ref nextActivatorIndex);
+                var (table, activators) = BuildTable(page: page, channelCommandName: channelCommandName, nextActivatorIndex: ref nextActivatorIndex);
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
@@ -461,14 +466,15 @@ public static class BindingProfile {
                         group: groupNames[groupIndex],
                         hints: hintsByGroup[groupIndex],
                         modifiers: modifiers,
-                        page: page
+                        page: page,
+                        channelCommandName: channelCommandName
                     )
                 );
             } else {
                 var command = row.Command!;
                 var isChannel = (command.Channel is not null);
                 var pressValue = (command.Value ?? (isChannel ? CommandValue.Axis(value: (command.Scale ?? 1f)) : CommandValue.Digital(active: true)));
-                var effectiveCommand = (isChannel ? ChannelCommandName(channel: command.Channel!) : command.Command!);
+                var effectiveCommand = (isChannel ? channelCommandName(arg: command.Channel!) : command.Command!);
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
@@ -498,7 +504,7 @@ public static class BindingProfile {
         );
     }
 
-    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, ref int nextActivatorIndex) {
+    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
         var entries = (page.Entries ?? []);
         // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
         // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
@@ -539,11 +545,11 @@ public static class BindingProfile {
             if (entry.Channel is { } channel) {
                 ValidateChannelRef(channel: channel, path: $"Page \"{page.Id}\" entry for {label}", paramName: nameof(page));
 
-                if ((entry.Scale is { } scale) && ((scale < -1f) || (scale > 1f))) {
+                if ((entry.Scale is { } scale) && (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))) {
                     throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(page));
                 }
 
-                effectiveCommand = ChannelCommandName(channel: channel);
+                effectiveCommand = channelCommandName(arg: channel);
                 // The scale rides ChannelScale, never Value: Value is an UNCONDITIONAL override (see CommandBinding's
                 // own remarks), which would replace an analog source's live sample with the constant scale (the B2
                 // defect). InputRouter decides constant-vs-multiply from the live signal's OWN value kind.
@@ -602,12 +608,10 @@ public static class BindingProfile {
                     ActivatorIndex: nextActivatorIndex++,
                     Activator: activator,
                     Command: effectiveCommand,
-                    // A CHANNEL destination MUST dispatch its release edge: CommandRegistry.ApplySnapshot skips any
-                    // entry whose Dispatch is false, so a release that never dispatches never reaches the channel
-                    // verb's handler, which is the ONLY thing that calls seat.ReleaseChannel — a gate that closed
-                    // (or a tap that completed) would otherwise leave the channel held forever. A COMMAND
-                    // destination keeps the chord-command row's own default (HoldRelease false, BindingProfile.cs
-                    // above): a dispatched verb is momentary by default and does not need to be told it released.
+                    // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
+                    // entry whose Dispatch is false, and only the channel verb's handler calls seat.ReleaseChannel —
+                    // without dispatch, a closed gate or completed tap would hold the channel forever. A command
+                    // destination keeps HoldRelease's own default (momentary; no release needed).
                     DispatchRelease: (channelScale is not null),
                     PressValue: pressValue,
                     ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
@@ -665,7 +669,8 @@ public static class BindingProfile {
         string group,
         IReadOnlyList<BindingChordCommandView> hints,
         IReadOnlyList<BindingModifierDefinition> modifiers,
-        BindingPageDefinition page
+        BindingPageDefinition page,
+        Func<ChannelRef, string> channelCommandName
     ) {
         var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
 
@@ -673,7 +678,7 @@ public static class BindingProfile {
             var entry = page.Entries![entryIndex];
 
             buttons[entryIndex] = new BindingPageButtonView(
-                Command: ((entry.Channel is { } channel) ? ChannelCommandName(channel: channel) : entry.Command!),
+                Command: ((entry.Channel is { } channel) ? channelCommandName(arg: channel) : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
                 // An activator entry has no Source — EntryLabel's synthetic "activator[...]" label stands in, so a

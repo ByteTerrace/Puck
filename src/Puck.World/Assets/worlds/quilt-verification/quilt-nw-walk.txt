@@ -1,0 +1,30 @@
+# Quilt border-crossing evidence — quilt-nw's two doors, both directions out of NW.
+#
+# Run: dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/quilt-nw.world.json --exit-after-seconds 5 --state-dir <fresh-tmp-dir> < this-file
+#
+# Proves: door-to-ne and door-to-sw both fire a mapped transfer when walked into from the
+# correct (interior) side, with wire.errors staying at zero. The landing coordinate is read
+# by the `world.transfer:` echo's own embedded arrival readout — that text comes from
+# `WorldInstanceHost.ApplyTransfer` calling `target.Server.Answer(new WorldQuery.PlayerWhere(...))`
+# against the DESTINATION instance's own live server, synchronously at transfer-apply time —
+# the identical PlayerWhere query the console's own `player.where` verb issues, not a cached
+# or stale value. See quilt-nw-liveness.txt for an independent instance-qualified re-read that
+# proves the landed body keeps simulating (does not silently stall) after this echo is printed.
+#
+# Player 1 walks door-to-ne (strafe = world +X). Expected arrival ~ (0.41, 0.02, -12.00) yaw=90.
+# Player 2 walks door-to-sw (forward = world -Z, so value -1 walks +Z). Expected arrival ~
+# (-12.00, 0.02, 0.41) yaw=0.
+world.wait 5
+wire.errors reset
+player.where 1
+player.pose -2 0 -12 0 0 0 1
+player.press strafe 1 1 1
+world.wait 90
+wire.errors reset
+player.join 2
+player.identity cobalt 2
+player.where 2
+player.pose -12 0 -2 0 0 0 2
+player.press forward -1 1 2
+world.wait 90
+wire.errors

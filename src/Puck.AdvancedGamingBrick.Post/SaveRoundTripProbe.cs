@@ -7,7 +7,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// plus the dirty-flag transitions, the legacy 32&#160;KiB prefix load, and the oversized-image rejection.
 /// </summary>
 internal static class SaveRoundTripProbe {
-    // "SRAM_V113" — the library tag that makes detection allocate the battery-SRAM backup.
+    // "SRAM_V113" — the cartridge string that makes save-type detection allocate the battery-SRAM backup.
     private static readonly byte[] SramTag = [0x53, 0x52, 0x41, 0x4D, 0x5F, 0x56, 0x31, 0x31, 0x33];
 
     /// <summary>Runs the round-trip checks.</summary>

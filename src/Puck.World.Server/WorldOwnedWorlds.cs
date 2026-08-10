@@ -24,7 +24,7 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
-    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId) {
+    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null) {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         m_template = IdentityBase(fallback: template);
@@ -41,7 +41,18 @@ public sealed class WorldOwnedWorlds {
         var present = new HashSet<string>(collection: paths.Select(Path.GetFileName)!, comparer: StringComparer.Ordinal);
 
         foreach (var path in paths) {
-            if (!WorldDefinitionFileSource.TryLoad(path: path, definition: out var document, contentHash: out _, reason: out var reason) || (document?.Identity is null)) {
+            // Remove only border claims still identical to the seed template, before the cross-document proof: they
+            // describe the visited arena's relationship to its siblings, not this per-identity document. A
+            // genuinely authored claim that differs from the seed remains and must prove itself through the
+            // resolver below.
+            if (WorldDefinitionFileSource.TryLoadLocally(path: path, definition: out var local, contentHash: out _, reason: out _) &&
+                (local?.Identity is not null) &&
+                StripInheritedBorderClaims(template: m_template, candidate: local, stripped: out var stripped)) {
+                _ = WorldDefinitionSerialization.Save(definition: stripped, path: path);
+                Console.Error.WriteLine(value: $"[identity] removed inherited border claims from {path}");
+            }
+
+            if (!WorldDefinitionFileSource.TryLoad(path: path, definition: out var document, contentHash: out _, reason: out var reason, neighbours: neighbours) || (document?.Identity is null)) {
                 Console.Error.WriteLine(value: $"[identity] owned world refused: {reason}");
 
                 continue;
@@ -372,7 +383,7 @@ public sealed class WorldOwnedWorlds {
 
     private static WorldDocumentSubmissionReceipt Refuse(WorldDocumentSubmission submission, string reason) => new(Submission: submission, Accepted: false, Reason: reason);
 
-    private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => template with {
+    private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => WithoutBorderClaims(definition: template) with {
         DocumentId = seed.Id,
         Motion = motion,
         Identity = new WorldIdentityDefinition(Id: seed.Id, Name: seed.Name, Color: seed.Color, MoveSpeedState: MoveSpeedState, TurnSpeedState: TurnSpeedState, InvertLookState: InvertLookState),
@@ -385,10 +396,64 @@ public sealed class WorldOwnedWorlds {
         Hud = WorldHudSection.Default,
     };
 
-    // A minimal, screen-free `blank.world.json` template used to seed owned-identity documents until the
-    // 2026-08-06 four-world charter retired it with no replacement — every shipped world is now a full arena.
-    // The booted world's own template is the only base left, so this always returns it; kept as its own method
-    // (rather than inlining `fallback` at the one call site) so a future minimal template has one door to return
-    // through.
+    // An identity seed owns profile/state data, not the visited arena's cross-document ground-strip agreement. Keep
+    // the portal itself (the identity document remains a faithful world-shaped document), but clear the neighbour
+    // claim that can only be proven in the visited document's own storage context.
+    private static WorldDefinition WithoutBorderClaims(WorldDefinition definition) => definition with {
+        Placements = [.. definition.Placements.Select(selector: static placement => placement with {
+            FaceSources = ((placement.FaceSources is null)
+                ? null
+                : [.. placement.FaceSources.Select(selector: static face => ((face.Portal?.MarginDepth is null)
+                    ? face
+                    : face with { Portal = face.Portal with { MarginDepth = null } }))]),
+        })],
+    };
+
+    // Upgrade the old full-clone seed shape without weakening validation for a later, genuinely authored claim:
+    // only a portal facet whose complete routing identity AND depth still match the current seed template is
+    // inherited. Anything else remains untouched and reaches the path-rooted resolver above.
+    private static bool StripInheritedBorderClaims(WorldDefinition template, WorldDefinition candidate, out WorldDefinition stripped) {
+        var changed = false;
+        var placements = new List<WorldPlacement>(capacity: candidate.Placements.Count);
+
+        foreach (var placement in candidate.Placements) {
+            var templatePlacement = template.Placements.FirstOrDefault(predicate: row => string.Equals(a: row.Id, b: placement.Id, comparisonType: StringComparison.Ordinal));
+
+            if ((templatePlacement is null) || (placement.FaceSources is null)) {
+                placements.Add(item: placement);
+
+                continue;
+            }
+
+            var faces = new List<WorldPlacementFace>(capacity: placement.FaceSources.Count);
+
+            foreach (var face in placement.FaceSources) {
+                var templateFace = templatePlacement.FaceSources?.FirstOrDefault(predicate: row => string.Equals(a: row.Face, b: face.Face, comparisonType: StringComparison.Ordinal));
+                var portal = face.Portal;
+                var templatePortal = templateFace?.Portal;
+
+                if ((portal?.MarginDepth is not null) && (templatePortal?.MarginDepth is not null) &&
+                    string.Equals(a: portal.Destination, b: templatePortal.Destination, comparisonType: StringComparison.Ordinal) &&
+                    (portal.Arrival == templatePortal.Arrival) &&
+                    string.Equals(a: portal.Counterpart, b: templatePortal.Counterpart, comparisonType: StringComparison.Ordinal) &&
+                    (portal.MarginDepth == templatePortal.MarginDepth)) {
+                    faces.Add(item: face with { Portal = portal with { MarginDepth = null } });
+                    changed = true;
+                } else {
+                    faces.Add(item: face);
+                }
+            }
+
+            placements.Add(item: placement with { FaceSources = faces });
+        }
+
+        stripped = (changed ? candidate with { Placements = placements } : candidate);
+
+        return changed;
+    }
+
+    // Every shipped world is a full arena, so the booted world's own template is the only base and this always
+    // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
+    // minimal template has one door to return through.
     private static WorldDefinition IdentityBase(WorldDefinition fallback) => fallback;
 }

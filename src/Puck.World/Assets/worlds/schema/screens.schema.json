@@ -67,6 +67,9 @@
           },
           {
             "$ref": "./common.schema.json#/$defs/Qr"
+          },
+          {
+            "$ref": "./common.schema.json#/$defs/Session"
           }
         ]
       },
@@ -218,6 +221,9 @@
                 },
                 {
                   "$ref": "./common.schema.json#/$defs/Qr"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/Session"
                 }
               ]
             }

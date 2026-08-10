@@ -21,9 +21,8 @@ namespace Puck.Scripting;
 /// one contributor to <see cref="WasmStdlibSources.All"/>, alongside <see cref="Puck.Maths.FixedQ4816RustPort"/>'s
 /// two artifacts, whose public emitters the registry calls. Deterministic and
 /// reproducible: reflection order is made irrelevant by sorting every emitted group by declaration name, so
-/// an unchanged host produces byte-identical output on every run. Nothing gates that today: the stage that
-/// compared the emitted text against what is committed left the build, so drift is caught only by
-/// regenerating and reading the diff.
+/// an unchanged host produces byte-identical output on every run. Nothing gates this automatically today; drift is
+/// caught only by regenerating and reading the diff.
 /// </remarks>
 internal static class AddonAbiRustPort {
     /// <summary>Emits the complete text of <c>abi_generated.rs</c>.</summary>

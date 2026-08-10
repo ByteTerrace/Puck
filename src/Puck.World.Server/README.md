@@ -108,7 +108,7 @@ mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
 A disconnected seat or peer does not drop its body on the spot — it PARKS
-(`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceTicks` ticks,
+(`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceSeconds` (converted to ticks at compile),
 retained pose/state and all, before `ReclaimExpiredParks` tears it down; a
 matching re-Join resumes the retained body instead of minting a fresh one.
 See [references/session-lifecycle.md](../../.claude/skills/puck-world/references/session-lifecycle.md)
@@ -118,17 +118,32 @@ for the full contract.
 
 `WorldTcpHost` is the P7 socket door: a TCP listener bound from `host.listen`
 (a document field the composition root also lets `--listen` reflect for one
-run). Per connection: the raw Hello handshake (`WorldProtocol.WireProtocolKey`
-via `WorldHelloDoor.TryAccept`, `Puck.World.Data`) runs off the tick thread —
-it touches no server state — then admission
+run). Per connection, TWO doors run off the tick thread before any body is
+admitted — neither touches server state beyond a read-only document snapshot:
+door 1 is the raw protocol-version handshake (`WorldProtocol.WireProtocolKey`
+via `WorldHelloDoor.TryAccept`, `Puck.World.Data`); door 2, once door 1
+passes, is the IDENTITY challenge-response
+(`Puck.World.Data.Protocol.WorldAdmissionDoor`) — the host mints a fresh
+nonce, the peer answers with a signed `Puck.Carriage` claim (and, for a
+vouching root, its two-hop chain), and the door verifies it against the world
+document's own authored `admission` section, mapping the verified identity to
+that entry's own authored grant templates. Each door refuses by its OWN named
+spelling (`version-mismatch: …` vs `identity-refused: …`) — the two are never
+conflated. Only once BOTH doors pass does population admission run
 (`WorldServer.TryAdmitPeerConnection` → `WorldPopulation.TryAdmitRemotePeer`,
 refused by name when the 128-body table is full or the document's
-`networkPlayers` admission cap is already met), every subsequent frame
+`networkPlayers` admission cap is already met) — it now mints the VERIFIED
+identity's own authored grants (`WorldServer.BuildAdmissionGrants`), never an
+unconditional `Control`/`all`; every subsequent frame
 (decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
 loopback and tape use), and disconnect
 (`WorldServer.DisconnectPeerConnection`) are marshaled onto the tick thread —
 `WorldServer`/`WorldPopulation`/`WorldGrants` carry no lock, so nothing may
-touch them from a connection's background reader directly.
+touch them from a connection's background reader directly. The LOOPBACK path
+(`WorldServer.ApplySession`'s `SessionRequest.Join` case, driven by
+`LoopbackTransport`) crosses door 1 only, by construction — see that method's
+own remarks on why the process boundary is the trust boundary there and no
+identity check applies.
 `WorldTcpHost.DrainPending`, called from `WorldServerStepShell.Step` before
 `WorldServer.Step`, is where that hand-off actually applies: one global FIFO
 for v1, no per-connection quotas or bounded-queue backpressure. A decoded
@@ -146,7 +161,10 @@ a scaffold beyond this one lane). `Puck.World.WorldRemoteClient` is the
 `--connect` side: a minimal, self-contained stdin client speaking this same
 Hello + leaf-codec grammar directly, not a second composition graph.
 `Puck.World.WorldNetworkCommandModule`'s `world.peers` echoes the connection
-table this class owns.
+table this class owns, INCLUDING each connection's verified admission
+identity (domain/subject); `Puck.World.WorldMutationCommandModule`'s
+`world.admission` echoes the document's own authored `admission` entries —
+the runtime and document halves of the admission decision, respectively.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
@@ -219,12 +237,10 @@ For untrusted principals, authority travels as handles rather than names:
 slots (never a whole-domain designation), stamped with the minting principal
 and capability, and generation-checked so a revoked or re-sorted handle
 refuses on its next use with a distinct verdict. The campaign that designed
-this model, its rulings, and its open work are in
-[`docs/capability-channels-STATE.md`](../../docs/capability-channels-STATE.md)
-(read it first),
-[`docs/capability-channels-plan.md`](../../docs/capability-channels-plan.md),
-and the campaign ledger. This README is the reader-facing summary; the state
-document and the code outrank it on any point of disagreement.
+this model was retired on 2026-08-10, its rulings moved into the code they
+govern; what survives as WORK is carried in
+[`docs/campaign.md`](../../docs/campaign.md). This README is the reader-facing
+summary; the CODE outranks it on any point of disagreement.
 
 Two settled rulings worth restating here because their absence is invisible:
 ownership latching is unified through this table (screen engagement's
@@ -280,8 +296,7 @@ and the pose hash covers no machine state to catch the divergence.
 pure reader of this type's outputs for presentation (framebuffer
 handle/light, `PublishFrame`) and still owns the genuinely presentation
 screen sources (test pattern, authored QR, webcam, compositor capture,
-jumbotron view) that are not this type's concern. `docs/capability-channels-STATE.md`'s
-DECIDED table accounts for the channel-carried ones; the list above is the
+jumbotron view) that are not this type's concern. The list above is the
 current set.
 
 ## The addon runtime (`WorldAddonRuntime.cs`)
@@ -406,10 +421,10 @@ authoritative pose trajectory, not the HUD. Known scope limits — the tape
 captures eight of the thirteen envelope payload kinds (command, grant, revoke,
 session, designation, rebuild, addon-lifecycle, and — as of the
 authoritative-machines campaign — screen-op) plus intents and the two
-peer-lifecycle server events; mutation, undo, composition, lever, and query
+peer-lifecycle server events; mutation, undo, composition, and query
 submissions remain bare passthroughs, and a mid-session capture honestly
-reports MISMATCH at tick 0 — are tracked in
-[`docs/capability-channels-STATE.md`](../../docs/capability-channels-STATE.md).
+reports MISMATCH at tick 0 — are carried in
+[`docs/campaign.md`](../../docs/campaign.md).
 
 ## Verifying a change here
 
@@ -444,5 +459,4 @@ headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a
 `world.grants peer:<index>:<generation>` on the host prove admission and the
 disconnect-driven revoke; the client's own query replies prove the Completion
 lane round-trips. No persisted battery exists for this yet (a live owner
-conversation — see `docs/capability-channels-STATE.md`'s runner disposition
-note); do not add one without asking.
+conversation about runner disposition); do not add one without asking.

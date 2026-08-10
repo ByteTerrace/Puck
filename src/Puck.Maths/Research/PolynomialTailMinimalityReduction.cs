@@ -46,8 +46,7 @@ public readonly record struct PolynomialTailMinimalityReduction(
 /// The continued-fraction equivalence prefactor is <c>mu/Alpha</c>, so the target contains one power of
 /// <c>mu</c>.  This follows directly from the equivalence transformation, which is the whole of its evidence:
 /// <see cref="PolynomialContinuedFractionAnalysis.VerifyOnePeriodEqualityReduction"/> rechecks the factorization and
-/// every hypergeometric parameter, but nothing compares the prefactor against actual convergents. OWED: a convergent
-/// cross-check. This type carries no law case, and the coverage register records it as uncovered rather than waived.
+/// every hypergeometric parameter, but nothing compares the prefactor against actual convergents.
 /// </remarks>
 public readonly record struct PolynomialTailOnePeriodReduction(
     BigInteger TailIndex,

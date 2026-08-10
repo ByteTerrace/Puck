@@ -37,13 +37,13 @@ public readonly record struct Surface(
     ReadOnlyMemory<byte> Pixels = default,
     nint SharedHandle = 0
 ) {
-    /// <summary>Gets whether the surface carries no content (no GPU handle, CPU pixels, or shared handle).</summary>
+    /// <summary>Gets a value indicating whether the surface carries no content (no GPU handle, CPU pixels, or shared handle).</summary>
     public bool IsEmpty =>
         ((0 == ImageViewHandle) && Pixels.IsEmpty && (0 == SharedHandle));
-    /// <summary>Gets whether the surface is the CPU-pixel variant — a host-memory readback rather than a device handle.</summary>
+    /// <summary>Gets a value indicating whether the surface is the CPU-pixel variant — a host-memory readback rather than a device handle.</summary>
     public bool IsCpuPixels =>
         !Pixels.IsEmpty;
-    /// <summary>Gets whether the surface is the zero-copy shared-handle variant — an external texture in shared GPU memory.</summary>
+    /// <summary>Gets a value indicating whether the surface is the zero-copy shared-handle variant — an external texture in shared GPU memory.</summary>
     public bool IsSharedHandle =>
         (0 != SharedHandle);
 }

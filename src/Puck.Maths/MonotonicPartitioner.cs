@@ -37,8 +37,8 @@ public readonly record struct MonotonicPartitionerMetrics(
 /// tables, so the common lookup is one indexed checkpoint scan and a bit scan.
 /// </summary>
 /// <remarks>
-/// <para>Three invariants hold over the whole domain (once proven by a battery's exhaustive sweep, which left the
-/// build on 2026-08-02 and has no replacement):</para>
+/// <para>Three invariants hold over the whole domain (proven once by an exhaustive sweep; no gate currently
+/// re-verifies them):</para>
 /// <list type="bullet">
 ///   <item><description><b>Deterministic</b> — the same (value, bucketCount) pair always yields the same bucket,
 ///   on every machine; routing decisions made on both sides of a wire agree bit-for-bit.</description></item>

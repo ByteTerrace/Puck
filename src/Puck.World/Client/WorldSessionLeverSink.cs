@@ -4,17 +4,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Writes an ACCEPTED <see cref="WorldSessionLever"/> onto the live presentation service it names — the client half of
-/// the lever path, and the ONLY place these knobs are written. The console modules that used to hold
-/// <see cref="WorldRenderSettings"/>, <see cref="PresentPacingControl"/> and the audio director for WRITING now hold
-/// them for READING their echoes only; the write travels
+/// Writes an accepted <see cref="WorldSessionLever"/> onto the live presentation service it names — the client half of
+/// the lever path, and the only place these knobs are written. The console modules that reference
+/// <see cref="WorldRenderSettings"/>, <see cref="PresentPacingControl"/>, and the audio director read their echoes
+/// only; the write travels
 /// <c>verb → IServerLink.SubmitSessionLever → WorldServer.ApplySessionLever (the Mutate check) → IClientSink → here</c>.
 /// </summary>
 /// <remarks>
 /// <para>Reached only past the server's grant check, so this type never decides anything — it dispatches. That split is
 /// deliberate: one boundary owns the authority question, and adding a knob here can never accidentally add an
 /// unchecked write, because the only way in is through the checked path.</para>
-/// <para>Every knob here is PRESENTATION state (render settings, present pacing, audio mix gain). Nothing under
+/// <para>Every knob here is presentation state (render settings, present pacing, audio mix gain). Nothing under
 /// <c>Server/</c> reads any of it, which is what makes the lever's <see cref="double"/> value lanes safe — see
 /// <see cref="WorldSessionLever"/>'s own remarks for why a simulation-read knob may not become a lever.</para>
 /// </remarks>

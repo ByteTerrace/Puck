@@ -496,23 +496,18 @@ public static class QuadraticIntegerArithmetic {
 
     // ---- Fixed-width fast tier ----
     //
-    // The BigInteger carrier is exact at every magnitude, but the norm and the divide-out inner loop dominate the
-    // factorization profile, and both specialize to Int128 once the operands are known small. This tier extracts the
-    // coefficients (P, Q) and an element's parts as machine words, computes in Int128 when they clear a proven bound,
-    // and otherwise falls through to the BigInteger methods above — bit-identically, since the integer arithmetic is
-    // exact and the bound rules out overflow. Callers never choose a tier; the routing is internal and the results,
-    // obstruction witnesses, and orderings are those of the BigInteger paths.
+    // The norm and divide-out inner loop dominate the factorization profile; this tier extracts the coefficients
+    // (P, Q) and an element's parts as machine words, computes in Int128 when they clear a proven bound, and
+    // otherwise falls through to the BigInteger methods above — bit-identically. Callers never choose a tier.
     //
-    // Bound proof. Let B name the routing bound, so |P|, |Q|, |U|, |V| ≤ B for every accepted operand. The norm
-    // U² + P·U·V − Q·V², the divisor norm, and the conjugate-product components a·c + P·a·e − Q·b·e and b·c − a·e are
-    // each a sum of at most three terms, and each term is a product of at most three of those bounded factors, so
-    // |term| ≤ B³ and the whole expression has magnitude at most B² + 2·B³ < 3·B³. Every partial product formed on the
-    // way to a triple product (for instance U·V before P·(U·V)) is itself at most B³. With B = 2⁴¹ the widest value is
-    // below 2⁸² + 2¹²⁴ < 2¹²⁵ — two full bits under the signed Int128 ceiling 2¹²⁷ — so no intermediate, and in
-    // particular no sum of three signed 64×64 products, can wrap. Tightening the bound this way is the sanctioned
-    // alternative to a signed-magnitude UInt128 split: the accumulator provably stays inside one Int128 lane, so a
-    // single unsplit Int128 sum is exact. Division and remainder truncate toward zero in Int128 exactly as in
-    // BigInteger, so the divisibility test and quotient agree bit-for-bit with the wide path.
+    // Bound proof. Let B be the routing bound, so |P|, |Q|, |U|, |V| ≤ B for every accepted operand. The norm
+    // U² + P·U·V − Q·V², the divisor norm, and the conjugate-product components a·c + P·a·e − Q·b·e and b·c − a·e
+    // are each a sum of at most three terms, each a product of at most three bounded factors, so |term| ≤ B³ and
+    // the whole expression is bounded by B² + 2·B³ < 3·B³; every partial product formed en route (e.g. U·V before
+    // P·(U·V)) is itself at most B³. With B = 2⁴¹ the widest value is below 2⁸² + 2¹²⁴ < 2¹²⁵ — under the signed
+    // Int128 ceiling 2¹²⁷ — so no intermediate sum of signed 64×64 products can wrap. Division and remainder
+    // truncate toward zero in Int128 exactly as in BigInteger, so the divisibility test and quotient agree
+    // bit-for-bit with the wide path.
     private const long FastTierBound = (1L << 41);
 
     private static readonly BigInteger FastTierUpperBound = FastTierBound;

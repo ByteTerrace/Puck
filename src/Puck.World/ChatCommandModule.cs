@@ -6,28 +6,28 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// Personal chat: a player IS a world, and personal chat history is keyed text rows in that player's OWNED identity
+/// Personal chat: a player is a world, and personal chat history is keyed text rows in that player's owned identity
 /// document — a bounded, evicting <c>chat-log</c> row this player appends to, and a bounded, evicting
-/// <c>chat-inbox</c> row a granted sender may deliver into cross-document. This module is THE inbox-grant door: the
-/// ONE in-session surface that lets a recipient declare its own inbox row and grant/revoke a sender's write access
-/// to it, on the recipient's OWN owned identity document — closing the gap <see cref="IdentityCommandModule"/>'s own
+/// <c>chat-inbox</c> row a granted sender may deliver into cross-document. This module is the inbox-grant door: the
+/// one in-session surface that lets a recipient declare its own inbox row and grant/revoke a sender's write access
+/// to it, on the recipient's own owned identity document — closing the gap <see cref="IdentityCommandModule"/>'s own
 /// remarks name (<c>identity.create</c> seeds <c>grants: []</c> with no verb to author it live).
 /// </summary>
 /// <remarks>
-/// <para><b>The owner-only constraint, enforced at ONE door.</b> Every mutating verb here resolves its target
-/// identity from a <c>player</c> argument (the SAME 1-based convention <see cref="IdentityCommandModule"/> uses,
+/// <para><b>The owner-only constraint, enforced at one door.</b> Every mutating verb here resolves its target
+/// identity from a <c>player</c> argument (the same 1-based convention <see cref="IdentityCommandModule"/> uses,
 /// via <see cref="PlayerRoster.ProfileAt(int)"/>) and then checks that <c>context.ActingPrincipal()</c> — never the
-/// verb's own arguments — holds <see cref="WorldCapability.Drive"/> over that player's body: the SAME primitive
+/// verb's own arguments — holds <see cref="WorldCapability.Drive"/> over that player's body: the same primitive
 /// <c>player.identity</c>'s own authorization already uses (<c>Server.WorldServer</c>'s <c>SessionRequest.SetIdentity</c>
 /// arm) to decide who may administer a seat's identity. A principal that does not hold Drive over the seat cannot
 /// author that seat's inbox, grants, or log — full stop, regardless of what player index the caller typed.</para>
 /// <para><b>Two argument conventions, deliberately different.</b> <see cref="Log"/>/<see cref="Whisper"/> carry
-/// free-form text, so <c>player</c> is a REQUIRED LEADING token there (never a trailing optional one) — a trailing
+/// free-form text, so <c>player</c> is a required leading token there (never a trailing optional one) — a trailing
 /// optional index is fundamentally ambiguous against a message that happens to end in a digit, so this module never
-/// authors that ambiguity. Every other verb here takes NO free text, so <c>player</c> stays a trailing OPTIONAL
+/// authors that ambiguity. Every other verb here takes no free text, so <c>player</c> stays a trailing optional
 /// token (default 1), exactly like <c>identity.motion</c>/<c>identity.hud</c>.</para>
-/// <para><b>Personal log auto-declare policy.</b> <see cref="Log"/> refuses BY NAME with the remedy
-/// (<c>chat.inbox</c> first) rather than silently auto-declaring — the SAME refuse-with-remedy doctrine
+/// <para><b>Personal log auto-declare policy.</b> <see cref="Log"/> refuses by name with the remedy
+/// (<c>chat.inbox</c> first) rather than silently auto-declaring — the same refuse-with-remedy doctrine
 /// <c>Server.WorldOwnedWorlds.Decide</c> already applies to an undeclared cross-document delivery target,
 /// restated here for a self-write so the two never disagree about what "undeclared" means.</para>
 /// </remarks>
@@ -114,7 +114,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
 
         var candidate = (document with { State = state });
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason)) {
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
             return CommandResult.Error(output: $"[chat.inbox: refused — {reason}]");
         }
 
@@ -145,7 +146,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         var grant = new WorldGrant(Principal: principal, Capability: WorldCapability.Mutate, Subject: subject, Exclusive: false, WriteMask: DocumentWriteMask.Empty.With(kind: WorldDocumentWriteKind.Set));
         var candidate = (document with { Grants = [.. WithoutGrantRow(grants: document.Grants, principal: principal, subject: subject), grant] });
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason)) {
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
             return CommandResult.Error(output: $"[chat.allow: refused — {reason}]");
         }
 
@@ -174,7 +176,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         var removed = (without.Count != document.Grants.Count);
         var candidate = (document with { Grants = without });
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason)) {
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
             return CommandResult.Error(output: $"[chat.block: refused — {reason}]");
         }
 

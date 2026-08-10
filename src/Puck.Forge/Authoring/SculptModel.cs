@@ -51,7 +51,7 @@ public readonly record struct SculptShape(
 /// <param name="Scale">The pose scale.</param>
 public readonly record struct SculptPose(int Id, Vector3 Position, Quaternion Rotation, Vector3 Scale);
 
-/// <summary>One timeline frame: a named FULL snapshot of every shape's transform. The deliberate minimal animation
+/// <summary>One timeline frame: a named full snapshot of every shape's transform. The deliberate minimal animation
 /// model: hold-style playback, no per-shape keys, no interpolation, by design.</summary>
 /// <param name="Name">The frame's name (auto-named <c>f1</c>, <c>f2</c>… on record).</param>
 /// <param name="Poses">Every shape's pose at record time.</param>
@@ -61,18 +61,18 @@ public sealed record SculptFrame(string Name, IReadOnlyList<SculptPose> Poses);
 /// The sculpt model — a <c>puck.creation.v1</c> document being edited at frame rate: shapes, a 16-slot palette,
 /// hold-style timeline frames, and an IK chain rig, with a bounded local <see cref="EditHistory{T}"/> undo ring.
 /// Presentation-pure and renderer-blind: no GPU types, no program revisions — consumers watch <see cref="Revision"/>
-/// and re-emit through <see cref="CreationGeometry"/> (so what a preview draws IS what a committed stamp draws,
+/// and re-emit through <see cref="CreationGeometry"/> (so what a preview draws is what a committed stamp draws,
 /// byte-for-byte). The behavioral contract (edit rates, clamps, blend-group coercion, timeline and IK semantics,
 /// the push-after undo/drag-coalescing protocol) is preserved deliberately: a persisted creation's pose must
 /// re-derive identically.
 /// </summary>
-/// <remarks>The TARGET model: every edit verb acts on the SELECTED shape when one exists, else on the BRUSH — the
-/// style/transform state the NEXT added shape inherits. The ghost/brush mechanism drives placement previews; the
-/// brush itself never renders. When a chain GOAL is the target (<see cref="TargetIsGoal"/>), movement drives the goal and
+/// <remarks><b>The target model.</b> Every edit verb acts on the selected shape when one exists, else on the brush — the
+/// style/transform state the next added shape inherits. The ghost/brush mechanism drives placement previews; the
+/// brush itself never renders. When a chain goal is the target (<see cref="TargetIsGoal"/>), movement drives the goal and
 /// the chain re-solves live. Single-threaded like every input-fold type: mutators run in the command pump's apply
 /// window, <see cref="TickPlayback"/>/<see cref="EndInputFrame"/> on the produce path — one window-pump thread.</remarks>
 public sealed class SculptModel {
-    /// <summary>The blend cycle in AUTHORING order (hard/smooth pairs adjacent), not raw enum order.</summary>
+    /// <summary>The blend cycle in authoring order (hard/smooth pairs adjacent), not raw enum order.</summary>
     public static readonly SdfBlendOp[] BlendCycle = [
         SdfBlendOp.Union,
         SdfBlendOp.SmoothUnion,
@@ -174,7 +174,7 @@ public sealed class SculptModel {
         m_history = new EditHistory<SculptSnapshot>(capacity: HistoryCapacity, initial: CaptureSnapshot());
     }
 
-    /// <summary>Bumps on EVERY visible mutation — a preview consumer re-emits when it moves.</summary>
+    /// <summary>Bumps on every visible mutation — a preview consumer re-emits when it moves.</summary>
     public int Revision { get; private set; }
 
     /// <summary>The authored shapes, in document order (the order group blends evaluate in).</summary>
@@ -196,14 +196,14 @@ public sealed class SculptModel {
             return count;
         }
     }
-    /// <summary>The selected shape's index (-1 = none; the brush is then the style target, UNLESS a chain goal is
+    /// <summary>The selected shape's index (-1 = none; the brush is then the style target, unless a chain goal is
     /// selected — see <see cref="TargetIsGoal"/>).</summary>
     public int SelectionIndex => m_selectionIndex;
-    /// <summary>Whether style/transform verbs currently target the brush (no shape AND no chain goal selected).</summary>
+    /// <summary>Whether style/transform verbs currently target the brush (no shape and no chain goal selected).</summary>
     public bool TargetIsBrush => (!TargetIsGoal && ((m_selectionIndex < 0) || (m_selectionIndex >= m_shapes.Count)));
     /// <summary>The selected shape, when there is one.</summary>
     public SculptShape? SelectedShape => (TargetIsBrush ? null : m_shapes[m_selectionIndex]);
-    /// <summary>Whether the SELECTED target is a chain GOAL rather than a shape or the brush — movement then drives
+    /// <summary>Whether the selected target is a chain goal rather than a shape or the brush — movement then drives
     /// the goal and the chain re-solves live.</summary>
     public bool TargetIsGoal => ((m_goalChainIndex >= 0) && (m_goalChainIndex < m_chains.Count));
     /// <summary>The chain whose goal is the current target, when <see cref="TargetIsGoal"/>.</summary>
@@ -224,7 +224,7 @@ public sealed class SculptModel {
     public bool CanRedo => m_history.CanRedo;
     /// <summary>The local ring's retained snapshot count (the HUD's ring readout).</summary>
     public int HistoryCount => m_history.Count;
-    /// <summary>The timeline cursor: 0 = the REST pose (the live model), 1..<see cref="FrameCount"/> = saved frames.</summary>
+    /// <summary>The timeline cursor: 0 = the rest pose (the live model), 1..<see cref="FrameCount"/> = saved frames.</summary>
     public int CurrentFrame => m_currentFrame;
     /// <summary>How many frames are saved (past the always-present rest pose).</summary>
     public int FrameCount => m_frames.Count;
@@ -232,19 +232,19 @@ public sealed class SculptModel {
     public bool Playing => m_playing;
     /// <summary>The saved frames, in playback order.</summary>
     public IReadOnlyList<SculptFrame> Frames => m_frames;
-    /// <summary>The TARGET's blend op (the selected shape's, else the brush's).</summary>
+    /// <summary>The target's blend op (the selected shape's, else the brush's).</summary>
     public SdfBlendOp TargetBlend => (TargetIsBrush ? m_brushBlend : m_shapes[m_selectionIndex].Blend);
-    /// <summary>The TARGET's palette slot.</summary>
+    /// <summary>The target's palette slot.</summary>
     public int TargetMaterialIndex => (TargetIsBrush ? m_brushMaterial : m_shapes[m_selectionIndex].MaterialIndex);
-    /// <summary>The TARGET's primitive (the selected shape's, else the brush's — what the next Add draws).</summary>
+    /// <summary>The target's primitive (the selected shape's, else the brush's — what the next Add draws).</summary>
     public AvatarPrimitive TargetType => (TargetIsBrush ? m_brushType : m_shapes[m_selectionIndex].Type);
-    /// <summary>The TARGET's mirror flag.</summary>
+    /// <summary>The target's mirror flag.</summary>
     public bool TargetMirror => (TargetIsBrush ? m_brushMirror : m_shapes[m_selectionIndex].Mirror);
-    /// <summary>The TARGET's smooth-blend radius.</summary>
+    /// <summary>The target's smooth-blend radius.</summary>
     public float TargetSmooth => (TargetIsBrush ? m_brushSmooth : m_shapes[m_selectionIndex].Smooth);
-    /// <summary>The TARGET's per-axis scale (the selected shape's, else the brush's — what the next add inherits).</summary>
+    /// <summary>The target's per-axis scale (the selected shape's, else the brush's — what the next add inherits).</summary>
     public Vector3 TargetScale => (TargetIsBrush ? m_brushScale : m_shapes[m_selectionIndex].Scale);
-    /// <summary>The TARGET's position: the selected shape's, the targeted chain goal's, or null on the brush (which
+    /// <summary>The target's position: the selected shape's, the targeted chain goal's, or null on the brush (which
     /// has no place until it becomes a shape).</summary>
     public Vector3? TargetPosition => (TargetIsGoal ? m_chains[m_goalChainIndex].Goal : (TargetIsBrush ? null : m_shapes[m_selectionIndex].Position));
 
@@ -297,8 +297,8 @@ public sealed class SculptModel {
         return shape;
     }
 
-    /// <summary>Duplicates the SELECTED shape in place (nudged aside so the twin reads) and selects the twin. A
-    /// duplicate of a grouped member joins the SAME group.</summary>
+    /// <summary>Duplicates the selected shape in place (nudged aside so the twin reads) and selects the twin. A
+    /// duplicate of a grouped member joins the same group.</summary>
     /// <returns>Whether a shape was added (false with no selection or a spent budget).</returns>
     public bool DuplicateTarget() {
         if (TargetIsBrush || TargetIsGoal || (StampShapeCount >= m_shapeCapacity)) {
@@ -321,7 +321,7 @@ public sealed class SculptModel {
         return true;
     }
 
-    /// <summary>Deletes the SELECTED shape (a no-op when nothing is selected). The selection clears.</summary>
+    /// <summary>Deletes the selected shape (a no-op when nothing is selected). The selection clears.</summary>
     /// <returns>Whether a shape was removed.</returns>
     public bool DeleteSelected() {
         if (TargetIsBrush || TargetIsGoal) {
@@ -365,7 +365,7 @@ public sealed class SculptModel {
         return null;
     }
 
-    /// <summary>Cycles the selection through the shapes, THEN past them into the defined chains' GOALS, wrapping
+    /// <summary>Cycles the selection through the shapes, then past them into the defined chains' goals, wrapping
     /// through "none" (where the target reverts to the brush) at either end.</summary>
     /// <param name="direction">+1 for the next shape/goal, -1 for the previous.</param>
     public void CycleSelection(int direction) {
@@ -407,7 +407,7 @@ public sealed class SculptModel {
         Revision++;
     }
 
-    /// <summary>Moves the TARGET this frame — planar on the floor plane plus a vertical nudge — clamped inside the
+    /// <summary>Moves the target this frame — planar on the floor plane plus a vertical nudge — clamped inside the
     /// workbench bound. A chain-goal target moves the goal and re-solves the chain live. A no-op on the brush (there
     /// is nothing to move). Coalesces onto one undo step per drag.</summary>
     /// <param name="planar">The X/Z move (+Y of the vector is +Z).</param>
@@ -444,7 +444,7 @@ public sealed class SculptModel {
         PushIfDragStarted(dragStarted: pushAfter);
     }
 
-    /// <summary>Spins the TARGET this frame — yaw about world up (stick X), pitch about world right (stick Y), roll
+    /// <summary>Spins the target this frame — yaw about world up (stick X), pitch about world right (stick Y), roll
     /// about world forward — composed onto its live orientation (world-space axis deltas premultiplied, so yaw reads
     /// the same regardless of how far the shape has turned). Coalesces onto one undo step per drag.</summary>
     /// <param name="stick">The stick vector: X yaws, Y pitches.</param>
@@ -470,7 +470,7 @@ public sealed class SculptModel {
         PushIfDragStarted(dragStarted: pushAfter);
     }
 
-    /// <summary>Grows or shrinks the TARGET this frame (uniform, multiplicative — a second of "up" always ~doubles),
+    /// <summary>Grows or shrinks the target this frame (uniform, multiplicative — a second of "up" always ~doubles),
     /// clamped to the scale envelope. Coalesces onto one undo step per drag.</summary>
     /// <param name="delta">The scale rate (−1 shrinks, +1 grows).</param>
     /// <param name="deltaSeconds">The frame delta.</param>
@@ -492,7 +492,7 @@ public sealed class SculptModel {
         PushIfDragStarted(dragStarted: pushAfter);
     }
 
-    /// <summary>Places the TARGET at an exact position (clamped; a goal target moves the goal and re-solves) — the
+    /// <summary>Places the target at an exact position (clamped; a goal target moves the goal and re-solves) — the
     /// console twin of stick movement. One discrete undo step.</summary>
     /// <param name="position">The desired position.</param>
     /// <returns>The clamped position actually applied, or null on the brush (nothing to place).</returns>
@@ -520,7 +520,7 @@ public sealed class SculptModel {
         return clamped;
     }
 
-    /// <summary>Sets the TARGET's orientation from Tait-Bryan degrees (yaw about +Y, pitch about +X, roll about +Z).
+    /// <summary>Sets the target's orientation from Tait-Bryan degrees (yaw about +Y, pitch about +X, roll about +Z).
     /// A no-op on a chain goal or the brush.</summary>
     /// <param name="yawDegrees">The yaw in degrees.</param>
     /// <param name="pitchDegrees">The pitch in degrees.</param>
@@ -544,7 +544,7 @@ public sealed class SculptModel {
         return true;
     }
 
-    /// <summary>Sets the TARGET's PER-AXIS scale directly, each axis clamped to the envelope; the brush takes it as
+    /// <summary>Sets the target's per-axis scale directly, each axis clamped to the envelope; the brush takes it as
     /// the next add's scale.</summary>
     /// <param name="scale">The desired per-axis scale.</param>
     /// <returns>The clamped scale actually applied.</returns>
@@ -571,7 +571,7 @@ public sealed class SculptModel {
         return clamped;
     }
 
-    /// <summary>Cycles the TARGET's primitive (wraps both directions): the brush's when nothing is selected (the
+    /// <summary>Cycles the target's primitive (wraps both directions): the brush's when nothing is selected (the
     /// next add changes), the selected shape's otherwise (re-primitive in place).</summary>
     /// <param name="direction">+1 for the next primitive, -1 for the previous.</param>
     /// <returns>The target's new primitive.</returns>
@@ -597,7 +597,7 @@ public sealed class SculptModel {
         return next;
     }
 
-    /// <summary>Sets the TARGET's primitive directly (the named twin of <see cref="CyclePrimitive"/>).</summary>
+    /// <summary>Sets the target's primitive directly (the named twin of <see cref="CyclePrimitive"/>).</summary>
     /// <param name="type">The primitive.</param>
     public void SetPrimitive(AvatarPrimitive type) {
         if (TargetIsGoal) {
@@ -614,7 +614,7 @@ public sealed class SculptModel {
         }
     }
 
-    /// <summary>Cycles the TARGET's blend op through the authoring order. A non-Union blend on an UNGROUPED shape
+    /// <summary>Cycles the target's blend op through the authoring order. A non-Union blend on an ungrouped shape
     /// coerces it into its own group-of-one (the structural invariant that keeps blends inside instance bounds).</summary>
     /// <param name="direction">+1 forward through the cycle, -1 back.</param>
     /// <returns>The target's new blend op.</returns>
@@ -631,7 +631,7 @@ public sealed class SculptModel {
         return next;
     }
 
-    /// <summary>Sets the TARGET's blend op directly (same group-of-one coercion as <see cref="CycleBlend"/>).</summary>
+    /// <summary>Sets the target's blend op directly (same group-of-one coercion as <see cref="CycleBlend"/>).</summary>
     /// <param name="blend">The blend op.</param>
     public void SetBlend(SdfBlendOp blend) {
         if (TargetIsGoal) {
@@ -653,7 +653,7 @@ public sealed class SculptModel {
         }
     }
 
-    /// <summary>Sets the TARGET's smooth-blend radius directly (clamped to [0, <see cref="ShapeDocument.MaxSmooth"/>]).</summary>
+    /// <summary>Sets the target's smooth-blend radius directly (clamped to [0, <see cref="ShapeDocument.MaxSmooth"/>]).</summary>
     /// <param name="value">The radius.</param>
     /// <returns>The applied radius.</returns>
     public float SetSmooth(float value) {
@@ -675,7 +675,7 @@ public sealed class SculptModel {
         return clamped;
     }
 
-    /// <summary>Cycles the TARGET's material through the palette (wraps).</summary>
+    /// <summary>Cycles the target's material through the palette (wraps).</summary>
     /// <param name="direction">+1 for the next palette slot, -1 for the previous.</param>
     /// <returns>The target's new palette slot.</returns>
     public int CycleMaterial(int direction) {
@@ -686,7 +686,7 @@ public sealed class SculptModel {
         return SetMaterialIndex(index: (TargetMaterialIndex + direction).FloorModulo(modulus: CreationDocument.PaletteSize));
     }
 
-    /// <summary>Assigns the TARGET's palette slot directly (clamped into range).</summary>
+    /// <summary>Assigns the target's palette slot directly (clamped into range).</summary>
     /// <param name="index">The palette slot.</param>
     /// <returns>The applied slot.</returns>
     public int SetMaterialIndex(int index) {
@@ -717,7 +717,7 @@ public sealed class SculptModel {
         PushUndo();
     }
 
-    /// <summary>Toggles the TARGET's mirror flag (the local X=0 symmetry fold).</summary>
+    /// <summary>Toggles the target's mirror flag (the local X=0 symmetry fold).</summary>
     /// <returns>The target's new mirror flag.</returns>
     public bool ToggleMirror() {
         if (TargetIsGoal) {
@@ -738,27 +738,27 @@ public sealed class SculptModel {
         return next;
     }
 
-    /// <summary>Sets the TARGET's twist rate (clamped to ±<see cref="ShapeDocument.MaxTwist"/>).</summary>
+    /// <summary>Sets the target's twist rate (clamped to ±<see cref="ShapeDocument.MaxTwist"/>).</summary>
     /// <param name="value">The rate.</param>
     /// <returns>The applied rate.</returns>
     public float SetTwist(float value) => SetStyleField(value: value, max: ShapeDocument.MaxTwist, min: -ShapeDocument.MaxTwist, field: StyleField.Twist);
 
-    /// <summary>Sets the TARGET's bend rate (clamped to ±<see cref="ShapeDocument.MaxBend"/>).</summary>
+    /// <summary>Sets the target's bend rate (clamped to ±<see cref="ShapeDocument.MaxBend"/>).</summary>
     /// <param name="value">The rate.</param>
     /// <returns>The applied rate.</returns>
     public float SetBend(float value) => SetStyleField(value: value, max: ShapeDocument.MaxBend, min: -ShapeDocument.MaxBend, field: StyleField.Bend);
 
-    /// <summary>Sets the TARGET's dilate (inflation) radius (clamped to [0, <see cref="ShapeDocument.MaxDilate"/>]).</summary>
+    /// <summary>Sets the target's dilate (inflation) radius (clamped to [0, <see cref="ShapeDocument.MaxDilate"/>]).</summary>
     /// <param name="value">The radius.</param>
     /// <returns>The applied radius.</returns>
     public float SetDilate(float value) => SetStyleField(value: value, max: ShapeDocument.MaxDilate, min: 0f, field: StyleField.Dilate);
 
-    /// <summary>Sets the TARGET's onion shell thickness (clamped to [0, <see cref="ShapeDocument.MaxOnion"/>]).</summary>
+    /// <summary>Sets the target's onion shell thickness (clamped to [0, <see cref="ShapeDocument.MaxOnion"/>]).</summary>
     /// <param name="value">The thickness.</param>
     /// <returns>The applied thickness.</returns>
     public float SetOnion(float value) => SetStyleField(value: value, max: ShapeDocument.MaxOnion, min: 0f, field: StyleField.Onion);
 
-    /// <summary>Links the SELECTED shape with the PREVIOUSLY selected one into a composition group (select A, then
+    /// <summary>Links the selected shape with the previously selected one into a composition group (select A, then
     /// B, then link). Groups merge when both shapes already belong to one.</summary>
     /// <returns>The joined group id, or null when there was no valid pair to link.</returns>
     public int? LinkWithPrevious() {
@@ -788,7 +788,7 @@ public sealed class SculptModel {
         return groupId;
     }
 
-    /// <summary>Dissolves the TARGET's group: every member returns to ungrouped, and — the structural invariant —
+    /// <summary>Dissolves the target's group: every member returns to ungrouped, and — the structural invariant —
     /// every member's blend returns to plain Union (an ungrouped shape may not carry a blend).</summary>
     /// <returns>How many shapes left the group (0 when the target was ungrouped, the brush, or a chain goal).</returns>
     public int UngroupTarget() {
@@ -812,7 +812,7 @@ public sealed class SculptModel {
         return released;
     }
 
-    /// <summary>Renames the SELECTED shape (a no-op without one).</summary>
+    /// <summary>Renames the selected shape (a no-op without one).</summary>
     /// <param name="name">The new name.</param>
     /// <returns>Whether a shape was renamed.</returns>
     public bool RenameSelected(string name) {
@@ -837,7 +837,7 @@ public sealed class SculptModel {
 
     // ---- the timeline (frame snapshots — the minimal hold-style animation model) --------------------------------
 
-    /// <summary>Steps the timeline cursor and APPLIES the destination frame's poses (0 restores the rest pose).
+    /// <summary>Steps the timeline cursor and applies the destination frame's poses (0 restores the rest pose).
     /// Stepping away from rest captures it first, so the authored pose is never lost.</summary>
     /// <param name="direction">+1 forward, -1 back (clamped to [0, <see cref="FrameCount"/>]).</param>
     /// <returns>The new cursor.</returns>
@@ -864,7 +864,7 @@ public sealed class SculptModel {
         ApplyPoses(frame: ((target == 0) ? m_restPose : m_frames[(target - 1)]));
     }
 
-    /// <summary>RECORDS the current pose: at rest a new frame appends and becomes current; on a saved frame the
+    /// <summary>Records the current pose: at rest a new frame appends and becomes current; on a saved frame the
     /// snapshot overwrites it.</summary>
     /// <returns>The recorded frame's display index (1-based).</returns>
     public int RecordFrame() {
@@ -883,7 +883,7 @@ public sealed class SculptModel {
         return m_currentFrame;
     }
 
-    /// <summary>Deletes the CURRENT saved frame (rest is protected); later frames renumber.</summary>
+    /// <summary>Deletes the current saved frame (rest is protected); later frames renumber.</summary>
     /// <returns>Whether a frame was removed.</returns>
     public bool DeleteCurrentFrame() {
         if (m_currentFrame == 0) {
@@ -963,7 +963,7 @@ public sealed class SculptModel {
 
     // ---- the rig (chains + IK) ----------------------------------------------------------------------------------
 
-    /// <summary>Defines a new chain from the given shapes (root→tip order), capturing their CURRENT positions as the
+    /// <summary>Defines a new chain from the given shapes (root→tip order), capturing their current positions as the
     /// rest geometry.</summary>
     /// <param name="name">The player-given name (the goal-cycling/console handle); null for unnamed.</param>
     /// <param name="shapeIdsOrNames">The member shape ids or names, root→tip order (at least 2).</param>
@@ -996,7 +996,7 @@ public sealed class SculptModel {
         return captured;
     }
 
-    /// <summary>Defines a limb chain seeded from the selection: the SELECTED shape as root, walking forward through
+    /// <summary>Defines a limb chain seeded from the selection: the selected shape as root, walking forward through
     /// the next 2 shapes in document order (the pad-friendly stand-in for the console verb's arbitrary list).</summary>
     /// <returns>The defined chain, or null when there was no valid 3-shape run or <see cref="MaxChains"/> is reached.</returns>
     public SculptChain? DefineChainFromSelection() {
@@ -1047,7 +1047,7 @@ public sealed class SculptModel {
         return true;
     }
 
-    /// <summary>Cycles the rig-page CURRENT-CHAIN cursor (which chain pole/kind/delete verbs act on) — SEPARATE from
+    /// <summary>Cycles the rig-page current-chain cursor (which chain pole/kind/delete verbs act on) — separate from
     /// the goal-target selection (a chain tunes without its goal being the movement target). Wraps through "none".</summary>
     /// <param name="direction">+1 for the next chain, -1 for the previous.</param>
     /// <returns>The cursor's chain, or null (none).</returns>
@@ -1066,7 +1066,7 @@ public sealed class SculptModel {
         return ((m_chainCursor >= 0) ? m_chains[m_chainCursor] : null);
     }
 
-    /// <summary>Targets a chain's GOAL for movement, by id or name (the verb twin of cycling into goals).</summary>
+    /// <summary>Targets a chain's goal for movement, by id or name (the verb twin of cycling into goals).</summary>
     /// <param name="idOrName">The chain's id or name.</param>
     /// <returns>The targeted chain, or null when nothing matched.</returns>
     public SculptChain? SelectGoal(string idOrName) {
@@ -1087,7 +1087,7 @@ public sealed class SculptModel {
         return m_chains[index];
     }
 
-    /// <summary>Sets a chain's GOAL directly and re-solves (the numeric twin of a goal drag). One discrete undo step.</summary>
+    /// <summary>Sets a chain's goal directly and re-solves (the numeric twin of a goal drag). One discrete undo step.</summary>
     /// <param name="idOrName">The chain's id or name.</param>
     /// <param name="goal">The new goal position (clamped into the workbench bound).</param>
     /// <returns>Whether a chain was found and re-solved.</returns>
@@ -1122,7 +1122,7 @@ public sealed class SculptModel {
         return true;
     }
 
-    /// <summary>Nudges the CURSOR chain's pole this frame (planar) — the rig page's d-pad channel.</summary>
+    /// <summary>Nudges the cursor chain's pole this frame (planar) — the rig page's d-pad channel.</summary>
     /// <param name="planar">The X/Z nudge.</param>
     /// <param name="deltaSeconds">The frame delta.</param>
     public void NudgePole(Vector2 planar, float deltaSeconds) {
@@ -1163,7 +1163,7 @@ public sealed class SculptModel {
         return resolved;
     }
 
-    /// <summary>Toggles the CURSOR chain's kind (the rig page's chord act).</summary>
+    /// <summary>Toggles the cursor chain's kind (the rig page's chord act).</summary>
     /// <returns>The applied kind, or null when no chain is cursored.</returns>
     public string? ToggleCurrentChainKind() {
         if ((m_chainCursor < 0) || (m_chainCursor >= m_chains.Count)) {
@@ -1176,8 +1176,8 @@ public sealed class SculptModel {
         return SetKind(idOrName: chain.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), kind: next);
     }
 
-    /// <summary>Re-solves every defined chain against its LIVE goal/pole and writes the result into its member
-    /// shapes' ordinary transforms — solver output lands in the SAME transforms <see cref="RecordFrame"/> snapshots,
+    /// <summary>Re-solves every defined chain against its live goal/pole and writes the result into its member
+    /// shapes' ordinary transforms — solver output lands in the same transforms <see cref="RecordFrame"/> snapshots,
     /// which is what lets a recorded pose inherit IK with zero consumer changes.</summary>
     public void SolveChains() {
         foreach (var chain in m_chains) {
@@ -1233,7 +1233,7 @@ public sealed class SculptModel {
     }
 
     /// <summary>Closes a drag whose continuous verb did not fire this frame (the stick returned to center) — call
-    /// ONCE per produced frame after every input verb has run. A drag still being touched stays open.</summary>
+    /// once per produced frame after every input verb has run. A drag still being touched stays open.</summary>
     public void EndInputFrame() {
         if (m_dragOpen && !m_dragTouchedThisFrame) {
             m_dragOpen = false;
@@ -1321,10 +1321,10 @@ public sealed class SculptModel {
         };
     }
 
-    /// <summary>Replaces the model's content from a NORMALIZED document (cross <see cref="CreationCanonicalizer"/>
-    /// first): ids/groups resequence their counters, chains RECAPTURE rest geometry from the just-loaded shape
-    /// positions (never trusting persisted rest data), and the pose is deliberately NOT re-solved — the loaded
-    /// transforms already ARE the exact pose, and a two-bone solve is not perfectly idempotent at float precision
+    /// <summary>Replaces the model's content from a normalized document (cross <see cref="CreationCanonicalizer"/>
+    /// first): ids/groups resequence their counters, chains recapture rest geometry from the just-loaded shape
+    /// positions (never trusting persisted rest data), and the pose is deliberately not re-solved — the loaded
+    /// transforms already are the exact pose, and a two-bone solve is not perfectly idempotent at float precision
     /// (re-solving could drift a byte-identical round-trip by ULPs). Editor-opaque members stash verbatim. The undo
     /// ring re-baselines (a load is a boundary; a save is not).</summary>
     /// <param name="document">The normalized document.</param>

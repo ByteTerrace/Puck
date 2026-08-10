@@ -57,7 +57,7 @@ internal static class ConsoleModeRecipes {
         return [];
     }
 
-    /// <summary>Whether a known recipe exists for <paramref name="title"/> — the host distinguishes a real live retarget
+    /// <summary>Returns a value indicating whether a known recipe exists for <paramref name="title"/> — the host distinguishes a real live retarget
     /// (the game re-renders natively) from a presentation-only re-interpretation when it echoes the swap.</summary>
     /// <param name="title">The cartridge header title.</param>
     public static bool HasRecipe(string title) {

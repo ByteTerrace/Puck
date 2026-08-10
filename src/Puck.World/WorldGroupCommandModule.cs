@@ -5,12 +5,12 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The GROUP + MEMBERSHIP console surface — the group+binding substrate's dev reflection. The policy catalog
+/// The group and membership console surface — the group+binding substrate's dev reflection. The policy catalog
 /// (<c>groups.kinds</c>) is authored through the general <see cref="WorldRowCommandModule"/> (<c>world.row.set</c>/
 /// <c>.remove groups.kinds ...</c>); <c>world.group.form</c>/<c>.join</c>/<c>.leave</c>/<c>.kick</c> work the
-/// live roster (a RUNTIME group is added by <c>form</c> and wiped by the next whole-document rebuild — see
+/// live roster (a runtime group is added by <c>form</c> and wiped by the next whole-document rebuild — see
 /// <see cref="WorldGroup"/>'s own remarks); <c>world.ownership.offer</c>/<c>.accept</c>/<c>.reclaim</c> work the
-/// ESCROW/TRANSFER lane over an already-declared <see cref="WorldOwnership"/> row (see
+/// escrow/transfer lane over an already-declared <see cref="WorldOwnership"/> row (see
 /// <see cref="WorldMutation.OfferOwnership"/>/<see cref="WorldMutation.SettleOwnership"/>); <c>world.groups</c> is
 /// the read-back for all of it. Every mutating verb routes <see cref="CommandRouting.Simulation"/> (they buffer and
 /// drain like every other <c>WorldMutation</c>) and returns <see cref="CommandResult.None"/> — the server prints the

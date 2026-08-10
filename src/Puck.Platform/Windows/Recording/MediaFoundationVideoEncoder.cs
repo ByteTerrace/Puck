@@ -363,7 +363,13 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
         var timestampNanoseconds = ((sample.GetSampleTime(phnsSampleTime: out var hns) >= 0) ? (hns * 100) : 0);
         var cleanPointKey = MFSampleExtension_CleanPoint;
         var cleanResult = sample.GetUINT32(guidKey: ref cleanPointKey, punValue: out var clean);
-        var isKeyframe = ((cleanResult >= 0) ? (clean != 0) : !m_firstOutputSeen);
+
+        // What the MFT claims, used only where the bitstream itself cannot answer (see EmitPacket). Hardware MFTs are
+        // not reliable here — the NVIDIA AV1 encoder sets no CleanPoint at all, so this alone reports exactly one
+        // keyframe per session and leaves every later random-access point invisible to the container.
+        var reportedKeyframe = ((cleanResult >= 0)
+            ? (clean != 0)
+            : !m_firstOutputSeen);
 
         m_firstOutputSeen = true;
 
@@ -381,7 +387,7 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
                 }
 
                 Marshal.Copy(source: pointer, destination: m_outputScratch, startIndex: 0, length: count);
-                EmitPacket(encoded: m_outputScratch.AsSpan(start: 0, length: count), timestampNanoseconds: timestampNanoseconds, isKeyframe: isKeyframe);
+                EmitPacket(encoded: m_outputScratch.AsSpan(start: 0, length: count), timestampNanoseconds: timestampNanoseconds, reportedKeyframe: reportedKeyframe);
             } finally {
                 _ = buffer.Unlock();
             }
@@ -389,12 +395,16 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
             _ = Marshal.ReleaseComObject(o: buffer);
         }
     }
-    private void EmitPacket(ReadOnlySpan<byte> encoded, long timestampNanoseconds, bool isKeyframe) {
+    // The keyframe flag decides where the container may open a cluster and place a cue, so it is read from the
+    // bitstream, which is where a random-access point is actually defined; the MFT's own report is the fallback for a
+    // packet carrying no frame header to read.
+    private void EmitPacket(ReadOnlySpan<byte> encoded, long timestampNanoseconds, bool reportedKeyframe) {
         if (m_codec == EncoderCodec.H264) {
-            var payload = AvcConfigRecord.ToLengthPrefixed(annexB: encoded, sps: ref m_sps, pps: ref m_pps);
+            var isKeyframe = (AvcBitstream.TryReadIsIdr(annexB: encoded) ?? reportedKeyframe);
+            var payload = AvcBitstream.ToLengthPrefixed(annexB: encoded, sps: ref m_sps, pps: ref m_pps);
 
             if ((m_codecPrivate.Length == 0) && (m_sps is not null) && (m_pps is not null)) {
-                m_codecPrivate = AvcConfigRecord.Build(sps: m_sps, pps: m_pps);
+                m_codecPrivate = AvcBitstream.BuildConfigRecord(sps: m_sps, pps: m_pps);
             }
 
             if (payload.Length == 0) {
@@ -403,10 +413,11 @@ internal sealed class MediaFoundationVideoEncoder : IVideoEncoder {
 
             m_packets.Add(item: new RecordedPacket(Data: payload, TimestampNanoseconds: timestampNanoseconds, IsKeyframe: isKeyframe));
         } else {
+            var isKeyframe = (Av1Bitstream.TryReadIsKeyFrame(temporalUnit: encoded) ?? reportedKeyframe);
             var payload = encoded.ToArray();
 
             if ((m_codecPrivate.Length == 0) && isKeyframe) {
-                m_codecPrivate = Av1ConfigRecord.Build(temporalUnit: payload);
+                m_codecPrivate = Av1Bitstream.BuildConfigRecord(temporalUnit: payload);
             }
 
             m_packets.Add(item: new RecordedPacket(Data: payload, TimestampNanoseconds: timestampNanoseconds, IsKeyframe: isKeyframe));

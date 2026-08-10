@@ -79,8 +79,10 @@ Get-ChildItem -Path $env:TEMP -Directory -Filter ($scratchPrefix + '*') -ErrorAc
 
 New-Item -ItemType Directory -Force -Path $scratchDir | Out-Null
 
-# ---- Every world file actually checked into the tree (the four-world charter's whole roster, 2026-08-06:
-# play/dive/kart/jump — arcade/blank/default/expo/kart-remap/kiosk/planetoid are RETIRED, not renamed), plus
+# ---- The worlds this battery boots and strict-parses today — NOT every world file checked into the tree
+# (studio.world.json and the four-corners campaign's quilt-*.world.json files now also live under
+# Assets/worlds/ and are not yet in this sweep). This set is the four-world charter's whole roster, 2026-08-06:
+# play/dive/kart/jump — arcade/blank/default/expo/kart-remap/kiosk/planetoid are RETIRED, not renamed — plus
 # the one wasm-crate battery world that boots through its own documented recipe
 # (wasm/puck-addon-channelwalk/README.md). Each must boot — the loud "[world] definition: <path> (--world)"
 # line, never the "baked default ... fallback" line a failed load would print instead — and each process

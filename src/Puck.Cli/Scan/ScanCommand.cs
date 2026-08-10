@@ -59,6 +59,7 @@ internal static class ScanCommand {
             OutDirectory = ((outDirArgument is { } outDir)
                 ? Path.GetFullPath(path: outDir)
                 : Path.Combine(path1: repositoryRoot!, path2: "artifacts", path3: "scan")),
+            RepositoryRoot = (repositoryRoot ?? string.Empty),
             ShaderRoot = ((repositoryRoot is null) ? string.Empty : Path.Combine(path1: repositoryRoot, path2: "src")),
             SingleStdout = ((selected.Count == 1) && !scanner.Has(name: "OutDir") && !scanner.Has(name: "Grouped")),
         };

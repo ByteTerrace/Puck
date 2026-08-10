@@ -80,7 +80,7 @@ public static class UnsignedNumberFunctions {
     /// <param name="value">The value to factor.</param>
     /// <returns>
     /// The prime factors of <paramref name="value"/>, each repeated according to its multiplicity — for example,
-    /// <c>360</c> yields <c>2, 2, 2, 3, 3, 5</c>. A prime yields ITSELF, so the length is always Ω, and the sequence is
+    /// <c>360</c> yields <c>2, 2, 2, 3, 3, 5</c>. A prime yields itself, so the length is always Ω, and the sequence is
     /// empty only for a <paramref name="value"/> below two, which has no factorization at all.
     /// </returns>
     /// <remarks>

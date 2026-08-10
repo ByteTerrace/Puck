@@ -8,7 +8,6 @@ using Puck.Cli.Source;
 
 namespace Puck.Cli.Scan.Analyzers;
 
-// The synchronization-primitive inventory — the concurrency-audit sibling of the comment analyzers.
 // Emits one JSONL record per lock site, each tagged with a `kind`:
 //   lock                — a `lock (expr) {...}` statement; text is the lock-object EXPRESSION (the field
 //                         that drives lock ordering and the lock-on-this/typeof/public/string smells),
@@ -20,10 +19,8 @@ namespace Puck.Cli.Scan.Analyzers;
 //                         there is no instance to anchor on).
 //   synchronized-method — a [MethodImpl(MethodImplOptions.Synchronized)] attribute.
 // Detection is purely syntactic (no semantic model): a field typed `object` only surfaces through the
-// `lock (_gate)` that uses it — which is the audit signal anyway — and a fully-aliased/using-static
-// primitive may slip through. The axes are disjoint, so no node is counted twice (a Lock field and the
-// lock() that uses it are two distinct sites, by design). Same -Grouped work-list, sink and stderr
-// summary as its siblings; like them it hand-writes its json.
+// `lock (_gate)` that uses it, and a fully-aliased/using-static primitive may slip through. The axes are
+// disjoint, so no node is counted twice (a Lock field and the lock() that uses it are two distinct sites).
 internal sealed class LockAnalyzer : ISourceAnalyzer {
     // Static synchronization classes whose member calls are themselves the lock site.
     private static readonly Dictionary<string, string> StaticLockClasses = new(comparer: StringComparer.Ordinal) {

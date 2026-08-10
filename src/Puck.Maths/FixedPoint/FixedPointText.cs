@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 
 namespace Puck.Maths;
 
@@ -8,9 +9,22 @@ internal enum FixedPointParseStatus {
     Overflow
 }
 
-/// <summary>Exact, allocation-free decimal parsing and format validation shared by the fixed-point primitives.</summary>
+/// <summary>Exact decimal parsing and format validation shared by the fixed-point primitives. Rendering
+/// (<see cref="WriteFractionDigits"/>) is always allocation-free. <see cref="Parse"/>'s fraction-digit accumulation
+/// and rounding stay allocation-free too, in <see cref="UInt128"/>, for every carrier at or below
+/// <see cref="NarrowFractionBitCountLimit"/> fraction bits — every format today except one. Only above that limit does
+/// the accumulation route through <see cref="BigInteger"/> (and therefore allocate), because a carrier wide enough to
+/// need forty-eight or more fraction bits — <c>FixedQ1648</c>'s Q16.48 — reads up to <c>fractionBitCount + 1</c>
+/// decimal digits, which can exceed <see cref="UInt128"/>'s width; every value the arithmetic narrows back to is
+/// proved to fit its original width, so the wide path is a strict generalization and changes no result versus the
+/// narrow one at any fraction width where both could run.</summary>
 internal static class FixedPointText {
     private const int StoredSignificantDigitCount = 64;
+    /// <summary>The largest fraction bit count whose <c>fractionBitCount + 1</c>-decimal-digit accumulation still fits
+    /// <see cref="UInt128"/> (<c>10^38 &lt; 2^128 ≤ 10^39</c>), and therefore the largest <see cref="Parse"/> serves
+    /// allocation-free. Every carrier below <c>FixedQ1648</c>'s forty-eight fraction bits — sixteen and thirty-two —
+    /// sits under it today.</summary>
+    private const int NarrowFractionBitCountLimit = 37;
 
     /// <summary>Writes the decimal point and the exact terminating expansion of a raw fraction.</summary>
     /// <param name="fraction">The raw fraction bits, strictly below <c>2^fractionBitCount</c>.</param>
@@ -242,55 +256,127 @@ internal static class FixedPointText {
 
         var integerRaw = (integerPart << fractionBitCount);
         var fractionDigitLimit = (fractionBitCount + 1);
-        var fractionPrefix = UInt128.Zero;
-
-        for (var fractionIndex = 0; (fractionIndex < fractionDigitLimit); fractionIndex++) {
-            var significantIndex = (integerSignificantDigitCount + fractionIndex);
-            var digit = (((0L <= significantIndex) && (significantIndex < storedDigitCount))
-                ? significantDigits[((int)significantIndex)]
-                : ((byte)0));
-
-            fractionPrefix = ((fractionPrefix * 10U) + digit);
-        }
-
         var hasNonzeroDiscardedFractionDigit =
             (lastNonzeroSignificantIndex >= (integerSignificantDigitCount + fractionDigitLimit));
         var maximumRaw = (negative ? maximumNegativeMagnitudeRaw : maximumPositiveRaw);
+        UInt128 fractionRaw;
 
-        if (rejectExactOutOfRange) {
-            if (integerRaw > maximumRaw) {
-                return FixedPointParseStatus.Overflow;
+        // fractionDigitLimit decimal digits can reach 10^(fractionBitCount + 1) − 1. That fits UInt128
+        // (10^38 < 2^128) through NarrowFractionBitCountLimit and no further — FixedQ1648's forty-eight fraction bits
+        // needs forty-nine decimal digits, about 163 bits, past UInt128's 128 — so only above the limit does the
+        // accumulation and its rounding move to BigInteger (and therefore allocate). Both branches share one formula;
+        // only the carrier width differs, and the quotient either narrows to is provably below 2^fractionBitCount
+        // (see the remark on the narrow branch's own division), so switching branches at the limit changes no result.
+        if (fractionBitCount <= NarrowFractionBitCountLimit) {
+            var fractionPrefix = UInt128.Zero;
+
+            for (var fractionIndex = 0; (fractionIndex < fractionDigitLimit); fractionIndex++) {
+                var significantIndex = (integerSignificantDigitCount + fractionIndex);
+                var digit = (((0L <= significantIndex) && (significantIndex < storedDigitCount))
+                    ? significantDigits[((int)significantIndex)]
+                    : ((byte)0));
+
+                fractionPrefix = ((fractionPrefix * 10U) + digit);
             }
 
-            var scaledPrefixNumerator = ((integerRaw * parsingDenominator) + fractionPrefix);
-            var maximumNumerator = (((UInt128)maximumRaw) * parsingDenominator);
+            if (rejectExactOutOfRange) {
+                if (integerRaw > maximumRaw) {
+                    return FixedPointParseStatus.Overflow;
+                }
+
+                var scaledPrefixNumerator = ((integerRaw * parsingDenominator) + fractionPrefix);
+                var maximumNumerator = (((UInt128)maximumRaw) * parsingDenominator);
+
+                if (
+                    (scaledPrefixNumerator > maximumNumerator) ||
+                    (
+                        (scaledPrefixNumerator == maximumNumerator) &&
+                        hasNonzeroDiscardedFractionDigit
+                    )
+                ) {
+                    return FixedPointParseStatus.Overflow;
+                }
+            }
+
+            // fractionPrefix < 10^(fractionBitCount + 1) = 2^(fractionBitCount + 1) · 5^(fractionBitCount + 1), and
+            // parsingDenominator = 2 · 5^(fractionBitCount + 1), so the quotient below is strictly below
+            // 2^fractionBitCount — every format's own whole-unit raw.
+            var narrowFractionRaw = (fractionPrefix / parsingDenominator);
+            var narrowRemainder = (fractionPrefix - (narrowFractionRaw * parsingDenominator));
+            var narrowHalf = (parsingDenominator >> 1);
 
             if (
-                (scaledPrefixNumerator > maximumNumerator) ||
+                (narrowRemainder > narrowHalf) ||
                 (
-                    (scaledPrefixNumerator == maximumNumerator) &&
-                    hasNonzeroDiscardedFractionDigit
+                    (narrowRemainder == narrowHalf) &&
+                    (
+                        hasNonzeroDiscardedFractionDigit ||
+                        !UInt128.IsEvenInteger(value: narrowFractionRaw)
+                    )
                 )
             ) {
-                return FixedPointParseStatus.Overflow;
+                narrowFractionRaw++;
             }
-        }
 
-        var fractionRaw = (fractionPrefix / parsingDenominator);
-        var remainder = (fractionPrefix - (fractionRaw * parsingDenominator));
-        var half = (parsingDenominator >> 1);
+            fractionRaw = narrowFractionRaw;
+        } else {
+            // A WIDE accumulator: BigInteger carries the accumulation and the rounding exactly past
+            // NarrowFractionBitCountLimit — every value it narrows back to is proved to fit its original width (see
+            // the remark on the narrow branch above), so this is a strict generalization of that branch, not a
+            // second rule.
+            var fractionPrefix = BigInteger.Zero;
 
-        if (
-            (remainder > half) ||
-            (
-                (remainder == half) &&
+            for (var fractionIndex = 0; (fractionIndex < fractionDigitLimit); fractionIndex++) {
+                var significantIndex = (integerSignificantDigitCount + fractionIndex);
+                var digit = (((0L <= significantIndex) && (significantIndex < storedDigitCount))
+                    ? significantDigits[((int)significantIndex)]
+                    : ((byte)0));
+
+                fractionPrefix = ((fractionPrefix * 10) + digit);
+            }
+
+            var wideParsingDenominator = ((BigInteger)parsingDenominator);
+
+            if (rejectExactOutOfRange) {
+                if (integerRaw > maximumRaw) {
+                    return FixedPointParseStatus.Overflow;
+                }
+
+                var scaledPrefixNumerator = ((((BigInteger)integerRaw) * wideParsingDenominator) + fractionPrefix);
+                var maximumNumerator = (((BigInteger)maximumRaw) * wideParsingDenominator);
+
+                if (
+                    (scaledPrefixNumerator > maximumNumerator) ||
+                    (
+                        (scaledPrefixNumerator == maximumNumerator) &&
+                        hasNonzeroDiscardedFractionDigit
+                    )
+                ) {
+                    return FixedPointParseStatus.Overflow;
+                }
+            }
+
+            // fractionPrefix < 10^(fractionBitCount + 1) = 2^(fractionBitCount + 1) · 5^(fractionBitCount + 1), and
+            // wideParsingDenominator = 2 · 5^(fractionBitCount + 1), so the quotient below is strictly below
+            // 2^fractionBitCount — every format's own whole-unit raw — and narrows to UInt128 without loss.
+            var fractionRawWide = (fractionPrefix / wideParsingDenominator);
+            var remainder = (fractionPrefix - (fractionRawWide * wideParsingDenominator));
+            var half = (wideParsingDenominator >> 1);
+
+            if (
+                (remainder > half) ||
                 (
-                    hasNonzeroDiscardedFractionDigit ||
-                    !UInt128.IsEvenInteger(value: fractionRaw)
+                    (remainder == half) &&
+                    (
+                        hasNonzeroDiscardedFractionDigit ||
+                        !fractionRawWide.IsEven
+                    )
                 )
-            )
-        ) {
-            fractionRaw++;
+            ) {
+                fractionRawWide++;
+            }
+
+            fractionRaw = ((UInt128)fractionRawWide);
         }
 
         var roundedRaw = (integerRaw + fractionRaw);

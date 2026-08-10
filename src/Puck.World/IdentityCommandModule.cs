@@ -127,7 +127,8 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         // just this door). A refusal leaves both the document and identity.Hud untouched.
         var candidate = document with { Hud = document.Hud with { Panels = [panel] } };
 
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason)) {
+        // No neighbour resolver: an owned identity's own document edit (a HUD panel), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
             return CommandResult.Error(output: $"[identity.hud: refused — {reason}]");
         }
 

@@ -20,7 +20,7 @@ deps       Puck.Assets, Puck.Maths + Wasmtime [44.0.0] (exact pin)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference — this is the neutral core of
-[capability channels](../../docs/capability-channels-plan.md)' assembly split. The ABI owns its own
+[capability channels](../../docs/campaign.md)' assembly split. The ABI owns its own
 verdict, subject-kind, channel-kind, cell-kind, and channel-value-shape sets, and its own
 capability-mask bits, all frozen independently of any consumer enum. There is no phase any more: a
 channel act is per-tick and declarative, so the two low verb bits that used to carry one are now

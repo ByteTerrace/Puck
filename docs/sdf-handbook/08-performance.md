@@ -163,7 +163,7 @@ are the source of truth.
 The full design — the timing seams, the switch registry, the scoring math, the
 scene roster, the measurement-hygiene machinery — was written down in a bench
 plan that was deleted on 2026-08-02. What survives is the code:
-`experimental/Puck.Bench` (quarantined, off limits) and its XML documentation are now the
+`experimental/Puck.Bench` (quarantined, read-only) and its XML documentation are now the
 only statement of the design, and the scene roster is not among them — the
 roster lived with the host that registered the scenes, which is gone. This
 chapter is the *why*; there is no longer a *what and how* document to pair it
@@ -267,7 +267,7 @@ the same discipline applies whenever you hand-measure anything.
   were deleted on 2026-08-02; this chapter's summaries are all that is left.
 - The benchmark's design — timing seams, switch registry, scoring math, hygiene
   machinery, the frozen reference constants: read
-  `experimental/Puck.Bench` (quarantined, off limits) directly. The plan document is gone
+  `experimental/Puck.Bench` (quarantined, read-only) directly. The plan document is gone
   and the scene roster went with the host that registered the scenes.
 - The shading terms these numbers isolate, and the switches the sweeps drive:
   [04-lighting-and-shading.md](04-lighting-and-shading.md).

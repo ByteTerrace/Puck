@@ -376,6 +376,11 @@
         "resolved": "10.0.10",
         "contentHash": "OvGz3PrzuAI/Sj7LTcXcCe3FClRI1IyRMZjNONcZtFh+Ww7nAtSh4kh08r8KVe/xxkXJPjR0Y1jF7H+N42d4xQ=="
       },
+      "System.Formats.Cbor": {
+        "type": "Transitive",
+        "resolved": "9.0.18",
+        "contentHash": "m7Z9QrAr7JCfzoosSuIuk3EkJRWidOK1So03oOGLXopBRJHh8NjF5yx+zbmCANP3KbtO3V1MDHQfpxwtx7OFDw=="
+      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.10",
@@ -413,6 +418,12 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+        }
+      },
+      "puck.carriage": {
+        "type": "Project",
+        "dependencies": {
+          "System.Formats.Cbor": "[9.*, )"
         }
       },
       "puck.commands": {
@@ -583,6 +594,7 @@
         "type": "Project",
         "dependencies": {
           "Puck.Abstractions": "[1.0.0, )",
+          "Puck.Carriage": "[1.0.0, )",
           "Puck.Commands": "[1.0.0, )",
           "Puck.Forge": "[1.0.0, )",
           "Puck.Maths": "[1.0.0, )"
@@ -591,6 +603,7 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
+          "Puck.Carriage": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Scripting.Simulation": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",

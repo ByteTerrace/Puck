@@ -2,20 +2,20 @@ using System.Reflection;
 
 namespace Puck.World.Protocol;
 
-/// <summary>Declares one <see cref="WorldMutation"/> nested record's stable DISPATCH ORDINAL and the
+/// <summary>Declares one <see cref="WorldMutation"/> nested record's stable dispatch ordinal and the
 /// <see cref="WorldSection"/> it targets — the wire vocabulary <see cref="MutationKindMask"/> and the addon mutation
 /// door (<c>Server.WorldAddonMutationDecoder</c>) read off. Every nested record under <see cref="WorldMutation"/>
-/// carries exactly one of these, with an EXPLICIT ordinal (never inferred from declaration order — a reordered file
+/// carries exactly one of these, with an explicit ordinal (never inferred from declaration order — a reordered file
 /// must never silently renumber the wire). <see cref="WorldMutationKindCatalog"/> discovers every so-tagged record by
-/// reflection over this assembly and validates the whole set at boot, the same DISCOVERED-NOT-HAND-KEPT posture
+/// reflection over this assembly and validates the whole set at boot, the same discovered-not-hand-kept posture
 /// <c>RefusalAttribute</c> uses for <c>world.refusals</c>.</summary>
 /// <param name="ordinal">The kind's stable dispatch ordinal, <c>0..</c><see cref="WorldMutationKindCatalog.MaxOrdinal"/>
 /// (one bit of the <see cref="MutationKindMask"/> lane). An ordinal past the lane is refused at boot rather than left
-/// to wrap: .NET masks a shift count by the operand's width, so an out-of-lane bit aliases a REAL kind and would
+/// to wrap: .NET masks a shift count by the operand's width, so an out-of-lane bit aliases a real kind and would
 /// admit the wrong door silently.</param>
 /// <param name="section">The <see cref="WorldSection"/> this kind targets (must equal what
-/// <c>Server.WorldServer.SectionOf</c> maps the SAME record type to — that cross-check is Server-side, since this
-/// project cannot reference Server; this attribute only records the DECLARED pairing).</param>
+/// <c>Server.WorldServer.SectionOf</c> maps the same record type to — that cross-check is Server-side, since this
+/// project cannot reference Server; this attribute only records the declared pairing).</param>
 [AttributeUsage(validOn: AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class MutationKindAttribute(int ordinal, WorldSection section) : Attribute {
     /// <summary>Gets the kind's stable dispatch ordinal.</summary>
@@ -34,26 +34,26 @@ public readonly record struct WorldMutationKindCatalogEntry(Type Type, int Ordin
 /// <summary>
 /// Discovers, at boot, every <see cref="MutationKindAttribute"/>-tagged <see cref="WorldMutation"/> nested record in
 /// this assembly, and validates the set: every ordinal in <c>0..</c><see cref="MaxOrdinal"/>, no two kinds sharing an ordinal, no kind
-/// missing the attribute. A violation fails BOOT loudly (a <see cref="InvalidOperationException"/> thrown from
+/// missing the attribute. A violation fails boot loudly (a <see cref="InvalidOperationException"/> thrown from
 /// <see cref="Validate"/>) — an ordinal collision or an out-of-range value is a build-time authoring defect, never a
-/// runtime data condition, so it must never reach a live session. This is the catalog only: it does NOT build a
+/// runtime data condition, so it must never reach a live session. This is the catalog only: it does not build a
 /// <see cref="MutationKindMask"/> or the addon door's guest-reachable ordinal subset — see <see cref="KindsOf"/> for
 /// the mask projection and <c>Server.WorldAddonMutationDecoder</c> for which ordinals a guest may actually dispatch.
 /// </summary>
 public static class WorldMutationKindCatalog {
     /// <summary>The highest ordinal a kind may declare — the top bit of the 128-bit
-    /// <see cref="MutationKindMask"/> lane these pack into. An ordinal past the lane must be refused here rather than
-    /// left to wrap: .NET masks a shift count by the operand's width, so on the former 64-bit lane
-    /// <c>1UL &lt;&lt; 64</c> silently produced <c>1UL &lt;&lt; 0</c> and a 65th kind would have been admitted as
-    /// <c>UpsertKit</c> — a grant quietly opening the wrong door rather than failing. The same wrap exists at 128 on
-    /// the wider lane, so the ceiling moves with the lane and keeps the refusal loud.</summary>
+    /// <see cref="MutationKindMask"/> lane these pack into. An ordinal past the lane must be refused here rather
+    /// than left to wrap: .NET masks a shift count by the operand's width, so a shift at or beyond the lane's own
+    /// width does not overflow to zero as intended but wraps around, silently admitting an out-of-range ordinal
+    /// under some other kind's bit — a grant quietly opening the wrong door rather than failing. The ceiling must
+    /// track the lane's own width if it ever changes.</summary>
     public const int MaxOrdinal = 127;
 
     private static IReadOnlyList<WorldMutationKindCatalogEntry>? s_entries;
     private static readonly MutationKindMask[] s_kindsBySection = new MutationKindMask[(Enum.GetValues<WorldSection>().Length)];
     private static bool s_kindsBySectionBuilt;
 
-    /// <summary>Returns every cataloged mutation kind, sorted by ordinal. Discovered once, cached, and VALIDATED on first
+    /// <summary>Returns every cataloged mutation kind, sorted by ordinal. Discovered once, cached, and validated on first
     /// access (see <see cref="Validate"/> for what a violation does).</summary>
     /// <returns>The catalog.</returns>
     public static IReadOnlyList<WorldMutationKindCatalogEntry> All() {
@@ -79,7 +79,7 @@ public static class WorldMutationKindCatalog {
     }
 
     /// <summary>Returns the declared dispatch ordinal of one live mutation's own kind — the bit a
-    /// <see cref="MutationKindMask"/> must carry for a grant row to admit it. THROWS rather than returning a
+    /// <see cref="MutationKindMask"/> must carry for a grant row to admit it. Throws rather than returning a
     /// sentinel: every nested kind carries an attribute (<see cref="Validate"/> proves it at boot), so a miss here
     /// is a build-time authoring gap, never a runtime data condition an authority check should quietly allow or
     /// quietly deny.</summary>
@@ -101,7 +101,7 @@ public static class WorldMutationKindCatalog {
         throw new InvalidOperationException(message: $"WorldMutationKindCatalog: '{type.Name}' carries no catalog entry — every WorldMutation kind must declare a [MutationKind] ordinal.");
     }
 
-    /// <summary>Forces discovery and validation NOW, so a boot sequence that never happens to read
+    /// <summary>Forces discovery and validation now, so a boot sequence that never happens to read
     /// <see cref="All"/> still fails loudly on a broken catalog before any session starts. Idempotent and cheap on a
     /// second call (the cached set is reused).</summary>
     /// <exception cref="InvalidOperationException">The catalog is malformed — see the message for which rule failed.</exception>

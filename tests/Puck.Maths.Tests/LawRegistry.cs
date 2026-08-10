@@ -68,6 +68,17 @@ internal static class LawRegistry {
     // The unsigned Q48.16 band. NO sublattice: every law over it either rounds once against an exact oracle or is exact
     // by construction, and the operand fold is a plain bit reinterpretation, so the whole sixty-four-bit word is legal.
     private static readonly Domain UnsignedScalar = new(Key: "unsigned-scalar", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    // The signed Q16.48 band (FixedQ1648) — sixteen integer bits, forty-eight fraction bits, a range/resolution lean
+    // opposite FixedQ4816's own. Same shared EdgeRaws battery as every other signed sixty-four-bit carrier; its own
+    // peer-conversion boundary (the sixteen-bit integer range) is swept separately by its own fixed ladder, not by
+    // this domain.
+    private static readonly Domain Q1648Scalar = new(Key: "q1648-scalar", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain Q1648ScalarDivision = new(Key: "q1648-scalar-division", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    // The signed Q32.32 band (FixedQ3232) — an even thirty-two/thirty-two split, the balanced point between
+    // FixedQ4816's and FixedQ1648's opposite leans. Same shared EdgeRaws battery; its own peer-conversion boundary
+    // (the thirty-two-bit integer range) is swept separately by its own fixed ladder, not by this domain.
+    private static readonly Domain Q3232Scalar = new(Key: "q3232-scalar", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain Q3232ScalarDivision = new(Key: "q3232-scalar-division", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
 
     // The attenuation bands — one key per sampled meet statement, the contribution-fold discipline, so distinct
     // statements never re-sweep one another's ground. All full-width and NO sublattice: the carriers are total on the
@@ -125,6 +136,67 @@ internal static class LawRegistry {
     private static readonly Domain RigidDirection = new(Key: "rigid-direction", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
     private static readonly Domain RigidPoint = new(Key: "rigid-point", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
     private static readonly Domain Rate = new(Key: "rate", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+
+    // The symmetric-solve bands, one key per arity so a solve law and its invert sibling never re-sweep each other's
+    // ground. ALL FOUR domains are consumed through SymmetricSolveClaims.FoldModerate — Solve's own claim bodies
+    // fold their operands exactly like Invert's; there is no unfolded domain anywhere in this family (corrected from
+    // an earlier, inaccurate "no fold anywhere" version of this comment). The fold keeps every group operand's own
+    // magnitude well below its family's target-plus-one, so the shared preconditioning shift stays non-negative (a
+    // lossless left shift, or none) on every draw, and the subject's ratio is provably exact there — checked
+    // against THREE independent references over this same ground: the adjugate oracle (solveN/invertN-vs-oracle),
+    // the fraction-free Bareiss oracle (solveN/invertN-vs-bareiss, which shares no cofactor or determinant
+    // transcription with either the subject or the adjugate oracle — see Oracles.TryBareissEliminate), and the
+    // exact K·x/K·K⁻¹ residual laws (a necessary bound only, NOT a substitute for the two oracle comparisons — see
+    // SymmetricSolveClaims.Solve2ResidualWithinEnvelope's own remarks for why a small residual cannot prove small
+    // component error). The large-magnitude corner where a lossy right-shift rounds before any cancellation — where
+    // Solve's ratio is only approximately preserved and Invert can refuse outright — is NOT swept by these domains;
+    // it has its own dedicated laws instead (symmetric-solve.solve3-extreme-magnitude-agrees,
+    // symmetric-solve.invert-large-magnitude-envelope-refuses, symmetric-solve.lossy-rank-one-singular-refuses,
+    // symmetric-solve.lossless-boundary-is-exact).
+    //
+    // Invert's smaller EdgeFraction (0.25 vs Solve's 0.4) and smaller Block (256 vs 512) are NOT a verified
+    // differential choice. The stated motivation — scalar-transcendental's "an edge-heavy mixture would spend most
+    // of its draws on values the fold collapses together" — applies to FoldModerate identically for Solve and
+    // Invert: FoldModerate(long.MaxValue) is -1 for both, and every other shared committed edge collapses the same
+    // way regardless of which family consumes it. No verified reason for Invert alone to sample less has been
+    // found; this is an unexplained sampling choice inherited from an earlier tuning pass, left as-is here rather
+    // than invented a justification for.
+    private static readonly Domain SymmetricSolve2 = new(Key: "symmetric-solve2", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain SymmetricSolve3 = new(Key: "symmetric-solve3", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain SymmetricInvert2 = new(Key: "symmetric-invert2", Block: 256, EdgeFraction: 0.25, NeighborhoodFraction: 0.3);
+    private static readonly Domain SymmetricInvert3 = new(Key: "symmetric-invert3", Block: 256, EdgeFraction: 0.25, NeighborhoodFraction: 0.3);
+
+    // The apply bands. NO fold anywhere, at the domain or in the claim: a matrix-times-vector component is a sum of at
+    // most three raw products, bounded by 3·2^126, so the sign-plus-UInt128 accumulator is exact over the whole signed
+    // range and there is no preconditioning envelope to stay inside — the reason Solve's and Invert's claims fold and
+    // Apply's do not.
+    private static readonly Domain SymmetricApply2 = new(Key: "symmetric-apply2", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain SymmetricApply3 = new(Key: "symmetric-apply3", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+
+    // The mixed-scale and directed-rounding bands. Both are full-width at the domain and fold only the FRACTION BIT
+    // COUNTS inside the claim (onto [0, 64]), because the counts are the operand whose extremes would otherwise put
+    // the oracle's own power-of-two denominator past any width; the shift-count corners those folds exclude are pinned
+    // by their own hand-derived claim instead. The directed band folds its value operands onto the non-negative half
+    // by one logical shift, which preserves each committed edge raw's bit pattern rather than collapsing the battery.
+    private static readonly Domain MixedScale = new(Key: "mixed-scale", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MixedScaleTriple = new(Key: "mixed-scale-triple", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain DirectedRoot = new(Key: "directed-root", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain DirectedProduct = new(Key: "directed-product", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain DirectedQuotient = new(Key: "directed-quotient", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain DirectedProductSum = new(Key: "directed-product-sum", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain DirectedMagnitude = new(Key: "directed-magnitude", Block: 512, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+
+    // The mass-property bands, one key per shape family so a sphere law and a capsule law never re-sweep each other's
+    // ground. The blocks are HALF the house 512: every draw here forms several BigInteger products of a few hundred
+    // bits on both the subject's and the oracle's side, which is the cost, and the Default tier's random batch already
+    // dominates the sweep.
+    private static readonly Domain MassVolume = new(Key: "mass-volume", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassSphere = new(Key: "mass-sphere", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassBox = new(Key: "mass-box", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassCylinder = new(Key: "mass-cylinder", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassCapsule = new(Key: "mass-capsule", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassParallelAxis = new(Key: "mass-parallel-axis", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
+    private static readonly Domain MassCompound = new(Key: "mass-compound", Block: 256, EdgeFraction: 0.4, NeighborhoodFraction: 0.3);
 
     // The GF(2)[t] bands. Operands are raw ulong coefficient bit-vectors — the domain's signed raw reinterpreted
     // unchanged by Subjects.UnsignedRaw — so the committed edge set lands on exactly the seams this ring branches on:
@@ -327,6 +399,53 @@ internal static class LawRegistry {
         Case("scalar.pow-exact-lattice", () => Laws.Claim(lawId: "scalar.pow-exact-lattice", claim: Subjects.FixedPowExactLattice)),
         Case("scalar.pow-envelope", () => Laws.SweptClaim(lawId: "scalar.pow-envelope", domain: ScalarTranscendental, tier: Tier.Default, width: 1, claim: Subjects.FixedPowWithinEnvelope)),
 
+        // ---- FixedQ1648 (Q16.48): a range-for-resolution scalar leaning toward resolution. Non-transcendental
+        // sibling of the scalar family above, retargeted at forty-eight fraction bits and a sixteen-bit integer
+        // range; its distinguishing law is the FixedQ4816 peer conversion. ----
+        Case("q1648.mul-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q1648.mul-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, subject: Subjects.Q1648Multiply, oracle: Subjects.Q1648MultiplyOracle)),
+        Case("q1648.add-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q1648.add-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, subject: Subjects.Q1648Add, oracle: Subjects.Q1648AddOracle)),
+        Case("q1648.mul-purity", () => Laws.PureScalarBinary(lawId: "q1648.mul-purity", domain: Q1648Scalar, tier: Tier.Default, op: Subjects.Q1648Multiply)),
+        Case("q1648.grid-and-construction", () => Laws.Claim(lawId: "q1648.grid-and-construction", claim: Subjects.Q1648GridAndConstruction)),
+        Case("q1648.additive-ops-vs-oracle", () => Laws.SweptClaim(lawId: "q1648.additive-ops-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648AdditiveOpsExact)),
+        Case("q1648.checked-ops-refuse", () => Laws.SweptClaim(lawId: "q1648.checked-ops-refuse", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648CheckedOpsRefuse)),
+        Case("q1648.divide-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q1648.divide-vs-oracle", domain: Q1648ScalarDivision, tier: Tier.Default, subject: Subjects.Q1648Divide, oracle: Subjects.Q1648DivideOracle)),
+        Case("q1648.modulus-vs-oracle", () => Laws.SweptClaim(lawId: "q1648.modulus-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648ModulusExact)),
+        Case("q1648.order-vs-oracle", () => Laws.SweptClaim(lawId: "q1648.order-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 2, claim: Subjects.Q1648OrderExact)),
+        Case("q1648.magnitude-selection-vs-oracle", () => Laws.SweptClaim(lawId: "q1648.magnitude-selection-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648MagnitudeSelectionExact)),
+        Case("q1648.integral-parts-vs-oracle", () => Laws.SweptClaim(lawId: "q1648.integral-parts-vs-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648IntegralPartsExact)),
+        Case("q1648.predicates-classify", () => Laws.SweptClaim(lawId: "q1648.predicates-classify", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648PredicatesClassify)),
+        Case("q1648.lerp-endpoints-and-oracle", () => Laws.SweptClaim(lawId: "q1648.lerp-endpoints-and-oracle", domain: Q1648Scalar, tier: Tier.Default, width: 2, claim: Subjects.Q1648LerpEndpointsAndOracle)),
+        Case("q1648.text-round-trip", () => Laws.SweptClaim(lawId: "q1648.text-round-trip", domain: Q1648Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q1648TextRoundTrip)),
+        Case("q1648.text-refusals", () => Laws.Claim(lawId: "q1648.text-refusals", claim: Subjects.Q1648TextRefusals)),
+        Case("q1648.styled-parse-is-genuine", () => Laws.Claim(lawId: "q1648.styled-parse-is-genuine", claim: Subjects.Q1648StyledParseIsGenuine)),
+        Case("q1648.text-parse-ties", () => Laws.Claim(lawId: "q1648.text-parse-ties", claim: Subjects.Q1648TextParseTies)),
+        Case("q1648.decimal-conversion-modes", () => Laws.Claim(lawId: "q1648.decimal-conversion-modes", claim: Subjects.Q1648DecimalConversionModes)),
+        Case("q1648.peer-conversion-vs-fixedq4816", () => Laws.Claim(lawId: "q1648.peer-conversion-vs-fixedq4816", claim: Subjects.Q1648PeerConversionExact)),
+
+        // ---- FixedQ3232 (Q32.32): a scalar splitting integer and fraction bits evenly, the balanced point between
+        // FixedQ4816's range-leaning and FixedQ1648's resolution-leaning splits. Non-transcendental sibling of the
+        // scalar family above, retargeted at thirty-two fraction bits and a thirty-two-bit integer range; its
+        // distinguishing law is the FixedQ4816 peer conversion. ----
+        Case("q3232.mul-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q3232.mul-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, subject: Subjects.Q3232Multiply, oracle: Subjects.Q3232MultiplyOracle)),
+        Case("q3232.add-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q3232.add-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, subject: Subjects.Q3232Add, oracle: Subjects.Q3232AddOracle)),
+        Case("q3232.mul-purity", () => Laws.PureScalarBinary(lawId: "q3232.mul-purity", domain: Q3232Scalar, tier: Tier.Default, op: Subjects.Q3232Multiply)),
+        Case("q3232.grid-and-construction", () => Laws.Claim(lawId: "q3232.grid-and-construction", claim: Subjects.Q3232GridAndConstruction)),
+        Case("q3232.additive-ops-vs-oracle", () => Laws.SweptClaim(lawId: "q3232.additive-ops-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232AdditiveOpsExact)),
+        Case("q3232.checked-ops-refuse", () => Laws.SweptClaim(lawId: "q3232.checked-ops-refuse", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232CheckedOpsRefuse)),
+        Case("q3232.divide-vs-oracle", () => Laws.ScalarBinaryMatchesOracle(lawId: "q3232.divide-vs-oracle", domain: Q3232ScalarDivision, tier: Tier.Default, subject: Subjects.Q3232Divide, oracle: Subjects.Q3232DivideOracle)),
+        Case("q3232.modulus-vs-oracle", () => Laws.SweptClaim(lawId: "q3232.modulus-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232ModulusExact)),
+        Case("q3232.order-vs-oracle", () => Laws.SweptClaim(lawId: "q3232.order-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 2, claim: Subjects.Q3232OrderExact)),
+        Case("q3232.magnitude-selection-vs-oracle", () => Laws.SweptClaim(lawId: "q3232.magnitude-selection-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232MagnitudeSelectionExact)),
+        Case("q3232.integral-parts-vs-oracle", () => Laws.SweptClaim(lawId: "q3232.integral-parts-vs-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232IntegralPartsExact)),
+        Case("q3232.predicates-classify", () => Laws.SweptClaim(lawId: "q3232.predicates-classify", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232PredicatesClassify)),
+        Case("q3232.lerp-endpoints-and-oracle", () => Laws.SweptClaim(lawId: "q3232.lerp-endpoints-and-oracle", domain: Q3232Scalar, tier: Tier.Default, width: 2, claim: Subjects.Q3232LerpEndpointsAndOracle)),
+        Case("q3232.text-round-trip", () => Laws.SweptClaim(lawId: "q3232.text-round-trip", domain: Q3232Scalar, tier: Tier.Default, width: 1, claim: Subjects.Q3232TextRoundTrip)),
+        Case("q3232.text-refusals", () => Laws.Claim(lawId: "q3232.text-refusals", claim: Subjects.Q3232TextRefusals)),
+        Case("q3232.styled-parse-is-genuine", () => Laws.Claim(lawId: "q3232.styled-parse-is-genuine", claim: Subjects.Q3232StyledParseIsGenuine)),
+        Case("q3232.text-parse-ties", () => Laws.Claim(lawId: "q3232.text-parse-ties", claim: Subjects.Q3232TextParseTies)),
+        Case("q3232.decimal-conversion-modes", () => Laws.Claim(lawId: "q3232.decimal-conversion-modes", claim: Subjects.Q3232DecimalConversionModes)),
+        Case("q3232.peer-conversion-vs-fixedq4816", () => Laws.Claim(lawId: "q3232.peer-conversion-vs-fixedq4816", claim: Subjects.Q3232PeerConversionExact)),
+
         // ---- FixedContributionFold: raw-once accumulation, optional pool, final range and terminal quantization ----
         Case("contribution-fold.formula-vs-big-integer-oracle", () => {
                 Laws.Claim(lawId: "contribution-fold.formula-vs-big-integer-oracle", claim: FixedContributionFoldClaims.FormulaExactGrid);
@@ -465,6 +584,10 @@ internal static class LawRegistry {
         Case("quaternion.normalize-unit-direction", () => Laws.SweptClaim(lawId: "quaternion.normalize-unit-direction", domain: QuaternionDirection, tier: Tier.Default, width: 4, claim: Subjects.QuaternionNormalizeUnitDirection)),
         Case("quaternion.rotate-vs-oracle", () => Laws.SweptClaim(lawId: "quaternion.rotate-vs-oracle", domain: QuaternionRotate, tier: Tier.Default, width: 4, claim: Subjects.QuaternionRotateExact)),
         Case("quaternion.axis-angle-ladder", () => Laws.Claim(lawId: "quaternion.axis-angle-ladder", claim: Subjects.QuaternionAxisAngleLadderClaim)),
+        // The inbound seam. Judged against the SAME ladder as vector.adoption-ladder, deliberately: the two doors
+        // must agree, and sharing the table is what would catch them drifting apart. Its second leg states what a
+        // three-lane ladder cannot — that the seam does not renormalize.
+        Case("quaternion.adoption-ladder", () => Laws.Claim(lawId: "quaternion.adoption-ladder", claim: Subjects.QuaternionAdoptionMatchesLadder)),
         Case("quaternion.exp-log-seam", () => Laws.Claim(lawId: "quaternion.exp-log-seam", claim: Subjects.QuaternionExpLogSeam)),
 
         // SinCosRaw was gated by nothing until these two cases: the case above says so in its own leg text. It is
@@ -1135,6 +1258,59 @@ internal static class LawRegistry {
         Case("rate.vector-axes-independent", () => Laws.SweptClaim(lawId: "rate.vector-axes-independent", domain: Rate, tier: Tier.Default, width: 6, claim: Subjects.RateVectorAxesIndependent)),
         Case("rate.vector-construction-and-refusals", () => Laws.Claim(lawId: "rate.vector-construction-and-refusals", claim: Subjects.RateVectorConstructionAndRefusals)),
 
+        // ---- FixedSymmetricSolve: scale-free 2×2/3×3 symmetric solve and invert (internal — see the type's own
+        // remarks for the bit budget and the Invert-only refusal envelope) ----
+        Case("symmetric-solve.solve2-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.solve2-vs-oracle", domain: SymmetricSolve2, tier: Tier.Default, width: 5, claim: SymmetricSolveClaims.Solve2VsOracle)),
+        Case("symmetric-solve.solve3-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.solve3-vs-oracle", domain: SymmetricSolve3, tier: Tier.Default, width: 9, claim: SymmetricSolveClaims.Solve3VsOracle)),
+        Case("symmetric-solve.invert2-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.invert2-vs-oracle", domain: SymmetricInvert2, tier: Tier.Default, width: 3, claim: SymmetricSolveClaims.Invert2VsOracle)),
+        Case("symmetric-solve.invert3-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.invert3-vs-oracle", domain: SymmetricInvert3, tier: Tier.Default, width: 6, claim: SymmetricSolveClaims.Invert3VsOracle)),
+        Case("symmetric-solve.solve2-vs-bareiss", () => Laws.SweptClaim(lawId: "symmetric-solve.solve2-vs-bareiss", domain: SymmetricSolve2, tier: Tier.Default, width: 5, claim: SymmetricSolveClaims.Solve2VsBareiss)),
+        Case("symmetric-solve.solve3-vs-bareiss", () => Laws.SweptClaim(lawId: "symmetric-solve.solve3-vs-bareiss", domain: SymmetricSolve3, tier: Tier.Default, width: 9, claim: SymmetricSolveClaims.Solve3VsBareiss)),
+        Case("symmetric-solve.invert2-vs-bareiss", () => Laws.SweptClaim(lawId: "symmetric-solve.invert2-vs-bareiss", domain: SymmetricInvert2, tier: Tier.Default, width: 3, claim: SymmetricSolveClaims.Invert2VsBareiss)),
+        Case("symmetric-solve.invert3-vs-bareiss", () => Laws.SweptClaim(lawId: "symmetric-solve.invert3-vs-bareiss", domain: SymmetricInvert3, tier: Tier.Default, width: 6, claim: SymmetricSolveClaims.Invert3VsBareiss)),
+        Case("symmetric-solve.solve3-extreme-magnitude-agrees", () => Laws.Claim(lawId: "symmetric-solve.solve3-extreme-magnitude-agrees", claim: SymmetricSolveClaims.Solve3ExtremeMagnitudeAgrees)),
+        Case("symmetric-solve.singular-matrices-refuse", () => Laws.Claim(lawId: "symmetric-solve.singular-matrices-refuse", claim: SymmetricSolveClaims.SingularMatricesRefuse)),
+        Case("symmetric-solve.invert-large-magnitude-envelope-refuses", () => Laws.Claim(lawId: "symmetric-solve.invert-large-magnitude-envelope-refuses", claim: SymmetricSolveClaims.InvertLargeMagnitudeEnvelopeRefuses)),
+        Case("symmetric-solve.lossy-rank-one-singular-refuses", () => Laws.Claim(lawId: "symmetric-solve.lossy-rank-one-singular-refuses", claim: SymmetricSolveClaims.LossyRankOneSingularRefuses)),
+        Case("symmetric-solve.lossless-boundary-is-exact", () => Laws.Claim(lawId: "symmetric-solve.lossless-boundary-is-exact", claim: SymmetricSolveClaims.LosslessBoundaryIsExact)),
+        Case("symmetric-solve.divide-magnitude-rounded-full-width-agrees", () => Laws.Claim(lawId: "symmetric-solve.divide-magnitude-rounded-full-width-agrees", claim: SymmetricSolveClaims.DivideMagnitudeRoundedFullWidthAgrees)),
+        Case("symmetric-solve.refusal-leaves-no-stale-output", () => Laws.Claim(lawId: "symmetric-solve.refusal-leaves-no-stale-output", claim: SymmetricSolveClaims.RefusalLeavesNoStaleOutput)),
+        Case("symmetric-solve.solve2-residual-within-envelope", () => Laws.SweptClaim(lawId: "symmetric-solve.solve2-residual-within-envelope", domain: SymmetricSolve2, tier: Tier.Default, width: 5, claim: SymmetricSolveClaims.Solve2ResidualWithinEnvelope)),
+        Case("symmetric-solve.solve3-residual-within-envelope", () => Laws.SweptClaim(lawId: "symmetric-solve.solve3-residual-within-envelope", domain: SymmetricSolve3, tier: Tier.Default, width: 9, claim: SymmetricSolveClaims.Solve3ResidualWithinEnvelope)),
+        Case("symmetric-solve.invert2-residual-within-envelope", () => Laws.SweptClaim(lawId: "symmetric-solve.invert2-residual-within-envelope", domain: SymmetricInvert2, tier: Tier.Default, width: 3, claim: SymmetricSolveClaims.Invert2ResidualWithinEnvelope)),
+        Case("symmetric-solve.invert3-residual-within-envelope", () => Laws.SweptClaim(lawId: "symmetric-solve.invert3-residual-within-envelope", domain: SymmetricInvert3, tier: Tier.Default, width: 6, claim: SymmetricSolveClaims.Invert3ResidualWithinEnvelope)),
+        Case("symmetric-solve.solve3-non-diagonal-exact-value", () => Laws.Claim(lawId: "symmetric-solve.solve3-non-diagonal-exact-value", claim: SymmetricSolveClaims.Solve3NonDiagonalExactValue)),
+        Case("symmetric-solve.solve3-all-cofactors-exact-value", () => Laws.Claim(lawId: "symmetric-solve.solve3-all-cofactors-exact-value", claim: SymmetricSolveClaims.Solve3AllCofactorsExactValue)),
+        Case("symmetric-solve.apply2-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.apply2-vs-oracle", domain: SymmetricApply2, tier: Tier.Default, width: 5, claim: SymmetricSolveClaims.Apply2VsOracle)),
+        Case("symmetric-solve.apply3-vs-oracle", () => Laws.SweptClaim(lawId: "symmetric-solve.apply3-vs-oracle", domain: SymmetricApply3, tier: Tier.Default, width: 9, claim: SymmetricSolveClaims.Apply3VsOracle)),
+        Case("symmetric-solve.apply-refusal-and-symmetry", () => Laws.Claim(lawId: "symmetric-solve.apply-refusal-and-symmetry", claim: SymmetricSolveClaims.ApplyRefusalAndSymmetry)),
+
+        // ---- FusedArithmetic: the mixed-scale one-rounding products (internal) ----
+        Case("mixed-scale.product-vs-oracle", () => Laws.SweptClaim(lawId: "mixed-scale.product-vs-oracle", domain: MixedScale, tier: Tier.Default, width: 4, claim: MixedScaleClaims.ProductVsOracle)),
+        Case("mixed-scale.checked-product-matches-representability", () => Laws.SweptClaim(lawId: "mixed-scale.checked-product-matches-representability", domain: MixedScale, tier: Tier.Default, width: 4, claim: MixedScaleClaims.CheckedProductMatchesRepresentability)),
+        Case("mixed-scale.triple-product-vs-oracle", () => Laws.SweptClaim(lawId: "mixed-scale.triple-product-vs-oracle", domain: MixedScaleTriple, tier: Tier.Default, width: 4, claim: MixedScaleClaims.TripleProductVsOracle)),
+        Case("mixed-scale.extreme-scale-counts-are-congruent", () => Laws.Claim(lawId: "mixed-scale.extreme-scale-counts-are-congruent", claim: MixedScaleClaims.ExtremeScaleCountsAreCongruent)),
+
+        // ---- FixedDirectedRounding: the conservative upper bounds (public — Puck.World.Data's first production caller) ----
+        Case("directed-rounding.ceiling-square-root-is-least-upper-bound", () => Laws.SweptClaim(lawId: "directed-rounding.ceiling-square-root-is-least-upper-bound", domain: DirectedRoot, tier: Tier.Default, width: 4, claim: DirectedRoundingClaims.CeilingSquareRootIsLeastUpperBound)),
+        Case("directed-rounding.ceiling-product-is-least-upper-bound", () => Laws.SweptClaim(lawId: "directed-rounding.ceiling-product-is-least-upper-bound", domain: DirectedProduct, tier: Tier.Default, width: 4, claim: DirectedRoundingClaims.CeilingProductIsLeastUpperBound)),
+        Case("directed-rounding.ceiling-quotient-is-least-upper-bound", () => Laws.SweptClaim(lawId: "directed-rounding.ceiling-quotient-is-least-upper-bound", domain: DirectedQuotient, tier: Tier.Default, width: 4, claim: DirectedRoundingClaims.CeilingQuotientIsLeastUpperBound)),
+        Case("directed-rounding.ceiling-product-sum-is-least-upper-bound", () => Laws.SweptClaim(lawId: "directed-rounding.ceiling-product-sum-is-least-upper-bound", domain: DirectedProductSum, tier: Tier.Default, width: 4, claim: DirectedRoundingClaims.CeilingProductSumIsLeastUpperBound)),
+        Case("directed-rounding.ceiling-magnitude-is-least-upper-bound", () => Laws.SweptClaim(lawId: "directed-rounding.ceiling-magnitude-is-least-upper-bound", domain: DirectedMagnitude, tier: Tier.Default, width: 4, claim: DirectedRoundingClaims.CeilingMagnitudeIsLeastUpperBound)),
+        Case("directed-rounding.negative-operands-refuse", () => Laws.Claim(lawId: "directed-rounding.negative-operands-refuse", claim: DirectedRoundingClaims.NegativeOperandsRefuse)),
+
+        // ---- FixedMassProperties: volumes, bodies, transfer, compound and the inversions (internal) ----
+        Case("mass-properties.volumes-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.volumes-vs-oracle", domain: MassVolume, tier: Tier.Default, width: 3, claim: MassPropertyClaims.VolumesVsOracle)),
+        Case("mass-properties.sphere-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.sphere-vs-oracle", domain: MassSphere, tier: Tier.Default, width: 4, claim: MassPropertyClaims.SphereVsOracle)),
+        Case("mass-properties.box-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.box-vs-oracle", domain: MassBox, tier: Tier.Default, width: 4, claim: MassPropertyClaims.BoxVsOracle)),
+        Case("mass-properties.cylinder-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.cylinder-vs-oracle", domain: MassCylinder, tier: Tier.Default, width: 4, claim: MassPropertyClaims.CylinderVsOracle)),
+        Case("mass-properties.capsule-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.capsule-vs-oracle", domain: MassCapsule, tier: Tier.Default, width: 4, claim: MassPropertyClaims.CapsuleVsOracle)),
+        Case("mass-properties.parallel-axis-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.parallel-axis-vs-oracle", domain: MassParallelAxis, tier: Tier.Default, width: 10, claim: MassPropertyClaims.ParallelAxisVsOracle)),
+        Case("mass-properties.compound-vs-oracle", () => Laws.SweptClaim(lawId: "mass-properties.compound-vs-oracle", domain: MassCompound, tier: Tier.Default, width: 10, claim: MassPropertyClaims.CompoundVsOracle)),
+        Case("mass-properties.capsule-degenerates-to-sphere", () => Laws.Claim(lawId: "mass-properties.capsule-degenerates-to-sphere", claim: MassPropertyClaims.CapsuleDegeneratesToSphere)),
+        Case("mass-properties.inversion-refuses-below-resolution", () => Laws.Claim(lawId: "mass-properties.inversion-refuses-below-resolution", claim: MassPropertyClaims.InversionRefusesBelowResolution)),
+        Case("mass-properties.pinned-pi-is-correctly-rounded", () => Laws.Claim(lawId: "mass-properties.pinned-pi-is-correctly-rounded", claim: MassPropertyClaims.PinnedPiIsCorrectlyRounded)),
+
         // ---- the GF(2)[t] ring beneath the binary fields ----
         // EVERYTHING in this family is EXACT. There is no rounding discipline anywhere in BinaryPolynomial, so the
         // substrate condition does not merely get discharged leg by leg — it never arises, and each leg below says so
@@ -1514,6 +1690,7 @@ internal static class LawRegistry {
         Case("sampling.field-noise-wide-position-alias-and-rebase", () => Laws.Claim(lawId: "sampling.field-noise-wide-position-alias-and-rebase", claim: FixedPointContractClaims.FieldNoiseWidePositionAliasAndRebaseSurface)),
         Case("core.unsigned-square-root-uint128-carrier-boundary", () => Laws.Claim(lawId: "core.unsigned-square-root-uint128-carrier-boundary", claim: FixedPointContractClaims.UnsignedSquareRootUInt128CarrierBoundarySurface)),
         Case("core.fixed-tick-conversion-rounds-up-against-rational-arithmetic", () => Laws.Claim(lawId: "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic", claim: FixedPointContractClaims.FixedTickConversionRoundsUpAgainstRationalArithmetic)),
+        Case("core.fixed-tick-conversion-exact-refuses-inexact-decimals", () => Laws.Claim(lawId: "core.fixed-tick-conversion-exact-refuses-inexact-decimals", claim: FixedPointContractClaims.TryDurationEngineTicksExactAgainstDecimalBits)),
         Case("scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy", () => Laws.Claim(lawId: "scalar.cyclic-rotation-plane-count-matches-coxeter-conjugacy", claim: Subjects.CyclicRotationPlaneCountIsCoxeterConjugacyPairCount)),
         Case("sampling.field-noise-sample-vs-exact-oracle", () => Laws.Claim(lawId: "sampling.field-noise-sample-vs-exact-oracle", claim: FieldNoiseOracleClaims.FieldNoiseSampleMatchesExactOracle)),
         // ---- the presented structure surface and the quadratic-integer wing ----

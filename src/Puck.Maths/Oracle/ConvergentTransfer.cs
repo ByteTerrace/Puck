@@ -2,7 +2,7 @@ namespace Puck.Maths;
 
 /// <summary>
 /// The transfer functor of a continued fraction: a word of partial quotients evaluated through the codiscrete quiver on
-/// two objects, which IS the two-by-two matrix algebra, so the convergent recurrence is a module run and not a
+/// two objects, which is the two-by-two matrix algebra, so the convergent recurrence is a module run and not a
 /// hand-rolled matrix product.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -18,14 +18,14 @@ namespace Puck.Maths;
 /// <b>Four copies of this product are open-coded in the tree</b> — in the quadratic inflation lens, the quasicrystal
 /// index, the Ostrowski numeration system, and the Sturmian return spectrum. Three of them fold left to right, so
 /// <see cref="Evaluate"/> reproduces them entry for entry; the Ostrowski one folds right to left, so it reproduces the
-/// TRANSPOSE, which is the same value because every digit element is symmetric.
+/// transpose, which is the same value because every digit element is symmetric.
 /// </para>
 /// <para>
 /// <b>Which entry is which.</b> The left-to-right fold of <c>[a₀, …, a_n]</c> is
-/// <c>[[p_n, p_{n−1}], [q_n, q_{n−1}]]</c>: the first ROW carries the convergent NUMERATORS and the second row the
+/// <c>[[p_n, p_{n−1}], [q_n, q_{n−1}]]</c>: the first row carries the convergent numerators and the second row the
 /// denominators, so <see cref="Entry"/> at <c>(0, 0)</c> and <c>(0, 1)</c> answers the numerator recurrence and
 /// <c>(1, 0)</c>/<c>(1, 1)</c> the denominator one. On <c>[1, 2, 2, 2]</c> that reads <c>[[17, 7], [12, 5]]</c>
-/// against the convergents <c>1/1, 3/2, 7/5, 17/12</c>. A word given WITHOUT its integer part — the Ostrowski
+/// against the convergents <c>1/1, 3/2, 7/5, 17/12</c>. A word given without its integer part — the Ostrowski
 /// convention, where the digits are <c>a₁</c> onwards — shifts the reading by one, so its first row carries the
 /// denominators <c>q</c> of the full expansion; that is the same matrix read against a different expansion, not a
 /// second convention in this type.

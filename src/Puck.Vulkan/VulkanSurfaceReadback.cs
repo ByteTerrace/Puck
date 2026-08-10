@@ -117,7 +117,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
     }
 
-    /// <summary>Records the image-to-staging copy and submits it under a completion fence WITHOUT waiting — the
+    /// <summary>Records the image-to-staging copy and submits it under a completion fence without waiting — the
     /// non-blocking counterpart of <see cref="Read"/>. Poll <see cref="IsReadComplete"/> and then <see cref="MapPixels"/>
     /// to collect the pixels. At most one read may be in flight per instance.</summary>
     /// <param name="deviceContext">The device the source image lives on.</param>
@@ -180,7 +180,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_readInFlight = true;
     }
 
-    /// <summary>Polls, WITHOUT blocking, whether the outstanding <see cref="SubmitRead"/>'s copy has completed. Returns
+    /// <summary>Polls, without blocking, whether the outstanding <see cref="SubmitRead"/>'s copy has completed. Returns
     /// <see langword="false"/> when no read is in flight, the copy has not finished, or the device is torn down/lost;
     /// <see langword="true"/> once the fence is signaled. Never throws (it is polled from the render loop).</summary>
     /// <returns>Whether the last <see cref="SubmitRead"/> has completed.</returns>
@@ -199,7 +199,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         return (m_frameSynchronizationApi.WaitForFence(deviceHandle: m_device.Handle, fenceHandle: m_fence, timeout: 0UL) == VkResult.Success);
     }
 
-    /// <summary>Returns the pixels the last COMPLETED <see cref="SubmitRead"/> copied (the same reusable staging view
+    /// <summary>Returns the pixels the last completed <see cref="SubmitRead"/> copied (the same reusable staging view
     /// <see cref="Read"/> returns — copy it before the next submit if it must outlive one) and clears the in-flight
     /// state so a new <see cref="SubmitRead"/> may be issued.</summary>
     /// <returns>The tightly packed pixel data from the last completed read.</returns>

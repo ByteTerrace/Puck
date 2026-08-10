@@ -35,10 +35,7 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // two runs agree with each other; this pinned floor additionally catches a serial-behavior regression that stays
     // self-consistent across both runs (both wrong, identically). The two hashes differ because each side receives what
     // the OTHER sent. If a legitimate core change moves these, re-capture from a fresh good run (the render-hash-floor
-    // discipline) rather than deleting the floor. Last re-capture: the HGB link branch's core corrections (the PPU
-    // video-RAM READ-unlock cohering with the polled STAT mode-0 flip at +4, and the serial
-    // shifter's move to the free-running DIV-derived divider) legitimately shifted the cgb side's received stream; the
-    // agb side's pin came through unchanged.
+    // discipline) rather than deleting the floor.
     private const ulong ExpectedCgbTrafficHash = 0x8AF238BC0931D513ul;
     private const ulong ExpectedAgbTrafficHash = 0xC68DC189E9861B53ul;
 

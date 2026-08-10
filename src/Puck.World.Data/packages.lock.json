@@ -25,6 +25,11 @@
         "resolved": "2.0.10",
         "contentHash": "6i1D6/U3i1f/PiXTt9pDvbJwdXEe0F2DZPup6BHzeIu5yPk/lkFzgtrJnPbj54JWUh8Y9vJeKG/TZIT6MkF8TA=="
       },
+      "System.Formats.Cbor": {
+        "type": "Transitive",
+        "resolved": "9.0.18",
+        "contentHash": "m7Z9QrAr7JCfzoosSuIuk3EkJRWidOK1So03oOGLXopBRJHh8NjF5yx+zbmCANP3KbtO3V1MDHQfpxwtx7OFDw=="
+      },
       "puck.abstractions": {
         "type": "Project"
       },
@@ -32,6 +37,12 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+        }
+      },
+      "puck.carriage": {
+        "type": "Project",
+        "dependencies": {
+          "System.Formats.Cbor": "[9.*, )"
         }
       },
       "puck.commands": {

@@ -37,7 +37,18 @@ the P7 socket door (`Server/WorldTcpHost`) so a remote peer can join the same
 ordered domain a local script drives; `--connect <ip:port>` skips the whole
 normal composition in favor of a minimal stdin/socket client
 (`WorldRemoteClient.cs`) — the two are never combined in one process. Both are
-zero by default (loopback-only, no socket ever opens).
+zero by default (loopback-only, no socket ever opens). A connection now
+crosses TWO doors before either side sees a submission: `WorldHelloDoor`
+(protocol-version compatibility) and, once that passes, `WorldAdmissionDoor`
+(`Puck.World.Data`'s `Protocol/WorldAdmissionDoor.cs`) — a challenge-response
+identity check over `Puck.Carriage`'s signed-carriage envelopes against the
+world document's own `admission` section. A world authoring no `admission`
+entries admits no remote peer at all (deny by default); `--connect-identity-dir <dir>`
+supplies the connecting client's own identity, and omitting it signs with a
+freshly minted, unregistered key so the door's refusal path is exercisable
+without a pre-arranged identity. `world.peers` echoes each connection's
+verified identity and mapped principal; `world.admission` echoes the
+document's own authored entries.
 
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device — the
@@ -49,16 +60,24 @@ dotnet run --project src/Puck.World -c Release -- --headless --exit-after-second
 
 `--headless` is a developer/CI reflection of `host.presentation`, never a
 separate product (the unification contract): the SAME console verb surface
-drives both shapes, minus whatever presentation composed. A presentation-only
-verb (`world.fps`/`.gpu`/`render*`/`view*`/`.screenshot`, audio, editor)
-refuses as UNKNOWN over headless stdin — the honest reflection of the
-composed set, not a special-cased denial. `screen.*` is registered in EVERY
-shape (owner ruling, 2026-08-03: the machine host is core state, not
-presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/`.link`/
-`.unlink` apply through the ordered domain headless exactly as windowed, and
-`screen.source <index> camera|capture|desktop|view|qr` still attempts a real
-device open (or, for `qr`, a real encode) and reports the honest failure
-rather than refusing as unknown.
+drives both shapes, minus whatever presentation composed. The command
+VOCABULARY itself must be identical in every shape — the document validators
+check a world's `bindingOverlays` (and the engine-default document's own
+wheels/editor/sculpt pages, which every world compiles in unconditionally)
+against whatever this composition registers, so a genuinely presentation-only
+verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
+UNKNOWN over headless stdin, while `editor.*`/`sculpt.*` are CORE-registered
+(nothing in their dependency chain is GPU-typed) and `world.console`/
+`world.screenshot`/`player.wheel.*` are CORE-registered too but resolve their
+presentation dependency as OPTIONAL and refuse BY NAME at use instead of going
+unregistered — a headless boot that left a stock wheel sector unregistered
+would refuse the SAME boot document a windowed boot admits. `screen.*` is
+registered in EVERY shape (owner ruling, 2026-08-03: the machine host is core
+state, not presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/
+`.link`/`.unlink` apply through the ordered domain headless exactly as
+windowed, and `screen.source <index> camera|capture|desktop|view|qr` still
+attempts a real device open (or, for `qr`, a real encode) and reports the
+honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
 in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
@@ -98,17 +117,28 @@ Facts a script needs:
 - `Program.cs` — the composition root: resolves the boot shape BEFORE any
   registration, then calls `WorldBootComposition.AddWorldAuthoritativeCore`
   always and `AddWorldPresentation` only when windowed;
-  `WorldPostBuildWiring.Install` wires the affordance vocabulary, the
-  session-lever sink, and the server's echo/cue taps once, after the
-  container builds, in EITHER shape.
+  `WorldPostBuildWiring.Install` wires the affordance vocabulary, RE-VALIDATES
+  the boot document's binding vocabulary now that the registry is real (the
+  FIRST validation, at `WorldDefinitionLoader.TryResolve` above, ran before
+  the registry existed, so its command half was a documented no-op in EVERY
+  boot shape — see `WorldPostBuildWiring.Install`'s remarks), the session-lever
+  sink, and the server's echo/cue taps once, after the container builds, in
+  EITHER shape. A refused re-validation prints its reason and fails the boot
+  (`Install` returns `false`) before `Program.cs` ever calls `IHost.RunAsync`.
 - `WorldBootComposition.cs` — the two composition methods (above): everything
   server-safe (profiles, roster, server, grants, addons, replay tape, the
   console's tick barrier, `WorldMachineHost` and `WorldScreenBinder` — the
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`player.engage` read its bound/
-  no-signal state even headless — and every server-safe command module,
-  `ScreenCommandModule` included) vs. everything presentation-only (the GPU
-  host, render root, overlays, the audio device, gamepads, the editor).
+  no-signal state even headless — every server-safe command module including
+  `ScreenCommandModule`, and the WHOLE editor/sculpt verb surface — session,
+  drag, workbench, picker, targeting, and every `editor.*`/`sculpt.*` command
+  module — for command-vocabulary parity: the engine-default binding document
+  commits that vocabulary in every boot shape regardless of what any world
+  document authors) vs. everything genuinely presentation-only (the GPU host,
+  render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
+  and `WorldWheelCommandModule` are CORE-registered too but resolve their one
+  presentation dependency as OPTIONAL and refuse BY NAME at use headless.
 - `WorldHost.cs` — `AddWorldGpuHost` (windowing, allocator, the selected
   backend) and its headless twin `AddWorldHeadlessHost` (the launcher's
   headless terminal + an optional standalone precision waiter); the two are
@@ -127,9 +157,16 @@ Facts a script needs:
   instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
   `WorldServer`/`WorldPopulation`/`WorldOwnedWorlds` and an empty
-  `WorldMachineHost`, shares no singleton with the boot world, and steps once
-  per boot tick inside the SAME `IFixedStepSimulation.Step` call (never a
-  second pump). The machine host being empty is why the start echo counts a
+  `WorldMachineHost`, shares no singleton with the boot world, and advances on
+  its OWN authored `simulation.rateHz` (never a shared build-wide rate) inside
+  the SAME `IFixedStepSimulation.Step` call (never a second pump) — a
+  per-instance accumulator banks the host's master timeline (the boot world's
+  own rate-derived cadence) and steps once per crossing of that instance's own
+  step width. A live `world.rate pause`/`resume` lever holds/releases the
+  accumulator without touching the authored rate; a rate of 0 is the durable
+  stop (never divided by, the instance stays resident and readable, and a
+  buffered document mutation still applies through `WorldServer.DrainAdministrative`
+  rather than self-locking). The machine host being empty is why the start echo counts a
   document's machine-sourced screens: they start dark, and that has to be read
   back rather than inferred. An instance name is also the DIRECTORY SEGMENT its
   owned worlds live in, so `TryStart` refuses a name that is not one safe
@@ -155,11 +192,16 @@ Facts a script needs:
   `screen.source <index> camera|capture|desktop|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
   rather than refusing as unknown), and
-  most others are server-safe (registered in `AddWorldAuthoritativeCore`);
-  `WorldCommandModule.cs` (the graphics/GPU levers), `WorldHostCommandModule.cs`,
+  most others are server-safe (registered in `AddWorldAuthoritativeCore`,
+  the editor/sculpt modules included — see above); `WorldCommandModule.cs`
+  (the graphics/GPU levers), `WorldHostCommandModule.cs`,
   `WorldViewCommandModule.cs`, `WorldAudioCommandModule.cs`,
-  `WorldRecordingCommandModule.cs`, `WorldSdfCommandModule.cs`,
-  `WorldUiCommandModule.cs`, and the editor modules are presentation-only.
+  `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
+  genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`
+  and `WorldWheelCommandModule.cs` are core-registered but refuse by name at
+  use when their one presentation dependency is absent (command-vocabulary
+  parity — `world.console`/`player.wheel.*` are stock wheel-hold-page rows the
+  engine-default document commits in every boot shape).
 - `WorldDefinitionLoader.cs` — resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
   `puck.recording.v1`.
@@ -178,9 +220,15 @@ Facts a script needs:
   the deterministic avatar catalog (a distinct animated humanoid rig per
   population slot, authored without RNG state) and rig compilation.
 - `RecordingTap.cs` — the render-tap capture path (below).
-- `Assets/` — the four checked-in worlds (`worlds/`: `play` — the hub and boot
-  default — `dive`, `kart`, `jump`; the four-world charter's whole roster,
-  2026-08-06), the default recording document (`recordings/`), two shipped
+- `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
+  rather than here: `play` — the hub and boot default — `dive`, `kart`, `jump`
+  — the four-world charter's whole game roster, 2026-08-06 — plus `studio`, a
+  non-game dev canvas for character work reached only with `--world`: neutral
+  floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout
+  composing front/three-quarter/side/back at once; and the `quilt-*` documents,
+  test content for the border-margin and corner-crossing work, outside the
+  charter roster and not game worlds), the default recording document
+  (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
   today — the `arcade` addon was ported to a world `rules` section and its
   compiled guest deleted before the addons themselves went unmounted), a
@@ -266,8 +314,7 @@ diverts a player's intent wire onto the machine — the same `PlayerIntent`
 currency, translated once into a neutral pad image, folded server-side
 (`WorldEngagement.FoldTick`) and read directly by `WorldMachineHost.Advance`
 inside `WorldServer.Step`; engagement authority rides the grant table's
-`Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md)
-and `docs/capability-channels-STATE.md` for the full contract.
+`Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
 ## Native capture
 
@@ -278,6 +325,16 @@ once in a capturing node; arming a session (`capture.start`/`capture.stop`/
 `capture.status`) reads captured frames back to CPU pixels and composites
 capture-only overlays that never appear in the game window. The tap is free
 when idle.
+
+Playback time is WALL-CLOCK time, not engine time: the shipped document sets
+`clock: "Wall"`, so blocks are stamped from QPC when the frame reaches the
+sink. `Sim` stamps from the engine tick clock instead but forbids audio rows.
+The two diverge under capture — the readback is synchronous per captured
+frame, so the frame rate roughly halves while recording (frames are never
+produced, not dropped; `capture.status` reports the drop count separately).
+A `Timecode` overlay reads its own clock and is not rebased, while the
+container timeline is, so the burnt-in number leads playback position by the
+arm-to-first-packet latency.
 
 ## Graphics options
 

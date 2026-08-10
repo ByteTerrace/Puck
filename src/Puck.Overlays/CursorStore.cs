@@ -3,14 +3,14 @@ using Puck.Hosting;
 
 namespace Puck.Overlays;
 
-/// <summary>One seat's drawn pointer cursor, scoped to its viewport rect. Positions are PIXELS in full-frame space;
+/// <summary>One seat's drawn pointer cursor, scoped to its viewport rect. Positions are pixels in full-frame space;
 /// the seat's clip rect confines them, so a cursor near a split boundary cuts, never bleeds into a neighbour's
 /// view.</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
 /// <param name="X">The cursor hotspot x, px.</param>
 /// <param name="Y">The cursor hotspot y, px.</param>
 /// <param name="Hover">Whether the cursor currently rests on something hit-testable (an overlay panel or a picked
-/// world row) — the ACCENT highlight tier.</param>
+/// world row) — the accent highlight tier.</param>
 /// <param name="HoverLabel">The hovered thing's short label (the tooltip text), or empty for a bare hover-less
 /// cursor.</param>
 /// <param name="SizePx">The ring radius, px (the world-authored cursor size; the host clamps it to the writer's
@@ -27,7 +27,7 @@ public readonly record struct OverlayCursorSeat(
     OverlayColorRole Role
 );
 
-/// <summary>The per-frame cursor snapshot — one entry per seat whose pointer is currently VISIBLE (the host owns the
+/// <summary>The per-frame cursor snapshot — one entry per seat whose pointer is currently visible (the host owns the
 /// visibility policy; an empty frame draws nothing, so hiding is simply not publishing the seat).</summary>
 /// <param name="Seats">The cursor-bearing seats, in slot order.</param>
 public readonly record struct OverlayCursorFrame(

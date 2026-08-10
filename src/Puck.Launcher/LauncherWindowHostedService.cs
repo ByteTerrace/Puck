@@ -186,14 +186,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // through one composite. Resolved once: the set of contributed capabilities never changes mid-run.
                 _ = m_rootHostContext.HoldsCapability<IWindowInputObserver>(capability: out var windowInputObserver);
                 // CLOSED-LOOP present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
-                // instant it was confirmed. The pacer OBSERVES this rhythm — reporting the measured display interval (the
-                // DELTA between consecutive confirmed presents, the only phase-meaningful part of the sample) — but it does
-                // NOT re-anchor the render deadline to the confirmation timestamp. That timestamp is backend-specific and,
-                // for Vulkan, is the CPU instant vkWaitForPresentKHR returned INSIDE this frame's Present call — i.e. AFTER
-                // produce ran — so anchoring the deadline to it and adding the period pushed every deadline out by one whole
-                // produce, serializing produce and the pacer wait (capping ~120 Hz runs near ~100 FPS). The deadline is
-                // instead advanced on an absolute slot grid (see the pacer block below), which lets produce + GPU work
-                // overlap the wait. Absent any feedback the pacer is unaffected. Render-side only — never touches the sim.
+                // instant it was confirmed. The pacer observes this rhythm — reporting the measured display interval
+                // (delta between consecutive confirmed presents) — but does not re-anchor the render deadline to the
+                // confirmation timestamp: for Vulkan that timestamp is the CPU instant vkWaitForPresentKHR returned
+                // inside this frame's Present call (after produce ran), so anchoring to it would serialize produce and
+                // the pacer wait, capping ~120 Hz runs near ~100 FPS. The deadline instead advances on an absolute slot
+                // grid (see the pacer block below), letting produce + GPU work overlap the wait. Render-side only —
+                // never touches the sim.
                 var presentTiming = (m_presenter as IPresentTimingFeedback);
                 var lastObservedPresentCount = 0u;
                 var previousPresentTimestamp = 0L;
@@ -217,7 +216,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 var presentPacingVersion = m_presentPacing.Version;
                 var renderPeriod = ResolveRenderPeriod(displayTiming: displayTiming, frequency: frequency, requestedHertz: m_presentPacing.TargetHertz);
                 var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
-                var stepTicks = EngineTicks.PerRate(ratePerSecond: LauncherHostLoop.TargetUpdateRate);
                 var startTimestamp = Stopwatch.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
                 var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
@@ -243,6 +241,24 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // IInputFocus.IsActiveFor is a LEVEL, not an edge — tracked across iterations so the focus-loss
                 // reset below fires once on the transition into unfocused, never every frame the level stays low.
                 var wasInputUnfocused = false;
+
+                // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
+                // (console pump alone) AND the fallback while the registered simulation reports 0 (an authored
+                // simulation.rateHz durable stop) — the pump's own calling cadence is presentation-adjacent host
+                // pacing, never sim state, and EngineTicks.PerRate refuses zero outright. The registered simulation
+                // still gates whether it actually steps internally (WorldSimulation.ShouldStepBoot); this value only
+                // decides how often it is called, so a stopped world's window keeps rendering and its console keeps
+                // answering.
+                //
+                // Resolved per iteration, not once before the loop: a live world.load can swap in a
+                // differently-rated document mid-session, and the pump must adopt the new cadence the next iteration
+                // rather than keep stepping at a stale rate.
+                static ulong ResolveStepTicks(IFixedStepSimulation? simulation) {
+                    var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
+                    var pumpRatePerSecond = ((simRatePerSecond == 0U) ? LauncherHostLoop.DefaultUpdateRate : simRatePerSecond);
+
+                    return EngineTicks.PerRate(ratePerSecond: pumpRatePerSecond);
+                }
 
                 m_frameTimingHub.Published += PublishFrameTimingDigest;
 
@@ -322,12 +338,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
                     // When the window is not focused, key/button releases are not delivered, so drop any held
-                    // inputs — otherwise a value down at the moment focus was lost would stay stuck. Fire only on
-                    // the TRANSITION into unfocused (wasInputUnfocused above): this is a level read, and resetting
-                    // on the level would re-run ReleaseHeld() — and its ResetAll chord reset — every single frame
-                    // focus stays away, unlatching a trigger resting in the hysteresis band for good and re-arming
-                    // (and re-firing) an armed chord command at frame rate. Distinct from the FocusLost windowInput
-                    // kind below, which is OS-level and already edge-shaped on its own.
+                    // inputs — otherwise a value down at the moment focus was lost would stay stuck. Fires only on
+                    // the transition into unfocused (wasInputUnfocused above): resetting on the level instead of the
+                    // edge would re-run ReleaseHeld() every frame focus stays away, unlatching a trigger resting in
+                    // the hysteresis band for good and re-firing an armed chord command at frame rate. Distinct from
+                    // the FocusLost windowInput kind below, which is OS-level and already edge-shaped on its own.
                     var isInputUnfocused = (
                         m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var heldFocus) &&
                         !heldFocus.IsActiveFor(deviceId: default)
@@ -356,12 +371,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         }
 
                         if (windowInput.Kind is WindowInputKind.PointerMove or WindowInputKind.PointerPosition or WindowInputKind.PointerButton or WindowInputKind.PointerWheel) {
-                            // The pointer is BROWSING state, not bound input: where the cursor is, what it is over,
-                            // which buttons are held, and how far the wheel turned are presentation/session-only and must never reach a
-                            // CommandSnapshot. The observer call above is therefore the pointer's WHOLE path — a pointer
-                            // act enters the simulation only when a consumer of that state dispatches an ordinary
-                            // console verb, through the same door a typed line uses. No InputSources entry names a
-                            // pointer control, so, exactly like FocusLost, these kinds must never reach
+                            // The pointer is browsing state, not bound input: where the cursor is, what it is over,
+                            // which buttons are held, and how far the wheel turned are presentation/session-only and
+                            // must never reach a CommandSnapshot. The observer call above is therefore the pointer's
+                            // whole path — a pointer act enters the simulation only when a consumer of that state
+                            // dispatches an ordinary console verb, through the same door a typed line uses. No
+                            // InputSources entry names a pointer control, so these kinds must never reach
                             // WindowInputMapper: it has no case for them and throws.
                             continue;
                         }
@@ -422,6 +437,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     var frameTimingFixedStepStart = (frameTimingEnabled ? Stopwatch.GetTimestamp() : 0L);
+                    // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
+                    var stepTicks = ResolveStepTicks(simulation: m_simulation);
 
                     if (pump is { } activePump) {
                         var timing = (frameTimingEnabled ? fixedStepTiming : null);
@@ -465,12 +482,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                     var frameTimingPostPresentStart = 0L;
 
-                    // The frame body (present-side GPU work) can surface a DEVICE LOST — DXGI_ERROR_DEVICE_REMOVED /
-                    // VK_ERROR_DEVICE_LOST — at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
+                    // The frame body (present-side GPU work) can surface a device-lost error (DXGI_ERROR_DEVICE_REMOVED /
+                    // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
                     // translated to a neutral DeviceLostException at the backend boundary. Catch it here, recover the
                     // device + resources, and resume. The fixed-step sim above is already advanced for this tick and is
-                    // NOT touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks clamp,
-                    // so a recorded run produces identical sim ticks regardless of recovery hitches.
+                    // not touched — a recovery that burns several wall-clock frames is absorbed by the maxFrameTicks
+                    // clamp, so a recorded run produces identical sim ticks regardless of recovery hitches.
                     try {
                         // Test hook (PUCK_TEST_DEVICE_LOSS=<seconds>): inject ONE synthetic device loss to exercise the
                         // full recovery path (catch -> node reset -> device recreate -> resume) on a HEALTHY GPU — no
@@ -564,16 +581,15 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     if (renderPeriod > 0L) {
-                        // GRID-ANCHORED pacing. The render deadline advances by exactly renderPeriod from the PREVIOUS
-                        // deadline — an absolute present-slot grid — NOT from when produce/present finished this frame. That
-                        // is what lets this frame's produce + GPU work OVERLAP the wait for the next slot: the wait is only
-                        // the slack between the fixed grid point and however long produce ran, so the loop-to-loop interval
-                        // is the slot itself (renderPeriod), not produce + slot.
+                        // Grid-anchored pacing. The render deadline advances by exactly renderPeriod from the previous
+                        // deadline — an absolute present-slot grid — not from when produce/present finished this frame.
+                        // That lets this frame's produce + GPU work overlap the wait for the next slot: the wait is
+                        // only the slack between the fixed grid point and however long produce ran, so the
+                        // loop-to-loop interval is the slot itself (renderPeriod), not produce + slot.
                         //
-                        // The closed loop stays OBSERVED, not authoritative: when the presenter confirms a NEW present, the
-                        // measured display interval (the DELTA between confirmed presents) is reported, but the confirmation
-                        // timestamp does NOT move the deadline — re-anchoring to it serialized produce and the wait (that
-                        // timestamp is a post-produce, one-present-lagged value on Vulkan; see the presentTiming remarks
+                        // The closed loop stays observed, not authoritative: when the presenter confirms a new
+                        // present, the measured display interval (delta between confirmed presents) is reported, but
+                        // the confirmation timestamp does not move the deadline (see the presentTiming remarks
                         // above). When no present-timing capability is present this whole block is a no-op.
                         if (presentTiming is not null) {
                             var sample = presentTiming.LastPresentTiming;

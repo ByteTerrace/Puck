@@ -47,7 +47,7 @@ public readonly record struct AssociatorCharge<TValue>(int Left, int Middle, int
 /// <param name="Right">The third basis key.</param>
 /// <param name="Nested">The commutation charge the folded pair carries.</param>
 /// <param name="Flat">The product of the commutation charges the two factors carry.</param>
-/// <remarks>Both hexagons are indexed by the SAME ordered triple — the first folds the leading pair against
+/// <remarks>Both hexagons are indexed by the same ordered triple — the first folds the leading pair against
 /// <paramref name="Right"/>, the second folds the trailing pair against <paramref name="Left"/> — so one record shape
 /// serves both, exactly as one <see cref="CoherenceWitness{TValue}"/> serves both rebalancing routes.</remarks>
 public readonly record struct BraidingWitness<TValue>(int Left, int Middle, int Right, TValue Nested, TValue Flat);
@@ -81,7 +81,7 @@ public readonly record struct SumClosureObstruction(ClosureCertificate Attempted
 public readonly record struct NormalizationObstruction(long StepsTaken, long BlockedKey);
 
 /// <summary>
-/// The computed law certificates of one presentation. Every flag is PROVED over the presentation's own basis; none is
+/// The computed law certificates of one presentation. Every flag is proved over the presentation's own basis; none is
 /// assumed, and the operation surface degrades by certificate rather than by a hardcoded assumption.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -134,7 +134,7 @@ public readonly struct PresentationCertificate<TValue> {
     /// quasialgebra floors over a signed exact material.
     /// </summary>
     /// <remarks>
-    /// Over an exact material this measures coherence. Over the rounding carrier it does NOT: every algebra in this
+    /// Over an exact material this measures coherence. Over the rounding carrier it does not: every algebra in this
     /// library already fails associativity bitwise because each returned component carries its own rounding, so on
     /// <see cref="FixedQ4816"/> a nonzero entry may be rounding noise rather than a 3-cochain. Read the quasialgebra
     /// regime on an exact material.
@@ -157,32 +157,32 @@ public readonly struct PresentationCertificate<TValue> {
     /// <see cref="IsCoherent"/> holds.
     /// </summary>
     public ReadOnlySpan<CoherenceWitness<TValue>> CoherenceWitness => m_coherenceWitness;
-    /// <summary>Indicates whether the unit acts as an identity on every basis element.</summary>
+    /// <summary>Gets a value indicating whether the unit acts as an identity on every basis element.</summary>
     public bool HasIdentity { get; }
-    /// <summary>Indicates whether the associator vanishes whenever two of its three arguments coincide.</summary>
+    /// <summary>Gets a value indicating whether the associator vanishes whenever two of its three arguments coincide.</summary>
     public bool IsAlternative { get; }
-    /// <summary>Indicates whether the product associates on every ordered basis triple examined.</summary>
+    /// <summary>Gets a value indicating whether the product associates on every ordered basis triple examined.</summary>
     public bool IsAssociative { get; }
     /// <summary>
-    /// Indicates whether the product carries a braiding: every ordered basis pair has a DERIVED commutation charge, and
-    /// those charges satisfy both hexagon identities on every ordered basis triple examined.
+    /// Gets a value indicating whether the product carries a braiding: every ordered basis pair has a derived
+    /// commutation charge, and those charges satisfy both hexagon identities on every ordered basis triple examined.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Derived, never declared. The charge of an ordered pair is the coefficient <c>c</c> with
     /// <c>a·b = c·(b·a)</c>, searched over the material's one, its negation, and — at an
     /// <see cref="IFieldMaterial{TValue, TSelf}"/> — the coefficient the two cells' own leading charges name. The
-    /// search PROPOSES and the scaled comparison decides, so the reported braiding is the product's own rather than a
+    /// search proposes and the scaled comparison decides, so the reported braiding is the product's own rather than a
     /// datum about it, which is strictly more than <see cref="IsCoherent"/> reports about the declared associator.
     /// </para>
     /// <para>
-    /// It is a LIMIT: where none of the three candidates works the pair issues no charge, no flag is issued, and the
+    /// It is a limit: where none of the three candidates works the pair issues no charge, no flag is issued, and the
     /// missing coefficient is readable as a zero from <see cref="BraidingCharge"/>. That is a shrunk guarantee and not
     /// a wrong answer — a noncommutative group algebra, whose two orderings land on different basis keys, has no
     /// commutation charge at all and says so.
     /// </para>
     /// <para>
-    /// A pair that ANNIHILATES BOTH WAYS is the second such case, and it is a limit for the opposite reason: every
+    /// A pair that annihilates both ways is the second such case, and it is a limit for the opposite reason: every
     /// coefficient relates the two zeros, so the pair determines none. No charge is issued there either, which is why a
     /// degenerate Clifford signature reports no braiding — its annihilating pairs leave the derivation incomplete —
     /// rather than reporting the hexagon failures an arbitrarily chosen charge would manufacture.
@@ -190,31 +190,31 @@ public readonly struct PresentationCertificate<TValue> {
     /// </remarks>
     public bool IsBraided { get; }
     /// <summary>
-    /// Indicates whether the presentation's re-association charges are coherent: the charge a bracketing picks up
-    /// depends only on the bracketing, never on the order its brackets were spliced away.
+    /// Gets a value indicating whether the presentation's re-association charges are coherent: the charge a
+    /// bracketing picks up depends only on the bracketing, never on the order its brackets were spliced away.
     /// </summary>
     /// <remarks>
     /// Proved on every ordered basis quadruple examined, by charging its two rebalancing routes and comparing them. It
-    /// is a statement about the DECLARED charges rather than about the product, so a presentation whose uniform charge
+    /// is a statement about the declared charges rather than about the product, so a presentation whose uniform charge
     /// is one is coherent outright and a declared 3-cochain is coherent exactly when it satisfies that quadruple
     /// identity. A presentation with no finite basis proves nothing and reports <see langword="false"/>, as every other
     /// flag here does.
-    /// <para>The quadruple identity is the whole remaining condition because the OTHER coherence axiom — that the
+    /// <para>The quadruple identity is the whole remaining condition because the other coherence axiom — that the
     /// charges are normalized at the unit — is enforced at construction, where a charge sitting at the unit is refused
     /// with an impossibility argument rather than certified afterwards. That is why a uniform charge that is not one
     /// never reaches this flag: it names no presentation. Certifying it here instead would be unsound over a rounding
     /// carrier, where a small charge cubed and squared truncate to the same value and the identity holds vacuously.</para>
     /// </remarks>
     public bool IsCoherent { get; }
-    /// <summary>Indicates whether the product commutes on every ordered basis pair examined.</summary>
+    /// <summary>Gets a value indicating whether the product commutes on every ordered basis pair examined.</summary>
     public bool IsCommutative { get; }
-    /// <summary>Indicates whether the braiding is symmetric: <see cref="IsBraided"/> holds and every ordered basis
-    /// pair's commutation charge equals its mirror's.</summary>
-    /// <remarks>A graded-commutative regime — every NONDEGENERATE Clifford signature, every Cayley-Dickson floor
+    /// <summary>Gets a value indicating whether the braiding is symmetric: <see cref="IsBraided"/> holds and every
+    /// ordered basis pair's commutation charge equals its mirror's.</summary>
+    /// <remarks>A graded-commutative regime — every nondegenerate Clifford signature, every Cayley-Dickson floor
     /// through the quaternions — is symmetric, because its charges are signs and a sign is its own mirror. A charge
     /// that is a root of unity of higher order is not, which is what separates a braiding from a symmetry and is why
     /// the two flags are reported apart rather than as one. A degenerate signature is symmetric everywhere it is
-    /// CONSTRAINED and reports <see langword="false"/> anyway, because the flag is a proof and its annihilating pairs
+    /// constrained and reports <see langword="false"/> anyway, because the flag is a proof and its annihilating pairs
     /// leave one unfinished.</remarks>
     public bool IsSymmetric { get; }
     /// <summary>Gets the outcome of bounded law verification over the compiled finite-basis product.</summary>
@@ -230,7 +230,7 @@ public readonly struct PresentationCertificate<TValue> {
     /// <exception cref="ArgumentOutOfRangeException">A key names no normal form of the certified presentation, which
     /// includes every key of a presentation with no finite basis.</exception>
     /// <remarks>
-    /// The material's zero reads unambiguously as "not derived", because no derived charge can BE zero: the candidates
+    /// The material's zero reads unambiguously as "not derived", because no derived charge can be zero: the candidates
     /// are the material's one, its negation, and a quotient of two nonzero field coefficients, and none of the three is
     /// the zero of any material this library carries.
     /// <para>"Not derived" covers three cases and does not separate them, so read it as the absence of a charge and

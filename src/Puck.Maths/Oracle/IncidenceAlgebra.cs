@@ -1,15 +1,15 @@
 namespace Puck.Maths;
 
 /// <summary>
-/// The presented algebra of a finite partially ordered set, read as its incidence algebra: its keys ARE the intervals,
-/// its product IS convolution over the ways an interval factors through a middle element, and the Möbius function of
+/// The presented algebra of a finite partially ordered set, read as its incidence algebra: its keys are the intervals,
+/// its product is convolution over the ways an interval factors through a middle element, and the Möbius function of
 /// the order is an element of it rather than a recursion beside it.
 /// </summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <typeparam name="TOps">The material.</typeparam>
 /// <remarks>
 /// <para>
-/// It contributes NO arithmetic. Zeta is the coefficient one at every interval; the Möbius element is the sum over all
+/// It contributes no arithmetic. Zeta is the coefficient one at every interval; the Möbius element is the sum over all
 /// lengths of the negated strict part of zeta; and every readout is a pairing. Each is one call into
 /// <see cref="PresentedAlgebra{TValue, TOps}"/>, so a recursion over intervals appears nowhere — which is the whole
 /// claim, since a Möbius recursion written here would be a second kernel.
@@ -21,7 +21,7 @@ namespace Puck.Maths;
 /// endpoints.
 /// </para>
 /// <para>
-/// <b>The order's height IS the closure certificate.</b> The strict part of zeta carries no singleton interval, so its
+/// <b>The order's height is the closure certificate.</b> The strict part of zeta carries no singleton interval, so its
 /// <c>k</c>-th power carries only intervals with a chain of <c>k</c> strict steps, and a finite order runs out of
 /// those: the sum over all lengths terminates and <see cref="ClosureCertificate.Nilpotent"/> is issued, computed
 /// rather than assumed. That is the same certificate the divisibility window earns from its bound.

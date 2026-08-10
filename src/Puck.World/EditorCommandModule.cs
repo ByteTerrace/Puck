@@ -11,20 +11,20 @@ namespace Puck.World;
 /// the camera verbs (<c>editor.camera</c>/<c>cam.speed</c>/<c>cam.pose</c>) are the typed twins of the
 /// chord toggles plus the numeric setters a chord cannot express — <c>editor.camera [fly|orbit]</c> both toggles
 /// (no argument) and selects explicitly, and <c>editor.cam.speed [unitsPerSecond|faster|slower]</c> both sets and
-/// steps, so a chord's step/toggle twin is a BOUND dispatch of the same verb (a constant <see cref="CommandValue"/>
+/// steps, so a chord's step/toggle twin is a bound dispatch of the same verb (a constant <see cref="CommandValue"/>
 /// riding the binding row) rather than a sibling command; the router/gesture verbs (<c>editor.stick.move</c>/
 /// <c>stick.look</c>/<c>ascend</c>/<c>descend</c>) are the bound-control channels the editor pages dispatch. Every
-/// discrete chord act returns an echo line, so the pad's acts narrate on stdout exactly like typed verbs. A SEPARATE
+/// discrete chord act returns an echo line, so the pad's acts narrate on stdout exactly like typed verbs. A separate
 /// module to keep every class under its analyzer ceilings.
 /// </summary>
 /// <remarks><c>editor.enter</c>/<c>exit</c> route Simulation (they divert intent through the same tick-applied
 /// <c>SetControl</c> wire as <c>player.control</c>, and the stdin barrier then serializes a following read); the
 /// camera verbs are presentation-only and stay Immediate.</remarks>
 internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench) : ICommandModule {
-    /// <summary>The Axis2D command the editor pages bind the LEFT stick to (+Y flies forward, +X strafes right) —
+    /// <summary>The Axis2D command the editor pages bind the left stick to (+Y flies forward, +X strafes right) —
     /// routed into the editing seat's camera; not meant to be typed.</summary>
     public const string MoveCommand = "editor.stick.move";
-    /// <summary>The Axis2D command the editor pages bind the RIGHT stick to (+X looks right, +Y looks up). Same
+    /// <summary>The Axis2D command the editor pages bind the right stick to (+X looks right, +Y looks up). Same
     /// routing contract as <see cref="MoveCommand"/>.</summary>
     public const string LookCommand = "editor.stick.look";
     /// <summary>The rise channel (Right Shoulder, both edges) — held vertical ascent while flying.</summary>
@@ -36,7 +36,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     /// and West (orbit, -1) for the explicit selection; typed with a literal <c>fly</c>/<c>orbit</c> token for the
     /// same explicit selection, or with none at all to toggle.</summary>
     public const string CameraToggleCommand = "editor.camera";
-    /// <summary>The mode entry act — bound on the DEFAULT page (Gamepad Back), committed by the play wheel's
+    /// <summary>The mode entry act — bound on the default page (Gamepad Back), committed by the play wheel's
     /// Editor sector (hold Tab), and typed as <c>editor.enter [seat]</c>.</summary>
     public const string EnterCommand = "editor.enter";
     /// <summary>The mode exit act — bound on the editor base page (East / Back), committed by the editor wheel's
@@ -134,11 +134,11 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         );
     }
 
-    /// <summary>Resolves the acting seat: a PRESENT trailing [seat] token (1..4) is authoritative; an absent one falls
+    /// <summary>Resolves the acting seat: a present trailing [seat] token (1..4) is authoritative; an absent one falls
     /// back to the invocation's slot — the pressing device's seat for a bound chord act, and the text path's default
-    /// seat 1 (<see cref="CommandContext.Slot"/> is 0 there by contract). Token PRESENCE is the discriminator, never
+    /// seat 1 (<see cref="CommandContext.Slot"/> is 0 there by contract). Token presence is the discriminator, never
     /// <see cref="CommandContext.Parse"/>: the registry's Immediate fast path hands wire handlers a null
-    /// Parse for TYPED lines too, so a Parse-null test would silently ignore a typed seat token. Internal —
+    /// Parse for typed lines too, so a Parse-null test would silently ignore a typed seat token. Internal —
     /// <see cref="EditorSelectionCommandModule"/> shares the same convention.</summary>
     /// <param name="context">The invocation context.</param>
     /// <param name="args">The verb args.</param>
@@ -171,9 +171,8 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             EditorModeOutcome.AlreadyThere => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is already editing]"),
             EditorModeOutcome.Pending => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is pending — confirm an identity first (South/Enter or player.identity)]"),
             EditorModeOutcome.NoBindingGroup => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)}'s profile declares no '{WorldEditorBindings.GroupId}' binding group, so editor verbs would resolve against the play page — the mode was NOT entered]"),
-            // Every outcome is named. The catch-all used to report NotJoined, so a new outcome would have been
-            // announced under someone else's reason — a refusal naming the wrong cause is worse than silence, because
-            // it sends the reader to fix a thing that is not broken.
+            // Every outcome is named individually — a catch-all reporting a fixed reason would announce a future new
+            // outcome under someone else's cause, and a refusal naming the wrong cause is worse than silence.
             EditorModeOutcome.NotJoined => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]"),
             _ => throw new InvalidOperationException(message: $"unhandled {nameof(EditorModeOutcome)} '{outcome}'"),
         });
@@ -430,15 +429,15 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
 
     /// <summary>Resolves a two-way step/selection from either a literal token at <paramref name="at"/> (case-insensitive
     /// match against <paramref name="positive"/>/<paramref name="negative"/>) or, when no token is present, the sign of
-    /// a BOUND dispatch's constant value: a step-twin binding row folds onto an argument-bearing verb by carrying
+    /// a bound dispatch's constant value: a step-twin binding row folds onto an argument-bearing verb by carrying
     /// <c>CommandValue.Axis(+1)</c>/<c>Axis(-1)</c> in place of an argument (the mechanism behind every
     /// <c>.next</c>/<c>.prev</c>/<c>.up</c>/<c>.down</c>/<c>.grow</c>/<c>.shrink</c> twin killed in this wave — see
     /// <c>editor.select</c>, <c>editor.sculpt.select/scale/material/frame/smooth</c>). Every such verb declares
     /// <c>valueKind: CommandValueKind.Axis1D</c> at registration (see <see cref="CommandDefinition.WithWireArgs"/>'s
     /// doctrine comment) so <see cref="BindingVocabularyCheck"/> admits the row — which means
-    /// <see cref="CommandContext.Value"/>'s KIND can no longer discriminate bound from typed (the text path's own
+    /// <see cref="CommandContext.Value"/>'s kind can no longer discriminate bound from typed (the text path's own
     /// impulse value now reads Axis1D too). The discriminator is <see cref="CommandContext.Source"/> instead — the
-    /// provider-neutral physical source id, non-null ONLY for a real bound dispatch, documented null for every text
+    /// provider-neutral physical source id, non-null only for a real bound dispatch, documented null for every text
     /// path. Internal — every sibling sculpt module shares this fold.</summary>
     /// <param name="context">The invocation context (its <see cref="CommandContext.Value"/> carries the bound constant
     /// when <see cref="CommandContext.Source"/> is non-null).</param>

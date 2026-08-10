@@ -1,17 +1,17 @@
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compiled variants of the Stage 1 views kernel — the ONE enumerable pair, deliberately not a combinatorial
+/// The compiled variants of the Stage 1 views kernel — the one enumerable pair, deliberately not a combinatorial
 /// space. <see cref="Full"/> (sdf-world-views.comp) is the default and the bit-exact reference: the complete ISA,
 /// every op and shape case compiled in. <see cref="CoreOps"/> (sdf-world-views-core.comp) compiles the exotic cases
-/// OUT (the <c>SDF_CORE_OPS</c> strip in sdf-vm.hlsli), shrinking the interpreter's live register state so more warps
-/// reside — the full interpreter is register-pressure-limited (~38% CS-warp occupancy, ~72% of the register file,
-/// limited. <see cref="SdfWorldEngine.UploadProgram"/> selects per program via
+/// out (the <c>SDF_CORE_OPS</c> strip in sdf-vm.hlsli), shrinking the interpreter's live register state so more warps
+/// reside — the full interpreter is register-pressure-limited (~38% CS-warp occupancy, ~72% of the register file).
+/// <see cref="SdfWorldEngine.UploadProgram"/> selects per program via
 /// <see cref="SdfViewsKernelVariants.Select"/>: a pure function of the instruction stream, so a program that touches
 /// any stripped op/shape always runs <see cref="Full"/>, and under <see cref="CoreOps"/> every compiled-out case is
-/// UNREACHABLE — the rendered field is semantically identical (a separate compiled binary can still carry the usual
+/// unreachable — the rendered field is semantically identical (a separate compiled binary can still carry the usual
 /// DXC codegen-re-roll ±1 LSB noise class the calibrated threshold families encode, never a structural change). Only
-/// the VIEWS kernel has a core variant — stripping the beam REGRESSED its cone march (a register-allocation/
+/// the views kernel has a core variant — stripping the beam regressed its cone march (a register-allocation/
 /// scheduling shift), so it stays on the full interpreter.
 /// </summary>
 public enum SdfViewsKernelVariant {

@@ -6,14 +6,13 @@ using Puck.Platform.Windows;
 namespace Puck.Platform;
 
 /// <remarks>
-/// EXEMPT from the constructor rule's retained-<see cref="IServiceProvider"/> prohibition (unit 6b's
-/// constructor-chain round, 2026-08-02; the plan's "live precedent to retire" citation names this exemption
-/// alongside the four-type view-composition chain it retired). <see cref="m_serviceProvider"/> is asked exactly
-/// once, in <see cref="CreateViWindow"/>, for the optional, licensed <c>ISwitchViWindowBackend</c> — a PLATFORM
-/// PRESENCE PROBE, not service location for a producer's own dependencies: <see langword="null"/> IS the correct,
+/// Exempt from the constructor rule's retained-<see cref="IServiceProvider"/> prohibition.
+/// <see cref="m_serviceProvider"/> is asked exactly
+/// once, in <see cref="CreateViWindow"/>, for the optional, licensed <c>ISwitchViWindowBackend</c> — a platform
+/// presence probe, not service location for a producer's own dependencies: <see langword="null"/> is the correct,
 /// expected answer on every build that does not carry the closed-source Switch SDK, and the caller turns that
 /// answer into a named, loud <see cref="PlatformNotSupportedException"/> rather than treating it as failure to
-/// resolve a required collaborator. This is the ONLY exemption; any future retained provider owes the same explicit
+/// resolve a required collaborator. This is the only exemption; any future retained provider owes the same explicit
 /// pin at its own declaration, or it is indistinguishable from the defect the rule exists to catch.
 /// </remarks>
 public sealed class NativeWindowFactory(

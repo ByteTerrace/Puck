@@ -140,7 +140,7 @@ public sealed partial class AgbCartridge {
     /// games do). When set, the bus routes ROM accesses at 0x0C4–0x0C8 to <see cref="ReadGpio"/>/<see cref="WriteGpio"/>.</summary>
     public bool HasRtc => m_hasRtc;
 
-    /// <summary>Gets a value indicating whether the cartridge overlays ANY GPIO device (RTC, rumble, or solar) on ROM
+    /// <summary>Gets a value indicating whether the cartridge overlays any GPIO device (RTC, rumble, or solar) on ROM
     /// at 0x0C4–0x0C8 — the bus's single overlay-routing gate, since several devices can share the overlay on one
     /// cartridge (a solar-sensor cart wires both RTC and the light sensor).</summary>
     public bool HasGpio => m_hasGpio;

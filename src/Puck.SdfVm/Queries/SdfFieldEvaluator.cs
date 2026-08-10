@@ -39,12 +39,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // rounding is coarser still near a smooth seam), collapsing the estimated gradient to zero; too large and the
     // central-difference TRUNCATION error grows (the estimate is only accurate where the field is locally near-linear
     // across the probe span, and any accumulated blend seam or Repeat cell wall inside that span corrupts the taps).
-    // The 6-tap per-axis probe's reconstruction response is 2*step*g per axis (the retired 4-tap tetrahedron's was
-    // 4*step*g), so the quantize-to-equal collapse threshold DOUBLED: both taps landing on the same raw Q48.16
-    // distance now requires 2*step >= 2^-16, i.e. step >= ~7.6e-6 (was ~3.8e-6 under the tetrahedron). The default
-    // 0.01 world units still sits ~3 orders of magnitude above that floor and three orders below room-scale content.
-    // 0.01 is documented, not derived. Consumers authoring much smaller or larger geometry may need a different
-    // probe — this is a tuning constant, not a physical law.
+    // The 6-tap per-axis probe's reconstruction response is 2*step*g per axis, so both taps landing on the same raw
+    // Q48.16 distance requires 2*step >= 2^-16, i.e. step >= ~7.6e-6. The default 0.01 world units still sits ~3
+    // orders of magnitude above that floor and three orders below room-scale content. 0.01 is documented, not
+    // derived. Consumers authoring much smaller or larger geometry may need a different probe — this is a tuning
+    // constant, not a physical law.
     private static readonly FixedQ4816 GradientEpsilon = FixedQ4816.FromDouble(value: 0.01);
     // The march accept threshold (Raycast/SphereCast/TryGroundHeight/LineOfSight): a sample within this of the
     // surface counts as a hit rather than one more step. Matches the scale of GradientEpsilon (both are "close
@@ -63,21 +62,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // hit" rather than spin — the standard non-convergence contract every sphere tracer carries, never a hang.
     private const int MaxMarchIterations = 512;
 
-    // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. The old 4-tap tetrahedron
-    // (equivalent only where the field is locally LINEAR across the probe span) aliased edge/seam curvature into a
-    // spurious tangential component with a fixed sign pattern — its fingerprint is a normal with two exactly-equal
-    // components (measured (0.3589, 0.3589, 0.8616) at a wall-floor union corner whose true gradient has no X), and
-    // the contact solver consuming that normal converted commanded planar momentum into a deterministic tangential
-    // runaway while a body ground against a wall. Central differences are exact where the field is mirror-symmetric
-    // about the probe point ONLY when every op between the probe point and the shape body is exactly affine in fixed
-    // point (ResetPoint/Translate plus a symmetric shape body) — the same fixed-point subtraction on bitwise-mirrored
-    // taps. Through Rotate/Scale the rounding of r(c+d) and r(c-d) is independent (a yaw-90 quaternion quantizes to
-    // |q|^2 = 1 + 2.1e-6), leaving a systematic tangential residual of order 1e-3 in the normalized gradient — ~400x
-    // smaller than the tetrahedron's edge aliasing, sub-perceptual at feel scale, and zero on unrotated geometry. The
-    // tetrahedron's original rationale — matching the
-    // renderer's probe shape — is stale: the renderer's lit normal is ANALYTIC by default now (the dual-gradient
-    // path; see the sdf-world skill), leaving accuracy at contact edges as the governing requirement over the two
-    // saved taps.
+    // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. Central differences are
+    // exact where the field is mirror-symmetric about the probe point ONLY when every op between the probe point and
+    // the shape body is exactly affine in fixed point (ResetPoint/Translate plus a symmetric shape body) — the same
+    // fixed-point subtraction on bitwise-mirrored taps. Through Rotate/Scale the rounding of r(c+d) and r(c-d) is
+    // independent (a yaw-90 quaternion quantizes to |q|^2 = 1 + 2.1e-6), leaving a systematic tangential residual of
+    // order 1e-3 in the normalized gradient — sub-perceptual at feel scale, and zero on unrotated geometry.
     private readonly CompiledInstruction[] m_instructions;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>

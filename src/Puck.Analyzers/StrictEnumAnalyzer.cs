@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Puck.Analyzers;
 
 /// <summary>
-/// Closes the capability-channels campaign's named gap: the strict-enum mechanism
+/// Closes a completeness gap in enum serialization: the strict-enum mechanism
 /// (<c>[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter&lt;TEnum&gt;))]</c>, plus the closed
 /// generic instances a leaner project registers on its <c>JsonSerializerContext</c> instead) has no completeness
 /// gate, so an enum added — or forgotten — silently regresses to numeric-tolerant serialization with a green build.

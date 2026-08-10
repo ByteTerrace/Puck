@@ -1,14 +1,14 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The overlay's EIGHT declared writer channels. The VALUE IS THE PRIORITY for the five first-party writers (0 draws
+/// The overlay's eight declared writer channels. The value is the priority for the five first-party writers (0 draws
 /// first/bottom, 4 draws last/top), pinned to the order <see cref="UnifiedOverlayNode"/> emits them in when they run
 /// — draw order stops being an implicit contract nobody states and becomes the lease table's first column.
-/// <see cref="Hud"/> is the ODD one out: it is not part of that fixed loop at all — <see cref="UnifiedOverlayNode"/>'s
-/// BANDED pipeline opens it up to FOUR separate times per frame (under, base-slot-when-replacing, over — the
-/// WORLD-scope bands — plus one unbanded pass for the PLAYER-scope per-seat panels), each its own
+/// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="UnifiedOverlayNode"/>'s
+/// banded pipeline opens it up to four separate times per frame (under, base-slot-when-replacing, over — the
+/// world-scope bands — plus one unbanded pass for the player-scope per-seat panels), each its own
 /// <see cref="OverlayFrameBuilder.BeginChannel"/>/<see cref="OverlayFrameBuilder.EndChannel"/> scope charged
-/// against this ONE reservation. <see cref="Wheel"/> and <see cref="Cursor"/> sit outside the fixed loop too — the
+/// against this one reservation. <see cref="Wheel"/> and <see cref="Cursor"/> sit outside the fixed loop too — the
 /// frame's last two channel scopes, in that order, topmost over every band and the seat panels, and deliberately
 /// outside the replace-band suppression: the wheel is the pointer's radial action menu and the cursor its on-screen
 /// echo, neither of them content, and a fullscreen replace panel is exactly what a pointer must still be able to
@@ -17,11 +17,11 @@ namespace Puck.Overlays;
 public enum OverlayChannel {
     /// <summary>The console panel (one singleton instance).</summary>
     Console = 0,
-    /// <summary>The per-seat binding bars (one instance per JOINED seat).</summary>
+    /// <summary>The per-seat binding bars (one instance per joined seat).</summary>
     BindingBar = 1,
-    /// <summary>The per-seat editor gizmo chips (one instance per EDITING seat).</summary>
+    /// <summary>The per-seat editor gizmo chips (one instance per editing seat).</summary>
     Gizmos = 2,
-    /// <summary>The per-seat editor HUD strips (one instance per EDITING seat).</summary>
+    /// <summary>The per-seat editor HUD strips (one instance per editing seat).</summary>
     EditorHud = 3,
     /// <summary>The transient toast echo (one singleton instance).</summary>
     Toast = 4,
@@ -32,13 +32,13 @@ public enum OverlayChannel {
     /// <summary>The per-seat drawn pointer cursor (<see cref="CursorWriter"/>) — the frame's last, topmost channel
     /// scope; see this enum's remarks.</summary>
     Cursor = 6,
-    /// <summary>The per-seat radial action menu (<see cref="WheelWriter"/>) — drawn immediately UNDER the cursor,
+    /// <summary>The per-seat radial action menu (<see cref="WheelWriter"/>) — drawn immediately under the cursor,
     /// outside the replace-band suppression; see this enum's remarks.</summary>
     Wheel = 7,
 }
 
-/// <summary>One channel's HARD reservation across the four frame resources. A channel may write up to these counts
-/// and not one record more: it clips at its OWN boundary, attributed to itself, and can never consume another
+/// <summary>One channel's hard reservation across the four frame resources. A channel may write up to these counts
+/// and not one record more: it clips at its own boundary, attributed to itself, and can never consume another
 /// channel's capacity.</summary>
 /// <param name="Elements">The element records (rects, rings, text runs, icon chips) the channel may write.</param>
 /// <param name="TextWords">The glyph-code words the channel's text runs may consume.</param>
@@ -68,17 +68,17 @@ public readonly record struct OverlayChannelUsage(
 }
 
 /// <summary>
-/// THE LEASE TABLE: every channel's reservation, each sized at the writer's MEASURED MAXIMUM — the largest record
+/// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
 /// shape its own code can legally produce, re-derived here from the writers' declared caps so a cap change moves the
-/// reservation with it. The reservations are the BUDGET; <see cref="OverlayFrameBuilder"/>'s capacities are only the
+/// reservation with it. The reservations are the budget; <see cref="OverlayFrameBuilder"/>'s capacities are only the
 /// cannot-overflow backstop above them. Nothing that legally renders today clips: a channel clipping at its own
 /// reservation means that channel exceeded its own declared maximum, which is a bug, and it is attributed to the
 /// bug's owner without costing any other channel a single record.
 /// </summary>
-/// <remarks>The gap between <see cref="TotalElements"/> (and its siblings) and the envelope is simply UNCLAIMED
-/// capacity — no addon/contributor-lease admission model reads it (that design was never built and none is being
-/// built here). Growing a channel's own reservation, first-party or the authored-HUD one, means growing it HERE, in
-/// the open, against the sum — never drawing silently from the unclaimed remainder.</remarks>
+/// <remarks>The gap between <see cref="TotalElements"/> (and its siblings) and the envelope is simply unclaimed
+/// capacity — no addon/contributor-lease admission model reads it. Growing a channel's own reservation, first-party
+/// or the authored-HUD one, means growing it here, in the open, against the sum — never drawing silently from the
+/// unclaimed remainder.</remarks>
 public static class OverlayChannelLeases {
     /// <summary>The number of declared channels.</summary>
     public const int Count = 8;
@@ -124,10 +124,9 @@ public static class OverlayChannelLeases {
 
     // Hud — the AUTHORED-HUD reservation (Puck.World.Data's WorldHudCapacity is the source of truth; this project
     // cannot reference that one, so these constants restate its numbers by hand): world-scope panels/elements PLUS
-    // the seat-scope budget (player-scope HUD, authored via identity.hud <panel-json> [player] as of Phase 3 L8,
-    // element count enforced at WorldDefinitionValidator against this SAME HudMaxElementsPerSeatPanel ceiling) spends
-    // from — reserved ahead of L8 (with L3) so that landing needed no second reservation; DO NOT widen these numbers
-    // for a future HUD change without a fresh measurement — the L8 landing spent exactly this budget, not more.
+    // the seat-scope budget (player-scope HUD, authored via identity.hud <panel-json> [player], element count
+    // enforced at WorldDefinitionValidator against this SAME HudMaxElementsPerSeatPanel ceiling) spends from. DO NOT
+    // widen these numbers for a future HUD change without a fresh measurement against WorldHudCapacity.
     // World scope: HudMaxWorldPanels panels x HudMaxElementsPerPanel elements. Seat scope: one panel x twelve
     // elements per LOCAL seat. Each authored element's render cost is taken at its OWN worst case per resource: a
     // GAUGE costs the most render elements (3: track + fill + label) and a TEXT run costs the most glyph words
@@ -187,10 +186,9 @@ public static class OverlayChannelLeases {
     };
 
     /// <summary>Throws when a per-seat writer is about to emit more seats than the lease table provisioned for.
-    /// <see cref="MaxSeats"/> mirrors Puck.World's <c>WorldPopulation.LocalSeatCount</c> by owner ruling only —
-    /// nothing checks that mirror across the assembly boundary, so a grown roster crossing this ceiling must fail
-    /// LOUDLY here rather than quietly clipping seats through the per-channel reservation drop path (which would
-    /// narrate it as an ordinary content overflow, not the structural mismatch it actually is).</summary>
+    /// <see cref="MaxSeats"/> mirrors Puck.World's <c>WorldPopulation.LocalSeatCount</c>, but nothing checks that
+    /// mirror across the assembly boundary, so a grown roster crossing this ceiling must fail loudly here rather
+    /// than quietly clipping seats through the per-channel reservation drop path.</summary>
     /// <param name="seatCount">The seats the writer is about to emit.</param>
     /// <param name="writerName">The writer's diagnostic name (for the exception message).</param>
     /// <exception cref="InvalidOperationException"><paramref name="seatCount"/> exceeds <see cref="MaxSeats"/>.</exception>

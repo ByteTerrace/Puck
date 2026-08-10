@@ -25,20 +25,57 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
     public ulong ElapsedTicks { get; private set; }
 
     /// <inheritdoc/>
+    public uint RatePerSecond => (uint)m_server.Definition.SimulationRateHz;
+
+    /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
-        // Same fixed point as the windowed shape (WorldSimulation.Step) — see its own remarks: scan for portal-entry
-        // edges, THEN drain, BEFORE any instance steps this tick, so a transfer lands and is advanced exactly once,
-        // this same tick.
-        m_instances.ScanPortalTriggers();
+        // Same fixed point as the windowed shape (WorldSimulation.Step) — see its own remarks: drain BEFORE any
+        // instance steps this tick (a transfer drained here was enqueued by a per-step portal scan during the
+        // PREVIOUS master call), so a transfer lands and is advanced exactly once, this same tick.
         m_instances.DrainPendingTransfers();
 
-        var stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in context, tcpHost: m_tcpHost);
+        // See WorldSimulation.Step's identical gate for the full remarks: boot steps by the same pause/rate-0 rule
+        // as every other instance, trivially due almost always; when it is not, the tape/wait-gate/socket
+        // bookkeeping is skipped along with the step, but an administrative drain still lets a buffered document
+        // mutation apply. The portal scan for boot runs immediately after its own step, never when it did not step
+        // at all. context.StepTicks is threaded in so ShouldStepBoot can refuse a call whose pump-supplied width no
+        // longer matches boot's current rate.
+        var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
+        var stepTick = Tick;
 
-        // Every world instance running beside the boot one (world.instance.start) steps once per boot tick too —
-        // folded into the SAME fixed-step call rather than a second pump (see WorldInstanceHost's own remarks).
-        m_instances.StepInstancesBesideBoot(stepTicks: context.StepTicks);
+        if (stepsBoot) {
+            // The boot world's OWN contiguous tick coordinate — see WorldSimulation.Step's identical remark for the
+            // full reasoning: the pump's raw context.Tick/ElapsedTicks keep advancing every fixed-step call
+            // regardless of whether boot actually stepped, so passing it straight through here would hand
+            // WorldServerStepShell a jumped coordinate on the first step after a resume. Built from Tick/ElapsedTicks
+            // as THIS shell already holds them (frozen below while boot does not step); only context.StepTicks — the
+            // pump's own per-call step width — is read from the raw context.
+            var bootContext = new FixedStepContext(
+                ElapsedTicks: (ElapsedTicks + context.StepTicks),
+                StepTicks: context.StepTicks,
+                Tick: Tick
+            );
 
-        ElapsedTicks = context.ElapsedTicks;
-        Tick = stepTick;
+            stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in bootContext, tcpHost: m_tcpHost);
+            m_instances.ScanBootPortalTriggers();
+            // Frozen — not merely unchanged — while boot did not step; see WorldSimulation.Step's identical remark.
+            // Written HERE, from bootContext's own values, never from the raw pump context.
+            ElapsedTicks = bootContext.ElapsedTicks;
+            Tick = stepTick;
+        } else {
+            _ = m_server.DrainAdministrative();
+
+            // See WorldSimulation.Step's identical release — a world.wait armed before this pause landed can never
+            // see its release tick now that boot's own clock is frozen; release it rather than leave the held
+            // console stream (including the very world.rate resume that would lift the pause) wedged forever.
+            if (m_waitGate.ReleaseStalled()) {
+                Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
+            }
+        }
+
+        // Every world instance running beside the boot one (world.instance.start) advances on its OWN authored
+        // schedule — folded into the SAME fixed-step call rather than a second pump (see WorldInstanceHost's own
+        // remarks). masterDeltaTicks is the host's own per-call engine-time advance, never a second clock.
+        m_instances.StepInstancesBesideBoot(masterDeltaTicks: context.StepTicks);
     }
 }

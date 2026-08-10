@@ -36,7 +36,7 @@ namespace Puck.Maths;
 /// calls <see cref="Math.Cos(double)"/> and <see cref="Math.Sin(double)"/>, and every polar entry is scaled by
 /// <see cref="Math.Tan(double)"/> of the cap's half-angle. Only the <see cref="Math.Sqrt(double)"/> calls are correctly
 /// rounded by IEEE-754; the rest are a per-machine input. That is deliberate and bounded: the table is a build-time
-/// upload, the envelope above holds on any machine — it bounds the STORAGE rounding, whatever doubles the platform's
+/// upload, the envelope above holds on any machine — it bounds the storage rounding, whatever doubles the platform's
 /// library produced — and the reproducibility claim a consumer may make on it is same-machine replay, not
 /// cross-machine bit identity.
 /// </para>
@@ -67,10 +67,10 @@ public static class ConeDirectionTable {
     /// table's <c>(axial, radial)</c> pairs at every half-angle a cap of real size is built for.
     /// </para>
     /// <para>
-    /// Distinctness of the STORED pairs is a property of the half-angle, not a promise made for every one of them, and
+    /// Distinctness of the stored pairs is a property of the half-angle, not a promise made for every one of them, and
     /// this is where the type says so. As the half-angle shrinks, every polar entry approaches the cap's axis, and
     /// below the resolution of a binary32 the entries coincide there — continuously, exactly as the geometry does. A
-    /// half-angle of exactly zero is the limit and is contract rather than accident: a cap of zero angle IS one
+    /// half-angle of exactly zero is the limit and is contract rather than accident: a cap of zero angle is one
     /// direction, so all <see cref="RadiusEntryCount"/> polar entries are the identical axis pair <c>(1, 0)</c>. A
     /// negative-zero half-angle is admitted on the same terms and is not canonicalized — it writes the radial
     /// components as <c>-0.0</c> rather than <c>+0.0</c>, a difference no consumer can observe, because a zero radial

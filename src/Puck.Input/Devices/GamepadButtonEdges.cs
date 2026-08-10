@@ -15,7 +15,7 @@ public struct GamepadButtonEdges : IEquatable<GamepadButtonEdges> {
     /// The number of button bits in <see cref="GamepadButtons"/>; one stamp slot per bit. Sized for the highest
     /// <see cref="GamepadButtons"/> flag (currently <see cref="GamepadButtons.TouchpadLeft"/> = bit 22): a flag
     /// past this count makes the coalescer's edge stamp throw on the device I/O thread and fault the pad on every
-    /// fresh press of that button — found on real hardware by a triple-press validation pass.
+    /// fresh press of that button.
     /// </summary>
     /// <remarks>
     /// <see cref="InlineArrayAttribute"/> requires a compile-time constant, so this one hand-kept number can't be

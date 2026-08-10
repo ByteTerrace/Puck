@@ -7,6 +7,7 @@ using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.World.Client.Sdf;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World.Client;
 
@@ -43,24 +44,34 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
+    // The traveler-follow router (stage 1) — the per-seat roster-bookkeeping pass in Dress reads it to keep an
+    // away-routed seat OUT of the local viewport layout (its own body left boot's simulation with it, so nothing
+    // here can frame a camera against it) rather than reading stale/reused boot-scoped body data.
+    private readonly WorldSeatInstanceRouter m_seatRouter;
+    // The traveler-follow away-render pool (stage 1, item 5/6) — tracks a WorldSessionMirror/AwaySeatSceneEmitter/
+    // WorldSessionView per FOLLOWED INSTANCE (refcounted, never per seat), reconciled once per produced frame
+    // against the router's current away locations, and rendered alongside the jumbotron pool in RenderViews.
+    private readonly WorldAwaySeatViews m_awaySeatViews;
     // Every local seat's live camera-orbit yaw/pitch — presentation-only, armed and shaped per that seat's own
     // control feel, composed into the resolved orbit rig only at ResolveCamera; never read by anything that
     // feeds the simulation. Only the seat WorldPointerSink currently resolves the mouse onto ever carries a
     // nonzero offset; every other slot resolves at rest.
     private readonly WorldCameraOrbit m_cameraOrbit;
-    // Each local seat's live control feel — read here only for WorldAxes, which decides whether that seat's live
-    // orbit composes onto world axes or rides its body's yaw. Per seat, so two seats can differ in the same frame.
+    // Each local seat's live control feel — the preference half WorldSeatCameraResolver.ResolveSeatLook merges with
+    // the boot document's own structure each frame; only the merged WorldAxes is consumed here. Per seat, so two
+    // seats can differ in the same frame.
     private readonly WorldSeatFeel m_seatFeel;
     // Each local seat's live-orbit rig cache (the seat rig must author an Orbit motion — the ONLY live camera
     // mechanism this type carries; any other authored motion renders untouched, with no live composition at all):
     // rebuilt only when the authored orbit motion instance or that seat's composed yaw/pitch actually changed since
-    // the last frame, so an unmoved drag on a stationary body costs no per-frame rig recompile. See
-    // ResolveLiveOrbitRig. Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
-    private readonly ISdfCameraRig?[] m_orbitLiveRigs = new ISdfCameraRig?[PlayerRoster.MaxSlots];
-    private readonly WorldCameraMotion.Orbit?[] m_orbitLiveAuthored = new WorldCameraMotion.Orbit?[PlayerRoster.MaxSlots];
-    private readonly float[] m_orbitLiveYaw = new float[PlayerRoster.MaxSlots];
-    private readonly float[] m_orbitLivePitch = new float[PlayerRoster.MaxSlots];
+    // the last frame, so an unmoved drag on a stationary body costs no per-frame rig recompile — see
+    // WorldSeatCameraResolver.ResolveChase, the same shared path AwaySeatSceneEmitter reuses for a traveling seat.
+    // Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
+    private readonly WorldSeatCameraResolver.LiveOrbitCache[] m_orbitCaches = CreateOrbitCaches();
     private readonly WorldSimulation m_simulation;
+    // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
+    // offscreen view as the base each derives its own submission from. Null before the first Dress.
+    private SdfFrame? m_dressedFrame;
     // The editor's client-side seams this half still reads: the targeting selection (the gizmo highlight tier), the
     // drag channel (its per-frame retirement pass and the composed speaker rows), and the sculpt workbench and
     // animated-placement pool (their presentation clocks). Their PROGRAM-side effects belong to the emitter.
@@ -90,14 +101,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private readonly ISdfCameraRig[] m_cameraRigs;
     // The seat-chase smoothing gap: the authored WorldCameraRig.SmoothRate the current seat rig carries (0 = off,
     // the unsmoothed snap every shipped world used before this field existed) and, per slot, the previously resolved
-    // eye/target the exponential ease lags toward — the SAME "seed un-smoothed on first resolve, alpha = 1 - e^(-rate
-    // * dt) after" shape WorldGroupAnchors already establishes for the establishing-shot centroid, applied here to a
-    // SEAT's own chase framing instead. Presentation-only: never read by anything that feeds back into the sim.
-    // Rig-level (not motion-level): every motion kind shares one smoothing knob, so Orbit/Static/Track ease too.
+    // eye/target the exponential ease lags toward — see WorldSeatCameraResolver.Smooth (the same shared ease
+    // AwaySeatSceneEmitter reuses for a traveling seat), which mirrors the "seed un-smoothed on first resolve, alpha
+    // = 1 - e^(-rate * dt) after" shape WorldGroupAnchors already establishes for the establishing-shot centroid.
+    // Presentation-only: never read by anything that feeds back into the sim. Rig-level (not motion-level): every
+    // motion kind shares one smoothing knob, so Orbit/Static/Track ease too.
     private readonly float[] m_cameraRigSmoothRate = new float[PlayerRoster.MaxSlots];
-    private readonly bool[] m_cameraRigSmoothSeeded = new bool[PlayerRoster.MaxSlots];
-    private readonly Vector3[] m_cameraRigSmoothEye = new Vector3[PlayerRoster.MaxSlots];
-    private readonly Vector3[] m_cameraRigSmoothTarget = new Vector3[PlayerRoster.MaxSlots];
+    private readonly WorldSeatCameraResolver.SmoothingState[] m_cameraRigSmoothState = CreateSmoothingStates();
     // The window composer (layout selection + eased transitions; a shared singleton the world.view.state read also
     // observes), the group-anchor resolver (smoothed centroids for establishing shots), and the shared live
     // composition-override store (view.override layout/view.override camera). All presentation-only.
@@ -118,6 +128,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
+    // The border-margin strip's render half — the neighbour's own solid geometry composed within each mapped portal
+    // facet's authored margin, through the SAME isometry the arrival math and the collision wrapper both use. Static
+    // content only (DynamicSlotCount 0), so it needs no dynamic-transform slot budgeting of its own.
+    private readonly WorldBorderMarginSceneEmitter m_borderMargin;
     private readonly SdfCompositionFrameSource m_composed;
     // This frame's composed program + packed transforms, stashed by Dress so the post-capture jumbotron pass
     // (RenderViews) films the SAME program the room renders. Null/empty until the first captured frame.
@@ -156,8 +170,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="cameraOrbit">Every local seat's live camera-orbit state (yaw/pitch), armed and shaped per that
     /// seat's own control feel, composed into each seat's own chase camera — never the simulation body
     /// orientation.</param>
-    /// <param name="seatFeel">Every local seat's live control feel; read here only for
-    /// <see cref="WorldSeatLook.WorldAxes"/>.</param>
+    /// <param name="seatFeel">Every local seat's live control feel — the preference half of the merged seat-look
+    /// <see cref="WorldSeatCameraResolver.ResolveSeatLook"/> assembles each frame (the boot document supplies the
+    /// structure half); only the merged result's <see cref="WorldSeatLook.WorldAxes"/> is consumed here.</param>
     /// <param name="composition">The shared live composition-override store (view.override layout/view.override camera) the composer reads.</param>
     /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
     /// <param name="viewports">The per-seat viewport + camera publication each dressed frame fills (the cursor
@@ -165,12 +180,20 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="sdfDocuments">The first-party puck.sdf.v1 document emitter (world.sdf.load composes into it) —
     /// configured here with the SAME probed floors and the reciprocal composed measurer, so a document load is
     /// checked against the live world definition exactly as a scene mutation is checked against the live document.</param>
+    /// <param name="seatRouter">The traveler-follow router (stage 1) — the per-seat roster-bookkeeping pass reads
+    /// it to exclude an away-routed seat from the local viewport layout.</param>
+    /// <param name="awaySeatViews">The traveler-follow away-render pool (stage 1) — reconciled once per produced
+    /// frame and rendered alongside the jumbotron pool.</param>
+    /// <param name="borderMargin">The injected neighbour resolver behind the border-margin strip's render half — the
+    /// SAME wire-shaped seam <see cref="Server.WorldServer.BorderMargin"/> reads for collision.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCameraOrbit cameraOrbit, WorldSeatFeel seatFeel, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCameraOrbit cameraOrbit, WorldSeatFeel seatFeel, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldAwaySeatViews awaySeatViews, IWorldBorderMarginSource borderMargin) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
         ArgumentNullException.ThrowIfNull(argument: cameraOrbit);
+        ArgumentNullException.ThrowIfNull(argument: seatRouter);
+        ArgumentNullException.ThrowIfNull(argument: awaySeatViews);
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
@@ -186,11 +209,14 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: composer);
         ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
         ArgumentNullException.ThrowIfNull(argument: viewports);
+        ArgumentNullException.ThrowIfNull(argument: borderMargin);
 
         m_viewports = viewports;
         m_composition = composition;
         m_composer = composer;
         m_gizmos = gizmos;
+        m_seatRouter = seatRouter;
+        m_awaySeatViews = awaySeatViews;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_gizmoChips[slot] = [];
@@ -230,11 +256,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
         // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
         m_emitter = new WorldSceneEmitter(client: client, settings: settings, targeting: targeting, drag: drag, workbench: workbench, animator: animator, audio: audio, anchor: anchor);
+        m_borderMargin = new WorldBorderMarginSceneEmitter(client: client, source: borderMargin);
         m_audio.ReconcileSpeakers(definition: definition);
         // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
-        m_composed = new SdfCompositionFrameSource(emitters: [m_emitter, m_sdfDocuments], dresser: this) {
+        m_composed = new SdfCompositionFrameSource(emitters: [m_emitter, m_sdfDocuments, m_borderMargin], dresser: this) {
             // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
             // outside the camera and tile-cull reach.
             ParkPosition = WorldSceneEmitter.HiddenAvatar,
@@ -250,7 +277,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
         // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
         // program and are not additive).
-        envelope.Configure(
+        _ = envelope.Configure(
             programWordCapacity: ProgramWordCapacity,
             instanceCapacity: InstanceCapacity,
             measure: candidate => MeasureComposed(worldDefinition: candidate, documentProgram: m_sdfDocuments.CurrentProgram)
@@ -271,7 +298,14 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             measureComposed: candidateProgram => MeasureComposed(worldDefinition: m_client.Definition, documentProgram: candidateProgram)
         );
 
-        m_builtDefinitionRevision = m_client.DefinitionRevision;
+        // NEVER m_client.DefinitionRevision here: the client's primer delivery (LoopbackTransport.Bind, run
+        // synchronously inside the client's OWN DI factory, before this type is ever constructed) already bumped the
+        // revision once, so capturing it as the baseline would make ReconcileDelivery's very first call see "nothing
+        // moved" and skip forever absent a LATER live mutation — a fresh boot with zero mutations would leave every
+        // derived face (session/view/testPattern/camera/capture/qr) frozen at its reserved None placeholder forever.
+        // A sentinel outside the revision's real range (which only ever counts up from 0) guarantees the first
+        // ReconcileDelivery call always reconciles once, exactly like every later delivery.
+        m_builtDefinitionRevision = int.MinValue;
     }
 
     // THE COMPOSITION-SAFE ADMISSION MEASURE, GENERALIZED to take EITHER side as the candidate (both Configure calls
@@ -283,8 +317,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // WorldRenderEnvelope's ceiling was probed from BOTH composed emitters together (m_composed's construction-time
     // probe walks [m_emitter, m_sdfDocuments] into ONE program — see SdfCompositionFrameSource.BuildProgram), so
     // either direction must be measured the same way: composing both sides into one shared builder, then measuring
-    // that ONE composed program. Measuring either side alone (the defect this method replaces, on the document-load
-    // side) would let a mutation on ONE side spend program-word/instance capacity the OTHER side already holds, since
+    // that ONE composed program. Measuring either side alone would let a mutation on ONE side spend program-word/
+    // instance capacity the OTHER side already holds, since
     // the packed tables a program carries (the instance grid, segment directory, world-segment list, rigid plan) are
     // computed over the WHOLE composed program and are not additive across emitters — a later commit on the
     // unchecked side then adds its content on top and SdfWorldEngine.UploadProgram throws on the frozen buffer.
@@ -305,6 +339,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
+        WorldPlacementStamper.EmitProbe(
+            builder: builder,
+            reservedCount: (WorldBorderMarginBands.CollectFrom(definition: worldDefinition).Count * WorldBorderMarginGeometry.MaximumPlacementsPerBand)
+        );
+
         var measured = builder.Build();
 
         return (Words: measured.Words.Length, Instances: measured.Instances.Count);
@@ -321,7 +360,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     public int DynamicTransformCapacity { get; }
 
     /// <inheritdoc/>
-    public void NotifyDeviceLost() => m_binder.NotifyDeviceLost();
+    public void NotifyDeviceLost() {
+        m_binder.NotifyDeviceLost();
+        m_awaySeatViews.NotifyDeviceLost();
+    }
 
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
@@ -355,6 +397,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // through a clock the host would have to query.
         m_emitter.AdvanceContentClock(seconds: m_elapsedSeconds);
         ReconcileDelivery();
+        // Traveler-follow stage 1: track/untrack away instances against the router's CURRENT locations before Dress
+        // resolves any periscope handle this frame — see WorldAwaySeatViews.Reconcile's own remarks.
+        m_awaySeatViews.Reconcile();
 
         return m_composed.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
     }
@@ -414,6 +459,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: m_anchor.PerceivedBody(slot: slot)));
             }
 
+            // TRAVELER-FOLLOW STAGE 1: a followed seat stays a roster participant while away (WorldInstanceHost.
+            // ApplyTransfer's commit loop skips VacateSeat for it — see that loop's own remarks), so m_roster.Seat
+            // above no longer excludes it the way an ordinary departure would — it keeps its own composed layout
+            // slot exactly like a boot-bound seat; the per-composed-slot loop below is what tells its region apart
+            // (periscope camera + away-view fill instead of the ordinary boot-scoped chase). The seat-join cue
+            // above still runs once on arrival/return either way.
             joinedRosterSlots[joinedRosterCount++] = slot;
         }
 
@@ -435,6 +486,29 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             var region = composed.Region;
 
             if (composed.Camera is { } cameraName) {
+                // A single followed traveler still owns the window's composition context. Its pixels come from the
+                // away render, so a live camera override must show that render's newly selected destination camera
+                // through the reserved periscope quad; resolving cameraName against m_client.Definition here would
+                // keep filming the boot scene after the crossing. Multi-seat camera slots remain process-global —
+                // there is no unique routed instance to choose when several seats occupy different worlds.
+                if ((m_composition.SelectedCamera is not null) && (joinedRosterCount == 1)) {
+                    var routedSlot = joinedRosterSlots[0];
+
+                    if (!string.Equals(a: m_seatRouter.Location(slot: routedSlot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                        var routedPixelWidth = (uint)(region.Width * width);
+                        var routedPixelHeight = (uint)(region.Height * height);
+                        var periscope = WorldAwaySeatQuad.PeriscopeCamera(slot: routedSlot, width: routedPixelWidth, height: routedPixelHeight);
+
+                        m_awaySeatViews.ReportSeatViewportSize(slot: routedSlot, width: routedPixelWidth, height: routedPixelHeight);
+                        m_views.Add(item: new SdfViewSnapshot(Camera: periscope, Region: region) {
+                            RenderScale = (m_settings.RenderScale * transitionScale),
+                            UpscaleSharpness = m_settings.UpscaleSharpness,
+                        });
+
+                        continue;
+                    }
+                }
+
                 // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
                 if (ResolveNamedCamera(name: cameraName, region: region, width: width, height: height, deltaSeconds: deltaSeconds, camera: out var namedCamera)) {
                     m_views.Add(item: new SdfViewSnapshot(Camera: namedCamera, Region: region) {
@@ -452,6 +526,34 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
 
             var slot = joinedRosterSlots[composed.SeatOrder];
+
+            // TRAVELER-FOLLOW STAGE 1, item (c): an away-routed seat's region renders its own reserved periscope
+            // quad (WorldAwaySeatQuad) instead of the ordinary boot-scoped chase — the quad's bound screen source
+            // (WorldAwaySeatViews.ResolveHandle, merged into the engine's screen-source providers) fills it with
+            // the away view's last rendered image, the SAME textured-quad technique a jumbotron session screen
+            // composites with. No seat-camera-pose/gizmo/viewport-unproject publication for an away seat: none of
+            // those are meaningful against a periscope framing a flat quad rather than the room.
+            if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                var seatPixelWidth = (uint)(region.Width * width);
+                var seatPixelHeight = (uint)(region.Height * height);
+                var periscope = WorldAwaySeatQuad.PeriscopeCamera(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
+
+                // This IS the one place the seat's actual composed viewport pixel size is known — hand it to the
+                // away-render pool so the followed instance's own offscreen render targets it instead of the fixed
+                // native brick-panel size (WorldSessionView.DefaultWidth/DefaultHeight) stretched over a viewport it
+                // was never sized for. WorldAwaySeatViews.ReconcileViewportSizes reads every seat's report once per
+                // produced frame and re-targets the SHARED render at the largest requesting seat's own size when two
+                // or more seats follow the same instance.
+                m_awaySeatViews.ReportSeatViewportSize(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
+
+                m_views.Add(item: new SdfViewSnapshot(Camera: periscope, Region: region) {
+                    RenderScale = (m_settings.RenderScale * transitionScale),
+                    UpscaleSharpness = m_settings.UpscaleSharpness,
+                });
+
+                continue;
+            }
+
             var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
@@ -509,7 +611,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // transient cue pool (visual-only clock use — audio is presentation).
         _ = m_audio.Publish(transforms: transforms, seats: m_seatCameraPoses, deltaSeconds: deltaSeconds);
 
-        return new SdfFrame(
+        // Stashed on the way out (see m_dressedFrame): RenderViews runs LATER in the same produced frame and hands
+        // this exact instance to every offscreen view, which derives its own submission from it. Returning it without
+        // keeping it is what left the views building their own.
+        return m_dressedFrame = new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
             Views: m_views,
@@ -575,11 +680,17 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // program / dynamic transforms / content clock the room renders with, so a jumbotron shows this world from its
         // placeable camera. Called AFTER PrepareScreenSources (the CPU-fed screens the views sample are already this
         // frame's) and BEFORE the source poll (so a View screen's provider returns this frame's offscreen render).
-        if (m_program is not { } program) {
+        // The dressed frame is required, not optional: an offscreen view DERIVES its submission from it, so a frame
+        // this produced frame never dressed has nothing to derive from and the views hold their last resolved image
+        // for one frame rather than rendering off a fabricated one.
+        if ((m_program is not { } program) || (m_dressedFrame is not { } hostFrame)) {
             return;
         }
 
-        m_binder.RenderViews(context: in context, program: program, revision: m_programRevision, transforms: m_transforms, time: m_elapsedSeconds, authoritativeTick: m_simulation.Tick);
+        m_binder.RenderViews(context: in context, program: program, revision: m_programRevision, transforms: m_transforms, time: m_elapsedSeconds, authoritativeTick: m_simulation.Tick, hostFrame: hostFrame);
+        // The away-seat render pool, rendered the SAME way and at the SAME point the jumbotron pool is — before the
+        // screen-source provider poll, so a followed instance's periscope quad samples THIS frame's offscreen image.
+        m_awaySeatViews.RenderViews(context: in context, program: program, revision: m_programRevision, transforms: m_transforms, time: m_elapsedSeconds, authoritativeTick: m_simulation.Tick, hostFrame: hostFrame);
     }
 
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
@@ -597,7 +708,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // Derive the creation facets: a creation's eyes become cameras on WorldAnchor.Placement, its faces
         // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
-        var facets = WorldCreationFacets.Derive(definition: m_client.Definition, placements: m_client.Definition.Placements, derivedFaceBase: WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: m_derivedFaceScreens);
+        var facets = WorldCreationFacets.Derive(definition: m_client.Definition, derivedFaceBase: WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: m_derivedFaceScreens);
 
         m_binder.ReconcileCameras(cameras: Concat(first: m_client.Definition.Cameras, second: facets.Cameras));
         m_binder.ReconcileScreens(screens: Concat(first: m_client.Definition.Screens, second: facets.Faces));
@@ -606,7 +717,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // ReconcileSpeakers runs AFTER ReconcileScreens (the chiasmus: speakers consume screen slots) and before the
         // emitter's own delivery pass (whose stamp-pool reconcile runs at the rebuild the host is about to make).
         m_audio.ReconcileSpeakers(definition: m_client.Definition);
-        m_emitter.ObserveDelivery(definition: m_client.Definition);
+        // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
+        // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
+        // which placement — one WorldCreationFacets.Derive call per delivery, never two.
+        m_emitter.ObserveDelivery(definition: m_client.Definition, derivedFaces: facets.Faces);
         m_builtDefinitionRevision = definitionRevision;
     }
 
@@ -724,28 +838,29 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, out Vector3 eye, out Vector3 target) {
         var body = m_anchor.PerceivedBody(slot: slot);
         var bodyOrientation = m_client.Orientation(index: body);
-        var chase = m_cameraRigs[slot];
+        var seatRig = m_client.Definition.Views.SeatRig;
 
-        // THE one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live drag straight into the
-        // document's own orbit vocabulary (authored yaw/pitch + the live offset), recompiled into a fresh rig below.
-        // seatLook.worldAxes selects what the composed yaw rides on top of — false (today's shipped default) adds
-        // the body's OWN yaw so the orbit rides the body's heading (turn, and the camera swings with you, exactly
-        // the feel the old Follow-rig chase had); true drops it, an absolute orbit independent of facing. Any other
-        // authored motion (Static, Track — never Follow; every shipped world now authors Orbit) renders through the
-        // plain compiled chase untouched: there is no live composition for it, deliberately — a second mechanism
-        // would be exactly the duplication this collapsed away. m_client.Orientation (the sim body orientation) is
-        // never written — everything here is a local presentation-only derivation.
-        if (m_client.Definition.Views.SeatRig.Motion is WorldCameraMotion.Orbit orbit) {
-            // THIS seat's own control feel, not a world-wide one: two seats can compose their live orbit onto
-            // different axes in the same frame.
-            var seatLook = m_seatFeel.Look(slot: slot);
-            var liveYaw = m_cameraOrbit.Yaw(slot: slot);
-            var livePitch = m_cameraOrbit.Pitch(slot: slot);
-            var yaw = ((orbit.Yaw + liveYaw) + (seatLook.WorldAxes ? 0f : BodyYaw(orientation: bodyOrientation)));
-            var pitch = (orbit.Pitch + livePitch);
-
-            chase = ResolveLiveOrbitRig(slot: slot, orbit: orbit, yaw: yaw, pitch: pitch);
-        }
+        // The one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live drag straight into the
+        // document's own orbit vocabulary (authored yaw/pitch + the live offset) via WorldSeatCameraResolver — the
+        // same shared path AwaySeatSceneEmitter reuses for a traveling seat, so a destination frames identically
+        // whether the seat sits at its boot or arrived through a portal. The merged seat-look's WorldAxes selects
+        // what the composed yaw rides on top of — false (today's shipped default) adds the body's own yaw so the
+        // orbit rides the body's heading (turn, and the camera swings with you); true drops it, an absolute orbit
+        // independent of facing. WorldAxes is rig STRUCTURE (the boot world's own playerDefaults.seatLook, never a
+        // joined profile's — see WorldSeatCameraResolver.ResolveSeatLook), so it agrees with the away path's own
+        // structure-only read of a destination's WorldAxes. Any other authored motion renders through the plain
+        // compiled chase untouched. m_client.Orientation (the sim body orientation) is never written — everything
+        // here is a local presentation-only derivation.
+        var seatLook = WorldSeatCameraResolver.ResolveSeatLook(structure: m_client.Definition.PlayerDefaults.SeatLook, preference: m_seatFeel.Look(slot: slot));
+        var chase = WorldSeatCameraResolver.ResolveChase(
+            authoredRig: seatRig,
+            compiledChase: m_cameraRigs[slot],
+            seatLookWorldAxes: seatLook.WorldAxes,
+            bodyOrientation: bodyOrientation,
+            liveYaw: m_cameraOrbit.Yaw(slot: slot),
+            livePitch: m_cameraOrbit.Pitch(slot: slot),
+            cache: m_orbitCaches[slot]
+        );
 
         var anchor = new SdfAnchor(Position: m_client.Position(index: body), Orientation: bodyOrientation);
         var rig = m_editor.ResolveRig(slot: slot, chase: chase, anchor: in anchor, time: m_elapsedSeconds, deltaSeconds: deltaSeconds);
@@ -755,31 +870,19 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
 
         (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, clock: in clock);
 
-        // The seat-chase smoothing gap: applied ONLY to the plain (non-editing) chase rig — ReferenceEquals catches
-        // exactly that, since ResolveRig above returns the SAME chase instance unchanged while the seat is not
-        // editing (see its own remarks) and a DIFFERENT rig (drag/orbit/workbench) otherwise. A zero rate (the
-        // default, and every world/camera authored before this field existed) skips the ease entirely — eye/target
-        // pass through raw, byte-for-byte, so this is a true no-op until a world opts in. SmoothRate lives on the
-        // rig, not the motion, so every motion kind (Follow/Orbit/Static/Track) shares the same ease.
-        if (ReferenceEquals(objA: rig, objB: m_cameraRigs[slot]) && (m_cameraRigSmoothRate[slot] > 0f)) {
-            if (!m_cameraRigSmoothSeeded[slot]) {
-                m_cameraRigSmoothEye[slot] = eye;
-                m_cameraRigSmoothTarget[slot] = target;
-                m_cameraRigSmoothSeeded[slot] = true;
-            } else {
-                // Frame-rate-independent exponential ease: a = 1 - e^(-rate * dt) — the same shape WorldGroupAnchors
-                // uses for the establishing-shot centroid (Demo's own recipe: rate 6).
-                var alpha = (1f - MathF.Exp(x: (-m_cameraRigSmoothRate[slot] * MathF.Max(x: deltaSeconds, y: 0f))));
-
-                m_cameraRigSmoothEye[slot] = Vector3.Lerp(value1: m_cameraRigSmoothEye[slot], value2: eye, amount: alpha);
-                m_cameraRigSmoothTarget[slot] = Vector3.Lerp(value1: m_cameraRigSmoothTarget[slot], value2: target, amount: alpha);
-            }
-
-            eye = m_cameraRigSmoothEye[slot];
-            target = m_cameraRigSmoothTarget[slot];
-        } else {
-            m_cameraRigSmoothSeeded[slot] = false;
-        }
+        // The seat-chase smoothing gap: applied only to the plain (non-editing) chase rig — ReferenceEquals catches
+        // exactly that, since ResolveRig above returns the same chase instance unchanged while the seat is not
+        // editing (see its own remarks) and a different rig (drag/orbit/workbench) otherwise. See
+        // WorldSeatCameraResolver.Smooth: a zero rate (the default, and every world/camera authored before this
+        // field existed) skips the ease entirely — eye/target pass through raw, byte-for-byte.
+        WorldSeatCameraResolver.Smooth(
+            state: m_cameraRigSmoothState[slot],
+            smoothRate: m_cameraRigSmoothRate[slot],
+            isPlainChase: ReferenceEquals(objA: rig, objB: m_cameraRigs[slot]),
+            deltaSeconds: deltaSeconds,
+            eye: ref eye,
+            target: ref target
+        );
 
         return CameraSnapshot.LookAt(
             position: eye,
@@ -790,51 +893,34 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         );
     }
 
-    // Recovers a body's heading as the yaw scalar OrbitRig.Offset's convention expects (0 = +Z, positive toward
-    // +X — the SAME atan2(x, z) WorldEditorSession.SetLookToward already uses to turn a direction into that same
-    // convention's yaw), by reading where the orientation sends +Z: a pure-yaw body orientation (the ordinary
-    // upright-avatar case) recovers its exact heading; a body additionally pitched or rolled (a slope, a
-    // planetoid's far side) recovers an approximation — OrbitRig never takes a full orientation, only a yaw
-    // scalar, so this is the closest any orbit-vocabulary consumer can get without widening that contract.
-    private static float BodyYaw(Quaternion orientation) {
-        var behind = Vector3.Transform(value: Vector3.UnitZ, rotation: orientation);
-
-        return MathF.Atan2(y: behind.X, x: behind.Z);
-    }
-
-    // Feeds a seat's live drag into the document's own orbit vocabulary — the composed yaw/pitch ResolveCamera
-    // already derived (authored + live, and body-relative unless seatLook.worldAxes) — rather than post-rotating a
-    // resolved eye/target. Rebuilds that seat's compiled rig only when the authored orbit motion instance (a live
-    // world.row.set views.seatRig edit swaps it for a new one) or the composed yaw/pitch actually changed since the last frame —
-    // recompiling every frame regardless would be a needless per-frame rig-instance allocation on top of the small
-    // record `with` this guard limits it to. A moving body still invalidates the cache every frame (its composed
-    // yaw rides BodyYaw), so the guard's saving is for a stationary body with an unmoved drag, not a moving one.
-    private ISdfCameraRig ResolveLiveOrbitRig(int slot, WorldCameraMotion.Orbit orbit, float yaw, float pitch) {
-        if ((m_orbitLiveRigs[slot] is { } cached) && ReferenceEquals(objA: m_orbitLiveAuthored[slot], objB: orbit) &&
-            (m_orbitLiveYaw[slot] == yaw) && (m_orbitLivePitch[slot] == pitch)) {
-            return cached;
-        }
-
-        var rig = m_client.Definition.Views.SeatRig with {
-            Motion = orbit with { Yaw = yaw, Pitch = pitch },
-        };
-
-        m_orbitLiveAuthored[slot] = orbit;
-        m_orbitLiveYaw[slot] = yaw;
-        m_orbitLivePitch[slot] = pitch;
-        m_orbitLiveRigs[slot] = WorldCameraRigCompiler.Compile(rig: rig);
-
-        return m_orbitLiveRigs[slot]!;
-    }
-
     // Recompiles every seat's chase rig from the authored seat rig (the built-in default carries OrientedFollowRig's
     // own field defaults). Called at construction and on any views-section delivery (world.row.set views.seatRig live).
     private void RebuildSeatRigs(WorldCameraRig seatRig) {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_cameraRigs[slot] = WorldCameraRigCompiler.Compile(rig: seatRig);
             m_cameraRigSmoothRate[slot] = seatRig.SmoothRate;
-            m_cameraRigSmoothSeeded[slot] = false;
+            m_cameraRigSmoothState[slot].Seeded = false;
         }
+    }
+
+    private static WorldSeatCameraResolver.LiveOrbitCache[] CreateOrbitCaches() {
+        var caches = new WorldSeatCameraResolver.LiveOrbitCache[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < caches.Length); slot++) {
+            caches[slot] = new();
+        }
+
+        return caches;
+    }
+
+    private static WorldSeatCameraResolver.SmoothingState[] CreateSmoothingStates() {
+        var states = new WorldSeatCameraResolver.SmoothingState[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < states.Length); slot++) {
+            states[slot] = new();
+        }
+
+        return states;
     }
 
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/

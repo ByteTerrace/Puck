@@ -65,7 +65,7 @@
   "cameras": [],
   "population": {
     "capacity": 4,
-    "reconnectGraceTicks": 720,
+    "reconnectGraceSeconds": 3.0,
     "seatActivation": [
       "Eager",
       "Eager",
@@ -135,9 +135,9 @@
     }
   },
   "inputHold": {
-    "ceilingTicks": 120,
-    "lowerAfterTicks": 60,
-    "defaultTicks": 0,
+    "ceilingSeconds": 0.5,
+    "lowerAfterSeconds": 0.25,
+    "defaultSeconds": 0.0,
     "equalizeByDefault": true,
     "participants": []
   },
@@ -804,10 +804,9 @@
       },
       "effects": [
         {
-          "$type": "addState",
+          "$type": "countdownState",
           "state": "strikeCooldown",
-          "key": "0",
-          "value": -1
+          "key": "0"
         }
       ]
     },
@@ -823,10 +822,9 @@
       },
       "effects": [
         {
-          "$type": "addState",
+          "$type": "countdownState",
           "state": "ccCooldown",
-          "key": "0",
-          "value": -1
+          "key": "0"
         }
       ]
     },
@@ -842,10 +840,9 @@
       },
       "effects": [
         {
-          "$type": "addState",
+          "$type": "countdownState",
           "state": "mobAttackCooldown",
-          "key": "2",
-          "value": -1
+          "key": "2"
         }
       ]
     },
@@ -861,10 +858,9 @@
       },
       "effects": [
         {
-          "$type": "addState",
+          "$type": "countdownState",
           "state": "stunRemaining",
-          "key": "2",
-          "value": -1
+          "key": "2"
         }
       ]
     },
@@ -924,7 +920,7 @@
           "$type": "setState",
           "state": "strikeCooldown",
           "key": "0",
-          "value": 240
+          "valueSeconds": 1.0
         },
         {
           "$type": "setState",
@@ -972,13 +968,13 @@
           "$type": "setState",
           "state": "stunRemaining",
           "key": "2",
-          "value": 120
+          "valueSeconds": 0.5
         },
         {
           "$type": "setState",
           "state": "ccCooldown",
           "key": "0",
-          "value": 240
+          "valueSeconds": 1.0
         },
         {
           "$type": "setState",
@@ -1058,7 +1054,7 @@
           "$type": "setState",
           "state": "mobAttackCooldown",
           "key": "2",
-          "value": 120
+          "valueSeconds": 0.5
         }
       ]
     },
@@ -1114,7 +1110,7 @@
           "$type": "setState",
           "state": "mobAttackCooldown",
           "key": "2",
-          "value": 120
+          "valueSeconds": 0.5
         }
       ]
     },

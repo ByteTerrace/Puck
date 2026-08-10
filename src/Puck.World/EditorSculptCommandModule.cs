@@ -207,7 +207,7 @@ internal sealed class EditorSculptCommandModule(WorldEditorSession session, Worl
 
         // The group flip is a precondition of the bench, not a decoration on it: without the sculpt page every sculpt
         // verb resolves against whatever page the seat is already on. The bench is dropped rather than left open,
-        // because a half-entered mode is worse than a refused one — this return value used to be discarded.
+        // because a half-entered mode is worse than a refused one.
         if (!m_seatBindings.SetActiveGroup(slot: slot, group: WorldEditorBindings.SculptGroupId)) {
             _ = m_workbench.Drop(slot: slot);
 

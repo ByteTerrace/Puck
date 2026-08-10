@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.World.Audio;
@@ -19,7 +20,7 @@ public interface IAudioBlockSource {
 }
 
 /// <summary>Adapts a live <see cref="IAudioMachine"/> ring to <see cref="IAudioBlockSource"/>: one destructive
-/// drain per block — sharing rows tap the mixer's scratch, never re-drain. The ring's occupancy IS the
+/// drain per block — sharing rows tap the mixer's scratch, never re-drain. The ring's occupancy is the
 /// watermark — a drain that comes up short is an underrun and the mixer renders the shortfall silent.</summary>
 /// <param name="machine">The machine to drain.</param>
 public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSource {
@@ -34,13 +35,13 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// The world audio mixer core: <see cref="MixBlock"/> is a synchronous pure function owning no
 /// thread — the future device pump and the offline hash proof are two drivers of the same code. Fixed-point end to
 /// end: s16 samples × Q16 composite gains → int32 accumulate → the deterministic polynomial soft-clip → s16.
-/// <para>Per block: each emitter's TARGET coefficients derive from the snapshot (finite-support authored
-/// attenuation, and the zero of its support IS the cull;
+/// <para>Per block: each emitter's target coefficients derive from the snapshot (finite-support authored
+/// attenuation, and the zero of its support is the cull;
 /// equal-power pan from listener-relative azimuth via one <see cref="FixedQ4816.SinCos"/> per point emitter; beds
 /// center-pan with a presence envelope whose slew <see cref="WorldAudioEmitter.FadeFrames"/> bounds), then the
-/// LIVE coefficients ramp linearly from the previous block's across every frame — the zipper-noise killer.
+/// live coefficients ramp linearly from the previous block's across every frame — the zipper-noise killer.
 /// Ramp state is keyed by emitter id; a new id ramps in from silence, a departed id drops its state. Each distinct
-/// source is pulled ONCE into per-source scratch and every feed taps it (left | right | mix).</para>
+/// source is pulled once into per-source scratch and every feed taps it (left | right | mix).</para>
 /// <para>The soft-clip is the smooth-knee cubic <c>y = H + G·(1 − (1 − t)³)</c>: bit-transparent up to
 /// <c>H = 24575</c> (0.75 FS), then the knee <c>t = (|s| − H)/W</c> over width <c>W = 3G = 24576</c> saturates
 /// into the ceiling <c>H + G = 32767</c> at <c>|s| = 49151</c> (1.5 FS) with matched value and slope at both ends
@@ -49,17 +50,74 @@ public sealed class MachineBlockSource(IAudioMachine machine) : IAudioBlockSourc
 /// Zero steady-state allocation: every scratch and table is preallocated at construction.
 /// </summary>
 public sealed class WorldAudioMixer {
-    /// <summary>The mixer rate: device-native, exactly <see cref="FramesPerSimStep"/> frames per 240 Hz
-    /// sim step, 21/20 engine ticks per frame. Single-sourced from <see cref="WorldMachineAudioRate.SampleRate"/> —
+    /// <summary>The mixer rate: device-native, 48000 Hz. Single-sourced from <see cref="WorldMachineAudioRate.SampleRate"/> —
     /// the rate every <c>Puck.World.Server.WorldMachineHost</c>-booted machine synthesizes at — so the two projects
-    /// on opposite sides of the presentation firewall can never disagree on it.</summary>
+    /// on opposite sides of the presentation firewall can never disagree on it. Not assumed to be a multiple of the
+    /// world's simulation rate: 90 Hz and 45 Hz (both required Steam Deck OLED refresh rates) divide the 50400
+    /// engine-tick base cleanly but not 48000. <see cref="FramesPerStep"/> and <see cref="AdvanceStepFrames"/> are
+    /// the two ways of asking how a sim step maps to audio frames without assuming that division is exact.</summary>
     public const int SampleRate = WorldMachineAudioRate.SampleRate;
-    /// <summary>Audio frames per 240 Hz sim step (stepTicks 210 of the 50400/s engine clock): 48000/240 = 200 —
-    /// the offline proof's block size. A contract invariant, not a tunable.</summary>
-    public const int FramesPerSimStep = 200;
-    /// <summary>The largest block <see cref="MixBlock"/> renders — sized to the device pump's 256-frame quantum
-    /// with the proof's 200-frame sim block inside it.</summary>
+    /// <summary>Computes the ceiling of one sim step's audio-frame count at <paramref name="simulationRateHz"/> —
+    /// safe as a one-off slack margin (<see cref="Client.WorldAudioDirector"/>'s cue-life padding is exactly that)
+    /// precisely because it never understates. No single per-step frame count is exact for every step when
+    /// <see cref="SampleRate"/> is not a multiple of <paramref name="simulationRateHz"/> (90 Hz: 533⅓ frames/step);
+    /// a caller rendering many consecutive steps without long-run drift uses <see cref="AdvanceStepFrames"/> instead.</summary>
+    /// <param name="simulationRateHz">The simulation rate, in hertz (any positive value; need not divide
+    /// <see cref="SampleRate"/>).</param>
+    /// <returns>⌈<see cref="SampleRate"/> / <paramref name="simulationRateHz"/>⌉ — never smaller than any individual
+    /// step actually renders.</returns>
+    public static int FramesPerStep(uint simulationRateHz) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: simulationRateHz);
+
+        return checked((int)(((SampleRate + simulationRateHz) - 1) / simulationRateHz));
+    }
+    /// <summary>The frames in one sim step at the engine's default simulation rate (240 Hz — exact here, since
+    /// 48000/240 divides evenly). A world now authors its own rate (<c>WorldDefinition.SimulationRateHz</c>,
+    /// defaulting to 240), but no audio caller reads it yet — this stays the fixed 240 Hz default for a caller
+    /// (<see cref="Client.WorldAudioDirector"/>'s cue-life slack) that does not carry the live world's rate; once one
+    /// does, prefer <see cref="FramesPerStep"/> or <see cref="AdvanceStepFrames"/>, parameterized by that authored
+    /// rate, over this fixed value.</summary>
+    public static readonly int FramesPerSimStep = FramesPerStep(simulationRateHz: 240U);
+    /// <summary>The largest block <see cref="MixBlock"/> renders — the device pump's own real-time quantum ceiling,
+    /// unrelated to any simulation rate. A sim step's frame total is not bounded by this: at 90 Hz a step is ~533⅓
+    /// frames (spans two blocks), at 45 Hz ~1067 (spans five), at 30 Hz 1600 (spans seven) — a caller driving audio
+    /// in lockstep with the simulation renders one step across as many <see cref="MixBlock"/> calls as its frame
+    /// total needs, never assuming a step is one block or a block is one step.</summary>
     public const int MaxBlockFrames = 256;
+
+    /// <summary>Binds a fresh exact-remainder accumulator for advancing audio frames in lockstep with sim steps —
+    /// the same <see cref="FixedRateAccumulator"/> technique <c>Puck.World.Server.WorldBody</c>'s motion integration
+    /// already uses, reused here rather than a second hand-rolled remainder (see <see cref="AdvanceStepFrames"/>).
+    /// Works at any simulation rate that divides <see cref="Puck.Hosting.EngineTicks.PerSecond"/>, including ones
+    /// like 90 and 45 Hz that do not divide <see cref="SampleRate"/>.</summary>
+    /// <returns>A fresh accumulator bound to the engine tick base, ready for <see cref="AdvanceStepFrames"/>.</returns>
+    public static FixedRateAccumulator CreateStepAccumulator() =>
+        new(ticksPerSecond: ((long)EngineTicks.PerSecond));
+
+    /// <summary>Advances <paramref name="accumulator"/> by one sim step of <paramref name="stepTicks"/> engine ticks
+    /// and returns the exact whole number of audio frames that step renders. At 90 Hz (560 ticks/step, 533⅓
+    /// frames/step) the sequence is 533, 533, 534, 533, 533, 534, … — never a fixed 533 or 534 every step, and never
+    /// drifting off the true mean, because the part of the division too small to represent one call is carried
+    /// exactly into the next (<see cref="FixedRateAccumulator"/>'s own contract). At 240 Hz (210 ticks/step) the
+    /// division is exact — 200 every step, no remainder ever accrues — so a caller migrating from the retired fixed
+    /// <c>FramesPerSimStep = 200</c> literal to this method at today's rate sees byte-identical output.</summary>
+    /// <param name="accumulator">The accumulator from <see cref="CreateStepAccumulator"/> (or restored via
+    /// <see cref="FixedRateAccumulator.FromRemainder"/>), advanced in place. Authoritative state: hold it in a
+    /// mutable field, array slot, or <see langword="ref"/> local — never a <see langword="readonly"/> field or
+    /// collection indexer (see <see cref="FixedRateAccumulator"/>'s own remarks) — and persist its
+    /// <see cref="FixedRateAccumulator.Remainder"/> anywhere the caller's own state must reproduce this exactly.</param>
+    /// <param name="stepTicks">The engine ticks the step covers (<c>Puck.Hosting.EngineTicks.PerRate</c> at the
+    /// world's simulation rate).</param>
+    /// <returns>The non-negative frame count this step renders.</returns>
+    public static int AdvanceStepFrames(ref FixedRateAccumulator accumulator, ulong stepTicks) {
+        // FromRawBits/.Value reinterpret the accumulator's raw storage as a plain frame COUNT rather than a scaled
+        // Q16 real number — the exact-integer-division-with-carried-remainder machine underneath is identical either
+        // way; only the unit the raw bits name changes, and both inputs here are already exact integers, so nothing
+        // about that reinterpretation loses precision.
+        var delta = accumulator.Integrate(ratePerSecond: FixedQ4816.FromRawBits(value: SampleRate), elapsedTicks: stepTicks);
+
+        return checked((int)delta.Value);
+    }
     /// <summary>The registered-source capacity (each slot preallocates one stereo scratch).</summary>
     public const int MaxSources = 16;
     /// <summary>The registered-patch capacity.</summary>

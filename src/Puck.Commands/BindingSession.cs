@@ -11,7 +11,7 @@ public enum BindingSessionStatus {
 
 /// <summary>
 /// The guided-rebind state machine: walks a player through a <see cref="BindingSessionPlan"/> one step at a
-/// time, waiting on each prompt forever (no timers — the hardware-calibration protocol), locking a capture in
+/// time, waiting on each prompt forever with no timers, locking a capture in
 /// only after <see cref="BindingSessionPlan.RequiredPresses"/> presses of the same source, resetting the step
 /// when a confirmation press wanders, and refusing reserved or already-captured sources. Feed it
 /// <see cref="InputSignal"/>s in the router's deterministic capture order and its whole life is a pure function

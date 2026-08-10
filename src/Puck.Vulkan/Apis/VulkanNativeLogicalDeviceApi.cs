@@ -41,10 +41,9 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
     // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes
     // keyed off sType, so over-allocating is harmless but UNDER-allocating lets it read uninitialized memory
-    // past the block. The previous one-flag assumption (IntPtr.Size * 3 = 24 bytes) was too small for structs
-    // with several flags — e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 5 flags / 40 bytes — and
-    // the driver read the adjacent block's sType as a bogus VkBool32, tripping a validation error. 256 bytes
-    // comfortably exceeds any current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
+    // past the block — e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 5 flags / 40 bytes, past which a
+    // too-small block reads the adjacent block's sType as a bogus VkBool32. 256 bytes comfortably exceeds any
+    // current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
     private const int FeatureStructureByteSize = 256;
 
     private readonly Lock m_syncRoot = new();

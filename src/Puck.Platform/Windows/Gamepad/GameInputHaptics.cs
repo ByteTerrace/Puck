@@ -97,7 +97,7 @@ public sealed class GameInputHaptics : IDisposable {
 
     /// <summary>
     /// Correlates a caller (an XInput slot) to its physical GameInput device by matching the buttons it currently
-    /// holds, and reserves that device so no other slot can bind it. Returns a device only when EXACTLY ONE
+    /// holds, and reserves that device so no other slot can bind it. Returns a device only when exactly one
     /// unbound device shows <paramref name="targetButtons"/> — if two pads hold the same mask the binding is
     /// deferred, so a transient ambiguity can never produce a stable mis-binding. The returned device is owned by
     /// this instance's dictionary; the caller borrows it and must <see cref="Unbind"/> it on release.

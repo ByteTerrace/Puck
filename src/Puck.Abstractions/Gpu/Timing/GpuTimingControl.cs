@@ -1,16 +1,16 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// The LIVE GPU-timing arming control — the <c>PresentPacingControl</c> idiom for per-pass GPU
-/// timestamp capture. A small mutable holder the render engine reads per frame: an ARMED control writes the per-pass
-/// timing marks (and the launcher publishes its CPU frame buckets), a DISARMED one skips the timestamp writes and
+/// The live GPU-timing arming control — the <c>PresentPacingControl</c> idiom for per-pass GPU
+/// timestamp capture. A small mutable holder the render engine reads per frame: an armed control writes the per-pass
+/// timing marks (and the launcher publishes its CPU frame buckets), a disarmed one skips the timestamp writes and
 /// reads entirely at near-zero cost, so timing can be turned on and off mid-session with no restart. This is a
-/// PRESENTATION/diagnostic concern only — the fixed-step simulation is never touched, so arming or disarming timing
+/// presentation/diagnostic concern only — the fixed-step simulation is never touched, so arming or disarming timing
 /// never affects determinism.
 /// <para>
-/// The <see cref="Shared"/> instance is the single arming authority every scattered timing toggle collapsed onto.
-/// Precedence, highest first: a PROGRAMMATIC <see cref="SetArmed"/> (the bench harness arms it at suite start and
-/// restores the prior state at suite end, and the LIVE console switches — the demo's gpu.timing / Puck.World's
+/// The <see cref="Shared"/> instance is the single arming authority for the engine's timing toggles.
+/// Precedence, highest first: a programmatic <see cref="SetArmed"/> (the bench harness arms it at suite start and
+/// restores the prior state at suite end, and the live console switches — the demo's gpu.timing / Puck.World's
 /// world.timing — flip it mid-session) &gt; the world document's <c>host</c> section (seeded at composition) &gt;
 /// the engine node's construction seed (the lowest tier — a <see cref="TrySeed"/> that claims the control only when
 /// nothing above has). A monotonically increasing <see cref="Version"/> — bumped whenever the armed state actually
@@ -22,16 +22,16 @@ public sealed class GpuTimingControl {
     private uint m_seeded;
     private uint m_version;
 
-    /// <summary>The process-wide arming authority (see the type remarks).</summary>
+    /// <summary>Gets the process-wide arming authority (see the type remarks).</summary>
     public static GpuTimingControl Shared { get; } = new();
 
-    /// <summary>Whether GPU timing is currently armed.</summary>
+    /// <summary>Gets a value indicating whether GPU timing is currently armed.</summary>
     public bool Armed => (Volatile.Read(location: ref m_armed) != 0U);
-    /// <summary>A monotonically increasing counter bumped whenever the armed state changes, so a reader re-resolves
-    /// derived state only on an actual change.</summary>
+    /// <summary>Gets a monotonically increasing counter bumped whenever the armed state changes, so a reader
+    /// re-resolves derived state only on an actual change.</summary>
     public uint Version => Volatile.Read(location: ref m_version);
 
-    /// <summary>Sets the armed state PROGRAMMATICALLY — the highest-precedence source (the bench harness). Also claims
+    /// <summary>Sets the armed state programmatically — the highest-precedence source (the bench harness). Also claims
     /// the control so a later <see cref="TrySeed"/> (a lower-precedence composition/env seed) is a no-op. A no-op (no
     /// version bump) when the value is unchanged.</summary>
     /// <param name="armed">Whether to arm GPU timing.</param>
@@ -49,7 +49,7 @@ public sealed class GpuTimingControl {
     }
 
     /// <summary>Seeds the armed state from a lower-precedence source (the world document's <c>host</c> section, then the engine
-    /// node's construction seed) — applied ONLY if nothing has claimed the control yet, so the FIRST seed in precedence
+    /// node's construction seed) — applied only if nothing has claimed the control yet, so the first seed in precedence
     /// order wins and a programmatic <see cref="SetArmed"/> always overrides. Idempotent and thread-safe: every seed
     /// site may call it, the first claim sticks.</summary>
     /// <param name="armed">The armed state this source requests.</param>

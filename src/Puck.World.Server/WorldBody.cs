@@ -24,7 +24,7 @@ internal readonly record struct BodyEffectTargets(int ProducerTarget, int Affect
 
 internal readonly record struct BodyEffectOutput(int SourceIndex, int TargetIndex, CompiledBodyInstruction Instruction);
 
-/// <summary>One <see cref="BodyMotionOp.Generate"/> firing staged during a body's advance — collected across the WHOLE
+/// <summary>One <see cref="BodyMotionOp.Generate"/> firing staged during a body's advance — collected across the whole
 /// population advance pass (the same staged-output shape <see cref="WorldDesignation"/> already uses) and enqueued
 /// through the ordinary mutation pipeline afterwards by <c>WorldServer.Step</c>. It carries no source entity index:
 /// the site is a world-global state row, never body-relative, and the acting principal is
@@ -42,7 +42,7 @@ public readonly record struct WorldGeneratorInvocation(string Row);
 public readonly record struct StopOutcome(int ReleasedHeldChannels, int ClearedTimedPresses);
 
 /// <summary>Which cap, if any, decided a timed <c>player.press</c>'s effective hold — <see cref="WorldBody.PressChannel(int, FixedQ4816, float, FixedQ4816)"/>'s
-/// synchronous read-back discriminator, so the console echo can name the TRUE binder instead of guessing from the
+/// synchronous read-back discriminator, so the console echo can name the true binder instead of guessing from the
 /// effective value's magnitude.</summary>
 public enum PressHoldCapKind : byte {
     /// <summary>The effective hold equals the request — nothing capped it.</summary>
@@ -63,7 +63,7 @@ public enum PressHoldCapKind : byte {
 }
 
 /// <summary>The outcome of a timed <c>player.press</c> — the effective hold after both caps apply, and which one
-/// (if either) actually bound it. <c>player.press</c>'s synchronous read-back, so its echo can report the TRUE
+/// (if either) actually bound it. <c>player.press</c>'s synchronous read-back, so its echo can report the true
 /// result instead of echoing the requested duration as though it were honored.</summary>
 /// <param name="EffectiveHoldSeconds">The hold actually applied, in sim seconds.</param>
 /// <param name="CapKind">Which cap decided it.</param>
@@ -305,6 +305,11 @@ public sealed class WorldBody {
 
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;
+    // The position captured at the top of the most recent Advance — the swept portal-crossing scan's segment start
+    // (see FixedPreviousPosition). A hard teleport resets it to the landing position in the SAME CommitTeleport call
+    // that resets m_verticalVelocity/m_planarVelocity for the identical reason: without the reset a warped body would
+    // leave a ghost segment behind, sweeping a portal scan through space it never actually travelled.
+    private FixedVector3 m_previousPosition;
     // Sub-Q48.16 integration state. Per-second velocity/rate numerators are divided by the exact engine time base;
     // these signed remainders carry the discarded tails into later steps instead of losing them every fixed update.
     // They are authoritative state: hard pose writes reset the affected channels. Each is bound to the engine time base
@@ -713,16 +718,16 @@ public sealed class WorldBody {
     /// <see langword="null"/> before a profile is assigned, in which case the tuning's default rates apply.</summary>
     public WorldIdentity? Profile { get; set; }
 
-    /// <summary>Gets the BASE move speed the sim integrates under right now, arm-aware. Under the grounded arm:
+    /// <summary>Gets the base move speed the sim integrates under right now, arm-aware. Under the grounded arm:
     /// <see cref="Profile"/>'s requested rate (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this AFTER the
-    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the swim arm: the SAME resolve,
+    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this after the
+    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the swim arm: the same resolve,
     /// verbatim — <see cref="WorldMotionModel.Swim.ThrustSpeedEnvelope"/> compiles into the identical shared
     /// <c>MoveSpeedEnvelope</c> slot the grounded arm reads, so a seated player's live profile speed clamps the same
-    /// way. Under the vehicle arm: the kit's OWN <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
+    /// way. Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
     /// <see cref="WorldMotionModel.Vehicle.TopSpeedEnvelope"/> clamp — the vehicle arm deliberately never reads
     /// <see cref="Profile"/>'s speed (a kart's speed is the kit's, not the seat's identity), and a held boost
-    /// channel scales this AFTER the clamp, on the SAME sprint-after-clamp precedent. Every arm, this is the SAME
+    /// channel scales this after the clamp, on the same sprint-after-clamp precedent. Every arm, this is the same
     /// resolve <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and
     /// an unenveloped kit returns the requested/kit rate unchanged.</summary>
     public FixedQ4816 EffectiveMoveSpeed => ResolveMoveSpeed();
@@ -761,6 +766,11 @@ public sealed class WorldBody {
     public FixedWorldCollider? Collider => m_collider;
     /// <summary>Gets the authoritative deterministic position.</summary>
     public FixedVector3 FixedPosition => m_position;
+    /// <summary>Gets the avatar's position at the top of the most recent <see cref="Advance"/> — the start point of
+    /// the swept segment a portal-crossing scan tests against a slab. A hard teleport (<c>Pose</c>,
+    /// <see cref="Reconcile"/>) resets this to the landing position, so the segment collapses to a point exactly
+    /// where a teleport-into-the-volume must still be detected as a point test.</summary>
+    public FixedVector3 FixedPreviousPosition => m_previousPosition;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
     /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
@@ -807,33 +817,33 @@ public sealed class WorldBody {
     /// <c>world.contacts</c> read-back.</summary>
     public int ContactCount => m_lastContactCount;
 
-    /// <summary>Gets the LATCHED resolved NON-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
+    /// <summary>Gets the latched resolved non-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
     /// obstructs the body, a unit surface normal otherwise. A walkable push (the ground, a ramp) never sets this —
     /// only a contact whose alignment fails the grounded test does, which is exactly the witness
     /// <see cref="ContactCount"/> cannot show: a body pushed by a vertical wall reads <see cref="ContactCount"/>
-    /// <c>0</c> but a non-zero normal here, even while simultaneously standing (grounded) on the floor. LATCHED
+    /// <c>0</c> but a non-zero normal here, even while simultaneously standing (grounded) on the floor. Latched
     /// (see <see cref="UpdateObstructionWitness"/>) rather than a raw per-tick read: it survives a solver tick that
     /// happens not to re-register the push while the body stays driven and hasn't moved, and clears the instant
-    /// input goes idle or the body actually gets clear. Read-back only — the raw normal is an EXISTING solver fact
-    /// (see <see cref="ContactResolution"/>) that used to be computed and discarded; surfacing it changes no
-    /// simulation behavior. Surfaced by the <c>world.contacts</c> read-back.</summary>
+    /// input goes idle or the body actually gets clear. Read-back only — the raw normal is a solver fact from
+    /// <see cref="ContactResolution"/>, surfaced without changing simulation behavior, via the
+    /// <c>world.contacts</c> read-back.</summary>
     public FixedVector3 LastObstructionNormal => m_obstructionWitness;
 
-    /// <summary>Gets a value indicating whether this route CAPTURES this body — the route table's <c>RouteCapture</c> latched onto the body at
+    /// <summary>Gets a value indicating whether this route captures this body — the route table's <c>RouteCapture</c> latched onto the body at
     /// <c>Engage</c> time. While captured its resolved per-frame intent is diverted to the route's target (read via
     /// <see cref="EngagedIntent"/>) instead of driving the avatar, which stands idle. <see langword="false"/> while
-    /// unrouted, or while routed under the MIRRORED (capture:false) policy — either way the avatar keeps integrating
+    /// unrouted, or while routed under the mirrored (capture:false) policy — either way the avatar keeps integrating
     /// normally.</summary>
     public bool Engaged => m_engaged;
 
-    /// <summary>Gets the intent resolved on the MOST RECENT <see cref="Advance"/> — captured every tick regardless of
+    /// <summary>Gets the intent resolved on the most recent <see cref="Advance"/> — captured every tick regardless of
     /// capture policy, so a routed body's channels are available for translation/passthrough whether or not the
     /// avatar itself is idled. The <see cref="PlayerIntent"/> default (all channels zero) before the first advance.</summary>
     public PlayerIntent EngagedIntent => m_engagedIntent;
 
-    /// <summary>Presses a channel for the default two-host-step tap, reaching ANY ordinal (movement roles included).
+    /// <summary>Presses a channel for the default two-host-step tap, reaching any ordinal (movement roles included).
     /// The concrete engine-tick duration is derived by the next <see cref="Advance"/> from its <c>stepTicks</c> (see
-    /// <see cref="MaterializeDefaultLanePresses"/>), which merges it under the SAME rule <see cref="PressChannel(int, FixedQ4816, float, FixedQ4816)"/>
+    /// <see cref="MaterializeDefaultLanePresses"/>), which merges it under the same rule <see cref="PressChannel(int, FixedQ4816, float, FixedQ4816)"/>
     /// uses: a same-value re-press only extends an in-flight hold, a different value replaces it outright.</summary>
     /// <param name="ordinal">The channel ordinal to hold.</param>
     /// <param name="value">The raw fixed-point value to hold the channel at.</param>
@@ -847,22 +857,22 @@ public sealed class WorldBody {
     }
 
     /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>player.press</c>), reaching
-    /// ANY ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
+    /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
     /// (clamped to the row's authored ceiling and the <see cref="MaxActionHoldSeconds"/> engine backstop), decremented
     /// per sub-step, then releases
     /// itself. A short hold is a short hop (the release cuts the rising jump) on a composition channel bound to a
-    /// vertical effect; on a movement-role channel it is a timed analog override. A re-press carrying the SAME value
+    /// vertical effect; on a movement-role channel it is a timed analog override. A re-press carrying the same value
     /// as the ordinal's in-flight hold never shortens it (the longer of the two durations wins — repeatedly resubmitting
-    /// one held key must not truncate itself); a re-press carrying a DIFFERENT value is a distinct action and replaces
+    /// one held key must not truncate itself); a re-press carrying a different value is a distinct action and replaces
     /// the hold outright — its own duration, not merged with whatever remained — so a short full-brake press on a
     /// channel mid a long throttle hold takes effect immediately instead of being swallowed by the throttle's
     /// remaining ticks (see <see cref="MergeLaneTimer"/>, shared with <see cref="MaterializeDefaultLanePresses"/> so
     /// the timed and untimed press paths can never drift onto two different rules). Independent of the movement
     /// tape, so <c>player.fly … ; player.press jump</c> jumps a runner mid-segment. A non-positive (or NaN) hold is
-    /// IGNORED OUTRIGHT — it never touches the lane timer at all, so it cannot cancel a genuine in-flight hold on the
+    /// ignored outright — it never touches the lane timer at all, so it cannot cancel a genuine in-flight hold on the
     /// same ordinal under the different-value rule above. Unlike the device-held channel image (see
     /// <see cref="SetHeldChannels"/>), this wire path overlays under every <see cref="IntentSource"/>. N simultaneous
-    /// presses in one tick still collapse to this one slot per ordinal (SUMMING distinct presses as pooled fold
+    /// presses in one tick still collapse to this one slot per ordinal (summing distinct presses as pooled fold
     /// contributions, rather than one replacing another, remains owed — see
     /// <c>WorldServer.FoldChannelContributions</c>'s remarks); this fix only stops a same-tick opposing press from
     /// being silently discarded.</summary>
@@ -1065,6 +1075,420 @@ public sealed class WorldBody {
         CommitTeleport();
         m_continuity = EntityContinuity.Teleport;
     }
+
+    /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/world-model.md's
+    /// "In-flight state at transfer" names ("drop and re-derive what the engine can recompute; carry what the player
+    /// can perceive") applied to a same-process transfer's abort/restore path
+    /// (<see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/>/<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>),
+    /// which otherwise discards the whole body object and reconstructs a fresh one at rest. Pose (position/yaw) is
+    /// captured separately by that caller; this narrows to what else a player would notice — momentum carrying
+    /// through the door, a dash still playing out, a charged button still held, a scripted tape still running, a
+    /// switched body-motion program, a cooldown mid-count — never a re-derivable fact and never an absolute tick
+    /// value: every ticks field here is a countdown or a remainder, decremented/consumed every <see cref="Advance"/>,
+    /// never a stamped deadline tick — the same distinction that keeps a park's <c>ParkedUntilTick</c> out of this
+    /// struct entirely.</summary>
+    /// <remarks>
+    /// <para>Every mutable instance field this class declares is classified below so a reviewer can check a table
+    /// rather than re-hunt the class. Two invariants bound the classification either way: no park state (governed by
+    /// <see cref="Puck.World.Server.WorldPopulation.Entry.ParkedUntilTick"/>, never this struct — re-derived on the
+    /// next <c>DeactivateSeat</c>, never replayed from a snapshot), and no absolute tick (every field here is either
+    /// a duration/countdown or a signed remainder — see <see cref="Puck.Maths.FixedRateAccumulator"/>'s own "the
+    /// remainder is authoritative simulation state... a fraction, not a tick" contract, which is exactly why the
+    /// integration-remainder fields below are safe to carry).</para>
+    /// <para><b>Captured (this struct's fields, below).</b> <see cref="PlanarVelocity"/>, <see cref="VerticalVelocity"/>,
+    /// <see cref="Orientation"/>, <see cref="VehiclePitch"/>, <see cref="OverlayVelocity"/>/<see cref="OverlayRemainingTicks"/>,
+    /// <see cref="ChannelTimerTicks"/>/<see cref="ChannelTimerValues"/>.
+    /// <see cref="BodyMotionProgramName"/> — a live <c>player.motion</c> switch away from the seat kit's own default
+    /// program (<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/> always reconstructs from the kit's
+    /// default program; nothing else remembers a switch away from it).
+    /// <see cref="Source"/> — the intent-source axis (<c>player.control</c>/the peer sweep); a fresh body always
+    /// defaults to <c>Live</c>, so a body driven by a producer would silently snap back without this.
+    /// <see cref="PreviousChannelBit"/> — the previous tick's per-ordinal threshold-crossing bit; without it a
+    /// currently-held bound action's edge detector reads "not held last tick" on the very next Advance and can
+    /// spuriously re-fire a rising-edge action (a jump) the player never released.
+    /// <see cref="PendingDefaultChannelPress"/>/<see cref="PendingDefaultChannelValue"/> — an argument-less
+    /// <c>player.press</c> tap staged but not yet materialized into a lane timer (<see cref="MaterializeDefaultLanePresses"/>
+    /// only runs at the next Advance).
+    /// <see cref="MotionRecency"/> — the body-motion program's own Recently-gate clocks (combo/gate windows a
+    /// program's predicates read); <see cref="ResetVertical"/> zeroes these on every hard teleport by design (a
+    /// teleport must not carry momentum), but an abort is not an ordinary teleport from the player's perspective —
+    /// the same reasoning that justifies capturing <see cref="PlanarVelocity"/>/<see cref="VerticalVelocity"/>
+    /// on top of the same reset, extended to their integration carries.
+    /// <see cref="PlanarRampRemainder"/>/<see cref="VehicleLongRemainder"/>/<see cref="VehicleLatRemainder"/>/
+    /// <see cref="VehicleResidualRemainder"/>/<see cref="SwimThrustRampRemainder"/>/<see cref="OverlayRemainderX"/>,Y,Z —
+    /// the response/vehicle/swim/overlay rate accumulators' own <see cref="Puck.Maths.FixedRateAccumulator.Remainder"/>s.
+    /// These are frame-independent (a rate of convergence, not a position), unlike the position/rotation/vertical
+    /// accumulators excluded below — see this list's own "deliberately re-derived" entry for exactly why that
+    /// distinction holds. Kart makes the vehicle trio live for an ordinary seat; Dive makes the swim one live.
+    /// <see cref="LaneLatch"/>/<see cref="LaneFactHeld"/>/<see cref="LaneRecency"/> — the per-lane action runtime's
+    /// own OnPress pending-latch bit, OnFact previous-evaluation edge bit, and Recently-gate clocks
+    /// (<see cref="LaneActionRuntime"/>) — a buffered press awaiting its gate, an OnFact trigger's own edge memory,
+    /// and a double-tap window all live here.
+    /// <see cref="ActionStateValues"/>/<see cref="ActionStateTimers"/> — the kit's own named action-state register
+    /// file's live values/timers (ammo counters, cooldown timers) — read by <see cref="GateOpen"/>'s CompareState/Timer
+    /// predicates, so this is genuinely gameplay-affecting, not diagnostic.
+    /// <see cref="ActionStateDirty"/>/<see cref="ActionStateDirtyKind"/>/<see cref="ActionStateDirtyOperand"/> — a
+    /// durable (profile-persisted) write-back staged for <see cref="TakeDurableStateOutputs"/>.
+    /// <see cref="Puck.World.Server.WorldPopulation.CompleteStep"/> drains every body's dirty flags unconditionally at
+    /// the end of every tick, and a transfer's mutation-drain only ever runs between ticks, after that drain has
+    /// already completed for the just-finished one, so in this engine's tick architecture the triple is always
+    /// false/default at any point an abort could observe it (verified directly:
+    /// <c>TransferAbortKitWideningLawTests</c> drives a real durable write through a real tick and confirms it reads
+    /// drained at capture). Captured anyway, at negligible cost, as a hedge against that ordering ever changing.
+    /// <see cref="DurableInputPresent"/>/<see cref="DurableInputValues"/>/<see cref="DurableInputTimers"/>/
+    /// <see cref="DurableInputWriters"/>/<see cref="DurableInputTick"/> — an incoming durable-state write staged this
+    /// tick (<see cref="ApplyDurableInput"/>) but not yet consumed by the next Advance — the same "staged, not yet
+    /// materialized" class of gap as the pending channel press.
+    /// <see cref="TapeIntents"/>/<see cref="TapeRemainingTicks"/> — the scripted tape (<c>player.fly</c>) in FIFO
+    /// order, captured/restored at exact tick counts (never round-tripped through
+    /// <see cref="FixedTickConversion.DurationEngineTicks"/>'s own seconds conversion, which would drift the
+    /// restored duration from what was actually live) — the body's own future trajectory.</para>
+    /// <para><b>Deliberately re-derived (with reason) — never added to this struct.</b>
+    /// <c>m_motionArm</c>/<c>m_tuning</c>/<c>m_vehicleTuning</c>/<c>m_swimTuning</c>/<c>m_driftChannelOrdinal</c>/
+    /// <c>m_sprintChannelOrdinal</c>/<c>m_laneBindings</c>/<c>m_channelThresholds</c>/<c>m_channelShapes</c>/
+    /// <c>m_roleChannels</c>/<c>m_roleOrdinals</c>/<c>m_actionStateDefinitions</c>/<c>m_collider</c>/
+    /// <c>m_maxSmoothError</c> — compiled kit config; <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
+    /// reconstructs the body from the same seat kit row (<c>m_kits[m_seatKit]</c>), so these are byte-identical
+    /// without help. <c>m_contactField</c>/<c>m_hasWaterline</c>/<c>m_waterline</c> — wired directly by
+    /// <c>RestoreDetachedSeat</c>'s own <see cref="SetContactField"/>/<see cref="SetWaterline"/> calls immediately
+    /// after construction (the same population), always correct. <c>m_position</c>/<c>m_previousPosition</c>/
+    /// <c>m_yaw</c> — captured/restored outside this struct entirely, via <c>RestoreDetachedSeat</c>'s own
+    /// position/yaw parameters into <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> (this
+    /// struct's own top-level remarks already say so). <c>m_positionAccumulator</c>/
+    /// <c>m_rotationAccumulator</c>/<c>m_verticalVelocityAccumulator</c> — position-integration remainders tied to
+    /// the old position's coordinate frame; <see cref="CommitTeleport"/> legitimately collapses these on every hard
+    /// teleport, abort or not, so a warped/restored body's swept portal-crossing segment never ghosts back through
+    /// space it never travelled in the new frame — carrying them across a discontinuous jump would be meaningless,
+    /// unlike the frame-independent rate accumulators captured above. <c>m_grounded</c>/<c>m_up</c>/
+    /// <c>m_lastContactCount</c> — pure functions of the current position and the world contact field; the very next
+    /// grounded Advance re-derives them identically from the position <c>Pose()</c> already restored exactly. (<c>m_up</c>'s
+    /// "held across a degenerate query" case is a narrow, bounded, self-correcting exception, named rather than
+    /// silently assumed away: a restore whose immediately-following contact query is also degenerate at the exact
+    /// restored position could read the fresh body's <c>+Y</c> default for one extra tick before a non-degenerate
+    /// query corrects it.) <c>m_obstructionWitness</c>/<c>m_obstructionWitnessPosition</c>/
+    /// <c>m_obstructionWitnessGraceTicks</c> — explicitly documented at their own declaration as "Read-back only" for
+    /// <c>world.contacts</c>; losing the latch only ever produces a missing witness until the next real push or grace
+    /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the swim surface stage
+    /// re-derives both, purely as a function of the restored position and waterline, on the very next Advance.
+    /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — one-tick
+    /// diagnostic images, explicitly documented as "never read by simulation" and republished every submission.
+    /// <c>m_submittedIntent</c>/<c>m_hasSubmittedIntent</c>/<c>m_producerIntent</c>/<c>m_hasProducerIntent</c> —
+    /// one-tick device/producer images, consumed and reset every <see cref="Advance"/> by design ("a missed producer
+    /// tick can never leave a stale entity moving forever" — this type's own existing doc comment). <c>m_actionStateRequested</c>/
+    /// <c>m_actionStateLastWriter</c>/<c>m_actionStateLastReason</c> — pure audit text for <see cref="DescribeActionState"/>'s
+    /// echo; <see cref="GateOpen"/> reads only Values/Timers, never these, so losing them regresses a diagnostic
+    /// string, not gameplay — the same exclusion class as <c>m_channelReadHeld</c>. <c>m_continuity</c> — overwritten
+    /// unconditionally by <c>RestoreDetachedSeat</c>'s own <c>Pose()</c> call, which already writes the correct
+    /// value (Teleport) for a genuinely discontinuous restore. <c>m_affectingSubject</c> — reset to <c>-1</c> at the
+    /// tail of every <see cref="Advance"/>, one-tick, like <c>m_heldChannels</c>.</para>
+    /// <para><b>Not audited here — named rather than silently assumed fine.</b> <c>m_engaged</c>/<c>m_engagedIntent</c>
+    /// (the screen-engagement route latch): engagement is governed by <see cref="Puck.World.Server.WorldEngagement"/>,
+    /// a separate subsystem keyed by slot, not by this class — whether it re-establishes engagement onto a restored
+    /// body is that subsystem's own question.
+    /// <see cref="Puck.World.Server.WorldPopulation.Entry.Designations"/> and
+    /// <see cref="Puck.World.Server.WorldPopulation.Entry.ProducerState"/> are not <see cref="WorldBody"/> fields at
+    /// all; they live on the population's own per-seat <c>Entry</c>, entirely outside this struct's reach. They are
+    /// addressed instead at the
+    /// <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/>/<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>
+    /// layer directly (see those methods' own remarks) — named here so a reviewer checking this struct's own
+    /// completeness does not read their absence as an oversight.</para>
+    /// </remarks>
+    /// <param name="PlanarVelocity">The ramped horizontal velocity the grounded model integrates.</param>
+    /// <param name="VerticalVelocity">The vertical (gravity/jump) velocity.</param>
+    /// <param name="Orientation">The full attitude — captured directly rather than re-derived from yaw alone, so a
+    /// future vehicle/swim seat kit's pitch/roll survives too (today's seat kits are grounded-only, where this always
+    /// agrees with the yaw already carried alongside it — see <see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>'s
+    /// own remarks on the grounded-model exact case).</param>
+    /// <param name="VehiclePitch">The vehicle frame's own climb-attitude scalar (inert, always zero, under a grounded
+    /// seat kit — carried for the same forward-compatibility reason as <paramref name="Orientation"/>).</param>
+    /// <param name="OverlayVelocity">The timed impulse overlay's (the dash) world-space velocity, if one is live.</param>
+    /// <param name="OverlayRemainingTicks">Engine ticks remaining on the live overlay — a duration, not a deadline.</param>
+    /// <param name="ChannelTimerTicks">Per-ordinal remaining ticks on an in-flight timed <c>player.press</c> — a
+    /// duration per ordinal, copied defensively (never the live array).</param>
+    /// <param name="ChannelTimerValues">The value each timed press in <paramref name="ChannelTimerTicks"/> holds while
+    /// live, copied defensively.</param>
+    /// <param name="BodyMotionProgramName">The live body-motion program's own name, reapplied through the same
+    /// public <see cref="SetBodyMotionProgram(string)"/> door <c>player.motion</c> uses.</param>
+    /// <param name="Source">The intent-source axis (<c>player.control</c>/the peer sweep).</param>
+    /// <param name="PreviousChannelBit">The previous tick's per-ordinal threshold-crossing bit (edge-detection carry),
+    /// copied defensively.</param>
+    /// <param name="PendingDefaultChannelPress">Per-ordinal: an argument-less <c>player.press</c> tap staged but not
+    /// yet materialized into a lane timer, copied defensively.</param>
+    /// <param name="PendingDefaultChannelValue">The value each pending tap in <paramref name="PendingDefaultChannelPress"/>
+    /// holds, copied defensively.</param>
+    /// <param name="MotionRecency">The body-motion program's own Recently-gate clocks, copied defensively.</param>
+    /// <param name="PlanarRampRemainder">The response table's ramp accumulator's own signed remainder.</param>
+    /// <param name="VehicleLongRemainder">The vehicle arm's longitudinal convergence accumulator's own remainder.</param>
+    /// <param name="VehicleLatRemainder">The vehicle arm's lateral convergence accumulator's own remainder.</param>
+    /// <param name="VehicleResidualRemainder">The vehicle arm's residual convergence accumulator's own remainder.</param>
+    /// <param name="SwimThrustRampRemainder">The swim arm's thrust convergence accumulator's own remainder.</param>
+    /// <param name="OverlayRemainderX">The dash overlay accumulator's X-axis remainder.</param>
+    /// <param name="OverlayRemainderY">The dash overlay accumulator's Y-axis remainder.</param>
+    /// <param name="OverlayRemainderZ">The dash overlay accumulator's Z-axis remainder.</param>
+    /// <param name="LaneLatch">Per-lane action-runtime OnFact edge latch, copied defensively.</param>
+    /// <param name="LaneFactHeld">Per-lane action-runtime previous-evaluation fact-held bits, copied defensively.</param>
+    /// <param name="LaneRecency">Per-lane action-runtime Recently-gate clocks (<see langword="null"/> for a lane with
+    /// no Recently predicates), copied defensively.</param>
+    /// <param name="ActionStateValues">The kit's named action-state register file's live counter values, copied
+    /// defensively, parallel to the kit's compiled definitions.</param>
+    /// <param name="ActionStateTimers">The register file's live timer values, copied defensively.</param>
+    /// <param name="ActionStateDirty">Per-slot: whether a durable write is staged but not yet drained, copied
+    /// defensively.</param>
+    /// <param name="ActionStateDirtyKind">The staged write's kind, parallel to <paramref name="ActionStateDirty"/>.</param>
+    /// <param name="ActionStateDirtyOperand">The staged write's operand (meaningful only for an Add), parallel to
+    /// <paramref name="ActionStateDirty"/>.</param>
+    /// <param name="DurableInputPresent">Per-slot: whether an incoming durable value is staged for
+    /// <paramref name="DurableInputTick"/> but not yet applied, copied defensively.</param>
+    /// <param name="DurableInputValues">The staged durable values, parallel to <paramref name="DurableInputPresent"/>.</param>
+    /// <param name="DurableInputTimers">The staged durable timer ticks, parallel to <paramref name="DurableInputPresent"/>.</param>
+    /// <param name="DurableInputWriters">The staged durable writer ids, parallel to <paramref name="DurableInputPresent"/>.</param>
+    /// <param name="DurableInputTick">The simulation tick the staged durable input targets.</param>
+    /// <param name="TapeIntents">The scripted tape's live segments, in FIFO (dequeue) order.</param>
+    /// <param name="TapeRemainingTicks">Each segment's own remaining ticks, parallel to <paramref name="TapeIntents"/>.</param>
+    public readonly record struct TransferState(
+        FixedVector3 PlanarVelocity,
+        FixedQ4816 VerticalVelocity,
+        FixedQuaternion Orientation,
+        FixedQ4816 VehiclePitch,
+        FixedVector3 OverlayVelocity,
+        ulong OverlayRemainingTicks,
+        ulong[] ChannelTimerTicks,
+        FixedQ4816[] ChannelTimerValues,
+        string BodyMotionProgramName,
+        IntentSource Source,
+        bool[] PreviousChannelBit,
+        bool[] PendingDefaultChannelPress,
+        FixedQ4816[] PendingDefaultChannelValue,
+        ulong[] MotionRecency,
+        long PlanarRampRemainder,
+        long VehicleLongRemainder,
+        long VehicleLatRemainder,
+        long VehicleResidualRemainder,
+        long SwimThrustRampRemainder,
+        long OverlayRemainderX,
+        long OverlayRemainderY,
+        long OverlayRemainderZ,
+        ulong[] LaneLatch,
+        ulong[] LaneFactHeld,
+        ulong[]?[] LaneRecency,
+        FixedQ4816[] ActionStateValues,
+        ulong[] ActionStateTimers,
+        bool[] ActionStateDirty,
+        WorldDocumentWriteKind[] ActionStateDirtyKind,
+        FixedQ4816[] ActionStateDirtyOperand,
+        bool[] DurableInputPresent,
+        FixedQ4816[] DurableInputValues,
+        ulong[] DurableInputTimers,
+        string[] DurableInputWriters,
+        ulong DurableInputTick,
+        PlayerIntent[] TapeIntents,
+        ulong[] TapeRemainingTicks);
+
+    /// <summary>Captures this body's own <see cref="TransferState"/> — read live, right now, never cached. Called
+    /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
+    /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="TransferState"/>'s own
+    /// remarks for the complete field-by-field classification.</summary>
+    public TransferState CaptureTransferState() {
+        var laneLatch = new ulong[ActionLaneCount];
+        var laneFactHeld = new ulong[ActionLaneCount];
+        var laneRecency = new ulong[]?[ActionLaneCount];
+
+        for (var lane = 0; (lane < ActionLaneCount); lane++) {
+            laneLatch[lane] = m_laneActions[lane].Latch;
+            laneFactHeld[lane] = m_laneActions[lane].FactHeld;
+            laneRecency[lane] = (m_laneActions[lane].Recency is { } recency) ? [.. recency] : null;
+        }
+
+        var tapeIntents = new PlayerIntent[m_tapeCount];
+        var tapeRemainingTicks = new ulong[m_tapeCount];
+
+        for (var offset = 0; (offset < m_tapeCount); offset++) {
+            var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
+
+            tapeIntents[offset] = segment.Intent;
+            tapeRemainingTicks[offset] = segment.RemainingTicks;
+        }
+
+        return new(
+            PlanarVelocity: m_planarVelocity,
+            VerticalVelocity: m_verticalVelocity,
+            Orientation: m_orientation,
+            VehiclePitch: m_vehiclePitch,
+            OverlayVelocity: m_overlayVelocity,
+            OverlayRemainingTicks: m_overlayRemaining,
+            ChannelTimerTicks: [.. m_laneTimers],
+            ChannelTimerValues: [.. m_channelTimerValues],
+            BodyMotionProgramName: m_bodyMotionProgram.Name,
+            Source: m_source,
+            PreviousChannelBit: [.. m_previousChannelBit],
+            PendingDefaultChannelPress: [.. m_pendingDefaultChannelPress],
+            PendingDefaultChannelValue: [.. m_pendingDefaultChannelValue],
+            MotionRecency: [.. m_motionRecency],
+            PlanarRampRemainder: m_planarRampAccumulator.Remainder,
+            VehicleLongRemainder: m_vehicleLongAccumulator.Remainder,
+            VehicleLatRemainder: m_vehicleLatAccumulator.Remainder,
+            VehicleResidualRemainder: m_vehicleResidualAccumulator.Remainder,
+            SwimThrustRampRemainder: m_swimThrustRampAccumulator.Remainder,
+            OverlayRemainderX: m_overlayAccumulator.XRemainder,
+            OverlayRemainderY: m_overlayAccumulator.YRemainder,
+            OverlayRemainderZ: m_overlayAccumulator.ZRemainder,
+            LaneLatch: laneLatch,
+            LaneFactHeld: laneFactHeld,
+            LaneRecency: laneRecency,
+            ActionStateValues: [.. m_actionStateValues],
+            ActionStateTimers: [.. m_actionStateTimers],
+            ActionStateDirty: [.. m_actionStateDirty],
+            ActionStateDirtyKind: [.. m_actionStateDirtyKind],
+            ActionStateDirtyOperand: [.. m_actionStateDirtyOperand],
+            DurableInputPresent: [.. m_durableInputPresent],
+            DurableInputValues: [.. m_durableInputValues],
+            DurableInputTimers: [.. m_durableInputTimers],
+            DurableInputWriters: [.. m_durableInputWriters],
+            DurableInputTick: m_durableInputTick,
+            TapeIntents: tapeIntents,
+            TapeRemainingTicks: tapeRemainingTicks);
+    }
+
+    /// <summary>Reapplies a captured <see cref="TransferState"/> — the abort/refire invariant's own ordering: call
+    /// this after a hard-teleport commit (<see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>, which
+    /// routes through <see cref="CommitTeleport"/> and zeroes velocity/overlay/the previous-position anchor exactly
+    /// like any other hard pose write), never before — restoring perceivable dynamic state is only meaningful once the
+    /// discontinuity itself has already collapsed the stale carries a fresh construction never had in the first
+    /// place. The body-motion program is reapplied first, inside this method, before every other write below — see
+    /// this method's own body for why: <see cref="SetBodyMotionProgram(string)"/> carries its own reset side effects
+    /// (re-pinning yaw/orientation, clearing swim medium facts, resetting the recency clocks) that would clobber
+    /// everything else this method restores if it ran after them. Writing the channel-timer arrays here (rather than
+    /// at construction) keeps this the one place a restored body's action track re-arms, symmetric with the
+    /// velocity/orientation fields beside it.</summary>
+    /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
+    public void ApplyTransferState(TransferState state) {
+        // FIRST: a program switch reruns part of the SAME reset ApplyTransferState exists to restore on top of (see
+        // this method's own summary) — every write below must be the LAST word, never this one. A no-op when the
+        // captured name already matches the fresh body's own kit-default program (the common case, no player.motion
+        // switch): SetBodyMotionProgram's own early-return skips every side effect entirely.
+        if (!string.IsNullOrEmpty(value: state.BodyMotionProgramName)) {
+            SetBodyMotionProgram(programName: state.BodyMotionProgramName);
+        }
+
+        m_planarVelocity = state.PlanarVelocity;
+        m_verticalVelocity = state.VerticalVelocity;
+        m_orientation = state.Orientation;
+        m_vehiclePitch = state.VehiclePitch;
+        m_overlayVelocity = state.OverlayVelocity;
+        m_overlayRemaining = state.OverlayRemainingTicks;
+        m_source = state.Source;
+
+        var ticks = state.ChannelTimerTicks;
+        var values = state.ChannelTimerValues;
+        var timedCount = Math.Min(val1: Math.Min(val1: ticks.Length, val2: values.Length), val2: ActionLaneCount);
+
+        for (var ordinal = 0; (ordinal < timedCount); ordinal++) {
+            m_laneTimers[ordinal] = ticks[ordinal];
+            m_channelTimerValues[ordinal] = values[ordinal];
+        }
+
+        CopyClamped(source: state.PreviousChannelBit, destination: m_previousChannelBit);
+        CopyClamped(source: state.PendingDefaultChannelPress, destination: m_pendingDefaultChannelPress);
+        CopyClamped(source: state.PendingDefaultChannelValue, destination: m_pendingDefaultChannelValue);
+        CopyClamped(source: state.MotionRecency, destination: m_motionRecency);
+
+        // The rate accumulators' own remainders — FromRemainder never throws here: a captured remainder was always
+        // read off a LIVE accumulator bound to this SAME EngineTicksPerSecond base, whose own Integrate contract
+        // already guarantees |remainder| < ticksPerSecond (Puck.Maths.FixedRateAccumulator's own invariant).
+        m_planarRampAccumulator = FixedRateAccumulator.FromRemainder(remainder: state.PlanarRampRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_vehicleLongAccumulator = FixedRateAccumulator.FromRemainder(remainder: state.VehicleLongRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_vehicleLatAccumulator = FixedRateAccumulator.FromRemainder(remainder: state.VehicleLatRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_vehicleResidualAccumulator = FixedRateAccumulator.FromRemainder(remainder: state.VehicleResidualRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_swimThrustRampAccumulator = FixedRateAccumulator.FromRemainder(remainder: state.SwimThrustRampRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_overlayAccumulator = FixedVector3RateAccumulator.FromRemainders(xRemainder: state.OverlayRemainderX, yRemainder: state.OverlayRemainderY, zRemainder: state.OverlayRemainderZ, ticksPerSecond: EngineTicksPerSecond);
+
+        var laneCount = Math.Min(val1: Math.Min(val1: state.LaneLatch.Length, val2: state.LaneFactHeld.Length), val2: ActionLaneCount);
+
+        for (var lane = 0; (lane < laneCount); lane++) {
+            m_laneActions[lane].Latch = state.LaneLatch[lane];
+            m_laneActions[lane].FactHeld = state.LaneFactHeld[lane];
+
+            if ((lane < state.LaneRecency.Length) && (state.LaneRecency[lane] is { } capturedRecency) && (m_laneActions[lane].Recency is { } targetRecency)) {
+                CopyClamped(source: capturedRecency, destination: targetRecency);
+            }
+        }
+
+        var actionStateCount = Math.Min(val1: Math.Min(val1: state.ActionStateValues.Length, val2: state.ActionStateTimers.Length), val2: m_actionStateDefinitions.Length);
+
+        for (var slot = 0; (slot < actionStateCount); slot++) {
+            m_actionStateValues[slot] = state.ActionStateValues[slot];
+            m_actionStateTimers[slot] = state.ActionStateTimers[slot];
+        }
+
+        var dirtyCount = Math.Min(val1: Math.Min(val1: state.ActionStateDirty.Length, val2: state.ActionStateDirtyKind.Length), val2: Math.Min(val1: state.ActionStateDirtyOperand.Length, val2: m_actionStateDefinitions.Length));
+
+        for (var slot = 0; (slot < dirtyCount); slot++) {
+            m_actionStateDirty[slot] = state.ActionStateDirty[slot];
+            m_actionStateDirtyKind[slot] = state.ActionStateDirtyKind[slot];
+            m_actionStateDirtyOperand[slot] = state.ActionStateDirtyOperand[slot];
+        }
+
+        var durableCount = Math.Min(val1: Math.Min(val1: state.DurableInputPresent.Length, val2: state.DurableInputValues.Length), val2: Math.Min(val1: Math.Min(val1: state.DurableInputTimers.Length, val2: state.DurableInputWriters.Length), val2: m_durableInputPresent.Length));
+
+        for (var slot = 0; (slot < durableCount); slot++) {
+            m_durableInputPresent[slot] = state.DurableInputPresent[slot];
+            m_durableInputValues[slot] = state.DurableInputValues[slot];
+            m_durableInputTimers[slot] = state.DurableInputTimers[slot];
+            m_durableInputWriters[slot] = state.DurableInputWriters[slot];
+        }
+
+        m_durableInputTick = state.DurableInputTick;
+
+        RestoreTape(intents: state.TapeIntents, remainingTicks: state.TapeRemainingTicks);
+    }
+
+    /// <summary>Overrides just this body's own linear velocity — the mapped-arrival half of a portal transfer (see
+    /// <c>Puck.World.WorldPlacementPortal.Arrival</c>): the source's captured velocity, rotated into the
+    /// destination's own frame by <c>Puck.World.Server.WorldPortalArrivalMath</c>, written after
+    /// <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>'s own hard-teleport commit — the same
+    /// "AFTER Pose, never before" ordering <see cref="ApplyTransferState"/> follows, so the discontinuity has already
+    /// reset <see cref="FixedPreviousPosition"/> before this runs. Deliberately narrower than
+    /// <see cref="ApplyTransferState"/>: the destination's own normal join already embodied the traveler fresh under
+    /// its own kit (appearance, grants, action-track state, body motion program) — mapped arrival carries across
+    /// only positional continuity, pose and velocity, never the source kit's dash overlay, timers, or tape.</summary>
+    /// <param name="planarVelocity">The rotated planar velocity.</param>
+    /// <param name="verticalVelocity">The (rotation-invariant) vertical velocity.</param>
+    public void SetArrivalVelocity(FixedVector3 planarVelocity, FixedQ4816 verticalVelocity) {
+        m_planarVelocity = planarVelocity;
+        m_verticalVelocity = verticalVelocity;
+    }
+
+    // The shared clamped-copy every array field ApplyTransferState restores uses: never trusts the captured array's
+    // length to match the restored body's own (a defensive habit, not a load-bearing one — the SAME seat kit always
+    // produces the SAME lengths for a same-process abort/restore).
+    private static void CopyClamped<T>(T[] source, T[] destination) {
+        var count = Math.Min(val1: source.Length, val2: destination.Length);
+
+        for (var index = 0; (index < count); index++) {
+            destination[index] = source[index];
+        }
+    }
+
+    // Rewrites the WHOLE tape ring from a captured FIFO snapshot — the abort-restore counterpart to
+    // CaptureTransferState's own tape read. Bypasses EnqueueRun's seconds-based API deliberately: re-deriving ticks
+    // from a seconds-rounded value would drift the restored segment's remaining duration from the exact tick count
+    // that was live at capture. Always called on a freshly constructed restore body (RestoreDetachedSeat never calls
+    // ApplyTransferState on a live one), so there is never an existing segment to preserve or lose.
+    private void RestoreTape(PlayerIntent[] intents, ulong[] remainingTicks) {
+        var count = Math.Min(val1: intents.Length, val2: remainingTicks.Length);
+
+        while (m_tape.Length < count) {
+            GrowTape();
+        }
+
+        m_tapeHead = 0;
+        m_tapeCount = count;
+
+        for (var index = 0; (index < count); index++) {
+            m_tape[index] = new TapeSegment { Intent = intents[index], RemainingTicks = remainingTicks[index] };
+        }
+    }
+
     /// <summary>Sets the entity's named body motion program as an authoritative pose switch.</summary>
     /// <param name="programName">The declared program name.</param>
     /// <returns><see langword="true"/> when the program exists.</returns>
@@ -1175,7 +1599,7 @@ public sealed class WorldBody {
         return m_continuity.Kind;
     }
     /// <summary>Clears every intent producer this body owns: drops the whole tape, the staged transient input images,
-    /// every in-flight timed press (<c>player.press</c> hold), AND any not-yet-materialized argument-less tap staged
+    /// every in-flight timed press (<c>player.press</c> hold), and any not-yet-materialized argument-less tap staged
     /// by <see cref="PressChannel(int, FixedQ4816)"/> (see <see cref="MaterializeDefaultLanePresses"/>) — on role and
     /// composition ordinals alike, in every one of these three forms. Not an instantaneous halt — an in-flight jump
     /// arc still resolves under gravity and lands, and the ramped planar velocity decays to rest through the
@@ -1245,6 +1669,14 @@ public sealed class WorldBody {
 
         return continuity;
     }
+
+    /// <summary>Reads this tick's continuity hint without consuming it — the non-consuming counterpart to
+    /// <see cref="TakeContinuity"/> for a primer snapshot built for a newly attached sink
+    /// (<c>WorldServer.AttachSink</c>/<c>BuildPrimerSnapshot</c>): a late attach must never steal the one-shot flag an
+    /// already-attached sink is still due to observe via <see cref="TakeContinuity"/> on the ordinary next-tick
+    /// broadcast.</summary>
+    public EntityContinuity PeekContinuity() => m_continuity;
+
     /// <summary>Formats the avatar's planar pose for the roster's <c>world.players</c> glance — position X/Z and heading,
     /// culture-invariant. The full 6DOF pose is <see cref="DescribeWhere"/>.</summary>
     /// <returns>A line of the form <c>pos=(x.xx, z.zz) yaw=ddd°</c>.</returns>
@@ -1323,6 +1755,11 @@ public sealed class WorldBody {
             m_overlayVelocity = default;
             m_overlayRemaining = 0;
             m_overlayAccumulator.Reset();
+            // Same discontinuity reason as the velocity resets below: without this, a warped body's swept
+            // portal-crossing segment would ghost from the pre-warp position through every frame in between. The
+            // caller has already written the new m_position by the time CommitTeleport runs, so this collapses the
+            // segment to a point exactly at the landing spot — the degenerate case the swept test reduces to.
+            m_previousPosition = m_position;
         }
 
         if (resetRotation) {
@@ -1353,12 +1790,12 @@ public sealed class WorldBody {
     /// <param name="tick">The explicit simulation tick whose staged durable inputs may enter.</param>
     /// <param name="stepTicks">The exact engine ticks this call advances.</param>
     /// <param name="engageProbeOrdinal">The context-sensitive-button interception (the RPG A-button): a channel
-    /// ordinal to test for a RISING edge against this SAME tick's composed intent, BEFORE any integration runs, or
+    /// ordinal to test for a rising edge against this same tick's composed intent, before any integration runs, or
     /// <see langword="null"/> for no probe (every body away from an engageable-by-channel screen, and every world
     /// with none — the default, zero-cost path). <see cref="Puck.World.Server.WorldServer.Step"/> resolves eligibility
-    /// (screen radius, machine-bearing, un-engaged, authority) BEFORE calling this and supplies the ordinal only when
+    /// (screen radius, machine-bearing, un-engaged, authority) before calling this and supplies the ordinal only when
     /// eligible; a fired edge here only reports it — the caller performs the actual
-    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/> afterward, through the SAME authority path a manual
+    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/> afterward, through the same authority path a manual
     /// <c>player.engage</c> takes.</param>
     /// <param name="entityIndex">The source body's population index.</param>
     /// <param name="effectTargets">The pre-step entity target image.</param>
@@ -1371,6 +1808,11 @@ public sealed class WorldBody {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     internal bool Advance(ulong tick, ulong stepTicks, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+
+        // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
+        // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
+        m_previousPosition = m_position;
+
         ApplyDurableInput(tick: tick);
         MaterializeDefaultLanePresses(stepTicks: stepTicks);
 
@@ -1832,12 +2274,12 @@ public sealed class WorldBody {
         }
     }
 
-    /// <summary>Updates the LATCHED <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
+    /// <summary>Updates the latched <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
     /// fresh non-walkable push always (re)latches immediately and refills the grace window. Absent one, the
-    /// EXISTING latch clears IMMEDIATELY the instant either releasing condition holds — the RAW planar move intent
+    /// existing latch clears immediately the instant either releasing condition holds — the raw planar move intent
     /// (<paramref name="intent"/>'s MoveForward/MoveStrafe roles, resolved once by <c>NextIntent</c> before any op
     /// runs — never a program-computed velocity, which may not be written yet at this exact point depending on op
-    /// order, and which — once written — is the RESPONSE-RAMPED result the wall itself just clipped, risking a
+    /// order, and which — once written — is the response-ramped result the wall itself just clipped, risking a
     /// feedback loop where a wall stopping the body reads back as "input released") has gone idle, or the body has
     /// meaningfully moved since the latch was captured — so the witness can never claim an obstruction the body has
     /// actually left or stopped pressing against. Short of either, the latch survives a solver pass reporting no
@@ -2195,11 +2637,10 @@ public sealed class WorldBody {
             : FixedQ4816.Zero);
     }
 
-    // The swim model's ONE vertical owner: a prior design ran the vertical channel's response-row convergence in a
-    // separate stage, independent of this one's buoyancy accumulation — a second constant-rate owner of one channel
-    // always beats the first, which is why an idle body used to stall short of its float line and a held ascent used
-    // to breach. That second stage is gone; both the medium's target and the response-row convergence happen HERE:
-    // the medium's own target folds into the commanded thrust target BEFORE the convergence runs — below the bob
+    // The swim model's ONE vertical owner: both the medium's target and the response-row convergence happen HERE,
+    // never split into a separate stage — a second constant-rate owner of the same channel always beats the first,
+    // which would leave an idle body short of its float line or let a held ascent breach it. The medium's own
+    // target folds into the commanded thrust target BEFORE the convergence runs — below the bob
     // band the target is a constant trim drift (Buoyancy, clamped to the terminal speeds); inside the band and
     // above it (breach recovery) the target is a proportional settle toward the float line — displacement times
     // SurfaceSettleRate — capped upward at the

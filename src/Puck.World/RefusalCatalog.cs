@@ -9,7 +9,7 @@ namespace Puck.World;
 /// on-demand read-back (<c>world.refusals</c> is Immediate and reads no simulation state), never a per-tick cost, and
 /// the doors themselves pay nothing for it — a refusal's own throw site names an enum member exactly as it always
 /// would; nothing here runs until an operator asks.</summary>
-/// <remarks>Scans THREE assemblies, not one: the split between <c>Puck.World.Data</c>, <c>Puck.World.Server</c>, and
+/// <remarks>Scans three assemblies, not one: the split between <c>Puck.World.Data</c>, <c>Puck.World.Server</c>, and
 /// this composition root put refusal-tagged enums in Puck.World.Data
 /// (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), and this composition root
 /// (<c>Client.Sdf.SdfRefusal</c>). A single-assembly scan would silently stop seeing two thirds of the catalog;

@@ -18,7 +18,7 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// <remarks>
     /// <para>
     /// The algebra carries no <c>Divide</c> and no <c>Inverse</c>, deliberately, and this is why: division is not an
-    /// operation of the object, it is a LINEAR SOLVE against the divisor's own action on the basis, and it succeeds
+    /// operation of the object, it is a linear solve against the divisor's own action on the basis, and it succeeds
     /// exactly when that action has full rank. A divisor that is a zero divisor, or whose action is singular for any
     /// other reason, is refused with the offending column rather than approximated.
     /// </para>
@@ -131,7 +131,7 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// </para>
     /// <para>
     /// The identity that ties it back to the sum is exact and worth testing:
-    /// <c>resolvent − (1 + … + value^k) == value^(k+1)·resolvent</c>, so the resolvent IS the sum whenever the sum
+    /// <c>resolvent − (1 + … + value^k) == value^(k+1)·resolvent</c>, so the resolvent is the sum whenever the sum
     /// converges, and is the analytic continuation of it whenever the sum does not.
     /// </para>
     /// </remarks>

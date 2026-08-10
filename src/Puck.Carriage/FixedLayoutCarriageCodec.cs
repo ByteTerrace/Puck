@@ -1,7 +1,7 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// The fixed-layout <see cref="ICarriageCodec"/> — the SHELVED alternative of docs/signed-carriage-wire.md
+/// The fixed-layout <see cref="ICarriageCodec"/> — the shelved alternative of docs/signed-carriage-wire.md
 /// §16, kept for a context that cannot carry a CBOR implementation or wants every byte hand-specified: a
 /// versioned byte stream with no unauthenticated parsing beyond bounded, length-prefixed reads (see
 /// <see cref="FixedLayoutReader"/>). Field order (also the signed-portion order):

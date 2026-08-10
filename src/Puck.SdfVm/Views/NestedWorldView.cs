@@ -4,25 +4,18 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// A FULLY nested world — its own <see cref="ISdfFrameSource"/> (typically a small <see cref="SdfCompositionFrameSource"/>
+/// A nested world — its own <see cref="ISdfFrameSource"/> (typically a small <see cref="SdfCompositionFrameSource"/>
 /// with its own emitters, unrelated to the host world's), rendered offscreen through its own
-/// <see cref="SdfWorldEngine"/> exactly like <see cref="SdfCameraView"/> films the HOST world. The hypervisor proof:
-/// a screen surface wired to this view shows an entirely separate SDF program — a world inside the world — and if
-/// THAT world's own emitters include a screen surface wired to yet another nested view, the chain composes (one
-/// frame of lag per hop, the same self-reference-safe TV-in-TV rule <see cref="ViewStack"/> enforces for every
-/// content kind).
+/// <see cref="SdfWorldEngine"/> exactly as <see cref="SdfCameraView"/> films the host world. A screen surface wired
+/// to this view shows an entirely separate SDF program — a world inside the world — and if that world's own
+/// emitters include a screen surface wired to yet another nested view, the chain composes (one frame of lag per hop,
+/// the same self-reference-safe TV-in-TV rule <see cref="ViewStack"/> enforces for every content kind).
 /// </summary>
 /// <remarks>
-/// ZERO construction sites in the buildable tree (unit 6b's constructor-chain census, 2026-08-02): the only callers
-/// ever built (a museum wallpaper fold, a Droste door, a demonstrative canary scene) lived in the quarantined
-/// <c>Puck.Demo</c>, which the repo's own doctrine never ports from — capabilities that lived only there are simply
-/// absent from <c>Puck.World</c>, with no plan of record bringing them over. This is deliberately NOT the dead-stack
-/// treatment, though: the destination is docs/vision.md's "recursion" note — a world document field/verb that lets a
-/// screen show another live, simulated world (the honest analogue is a second world document with its own server).
-/// That destination is real but UNPHASED — no unit owns building the document/verb seam yet, and vision.md says so
-/// plainly ("explicitly open and unsurveyed"). Recorded here rather than deleted, the same posture
-/// <see cref="Puck.SdfVm.Queries.IWorldQuery"/> takes beside its own named (and, unlike this one, phase-owned)
-/// destination: honest about being unconsumed today, not a claim of coverage that isn't there.
+/// No construction sites exist in the buildable tree; the type is currently unconsumed. Its destination is a world
+/// document field or console verb that lets a screen show another live, simulated world, tracked as an open item in
+/// <c>docs/vision.md</c>'s recursion note; no phase currently owns building that seam. See
+/// <see cref="Puck.SdfVm.Queries.IWorldQuery"/> for the same posture applied to its own destination.
 /// </remarks>
 public sealed class NestedWorldView : IViewContent, IDisposable {
     /// <summary>The view's fixed render width — the native brick panel size (matches <see cref="SdfCameraView.DefaultWidth"/>).</summary>
@@ -42,7 +35,7 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this view forwards
     /// to its offscreen engine — resolved once at the composition root and stashed unchanged.</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 (selects the kernel bytecode).</param>
-    /// <param name="frameSource">The nested world's OWN frame source — captured fresh every <see cref="Resolve"/>,
+    /// <param name="frameSource">The nested world's own frame source — captured fresh every <see cref="Resolve"/>,
     /// entirely independent of the host world's program/anchors/emitters.</param>
     /// <param name="width">The render width (default the native panel size).</param>
     /// <param name="height">The render height (default the native panel size).</param>
@@ -58,13 +51,13 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Always zero — a nested world films its OWN lit content; it contributes no light to the host room
+    /// <remarks>Always zero — a nested world films its own lit content; it contributes no light to the host room
     /// beyond whatever the host's own screen-surface glow accounting already does for a bound image.</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
 
     /// <inheritdoc/>
     /// <remarks>Always <see langword="true"/> — a nested-world resolve is a real offscreen render pass (capturing its
-    /// own frame source AND submitting it).</remarks>
+    /// own frame source and submitting it).</remarks>
     public bool IsBudgeted => true;
 
     /// <inheritdoc/>
@@ -103,11 +96,10 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
 
         // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine / SdfCameraView.EnsureEngine —
         // GpuTimingControl.Shared, gated on the backend having registered the timing seam.
-        // WART PRESERVED BY NAME (unit 6b constructor-chain round): the timing bundle is resolved EAGERLY at the
-        // composition root regardless of arming state, but this engine only picks it up when ViewTiming.Enabled is
-        // true at THIS EnsureEngine call (once per engine lifetime) — a view whose engine builds with timing off
-        // never gains it until a device-lost rebuild re-runs EnsureEngine. Fixing this here would smuggle a behavior
-        // change into a pure restructuring; carried over unchanged from the retired IServiceProvider path.
+        // A known wart: the timing bundle is resolved eagerly at the composition root regardless of arming
+        // state, but this engine only picks it up when ViewTiming.Enabled is true at this EnsureEngine call
+        // (once per engine lifetime) — a view whose engine builds with timing off never gains it until a
+        // device-lost rebuild re-runs EnsureEngine.
         var timingFactory = (ViewTiming.Enabled ? m_services.TimingFactory : null);
         var timingRecorder = (ViewTiming.Enabled ? m_services.TimingRecorder : null);
 

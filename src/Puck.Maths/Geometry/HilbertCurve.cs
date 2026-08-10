@@ -72,13 +72,10 @@ public static class HilbertCurve {
     /// <summary>Validates the order and returns the grid side <c>2^order</c>, the bound both directions measure against.</summary>
     /// <param name="order">The curve order, which must lie in <c>[1, 31]</c>.</param>
     /// <returns>The grid side length.</returns>
-    /// <remarks>The order is checked BEFORE any shift, because C# masks a shift count to the operand's width: an order
-    /// of 32 silently became a shift of zero, which made the grid one cell wide and collapsed every input onto the
-    /// origin. Nothing here validated anything, so a caller's out-of-range order, coordinate or distance was not
-    /// refused but ALIASED — <c>Decode(32, 12345)</c>, <c>Decode(1, 4)</c> and <c>Decode(1, 0)</c> all returned
-    /// <c>(0, 0)</c>, and <c>Encode(1, 2, 0)</c> matched <c>Encode(1, 0, 0)</c>. A curve whose whole purpose is to be a
-    /// bijective spatial key cannot quietly map distinct inputs together, and an out-of-range argument is usually
-    /// caller corruption worth surfacing rather than absorbing.</remarks>
+    /// <remarks>The order is checked before any shift, because C# masks a shift count to the operand's width — an
+    /// unvalidated order of 32 would silently become a shift of zero, collapsing every input onto the origin instead
+    /// of throwing. Validating first keeps the curve's bijection honest: an out-of-range order, coordinate, or
+    /// distance is refused rather than silently aliased to a valid one.</remarks>
     private static uint ValidOrderBound(int order) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: order, other: 1, paramName: nameof(order));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: order, other: 31, paramName: nameof(order));

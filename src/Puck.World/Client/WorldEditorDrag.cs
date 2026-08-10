@@ -9,15 +9,15 @@ namespace Puck.World.Client;
 /// The drag preview channel — the client-local pending-row overlay every continuous manipulation rides. A grab copies
 /// the selected row (or a spawn act creates a ghost row) into a per-seat pending slot; stick/verb motion moves the
 /// pending position through <see cref="GridSnap"/>; the frame source composes the pending rows over the delivered
-/// definition so the EXISTING rebuild path renders the preview (drag-cadence rebuild ≈ the seat-recolor cost);
-/// and release submits exactly ONE whole-row mutation over the link (the wire-boundary drag coalescing — a 10-second
+/// definition so the existing rebuild path renders the preview (drag-cadence rebuild ≈ the seat-recolor cost);
+/// and release submits exactly one whole-row mutation over the link (the wire-boundary drag coalescing — a 10-second
 /// drag is one journal entry, one undo step). Cancel clears the pending row: the drag never existed.
 /// </summary>
-/// <remarks>Release FREEZES the overlay instead of clearing it: the screen already shows the committed pose, so no
-/// rebuild fires until the released act's OWN result retires it — an APPLY (the delivered definition's keyed row
-/// equals the frozen expected row: identical document truth, no pixel pop) or a REJECTION (the server's edit echo
+/// <remarks>Release freezes the overlay instead of clearing it: the screen already shows the committed pose, so no
+/// rebuild fires until the released act's own result retires it — an apply (the delivered definition's keyed row
+/// equals the frozen expected row: identical document truth, no pixel pop) or a rejection (the server's edit echo
 /// correlates back through <see cref="NoteRejected"/>: the row snaps honestly back while the rejection toast narrates
-/// why). An UNRELATED delivery — another principal's mutation advancing the definition revision — leaves the frozen
+/// why). An unrelated delivery — another principal's mutation advancing the definition revision — leaves the frozen
 /// preview standing (a preview retires only on its own act's apply/rejection/deadline, never an unrelated delivery).
 /// The frame deadline stays as the honest fallback for a missing response. Single-threaded on the
 /// window-pump thread, like every editor type here.</remarks>

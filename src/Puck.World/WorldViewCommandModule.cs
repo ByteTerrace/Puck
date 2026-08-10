@@ -29,7 +29,7 @@ namespace Puck.World;
 /// the subject.
 /// <para><c>world.view.state</c> and <c>world.view.orbit</c> carry no principal at all — each is a direct read of
 /// live presentation state.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCameraOrbit orbit, WorldSeatFeel seatFeel, WorldCursorFeed cursorFeed) : ICommandModule {
+internal sealed class WorldViewCommandModule(IServerLink link, WorldInstanceHost instances, WorldViewComposer composer, WorldCameraOrbit orbit, WorldSeatFeel seatFeel, WorldCursorFeed cursorFeed) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
@@ -60,14 +60,20 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
             description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name>). A query (always echoes) — the pipe-assertable composition read.",
-            handler: (context, args) => new CommandResult(Output: DescribeState()),
+            handler: (context, args) => (args.Count == 0
+                ? new CommandResult(Output: DescribeState())
+                : CommandResult.Error(output: $"[world.view.state: unrecognized '{args[0]}' — expected no arguments]")),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.orbit",
-            description: "Echoes a local seat's live mouse-look orbit: world.view.orbit [player] — THAT SEAT's control feel in force (arming, worldAxes, sensitivities, invert flags, pitch clamp) and its live drag yaw/pitch in degrees. Feel is PER SEAT: a seat carrying a profile reads that profile's own playerDefaults.seatLook, and a seat with none reads the world document's, so two seats can answer differently in the same session and a world.row.set playerDefaults.seatLook moves only the seats sitting at the world's floor. The optional trailing player index is 1..4 (default 1) — the orbit ANGLES WorldCameraOrbit carries are per local seat too; only the seat WorldPointerSink currently resolves the mouse onto (the keyboard's own seat — see its remarks) ever carries a nonzero angle. A query (always echoes) — the pipe-assertable seat-look read.",
+            description: "Echoes a local seat's live mouse-look orbit: world.view.orbit [player] — THAT SEAT's merged control-feel policy in force (arming, worldAxes, sensitivities, invert flags, pitch clamp) and its live drag yaw/pitch in degrees. worldAxes and the pitch clamp are the boot world's own playerDefaults.seatLook (rig structure, never a joined profile's); arming/sensitivities/invert flags are PER SEAT — a seat carrying a profile reads that profile's own playerDefaults.seatLook, and a seat with none reads the world document's, so two seats can answer differently in the same session and a world.row.set playerDefaults.seatLook moves only the seats sitting at the world's floor. The optional trailing player index is 1..4 (default 1) — the orbit ANGLES WorldCameraOrbit carries are per local seat too; only the seat WorldPointerSink currently resolves the mouse onto (the keyboard's own seat — see its remarks) ever carries a nonzero angle. A query (always echoes) — the pipe-assertable seat-look read.",
             handler: (context, args) => {
+                if (args.Count > 1) {
+                    return CommandResult.Error(output: $"[world.view.orbit: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
+                }
+
                 if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var player)) {
                     return CommandResult.Error(output: $"[world.view.orbit: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
                 }
@@ -80,7 +86,9 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
             description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.orbit sibling: live per-seat presentation state nothing else can echo.",
-            handler: (context, args) => new CommandResult(Output: DescribePointer()),
+            handler: (context, args) => (args.Count == 0
+                ? new CommandResult(Output: DescribePointer())
+                : CommandResult.Error(output: $"[world.view.pointer: unrecognized '{args[0]}' — expected no arguments]")),
             routing: CommandRouting.Immediate
         );
     }
@@ -106,9 +114,13 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
     }
     private string DescribeOrbit(int slot) {
         const float RadiansToDegrees = (180f / MathF.PI);
-        // THIS seat's feel, not a document-wide one: the echo prints player=N, so it must read the policy that seat
-        // actually drags with — its own profile's, or the world's until one is delivered.
-        var seatLook = seatFeel.Look(slot: slot);
+        // THIS seat's merged policy, not a document-wide one: the echo prints player=N, so it must read exactly what
+        // WorldCameraOrbitDrag actually resolves — whichever world the seat's LIVE route currently frames it from
+        // (WorldInstanceHost.ResolveRoutedDefinition; the boot world for a boot-anchored seat, same as always)
+        // merged with this seat's own control feel (its profile's, or the world's until one is delivered). One
+        // source with the drag path, never re-derived, so this echo can never show a structure the drag itself
+        // did not actually clamp against.
+        var seatLook = WorldSeatCameraResolver.ResolveSeatLook(structure: instances.ResolveRoutedDefinition(slot: slot).PlayerDefaults.SeatLook, preference: seatFeel.Look(slot: slot));
         var builder = new StringBuilder(value: "[world.view.orbit: ");
 
         _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"player={PlayerRoster.DisplayNumber(slot: slot)} arming={seatLook.Arming.ToString().ToLowerInvariant()} worldAxes={seatLook.WorldAxes.ToString().ToLowerInvariant()} yawSensitivity={seatLook.YawSensitivity.ToString(format: "0.#####", provider: CultureInfo.InvariantCulture)} pitchSensitivity={seatLook.PitchSensitivity.ToString(format: "0.#####", provider: CultureInfo.InvariantCulture)} invertYaw={seatLook.InvertYaw.ToString().ToLowerInvariant()} invertPitch={seatLook.InvertPitch.ToString().ToLowerInvariant()} minPitch={(seatLook.MinPitch * RadiansToDegrees).ToString(format: "0.##", provider: CultureInfo.InvariantCulture)} maxPitch={(seatLook.MaxPitch * RadiansToDegrees).ToString(format: "0.##", provider: CultureInfo.InvariantCulture)}");

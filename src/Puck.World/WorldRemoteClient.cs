@@ -1,38 +1,48 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using Puck.Carriage;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
-/// The <c>--connect</c> boot shape: a minimal, self-contained TCP socket client — NOT a second
-/// <see cref="Puck.World.Server.WorldServer"/>/composition graph, deliberately. It skips the whole normal DI
-/// composition (no GPU, no local authoritative server, no <c>CommandRegistry</c>) and instead speaks the wire
-/// directly: Hello, then a small stdin verb grammar that encodes through the SAME
-/// <see cref="WorldSubmissionCodec"/> leaf codecs the loopback always uses, over the socket instead of in-process.
-/// It supports exactly the verbs needed to prove the round trip. Every token this harness OWNS is spelled
-/// <c>peer.*</c> so it can never be read as a console verb: the two MUTATION verbs
-/// <c>peer.hud.panel.remove &lt;id&gt;</c> and <c>peer.hud.element.remove &lt;panel&gt; &lt;element&gt;</c>, which build
-/// their mutation kinds directly rather than through the registry (the peer door's own half of the mutation
-/// substrate — one section, two kinds, strings only); the client-local <c>peer.sleep &lt;ms&gt;</c> (holds the
-/// connection open; never reaches the wire); and <c>peer.quit</c>. The ONE token that keeps a console spelling is
-/// <c>player.where &lt;n&gt;</c> (a <see cref="WorldQuery.PlayerWhere"/>), because it IS that console verb's query,
-/// asked over the socket — a reader's knowledge transfers. This is never the full console surface a
-/// windowed/headless boot registers; the console reaches the same HUD section through
-/// <c>world.row.set hud.panels</c>/<c>world.row.remove hud.panels</c>, which have no element-level door at all.
-/// <para>Every mutation this client encodes stamps <see cref="WorldPrincipal.Console"/> as a placeholder the wire
-/// carries and the HOST overwrites: <c>WorldTcpHost.StampPrincipal</c> re-stamps the connection's own admitted
-/// identity onto the payload before it reaches the ordered domain, so what the client's bytes CLAIM is never what
-/// the server authorizes against. Sending the most privileged identity in the vocabulary from here and watching the
-/// host authorize it as <c>peer:&lt;n&gt;:&lt;gen&gt;</c> is that property under test, not an oversight.</para>
+/// The <c>--connect</c> boot shape: a minimal, self-contained TCP socket client that speaks the wire protocol
+/// directly instead of composing a local <see cref="Puck.World.Server.WorldServer"/> (no GPU, no local authoritative
+/// server, no <c>CommandRegistry</c>). It runs the Hello (protocol-version) handshake, then the admission door's
+/// challenge-response identity check (see <see cref="RunAsync"/> remarks), then reads a small stdin verb grammar
+/// that encodes through the same <see cref="WorldSubmissionCodec"/> leaf codecs the loopback path uses, over the
+/// socket instead of in-process. Every verb this client owns is spelled <c>peer.*</c> so it can never be read as a
+/// console verb: the mutation verbs <c>peer.hud.panel.remove &lt;id&gt;</c> and
+/// <c>peer.hud.element.remove &lt;panel&gt; &lt;element&gt;</c>, which build their mutation kinds directly rather
+/// than through the registry; the client-local <c>peer.sleep &lt;ms&gt;</c>, which holds the connection open and
+/// never reaches the wire; and <c>peer.quit</c>. <c>player.where &lt;n&gt;</c> keeps its console spelling because it
+/// is that console verb's query (<see cref="WorldQuery.PlayerWhere"/>), asked over the socket. This client supports
+/// only these verbs, not the full console surface a windowed or headless boot registers.
+/// <para>Every mutation this client encodes stamps <see cref="WorldPrincipal.Console"/> as a placeholder; the host's
+/// <c>WorldTcpHost.StampPrincipal</c> re-stamps the connection's own admitted identity onto the payload before it
+/// reaches the ordered domain, so the identity the client's bytes claim is never the identity the server authorizes
+/// against.</para>
 /// </summary>
 internal static class WorldRemoteClient {
-    /// <summary>Connects to a TCP socket host and runs the stdin verb loop until EOF/<c>peer.quit</c>/disconnect.</summary>
+    /// <summary>Connects to a TCP socket host and runs the stdin verb loop until EOF, <c>peer.quit</c>, or
+    /// disconnect. After the protocol-version check passes, answers the door's identity challenge
+    /// (<see cref="WorldAdmissionDoor"/>): with <paramref name="identityDir"/>, signs the exact challenge nonce with
+    /// the identity it names; without one, signs with a freshly minted, unregistered P-256 key, which the host is
+    /// expected to refuse by name.</summary>
     /// <param name="connect">The <c>host:port</c> endpoint to connect to.</param>
+    /// <param name="identityDir">A directory holding <c>private-key.pkcs8</c> (an ECDsa PKCS8 private key),
+    /// <c>domain.txt</c>, <c>subject.txt</c> (the signing subject key's own platform user id — required whether the
+    /// identity is <c>signsDirectly</c> or <c>vouches</c>: a claim is always signed by a subject key, even when the
+    /// admission entry that admits it pins only a root), <c>algorithm.txt</c> (defaults to
+    /// <c>ecdsa-p256-sha256</c> if absent), and an optional <c>chain/</c> subdirectory holding <c>1.envelope</c> and
+    /// (for a two-hop <c>vouches</c> identity) <c>2.envelope</c> — carriage-codec-encoded key-binding envelopes,
+    /// root-to-subject order; absent for a <c>signsDirectly</c> identity. <see langword="null"/> mints the
+    /// throwaway identity described above.</param>
     /// <returns>The process exit code.</returns>
-    public static async Task<int> RunAsync(string connect) {
+    public static async Task<int> RunAsync(string connect, string? identityDir) {
         if (!IPEndPoint.TryParse(s: connect, result: out var endpoint)) {
             Console.Error.WriteLine(value: $"--connect '{connect}' is not a parseable \"ip:port\" endpoint (a hostname is not accepted).");
 
@@ -71,23 +81,52 @@ internal static class WorldRemoteClient {
         }
 
         if (helloFrame.Kind == WorldTcpWireFormat.DownstreamKind.HelloRefused) {
-            var offset = 0;
-            var reason = WorldTcpWireFormat.ReadLengthPrefixedString(body: helloFrame.Body, offset: ref offset);
+            var reason = WorldTcpWireFormat.DecodeText(body: helloFrame.Body);
 
             Console.Error.WriteLine(value: $"[world.connect: refused — {reason}]");
 
             return 1;
         }
 
-        if (helloFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloAccepted) {
+        if (helloFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloChallenge) {
             Console.Error.WriteLine(value: $"[world.connect: unexpected first frame kind {helloFrame.Kind}]");
 
             return 1;
         }
 
-        var peerIndex = BinaryPrimitives.ReadInt32LittleEndian(source: helloFrame.Body);
-        var generation = BinaryPrimitives.ReadInt32LittleEndian(source: helloFrame.Body.AsSpan(start: sizeof(int)));
-        var connectionId = BinaryPrimitives.ReadInt32LittleEndian(source: helloFrame.Body.AsSpan(start: (2 * sizeof(int))));
+        // Door 2 of 2 — the identity challenge. Sign the EXACT challenge bytes (opaque claim payload) with either
+        // the caller-supplied identity or a fresh throwaway one, and answer with a HelloIdentity frame.
+        var challenge = helloFrame.Body;
+        var codec = new FixedLayoutCarriageCodec();
+        var (claimBytes, chainBytes) = BuildIdentityResponse(codec: codec, challenge: challenge, identityDir: identityDir);
+
+        await WorldTcpWireFormat.WriteHelloIdentityAsync(stream: stream, chain: chainBytes, claim: claimBytes, ct: cts.Token).ConfigureAwait(continueOnCapturedContext: false);
+
+        var admission = await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: cts.Token).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (admission is not { } admissionFrame) {
+            Console.Error.WriteLine(value: "[world.connect: the host closed the connection before completing the identity challenge]");
+
+            return 1;
+        }
+
+        if (admissionFrame.Kind == WorldTcpWireFormat.DownstreamKind.HelloRefused) {
+            var reason = WorldTcpWireFormat.DecodeText(body: admissionFrame.Body);
+
+            Console.Error.WriteLine(value: $"[world.connect: refused — {reason}]");
+
+            return 1;
+        }
+
+        if (admissionFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloAccepted) {
+            Console.Error.WriteLine(value: $"[world.connect: unexpected frame kind {admissionFrame.Kind} after the identity challenge]");
+
+            return 1;
+        }
+
+        var peerIndex = BinaryPrimitives.ReadInt32LittleEndian(source: admissionFrame.Body);
+        var generation = BinaryPrimitives.ReadInt32LittleEndian(source: admissionFrame.Body.AsSpan(start: sizeof(int)));
+        var connectionId = BinaryPrimitives.ReadInt32LittleEndian(source: admissionFrame.Body.AsSpan(start: (2 * sizeof(int))));
 
         Console.Out.WriteLine(value: $"[world.connect: accepted peer:{peerIndex}:{generation} connection:{connectionId} — player.where {(peerIndex + 1)}]");
 
@@ -142,6 +181,83 @@ internal static class WorldRemoteClient {
         return 0;
     }
 
+    // Answers the identity challenge: either the caller's own configured identity (--connect-identity-dir), or a
+    // freshly minted, unregistered, throwaway P-256 key that no admission entry on the far side will ever name — a
+    // deliberate way to exercise the identity door's refusal path without requiring a pre-arranged identity for
+    // every run. Either way the claim's payload is the EXACT challenge bytes (opaque), signed under a short window
+    // around "now" and directed at the door's fixed purpose/audience — never a durable carried claim (no sequence).
+    private static (byte[] Claim, byte[][] Chain) BuildIdentityResponse(FixedLayoutCarriageCodec codec, byte[] challenge, string? identityDir) {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        const long notBeforeSlackSeconds = 30L;
+        const long windowSeconds = 300L;
+
+        if (identityDir is null) {
+            using var throwawayKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+            var throwawaySpki = throwawayKey.ExportSubjectPublicKeyInfo();
+            var throwawayDomain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: throwawaySpki);
+            var claim = CarriageSigner.SignClaim(
+                codec: codec,
+                domain: throwawayDomain,
+                subject: "unregistered-throwaway",
+                signerKey: throwawayKey,
+                signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+                purpose: WorldAdmissionDoor.Purpose,
+                notBefore: (now - notBeforeSlackSeconds),
+                notAfter: (now + windowSeconds),
+                audience: WorldAdmissionDoor.Audience,
+                sequence: null,
+                claimBytes: challenge
+            );
+
+            Console.Error.WriteLine(value: $"[world.connect: no --connect-identity-dir given — signing with a fresh unregistered key (domain {throwawayDomain}); expect the host to refuse this identity by name]");
+
+            return (codec.EncodeEnvelope(envelope: claim), []);
+        }
+
+        var algorithmPath = Path.Combine(path1: identityDir, path2: "algorithm.txt");
+        var algorithm = (File.Exists(path: algorithmPath) ? File.ReadAllText(path: algorithmPath).Trim() : CarriageAlgorithms.EcdsaP256Sha256);
+        var domain = File.ReadAllText(path: Path.Combine(path1: identityDir, path2: "domain.txt")).Trim();
+        // REQUIRED regardless of mode: a claim is always signed by a SUBJECT key (SignClaim's own shape), even when
+        // the admission ENTRY that admits it pins only a root under WorldAdmissionTrustMode.Vouches.
+        var subject = File.ReadAllText(path: Path.Combine(path1: identityDir, path2: "subject.txt")).Trim();
+
+        using var signingKey = ECDsa.Create();
+
+        signingKey.ImportPkcs8PrivateKey(source: File.ReadAllBytes(path: Path.Combine(path1: identityDir, path2: "private-key.pkcs8")), bytesRead: out _);
+
+        var chainDir = Path.Combine(path1: identityDir, path2: "chain");
+        var chain = new List<byte[]>();
+
+        if (Directory.Exists(path: chainDir)) {
+            foreach (var fileName in new[] { "1.envelope", "2.envelope" }) {
+                var chainPath = Path.Combine(path1: chainDir, path2: fileName);
+
+                if (File.Exists(path: chainPath)) {
+                    chain.Add(item: File.ReadAllBytes(path: chainPath));
+                }
+            }
+        }
+
+        // A signsDirectly identity signs directly with its own key; a vouches (chain-carrying) identity signs with
+        // that SAME key too — the chain proves the key up to the root, the claim itself is always signed by the
+        // subject key regardless of which shape admitted it.
+        var signedClaim = CarriageSigner.SignClaim(
+            codec: codec,
+            domain: domain,
+            subject: subject,
+            signerKey: signingKey,
+            signerAlgorithm: algorithm,
+            purpose: WorldAdmissionDoor.Purpose,
+            notBefore: (now - notBeforeSlackSeconds),
+            notAfter: (now + windowSeconds),
+            audience: WorldAdmissionDoor.Audience,
+            sequence: null,
+            claimBytes: challenge
+        );
+
+        return (codec.EncodeEnvelope(envelope: signedClaim), [.. chain]);
+    }
+
     // Encodes one payload through the SAME leaf codec the loopback uses, writes it, awaits the one downstream
     // reply (v1 is strictly request-then-response per connection — no correlation id needed), and prints it.
     // Returns false when the socket closed underneath the request, so the caller stops the stdin loop.
@@ -188,7 +304,7 @@ internal static class WorldRemoteClient {
 
                 break;
             case WorldTcpWireFormat.DownstreamKind.Refusal: {
-                    var reason = WorldTcpWireFormat.ReadLengthPrefixedString(body: frameReply.Body, offset: ref offset);
+                    var reason = WorldTcpWireFormat.DecodeText(body: frameReply.Body);
 
                     Console.Error.WriteLine(value: $"[world.connect: refused — {reason}]");
 

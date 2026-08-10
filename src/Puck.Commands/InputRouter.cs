@@ -8,24 +8,23 @@ namespace Puck.Commands;
 /// <see cref="InputSignal"/>s here from any thread; the host's fixed-step loop pulls one
 /// <see cref="CommandSnapshot"/> per tick, draining the captured signals whose
 /// <see cref="InputSignal.CaptureTick"/> falls within the tick's window and folding them — through the binding
-/// table — into per-slot lanes. Signals stamped at or beyond the window stay for a later tick (so a frame
-/// spike delays, never misattributes, recent input). Replaces the bind-once-per-render-frame path.
+/// table — into per-slot lanes. Signals stamped at or beyond the window stay for a later tick, so a frame
+/// spike delays, never misattributes, recent input.
 /// </summary>
 /// <remarks>
 /// Held semantics mirror a physical control: digital presses and active analog values persist until a release or zero
 /// sample clears them. Digital handlers dispatch only on their bound edges; analog handlers re-dispatch their carried
-/// sample each tick so route-style consumers receive the continuous value. Text is
-/// transient. Dispatch is <em>not</em> performed here — the
-/// router only produces the deterministic per-tick state; the consumer runs handlers from the snapshot.
-/// Pre-resolved commands (a console / STDIN line, a peer, an AI) enter through a
+/// sample each tick so route-style consumers receive the continuous value. Text is transient. Dispatch is
+/// <em>not</em> performed here — the router only produces the deterministic per-tick state; the consumer runs
+/// handlers from the snapshot. Pre-resolved commands (a console/STDIN line, a peer, an AI) enter through a
 /// <see cref="CommandInjectionSink"/> — one per producer, each bound to its own principal at construction — and fold
 /// into the same lanes as captured signals, in one deterministic capture order, so command-line input is recorded and
 /// replayed by the same machinery with no separate path.
-/// <para>THE MIXER IS ALSO THE PRINCIPAL DOOR. Every entry leaves this type carrying a
-/// <see cref="CommandPrincipal"/>: an injected entry keeps the one its sink was constructed with, and every captured
-/// entry is stamped from <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is
-/// never turned into a seat principal here — a claimed slot may be answering to a peer or a guest module, so only the
-/// host's roster can say who it is.</para>
+/// <para>The mixer is also the principal door: every entry leaves this type carrying a <see cref="CommandPrincipal"/>.
+/// An injected entry keeps the one its sink was constructed with; every captured entry is stamped from
+/// <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is never turned into a
+/// seat principal here — a claimed slot may be answering to a peer or a guest module, so only the host's roster can
+/// say who it is.</para>
 /// </remarks>
 public sealed class InputRouter {
     private readonly IInputBindings m_bindings;
@@ -201,23 +200,22 @@ public sealed class InputRouter {
         QueueCancellations(cancellations: cancellations, discardCapturedSignals: true);
     }
 
-    /// <summary>Clears ONE slot's held commands and <see cref="BindingEntryMode.Toggle"/> latches — the input-layer
+    /// <summary>Clears one slot's held commands and <see cref="BindingEntryMode.Toggle"/> latches — the input-layer
     /// half of a deliberate, full "stop": queues one deterministic cancellation per carried command (so a held
-    /// channel's handler actually RUNS its release, exactly as a physical release would — see
+    /// channel's handler actually runs its release, exactly as a physical release would — see
     /// <see cref="CommandRegistry.ApplySnapshot"/>'s <c>Dispatch</c> gate), and drops every toggle latch the slot
     /// carries so a later press starts fresh rather than reading as "already on".</summary>
     /// <remarks>
-    /// Distinct from <see cref="ReleaseHeld()"/> (every slot, wired to OS focus loss) and the private per-DEVICE
-    /// overload (a disconnect): this is the per-SLOT seam a caller reaches for on a NAMED, deliberate stop — never
-    /// wired implicitly. Deliberately narrow: it does NOT touch <see cref="IInputBindings"/> chord/modifier state
-    /// (<see cref="PagedInputBindings.Reset(int)"/> is that seam, and no caller of THIS method needs it) and does
-    /// NOT discard already-captured signals for the slot (a signal in flight when the stop runs is not this
-    /// method's business to judge).
+    /// Distinct from <see cref="ReleaseHeld()"/> (every slot, wired to OS focus loss) and the private per-device
+    /// overload (a disconnect): this is the per-slot seam a caller reaches for on a named, deliberate stop, never
+    /// wired implicitly. It does not touch <see cref="IInputBindings"/> chord/modifier state
+    /// (<see cref="PagedInputBindings.Reset(int)"/> is that seam) and does not discard already-captured signals
+    /// for the slot.
     /// </remarks>
     /// <param name="slot">The logical player slot to clear.</param>
-    /// <returns>The number of TOGGLE latches this slot carried in the ON state and cleared — 0 when the slot had
+    /// <returns>The number of toggle latches this slot carried in the on state and cleared; 0 when the slot had
     /// none latched. A caller with a user-facing "totality" echo (a panic verb) should fold this into its own
-    /// tally rather than let a toggled-on channel a stop clears go unaccounted for.</returns>
+    /// tally.</returns>
     public int ClearSlotHeld(int slot) {
         var latchKeysToRemove = new List<(int Slot, ushort CommandId)>();
         var clearedLatches = 0;
@@ -628,11 +626,10 @@ public sealed class InputRouter {
     }
     // The dispatched value for one bound signal: an ordinary binding's Value is an UNCONDITIONAL override (or null,
     // meaning pass the signal through verbatim) — untouched here. A channel destination's ChannelScale is instead
-    // applied by the signal's OWN value kind, never guessed from nullability (the B2 fix): a digital source (a key)
-    // has no magnitude, so the declared scale IS the whole contribution; an analog (Axis1D) source's contribution is
-    // its own sample TIMES the scale, via FixedQ4816's multiply (nearest, ties to even) — never the scale replacing
-    // the sample. Any other live kind bound to a channel (no current binding does this) falls back to the constant,
-    // matching the pre-fix behavior rather than inventing an untested multiply shape.
+    // applied by the signal's OWN value kind, never guessed from nullability: a digital source (a key) has no
+    // magnitude, so the declared scale IS the whole contribution; an analog (Axis1D) source's contribution is its
+    // own sample TIMES the scale, via FixedQ4816's multiply (nearest, ties to even) — never the scale replacing the
+    // sample. Any other live kind bound to a channel (no current binding does this) falls back to the constant.
     private static CommandValue ResolveValue(in CommandBinding binding, in InputSignal signal) {
         if (binding.ChannelScale is not { } channelScale) {
             return (binding.Value ?? signal.Value);

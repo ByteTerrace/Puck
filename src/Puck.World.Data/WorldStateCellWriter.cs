@@ -4,21 +4,18 @@ using Puck.Maths;
 namespace Puck.World;
 
 /// <summary>
-/// The shared PURE composition for one <see cref="WorldStateRow"/> cell write — upsert-or-append plus the row's own
+/// The shared pure composition for one <see cref="WorldStateRow"/> cell write — upsert-or-append plus the row's own
 /// <see cref="WorldStateRow.Evicts"/> overflow policy. Extracted so the running world's own ordered mutation
-/// pipeline (<c>Server.WorldServer</c>'s <c>UpsertStateCell</c> compose arm) and any OWNED IDENTITY document write
+/// pipeline (<c>Server.WorldServer</c>'s <c>UpsertStateCell</c> compose arm) and any owned-identity document write
 /// outside that pipeline (<c>WorldIdentity.TryAppendEvictingText</c>, and through it the cross-document text
-/// delivery door, <c>Server.WorldOwnedWorlds.Decide</c>) run the IDENTICAL rule and can never disagree about a
-/// victim, a duplicate key, or a reserved-cell refusal — a second reading of "how a row absorbs one cell write" is
-/// exactly the drift this repository's docs warn eviction logic against (see <see cref="WorldStateRow.Evicts"/>'s
-/// own remarks: "the identical pure function... so a live apply and every world.undo re-composition run the
-/// identical pure function... and can never disagree about the victim").
+/// delivery door, <c>Server.WorldOwnedWorlds.Decide</c>) run the identical rule and can never disagree about a
+/// victim, a duplicate key, or a reserved-cell refusal.
 /// </summary>
 public static class WorldStateCellWriter {
     /// <summary>Parses a human-authored wire token into a cell's raw-encoded operand, against a row <c>Kind</c>
-    /// resolved from the CANDIDATE document at compose time — never at console submit time, where the row this token
+    /// resolved from the candidate document at compose time — never at console submit time, where the row this token
     /// targets may not exist yet in the same batch (see <c>WorldMutation.UpsertStateCell.RawToken</c>'s remarks for
-    /// why the interpretation cannot happen any earlier). Mirrors the console's former per-verb parse exactly: DECIMAL
+    /// why the interpretation cannot happen any earlier). Mirrors the console's former per-verb parse exactly: decimal
     /// text for <see cref="CellKind.Fixed"/> (never raw <see cref="FixedQ4816"/> bits), <c>true</c>/<c>false</c> for
     /// <see cref="CellKind.Bool"/>, and a plain integer literal otherwise. Never called for <see cref="CellKind.Text"/>
     /// — a text write carries its operand through <see cref="WorldStateCell.Text"/> and never reaches this parser.</summary>
@@ -66,7 +63,7 @@ public static class WorldStateCellWriter {
         }
     }
 
-    /// <summary>Determines whether <paramref name="key"/> is ALREADY present in <paramref name="cells"/> — asked before an
+    /// <summary>Determines whether <paramref name="key"/> is already present in <paramref name="cells"/> — asked before an
     /// upsert, since the upsert's own replaced-vs-appended distinction is not itself observable to the caller. An
     /// eviction only ever fires for a write that minted a brand-new key, never one that re-wrote an existing one in
     /// place.</summary>
@@ -83,12 +80,12 @@ public static class WorldStateCellWriter {
         return false;
     }
 
-    /// <summary>Returns the row's own overflow policy, applied AFTER a write already appended-or-replaced a cell — the ONE
+    /// <summary>Returns the row's own overflow policy, applied after a write already appended-or-replaced a cell — the one
     /// eviction seam (see <see cref="WorldStateRow.Evicts"/>). A no-op (returns <paramref name="cells"/> unchanged,
-    /// <paramref name="evictedKey"/> null) unless the row opts in, the write added a new key, AND the addition
+    /// <paramref name="evictedKey"/> null) unless the row opts in, the write added a new key, and the addition
     /// pushed the row past its declared capacity.</summary>
     /// <param name="row">The carrying row (for its <see cref="WorldStateRow.Evicts"/>/<see cref="WorldStateRow.Capacity"/>).</param>
-    /// <param name="cells">The cells AFTER the triggering write already applied.</param>
+    /// <param name="cells">The cells after the triggering write already applied.</param>
     /// <param name="addedNewKey">Whether the triggering write minted a brand-new key rather than rewriting an existing one.</param>
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <returns>The post-eviction cell list.</returns>
@@ -119,8 +116,8 @@ public static class WorldStateCellWriter {
         return trimmed;
     }
 
-    /// <summary>Composes ONE text-cell write onto <paramref name="row"/> — upsert-or-append plus eviction — running
-    /// the SAME reserved-cell rule (<see cref="WorldStateReservedCells.TryValidateReservedCell"/>) the running world's
+    /// <summary>Composes one text-cell write onto <paramref name="row"/> — upsert-or-append plus eviction — running
+    /// the same reserved-cell rule (<see cref="WorldStateReservedCells.TryValidateReservedCell"/>) the running world's
     /// own mutation pipeline runs, so a hand-typed <c>world.state.cell.set</c> text write and an owned-identity document write
     /// are refused by the identical rule rather than two readings of it.</summary>
     /// <param name="row">The carrying row (must declare <see cref="CellKind.Text"/>).</param>

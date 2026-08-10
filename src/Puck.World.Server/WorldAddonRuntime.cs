@@ -9,7 +9,7 @@ namespace Puck.World.Server;
 
 /// <summary>One mounted guest's recorded-at-mount identity — the smallest honest set of facts a replay must
 /// re-establish before it may re-run that guest. The world document's <see cref="WorldAddonRow"/> carries the pin an
-/// author WROTE; a receipt carries what the mount actually PRODUCED, which is the only form that survives the tree
+/// author wrote; a receipt carries what the mount actually produced, which is the only form that survives the tree
 /// moving under a saved tape (<see cref="WorldReplaySnapshot"/> records the set at record-start and refuses a re-drive
 /// whose fresh mount disagrees).</summary>
 /// <param name="Name">The descriptor name — the key receipts are compared by.</param>
@@ -18,7 +18,7 @@ namespace Puck.World.Server;
 public readonly record struct WorldAddonReceipt(string Name, string Hash, ulong Fuel);
 
 /// <summary>One mounted guest's live cost-surface reading — the <c>world.addons</c> read
-/// (<see cref="WorldAddonRuntime.DescribeCost"/>). DIAGNOSTIC ONLY: never simulation state, never on a hashed path —
+/// (<see cref="WorldAddonRuntime.DescribeCost"/>). Diagnostic only: never simulation state, never on a hashed path —
 /// fuel consumed is measured every tick regardless (the guarantee determinism needs), this is only where the already-
 /// measured number stops being discarded.</summary>
 /// <param name="Name">The addon's identifying name.</param>
@@ -27,10 +27,10 @@ public readonly record struct WorldAddonReceipt(string Name, string Hash, ulong 
 /// <param name="LastTickFuelConsumed">Fuel consumed by the most recent tick this guest actually ran; zero on a tick
 /// it was skipped (faulted, disabled, or enabled-but-unadmitted).</param>
 /// <param name="TotalFuelConsumed">Fuel consumed across every tick since this guest was first mounted — a lifetime
-/// figure that survives a disable/enable cycle AND a live reload (see <see cref="WorldAddonRuntime.Reload"/>), never
+/// figure that survives a disable/enable cycle and a live reload (see <see cref="WorldAddonRuntime.Reload"/>), never
 /// silently restarting while the guest stays mounted under the same name. Saturates at <see cref="ulong.MaxValue"/>
 /// rather than wrapping.</param>
-/// <param name="TotalAnswersDropped">Answer groups dropped with NO verdict cell at all, across this guest's whole
+/// <param name="TotalAnswersDropped">Answer groups dropped with no verdict cell at all, across this guest's whole
 /// lifetime (same survives-reload, saturating-lifetime shape as <paramref name="TotalFuelConsumed"/>) — the ring's
 /// own hard ceiling, past which even a single-cell <see cref="AddonVerdict.QuotaExhausted"/> squeeze has no room.
 /// Nonzero here means this guest is asking for more per tick than its declared <c>puck_in_cap</c> can ever answer.</param>
@@ -45,35 +45,35 @@ public readonly record struct AddonCostReport(string Name, AddonState State, lon
 /// <summary>
 /// The server-side addon runtime — the one host every guest mounts into and the one caller that drives
 /// it. It owns the <see cref="AddonHost"/> (and therefore the Wasmtime engine), mounts every enabled row of the boot
-/// world document, and is pumped by <see cref="WorldServer.Step"/> at three PINNED points inside one tick:
+/// world document, and is pumped by <see cref="WorldServer.Step"/> at three pinned points inside one tick:
 /// <see cref="TickAddons"/> at the very top (write the guest's input ring, run <c>puck_on_tick</c>, decode and
 /// vocabulary-validate through the Simulation adapter), <see cref="ApplyContributions"/> after the intent drain (resolve
 /// Drive handles, check authority, submit the folded intent), and <see cref="ResolveReads"/> after the population
-/// advances (disclosures, world events, asks, and pose queries answered against the post-step authoritative state, staged for the NEXT
+/// advances (disclosures, world events, asks, and pose queries answered against the post-step authoritative state, staged for the next
 /// tick's batch).
 /// </summary>
 /// <remarks>
 /// <para><b>A guest reaches the world through typed channels only.</b> There is no roster slot, no
-/// <c>InputDeviceId</c>, and no binding page anywhere on this path: an input-channel act names a Drive HANDLE and a
-/// declared CHANNEL NAME, resolved once at handshake against the WORLD DOCUMENT's channel table through
+/// <c>InputDeviceId</c>, and no binding page anywhere on this path: an input-channel act names a Drive handle and a
+/// declared channel name, resolved once at handshake against the world document's channel table through
 /// <see cref="WorldAddonChannelResolver"/>, and the server writes each validated record into
 /// <see cref="PlayerIntent"/>'s channel vector at that same resolved ordinal (<see cref="Fold"/>) — the guest's own
 /// declaration index never reaches this type. Unlike the source vocabulary this replaces, an
 /// unresolvable declared name is never a whole-mount refusal — it is report-and-inert (one line at mount, then a
 /// per-act <see cref="AddonVerdict.AttenuatedToEmpty"/> if the guest ever acts through it) — so nothing a guest
 /// may declare can fault the mount, but nothing unrecognized silently does anything either.</para>
-/// <para><b>Authority MATERIALIZES at requests ∧ grants.</b> A handle is minted for a (capability, subject) pair only
-/// when the row's manifest (<see cref="WorldAddonRow.Requests"/>) asked for it AND the settled table grants it. A hold
+/// <para><b>Authority materializes at requests ∧ grants.</b> A handle is minted for a (capability, subject) pair only
+/// when the row's manifest (<see cref="WorldAddonRow.Requests"/>) asked for it and the settled table grants it. A hold
 /// the manifest never named is real in the table and inert for the guest — it is disclosed to the operator at mount as
 /// "holds beyond its manifest" and is never handed across the ABI, so an authority nobody reviewed cannot arrive by
 /// surprise. A guest asking for an unrequested pair reads <see cref="AddonVerdict.AttenuatedToEmpty"/>: the attenuation
 /// is AND, so asking for more than the manifest declared yields less, never more.</para>
 /// <para><b>The principal comes from the mount, never from a record.</b> It is captured here beside the instance and no
-/// cell carries a field for it, so a guest has no way to name one. Authority is checked at APPLICATION — every act
+/// cell carries a field for it, so a guest has no way to name one. Authority is checked at application — every act
 /// resolves its handle against the live table and every submission runs the same
 /// <see cref="WorldServer.ApplyIntentSubmission"/> a seat's submission runs — never at decode, which would re-open the
 /// revoked-between-decode-and-apply window the handle generation exists to close.</para>
-/// <para><b>Refusal is data.</b> A refused record answers with its verdict on the guest's Response channel; an ALLOWED
+/// <para><b>Refusal is data.</b> A refused record answers with its verdict on the guest's Response channel; an allowed
 /// act produces nothing, because silence is the positive signal. A guest declaring no Response channel can be handed no
 /// answers at all, which is reported loudly once rather than dropped silently.</para>
 /// <para>Single-threaded on the host tick, like every simulation type here. Per-tick state is preallocated at mount:
@@ -153,13 +153,10 @@ public sealed class WorldAddonRuntime : IDisposable {
                 continue;
             }
 
-            // A manifest that asks for a capability but declares no Response channel is mounting a guest that is
-            // PERMANENTLY incapable of exercising anything it might be granted: every verdict, disclosure, and
-            // minted-handle answer routes through the Response channel (StageBatch below), so with none, no requested
-            // handle can ever be learned — not on this tick, not on any later one, no matter what the grant table
-            // later does. That is decidable from the row alone, at mount, deterministically: mount-and-idle would
-            // silently ship a guest whose whole manifest is dead on arrival, forever, so it is refused here instead.
-            // A row with no requests at all is unaffected — it declares nothing there is anything to answer.
+            // A manifest that requests a capability but declares no Response channel can never receive a verdict,
+            // disclosure, or minted handle — every such answer routes through the Response channel (StageBatch
+            // below) — so refuse the mount rather than admit a guest permanently incapable of using anything it
+            // might be granted. A row with no requests at all is unaffected.
             if ((row.Requests is { Count: > 0 }) && (ResolveResponseChannel(instance: instance) < 0)) {
                 instance.Disable();
                 Console.Error.WriteLine(value: $"[world.addon: {row.Name} refused — requests {row.Requests.Count} capabilit{((row.Requests.Count == 1) ? "y" : "ies")} but declares no Response channel, so no verdict or disclosure could ever reach it and no requested handle could ever be learned; not mounted]");
@@ -167,7 +164,7 @@ public sealed class WorldAddonRuntime : IDisposable {
                 continue;
             }
 
-            // The capability disclosure — the whole point (docs/capability-channels-plan.md's "a manifest requests; a
+            // The capability disclosure — the whole point (the capability-channels campaign's "a manifest requests; a
             // grant approves a subset; nothing is implicit"): reports what this addon's principal actually HOLDS in the
             // SETTLED table (the permissive seed — empty for an addon — plus any WorldDefinition.Grants row the
             // server's constructor already applied), matched against what the row's manifest asked for. Runs BEFORE
@@ -202,18 +199,18 @@ public sealed class WorldAddonRuntime : IDisposable {
     /// settled set.</summary>
     public IReadOnlyList<WorldAddonReceipt> Receipts => m_receipts;
 
-    /// <summary>Gets a value indicating whether ANY mounted addon has ever had an admitted execution attempted — the OR of every mounted
+    /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted — the OR of every mounted
     /// entry's <see cref="MountedAddon.HasEverPumped"/>. See <see cref="WorldServer.AnyAddonEverPumped"/>, which
     /// forwards this.</summary>
     public bool AnyEverPumped => m_mounted.Exists(match: static addon => addon.HasEverPumped);
 
-    /// <summary>Routes an addon-sourced mutation's DECIDED outcome back to its originating guest's reserved answer
-    /// cell (Phase-3 plan AXIS 2, I2/I3) — called by <see cref="WorldServer.Step"/>'s <c>DrainPendingOps</c>, in the
-    /// SAME Step the act was decoded, immediately after the mutation's compose→revalidate→swap ran. Never applies
+    /// <summary>Routes an addon-sourced mutation's decided outcome back to its originating guest's reserved answer
+    /// cell — called by <see cref="WorldServer.Step"/>'s <c>DrainPendingOps</c>, in the
+    /// same Step the act was decoded, immediately after the mutation's compose→revalidate→swap ran. Never applies
     /// anything itself; it only records which verdict <see cref="ResolveReads"/> will stage into the guest's next
     /// batch. A no-op if <paramref name="addonIndex"/> no longer names a mounted guest (defensive — lifecycle verbs
     /// refuse while a recording is armed, but a reload/enable/disable between decode and drain within an
-    /// UNARMED session is not itself refused, and a stale index must never write into the wrong guest).</summary>
+    /// unarmed session is not itself refused, and a stale index must never write into the wrong guest).</summary>
     /// <param name="addonIndex">The mounted addon index the act was decoded from.</param>
     /// <param name="actOrdinal">The addon's own output-batch ordinal the act answers.</param>
     /// <param name="verdict">The decided outcome — <see cref="AddonVerdict.Applied"/> or
@@ -226,12 +223,10 @@ public sealed class WorldAddonRuntime : IDisposable {
         SetReservedVerdict(addon: m_mounted[addonIndex], ordinal: actOrdinal, verdict: verdict);
     }
 
-    // Overwrites the reserved Answer cell for `ordinal` (already reserved by ResolveMutations this tick) with its
-    // decided verdict — shared by a stage 1-5 refusal decided synchronously at decode time and by CompleteMutation's
-    // stage-6-onward outcome decided later the same Step, at drain. A miss (no reservation for this ordinal) is
-    // silently ignored rather than thrown: CompleteMutation's own defensive index check above already covers the
-    // "guest moved" case, and a caller passing an ordinal this tick never reserved is a programming error to find
-    // by review, not a runtime condition to crash a live session over.
+    // Overwrites the reserved Answer cell for `ordinal` with its decided verdict — shared by a stage 1-5 refusal
+    // decided at decode time and by CompleteMutation's stage-6-onward outcome decided later at drain. A miss (no
+    // reservation for this ordinal) is silently ignored rather than thrown: a caller passing an unreserved ordinal
+    // is a programming error to catch by review, not a runtime condition to crash a live session over.
     private static void SetReservedVerdict(MountedAddon addon, ushort ordinal, AddonVerdict verdict) {
         for (var index = 0; (index < addon.ReservedCount); ++index) {
             if (addon.ReservedAnswers[index].Ordinal == ordinal) {
@@ -241,8 +236,8 @@ public sealed class WorldAddonRuntime : IDisposable {
         }
     }
 
-    /// <summary>Builds the runtime over a boot world document and ATTACHES it to the server that will pump it. Mounting
-    /// runs here, which is AFTER the server's constructor applied <see cref="WorldDefinition.Grants"/> — the disclosure
+    /// <summary>Builds the runtime over a boot world document and attaches it to the server that will pump it. Mounting
+    /// runs here, which is after the server's constructor applied <see cref="WorldDefinition.Grants"/> — the disclosure
     /// must report a settled table, because a report that lies at boot is worse than no report.</summary>
     /// <param name="definition">The boot world definition (its <c>addons</c> rows).</param>
     /// <param name="server">The authoritative server the guests act against and that drives the three pump points.</param>
@@ -287,10 +282,10 @@ public sealed class WorldAddonRuntime : IDisposable {
         return report;
     }
 
-    /// <summary>Reloads a MOUNTED guest from its declared module path and re-runs the admit sequence —
+    /// <summary>Reloads a mounted guest from its declared module path and re-runs the admit sequence —
     /// <see cref="AddonHost.Reload"/>'s own doc names the whole admit sequence as owed and, until this verb, unowned:
     /// re-reads and recompiles the module through <see cref="AddonHost.Reload"/>, then, when the fresh instance
-    /// enabled, re-reports the capability disclosure against the SAME manifest and re-runs
+    /// enabled, re-reports the capability disclosure against the same manifest and re-runs
     /// <see cref="AddonInstance.Admit"/> before the guest can tick again — closing the enabled-but-unadmitted gap
     /// <see cref="TickAddons"/> otherwise has to skip defensively. The receipt <see cref="Receipts"/> reports is
     /// updated only on a successful re-admit, so a failed reload leaves the last-known-good receipt in place rather
@@ -298,7 +293,7 @@ public sealed class WorldAddonRuntime : IDisposable {
     /// are sized to the fresh instance's channel geometry), but its <c>TotalFuelConsumed</c> lifetime counter carries
     /// forward from the instance it replaces — a reload recovers the same guest, it does not start a new one.</summary>
     /// <remarks>A row that never reached the mounted set (a boot load fault) is out of this verb's
-    /// reach: reviving one from nothing would re-run the WHOLE boot mount sequence for a row this runtime never added
+    /// reach: reviving one from nothing would re-run the whole boot mount sequence for a row this runtime never added
     /// to <see cref="Receipts"/>, a bigger surface than this pass owes. <b>Tape caveat</b>: a saved replay pins its
     /// mounted guests' receipts once, at record-start (<c>WorldReplaySnapshot</c>) — a live reload during an active
     /// recording changes what is actually running without the tape ever learning of it. This method does not detect or
@@ -359,12 +354,10 @@ public sealed class WorldAddonRuntime : IDisposable {
         }
 
         // Replace the tracked guest wholesale rather than mutate it in place: a reload is a fresh instance with its
-        // own channel geometry, so every per-tick buffer this type preallocates at construction (Batch, Answers,
-        // Contributions, the dispatch/disclosure scratch) must be re-sized and re-zeroed exactly as mount does,
-        // never patched field-by-field onto stale state sized for the PREVIOUS instance's declarations. TotalFuelConsumed
-        // and TotalAnswersDropped are the two fields carried forward on purpose: the guest's NAME is what world.addons
-        // reports against, and a reload is a recovery/upgrade of that same guest, not a new one — a lifetime figure
-        // that silently dropped to zero on every reload would be exactly the counter the reload just fixed.
+        // own channel geometry, so every per-tick buffer this type preallocates (Batch, Answers, Contributions, the
+        // dispatch/disclosure scratch) must be re-sized and re-zeroed exactly as mount does, never patched onto
+        // stale state sized for the PREVIOUS instance. The fuel/drop/event counters below carry forward because the
+        // guest's NAME is what world.addons reports against, and a reload recovers that same guest, not a new one.
         m_mounted[mountedIndex] = new MountedAddon(instance: fresh, requests: previous.Requests, populationCapacity: m_server.Population.Capacity, memoryWatches: previous.MemoryWatches) {
             TotalFuelConsumed = previous.TotalFuelConsumed,
             TotalAnswersDropped = previous.TotalAnswersDropped,
@@ -377,12 +370,12 @@ public sealed class WorldAddonRuntime : IDisposable {
         return (status + outcome);
     }
 
-    /// <summary>Enables or disables a MOUNTED guest. Disabling releases nothing, because a contribution is per-tick and
-    /// expires on its own — a disabled guest simply stops producing one. Enabling re-instantiates the SAME
+    /// <summary>Enables or disables a mounted guest. Disabling releases nothing, because a contribution is per-tick and
+    /// expires on its own — a disabled guest simply stops producing one. Enabling re-instantiates the same
     /// <see cref="AddonInstance"/> in place
     /// (<see cref="AddonHost.SetEnabled"/>) and then re-runs the admit sequence this runtime's mount-time constructor
     /// runs — <see cref="AddonInstance.Enable"/> itself does not, by its own doc, which is the "Enable is uncalled,
-    /// and nothing recovers a fault" gap this verb closes. A LOAD fault (missing file, bad bytes, a hash-pin mismatch)
+    /// and nothing recovers a fault" gap this verb closes. A load fault (missing file, bad bytes, a hash-pin mismatch)
     /// constructed the instance with no module at all, so enabling it is permanently a no-op — reported honestly
     /// rather than claimed fixed; <see cref="Reload"/> (which re-reads the module from disk) is the recovery for
     /// that case.</summary>
@@ -435,21 +428,21 @@ public sealed class WorldAddonRuntime : IDisposable {
             : $"{name} — puck_init faulted on re-admit: {instance.Fault.Detail}");
     }
 
-    /// <summary>Live-mounts a NEW guest — the runtime half of the <c>world.addon.mount</c> lifecycle submission
-    /// (<see cref="WorldServer"/>'s <c>AddonLifecycle</c> drain arm, reached ONLY through the ordered domain: a live
+    /// <summary>Live-mounts a new guest — the runtime half of the <c>world.addon.mount</c> lifecycle submission
+    /// (<see cref="WorldServer"/>'s <c>AddonLifecycle</c> drain arm, reached only through the ordered domain: a live
     /// mount now lands at the same defined tick-boundary point a document mutation does, and rides the replay tape
     /// through <see cref="WorldSubmissionCodec"/>'s shared leaf — see <c>references/replay.md</c>). Mirrors the
     /// boot-time per-row mount sequence this type's constructor runs: lazily builds the Wasmtime host (an addon-free
     /// world still pays nothing until its first mount, live or boot), compiles under the declared hash pin, gates
-    /// the Response-channel-required-for-Requests rule, discloses capabilities against the SETTLED grant table, and
+    /// the Response-channel-required-for-Requests rule, discloses capabilities against the settled grant table, and
     /// admits under fuel — every gate the boot path runs, run here instead of duplicated by inspection: a live mount
-    /// and a boot mount must refuse identically. <b>MOUNT never re-admits an existing guest</b> — a name already
+    /// and a boot mount must refuse identically. <b>Mount never re-admits an existing guest</b> — a name already
     /// tracked in the mounted set refuses; <see cref="Reload"/> is the recovery/refresh verb for that case, kept
     /// deliberately distinct so an operator's "bring this up" and "restart what is already up" never collide on one
     /// name.</summary>
     /// <param name="name">The addon's identifying name — must be unique among mounted guests.</param>
     /// <param name="modulePath">The WASM module file path (machine-local, resolved exactly as a boot row's is).</param>
-    /// <param name="hash">The REQUIRED content-address integrity pin (<c>sha256-64/{16 hex}</c>) — an unpinned guest
+    /// <param name="hash">The required content-address integrity pin (<c>sha256-64/{16 hex}</c>) — an unpinned guest
     /// makes state depend on a file on disk, a determinism hole before a security one.</param>
     /// <param name="fuel">The per-tick fuel budget; <c>0</c> selects <see cref="AddonAbi.DefaultFuelPerTick"/>.</param>
     /// <param name="requests">The addon's manifest — what it asks for, as data; null/empty means it asks for
@@ -518,7 +511,7 @@ public sealed class WorldAddonRuntime : IDisposable {
     }
 
     /// <summary>Fully unmounts a guest by name — the runtime half of the <c>world.addon.unmount</c> lifecycle
-    /// submission. STRONGER than <see cref="SetEnabled"/>'s disable: the guest leaves <see cref="Receipts"/> and
+    /// submission. Stronger than <see cref="SetEnabled"/>'s disable: the guest leaves <see cref="Receipts"/> and
     /// <see cref="MountedCount"/> entirely rather than staying tracked-but-skipped, so a later
     /// <c>world.addons</c> read no longer lists it at all. Disables the instance first (releases nothing beyond what
     /// disable already releases — a contribution is per-tick and expires on its own, per <see cref="SetEnabled"/>'s
@@ -556,8 +549,8 @@ public sealed class WorldAddonRuntime : IDisposable {
 
     /// <summary>Composes each guest's input batch (the tick cell, then the disclosures and answers staged at the end
     /// of the previous tick), runs <c>puck_on_tick</c>, and decodes plus vocabulary-validates the returned batch
-    /// through the Simulation adapter — PUMP POINT 1, the top of <see cref="WorldServer.Step"/>, before the
-    /// pending-edit and intent drains. NOTHING is applied here: a validated batch is only staged, so a guest's pose
+    /// through the Simulation adapter — pump point 1, the top of <see cref="WorldServer.Step"/>, before the
+    /// pending-edit and intent drains. Nothing is applied here: a validated batch is only staged, so a guest's pose
     /// reads and its acts both resolve at their own pinned points later in the same tick.</summary>
     /// <param name="tick">The tick the batch reports — the same tick number a seat's submission carries.</param>
     public void TickAddons(ulong tick) {
@@ -621,12 +614,11 @@ public sealed class WorldAddonRuntime : IDisposable {
 
             var pumped = addon.Pump.Pump(instance: instance, input: batch.AsSpan(length: count, start: 0));
 
-            // The cost surface: fuel spent THIS tick, whether the tick succeeded or trapped (a trap that burns the
-            // whole budget before faulting is exactly the spinning-guest case an operator needs to see) — read from
-            // the pump rather than instance.LastFuelConsumed directly so the one crossing that already reads the tick
-            // result is the one source of truth for it. Accumulated into the running total unconditionally, saturating
-            // rather than wrapping — a document may admit per-tick fuel up to long.MaxValue, so a few faulting ticks
-            // could otherwise overflow the ulong total and run it backwards.
+            // Fuel spent THIS tick, whether the tick succeeded or trapped (a trap that burns the whole budget before
+            // faulting is the spinning-guest case an operator needs to see) — read from the pump, the one crossing
+            // that already reads the tick result. Accumulated into the running total saturating rather than
+            // wrapping: a document may admit per-tick fuel up to long.MaxValue, so faulting ticks could otherwise
+            // overflow the ulong total and run it backwards.
             var fuelConsumedThisTick = addon.Pump.FuelConsumed;
 
             addon.LastTickFuelConsumed = fuelConsumedThisTick;
@@ -652,19 +644,19 @@ public sealed class WorldAddonRuntime : IDisposable {
         }
     }
 
-    /// <summary>Resolves each staged input act through the guest's OWN Drive handle table — PUMP POINT 2, after the
+    /// <summary>Resolves each staged input act through the guest's own Drive handle table — pump point 2, after the
     /// intent drain and before the population advances — folds the acts into one <see cref="PlayerIntent"/> per
     /// contributed body, and submits each through the same authority path a seat's submission runs
-    /// (<see cref="WorldServer.ApplyIntentSubmission"/>). <b>What happens next to a body a SEAT co-drives is no longer a
-    /// plain overwrite</b> (<see cref="FixedContributionFold"/>): on a HUMAN-OCCUPIED body the
-    /// submission routes into that tick's per-body contribution set instead — BOTH halves of it, the intent and the
+    /// (<see cref="WorldServer.ApplyIntentSubmission"/>). <b>What happens next to a body a seat co-drives is no longer a
+    /// plain overwrite</b> (<see cref="FixedContributionFold"/>): on a human-occupied body the
+    /// submission routes into that tick's per-body contribution set instead — both halves of it, the intent and the
     /// held-channel composition image — bounded by this guest's own declared reach
-    /// (<see cref="WorldGrant.Reach"/>) and by the ceiling the occupying SEAT authored per channel on its own
+    /// (<see cref="WorldGrant.Reach"/>) and by the ceiling the occupying seat authored per channel on its own
     /// row (<see cref="WorldGrant.Ceiling"/>), and folded with the seat's own value by
     /// <see cref="WorldServer.FoldChannelContributions"/> — never tracked as contention, because a consented (or
-    /// default-denied) contribution is the feature, not a race. An UNOCCUPIED body is untouched: it still applies
+    /// default-denied) contribution is the feature, not a race. An unoccupied body is untouched: it still applies
     /// exactly as this paragraph used to describe for every body, contention reporting included, because occupancy is
-    /// what makes a pool exist at all. Every channel — movement role and composition alike — is folded fresh from THIS
+    /// what makes a pool exist at all. Every channel — movement role and composition alike — is folded fresh from this
     /// tick's acts only: the host holds no cross-tick channel state, so a guest that stops acting on a body simply
     /// stops contributing to it, the same way a seat's analog clear works.</summary>
     /// <param name="tick">The tick the submissions are for.</param>
@@ -673,12 +665,9 @@ public sealed class WorldAddonRuntime : IDisposable {
             var addon = m_mounted[index];
 
             if (addon.Instance.State != AddonState.Enabled) {
-                // FoldActs did not run this tick, so its own bottom-of-method reset did not run either — a mounted
-                // guest that is disabled, faulted, or (defensively) skipped is a guest with no open Drive-exhaustion
-                // episode to keep silent about, so this is the one gate FoldActs runs behind and therefore the one
-                // place that can end the episode for every reason it can end. Without this, a guest disabled or
-                // faulted between exhaustion and its next FoldActs call keeps an armed-but-orphaned latch that
-                // survives into a later enable and swallows the very first new exhaustion it should have reported.
+                // FoldActs did not run this tick, so its own bottom-of-method latch reset did not run either — clear
+                // it here so a guest disabled or faulted between an exhaustion and its next FoldActs call does not
+                // carry an armed-but-orphaned latch into a later enable and swallow the next real exhaustion.
                 addon.DriveDispatchBudgetExhaustedReported = false;
 
                 continue;
@@ -688,13 +677,13 @@ public sealed class WorldAddonRuntime : IDisposable {
         }
     }
 
-    /// <summary>Resolves each guest's disclosures, world-event pushes, and queued asks/pose queries — PUMP POINT 3,
-    /// after the population advances and before the snapshot is emitted. This is the PINNED
+    /// <summary>Resolves each guest's disclosures, world-event pushes, and queued asks/pose queries — pump point 3,
+    /// after the population advances and before the snapshot is emitted. This is the pinned
     /// drain point: a verdict, a minted handle, and a pose all reflect the grant table and the authoritative state as of
     /// the step of the tick the record was written in. Disclosures are pushed first (the guest's bootstrap — enumeration
     /// is itself a capability, so a guest cannot know a body index until the host hands it one), then world events
     /// (four families plus the guest's own machine-memory watches), then asks and pose queries are answered, and the
-    /// whole result is budgeted into the guest's input batch for the NEXT tick.</summary>
+    /// whole result is budgeted into the guest's input batch for the next tick.</summary>
     /// <param name="tick">The tick whose reads are being resolved.</param>
     public void ResolveReads(ulong tick) {
         for (var index = 0; (index < m_mounted.Count); ++index) {
@@ -740,11 +729,8 @@ public sealed class WorldAddonRuntime : IDisposable {
         // just reset here because FoldActs (pump point 2) runs before StageBatch (pump point 3) within one tick.
         Array.Clear(array: addon.DriveDispatchCounts);
         // Set the moment any subject exhausts its drive budget THIS tick — read by the edge-trigger reset in the
-        // finally below, the same shape as MergeAnswers' QuotaDropReported. The whole method body from here on is
-        // wrapped in try/finally so an unexpected throw partway through still runs the reset decision — a stage
-        // that dies mid-tick is at least as much an episode boundary as one that completes and finds nothing to
-        // report, and a latch stuck armed by an exception is the same silent-forever failure as one stuck armed by
-        // a skipped tick.
+        // finally below. The method body is wrapped in try/finally so an unexpected throw partway through still
+        // runs the reset decision, rather than leaving the latch stuck armed.
         var driveExhaustedThisTick = false;
 
         try {
@@ -789,12 +775,10 @@ public sealed class WorldAddonRuntime : IDisposable {
 
                 // BUDGET CHECK — the Drive twin of ResolveQueries' Observe budget, same charge order (resolve ->
                 // requested -> budget -> dispatch/fold): Drive's own "allowed" check happens once per BODY at Submit
-                // (below), not once per act, so the budget meters the compute this act's resolve+fold already spent
-                // rather than waiting for a check that has not run yet. A row with no recorded budget is unreachable by
-                // construction for the identical reason ResolveQueries' own comment gives — every principal that reaches
-                // here is a mounted addon's own untrusted Principal, and TryGrant's Conflicts gate refuses an untrusted
-                // Drive hold with no budget before it can ever be added — so this refuses rather than dispatching
-                // unmetered if it ever fires.
+                // (below), not once per act, so the budget meters the compute this act's resolve+fold already spent.
+                // A row with no recorded budget is unreachable by construction: every principal reaching here is a
+                // mounted addon's own untrusted Principal, and TryGrant's Conflicts gate refuses an untrusted Drive
+                // hold with no budget before it can be added — so this refuses rather than dispatching unmetered.
                 if (m_server.Grants.TryGetBudget(principal: principal, capability: WorldCapability.Drive, subject: subject, out var driveBudget)) {
                     if (addon.DriveDispatchCounts[subject.Value] >= driveBudget) {
                         QueueAnswer(addon: addon, ordinal: act.Ordinal, verdict: AddonVerdict.QuotaExhausted);
@@ -840,7 +824,7 @@ public sealed class WorldAddonRuntime : IDisposable {
                     continue;
                 }
 
-                // Always found: every ActBody value came from a Contribution call in the first pass.
+                // Every ActBody value here was set by a Contribution call in the first pass, so this always resolves.
                 var outcome = addon.Contributions[FindContribution(addon: addon, bodyIndex: bodyIndex)].Outcome;
 
                 // An allowed contribution answers nothing: silence is the positive signal.
@@ -861,13 +845,10 @@ public sealed class WorldAddonRuntime : IDisposable {
     }
 
     // Fold one validated act into its body's accumulating channel vector, at the ordinal the guest's declared name
-    // resolved to at handshake. That ordinal is the WORLD table's (see WorldAddonChannelResolver) and therefore a
-    // PlayerIntent ordinal directly — the guest's own declaration index stayed inside the pump — so there is no
-    // per-channel interpretation to switch on and no way for a table row to become resolvable-and-silently-inert.
-    // Every channel is DECLARATIVE, this tick only: the host holds no channel state between ticks, on the movement
-    // roles or the composition channels, so a channel a guest stops emitting reads zero the very next tick, exactly
-    // like a seat's own analog clear. The pump already refused a duplicate ordinal within one batch as a protocol
-    // fault, so no act can overwrite another's channel here.
+    // resolved to at handshake — the WORLD table's ordinal, and therefore a PlayerIntent ordinal directly. Every
+    // channel is DECLARATIVE, this tick only: the host holds no channel state between ticks, so a channel a guest
+    // stops emitting reads zero the very next tick, like a seat's own analog clear. The pump already refused a
+    // duplicate ordinal within one batch as a protocol fault, so no act can overwrite another's channel here.
     private static void Fold(MountedAddon addon, int slot, in AddonActSubmission act) {
         ref var contribution = ref addon.Contributions[slot];
 
@@ -942,25 +923,21 @@ public sealed class WorldAddonRuntime : IDisposable {
         //
         // ApplyIntentSubmission's ALLOWED verdict answers only "does this principal hold Drive reach over the body" —
         // on a HUMAN-OCCUPIED body that says nothing about whether the fold actually accepted anything from this
-        // addon: StageContribution (trusted-by-authorship, owner ruling 2026-08-02) still refuses a channel this
-        // document-mounted addon never declared Reach over, silently, and a submission that clears every ordinal
-        // that way must not be allowed to cancel the seat's own Idle/Wander/Attend control. So the nudge itself is
-        // gated a second time, narrower than Drive authority: an UNOCCUPIED body has no pool to be refused by (a bot
-        // at full authority, same as ApplyIntentSubmission's own routing above), so it is nudged exactly as before;
-        // a HUMAN-OCCUPIED body is nudged only when this contribution actually reached its OWN declared Reach on at
-        // least one channel.
+        // addon: StageContribution still refuses a channel this document-mounted addon never declared Reach over,
+        // silently, and a submission that clears every ordinal that way must not be allowed to cancel the seat's own
+        // Idle/Wander/Attend control. So the nudge is gated a second time, narrower than Drive authority: an
+        // UNOCCUPIED body is nudged exactly as before (a bot at full authority); a HUMAN-OCCUPIED body is nudged
+        // only when this contribution actually reached its OWN declared Reach on at least one channel.
         if ((body.Source != IntentSource.Live) &&
             (!m_server.Population.IsHumanOccupied(bodyIndex: bodyIndex) || ContributionAccepted(bodyIndex: bodyIndex, principal: addon.Principal, values: in contribution.Values))) {
             m_server.ApplyCommand(command: new WorldCommand.SetControl(Principal: addon.Principal, EntityIndex: bodyIndex, Source: IntentSource.Live));
         }
     }
 
-    // Mirrors StageContribution's own trusted-addon acceptance gate (WorldServer.cs, owner ruling 2026-08-02): a
-    // document-mounted addon is trusted-by-authorship (added outside the pool), but still gated by its OWN declared
-    // Reach (WorldGrants.TryGetChannelReach) — there is no occupying-seat ceiling to consult, unlike a genuinely
-    // untrusted (pooled) contributor. Recomputed here rather than read back from the fold, because
-    // ApplyIntentSubmission's verdict answers Drive authority only and must keep meaning exactly that — never "and
-    // something landed too".
+    // Mirrors StageContribution's own trusted-addon acceptance gate: a document-mounted addon is trusted-by-authorship
+    // (added outside the pool), but still gated by its OWN declared Reach (WorldGrants.TryGetChannelReach) — there is
+    // no occupying-seat ceiling to consult, unlike a genuinely untrusted (pooled) contributor. Recomputed here rather
+    // than read back from the fold, because ApplyIntentSubmission's verdict answers Drive authority only.
     private bool ContributionAccepted(int bodyIndex, WorldPrincipal principal, in ChannelValues values) {
         if (!m_server.Grants.TryGetChannelReach(principal: principal, subject: GrantSubject.Body(index: bodyIndex), mask: out var reach)) {
             return false;
@@ -1042,11 +1019,11 @@ public sealed class WorldAddonRuntime : IDisposable {
         var budget = (addon.Instance.InputCellCapacity - 1);
 
         // THE RESERVATION, realized: this tick's protected mutation-answer cells install FIRST, before
-        // EmitDisclosures/MergeAnswers ever run — they may never consume a reserved cell (Phase-3 plan AXIS 2,
-        // I3). Each slot's Verdict is whatever ResolveMutations/CompleteMutation already decided (a stage 1-5
-        // refusal decided at decode time, or Applied/Rejected decided at drain); AddonVerdict.None can only mean a
-        // decode-time-enqueued act whose drain has not yet run, which is unreachable here — DrainPendingOps always
-        // runs before ResolveReads within one Step (see WorldServer.Step's own pinned order).
+        // EmitDisclosures/MergeAnswers ever run — they may never consume a reserved cell. Each slot's Verdict is
+        // whatever ResolveMutations/CompleteMutation already decided (a stage 1-5 refusal decided at decode time, or
+        // Applied/Rejected decided at drain); AddonVerdict.None can only mean a decode-time-enqueued act whose drain
+        // has not yet run, which is unreachable here — DrainPendingOps always runs before ResolveReads within one
+        // Step (see WorldServer.Step's own pinned order).
         for (var index = 0; (index < addon.ReservedCount); ++index) {
             addon.Pending[addon.PendingCount++] = (addon.ReservedAnswers[index] with { Channel = (byte)addon.ResponseChannel });
         }
@@ -1162,17 +1139,14 @@ public sealed class WorldAddonRuntime : IDisposable {
 
     // The world's four collected event families, filtered per-addon, plus this guest's own machine-memory watches
     // (addon-scoped, materializing through the same requested ∧ granted rule — see WorldAddonRow.MemoryWatches'
-    // own doc). OVERFLOW DOCTRINE (owner-ratified): edges arrive already in PINNED SIM ORDER
-    // (WorldEventFeed.Collect's own order — seats, regions, collisions, routes — then this guest's own watches in
-    // declaration order); once the ring runs out of room the REST of this tick's qualifying edges drop, NEWEST
-    // first by construction (we simply stop writing), so the guest always sees a consistent ORDERED PREFIX, never a
-    // mid-stream hole. Each qualifying edge also charges the first gate row with remaining EventBudget; a row whose
-    // allowance is spent drops the edge through the same gap path. Every drop increments the per-mount, saturating,
-    // LIFETIME EventGapCount; whenever that count
-    // has moved since the last batch that reported it, ONE EventGap summary cell is appended (if room remains after
-    // every edge that fit) — a nonzero count is the guest's "resync by polling the level state you already
-    // observe" signal, never a request to replay the missed edges (levels stay polled observations; events are
-    // edges only).
+    // own doc). OVERFLOW DOCTRINE: edges arrive already in PINNED SIM ORDER (WorldEventFeed.Collect's own order —
+    // seats, regions, collisions, routes — then this guest's own watches in declaration order); once the ring runs
+    // out of room the REST of this tick's qualifying edges drop, NEWEST first by construction, so the guest always
+    // sees a consistent ORDERED PREFIX, never a mid-stream hole. Each qualifying edge also charges the first gate row
+    // with remaining EventBudget; a row whose allowance is spent drops the edge through the same gap path. Every
+    // drop increments the per-mount, saturating, LIFETIME EventGapCount; whenever that count has moved since the
+    // last batch that reported it, ONE EventGap summary cell is appended — a nonzero count is the guest's "resync by
+    // polling the level state you already observe" signal, never a request to replay the missed edges.
     private void EmitEvents(MountedAddon addon, int budget) {
         var edges = m_server.Events.Edges;
         var dropped = 0;
@@ -1246,12 +1220,11 @@ public sealed class WorldAddonRuntime : IDisposable {
     }
 
     // Machine-memory watches: addon-scoped (each row declares its own), materializing through Observe/screen:<n>
-    // WITH an event budget — the same requested ∧ granted rule every other capability here already enforces.
-    // Authoritative-machines campaign (2026-08-03): m_server.Machines is ALWAYS present now (machines boot and
-    // step server-side in every boot shape), so this family publishes in a headless host too — the former
-    // "no presentation composed, no screen binder to peek through" caveat no longer holds. Returns the number of
-    // changed-value edges dropped for event-budget or ring-capacity reasons (folded into the SAME gap counter EmitEvents already
-    // tracks — one gap surface per mount, not one per family).
+    // WITH an event budget — the same requested ∧ granted rule every other capability here enforces.
+    // m_server.Machines is always present (machines boot and step server-side in every boot shape), so this family
+    // publishes in a headless host too. Returns the number of changed-value edges dropped for event-budget or
+    // ring-capacity reasons, folded into the SAME gap counter EmitEvents tracks — one gap surface per mount, not
+    // one per family.
     private int EmitMemoryWatchEvents(MountedAddon addon, int budget) {
         if (addon.MemoryWatches is not { Count: > 0 } watches) {
             return 0;
@@ -1408,18 +1381,14 @@ public sealed class WorldAddonRuntime : IDisposable {
 
             // The subject shape is per-KIND (Body pairs with Drive/Observe, Section pairs with Mutate — the pump
             // already enforced that pairing at TryValidateAsk), so the RANGE check and the GrantSubject construction
-            // both branch on it here. A subject kind neither the pump nor this switch recognizes is structurally
-            // unreachable (the pump admits only Body and Section) and falls to the safe default: out of range.
+            // both branch on it here. A subject kind neither the pump nor this switch recognizes falls to the safe
+            // default: out of range.
             //
-            // Section is NAME-KEYED, never ordinal-keyed — this is the drift class's actual closing point. The old
-            // shape resolved `(WorldSection)ask.SubjectIndex` directly off a guest-baked ordinal: a prior renumbering
-            // of WorldSection left a stale ordinal pointing at a DIFFERENT, still-defined member, so a guest asking
-            // for "Hud" silently minted a handle over whatever member the stale number now named — no fault, no
-            // refusal, just the wrong section acted on. A guest now sends its section's declared NAME (UTF-8 bytes
-            // in its own linear memory, ptr+len in the ask's A/C lanes — the same convention SubmitMutation already
-            // uses for a payload), and the host resolves it against the live WorldSection vocabulary here. There is
-            // no ordinal left for a guest to bake stale, and an unresolvable name refuses LOUDLY, quoting the name,
-            // rather than silently minting authority over an unintended member.
+            // Section is NAME-KEYED, never ordinal-keyed: a guest sends its section's declared NAME (UTF-8 bytes in
+            // its own linear memory, ptr+len in the ask's A/C lanes — the same convention SubmitMutation uses for a
+            // payload), and the host resolves it against the live WorldSection vocabulary here. There is no ordinal
+            // for a guest to bake stale, and an unresolvable name refuses LOUDLY, quoting the name, rather than
+            // silently minting authority over an unintended member.
             bool inRange;
             GrantSubject subject;
 
@@ -1452,12 +1421,10 @@ public sealed class WorldAddonRuntime : IDisposable {
                 subject = GrantSubject.All;
             }
 
-            // The MANIFEST gate runs before ANY further inspection — including the liveness check below — so an
-            // unrequested ask learns nothing at all: answering NoSuchSubject before this gate made the verdict a
-            // body-enumeration oracle a zero-grant guest could walk (live body vs empty slot off the verdict
-            // difference), against the model's own "enumeration is itself a capability". An index the manifest could
-            // not have named (out of range, or an unrecognized kind) is attenuated for the same reason, with the
-            // same answer.
+            // The MANIFEST gate runs before any further inspection, including the liveness check below: answering
+            // NoSuchSubject before this gate would make the verdict a body-enumeration oracle (live body vs empty
+            // slot leaks off the difference) for a zero-grant guest. An index the manifest could not have named
+            // (out of range, or an unrecognized kind) is attenuated for the same reason.
             if (!inRange || !IsRequested(addon: addon, capability: capability, subject: subject)) {
                 QueueAnswer(addon: addon, ordinal: ask.Ordinal, verdict: AddonVerdict.AttenuatedToEmpty);
 
@@ -1560,17 +1527,16 @@ public sealed class WorldAddonRuntime : IDisposable {
     };
 
     // PUMP POINT 1, per addon, run right after a successful Pump: the addon mutation seam's six-stage dispatch door
-    // over every SubmitMutation act in THIS batch. Stages (1) manifest, (2+3) THE SHARED ADMISSION PREDICATE —
+    // over every SubmitMutation act in THIS batch. Stages: (1) manifest, (2+3) THE SHARED ADMISSION PREDICATE —
     // WorldServer.TryAdmitMutation, the one owner of hold ∧ verb mask ∧ budget for every mutation ingress, called
     // here rather than reimplemented, and called BEFORE decode so a malformed payload still spends its dispatch —
     // (4) the reserved answer cell (bookkeeping only: the ABI handshake's outCap <= inCap-1 relation already proves
     // this can never overflow ReservedAnswers), (5) pointer safety (unsigned ptr/len, the payload-size ceilings, an
-    // immediate host-side copy), (6) the per-kind decode (WorldAddonMutationDecoder). The stage numbering keeps its
-    // historical labels so the refusal catalog and this door's own log lines still line up. A cleared act ENQUEUES a PendingOp.Mutate — it is NEVER applied here; application
-    // (compose -> revalidate -> swap) runs later THIS SAME Step, at WorldServer.Step's DrainPendingOps, before
-    // intents. Every other outcome is DECIDED here but not yet DELIVERED: every reserved slot's verdict (a stage
-    // 1-5 refusal, decided now, or Applied/Rejected, decided at drain via CompleteMutation) is staged into the
-    // guest's next input batch by ResolveReads/StageBatch — never here, and never by DrainPendingOps directly.
+    // immediate host-side copy), (6) the per-kind decode (WorldAddonMutationDecoder). A cleared act ENQUEUES a
+    // PendingOp.Mutate — it is NEVER applied here; application (compose -> revalidate -> swap) runs later THIS SAME
+    // Step, at WorldServer.Step's DrainPendingOps, before intents. Every other outcome is DECIDED here but not yet
+    // DELIVERED: every reserved slot's verdict is staged into the guest's next input batch by ResolveReads/
+    // StageBatch — never here, and never by DrainPendingOps directly.
     private void ResolveMutations(MountedAddon addon, int addonIndex, ulong tick) {
         addon.ReservedCount = 0;
         addon.MutateBytesThisTick = 0;
@@ -1627,16 +1593,15 @@ public sealed class WorldAddonRuntime : IDisposable {
 
                 // STAGE 2+3 — THE SHARED ADMISSION PREDICATE. The bare Mutate hold, the DECIDING row's verb mask, and
                 // the per-tick dispatch budget are ONE rule, owned by WorldServer.TryAdmitMutation and merely CALLED
-                // here. This call site stays where it always was — before decode, so a malformed payload still spends
-                // its dispatch and a guest cannot probe the decoder for free — but it is a call, never a second
-                // reading of the same rules. Everything is re-checked live, exactly like every other capability here:
-                // a cached decision would go stale the moment another principal reserves the section exclusively.
+                // here, before decode, so a malformed payload still spends its dispatch and a guest cannot probe the
+                // decoder for free. Everything is re-checked live: a cached decision would go stale the moment
+                // another principal reserves the section exclusively.
                 //
                 // rowScopedEditSubject is null: a state write's Edit/state:<name> subject is only knowable AFTER the
                 // decode this pre-flight deliberately precedes, so that gate runs at apply (WorldServer's own
                 // TryApplyMutation, later THIS same Step) over the identical predicate.
                 //
-                // meter: true — THIS is the metering point for a guest act, and the apply path knows not to charge it
+                // meter: true — THIS is the metering point for a guest act; the apply path knows not to charge it
                 // again (PendingOp.Mutate carries SourceAddonIndex for exactly that).
                 var kindOrdinal = (int)query.A;
                 var section = (WorldSection)subject.Value;
@@ -1664,10 +1629,10 @@ public sealed class WorldAddonRuntime : IDisposable {
                 // an IMMEDIATE host-owned copy (AddonInstance.TryCopyMemory bounds-checks ptr/len against the
                 // guest's ACTUAL memory length, unsigned throughout, overflow-checked end).
                 //
-                // query.C crosses the ABI as a signed i64 lane REINTERPRETED UNSIGNED (the pump's own decode no
-                // longer bounds it — see AddonSimulationPump.TryValidateQuery's remarks) — compared as ulong here,
-                // BEFORE any narrowing cast, so a negative-reinterpreted-as-huge length reads as "too large" rather
-                // than wrapping into a small or negative `int` that could slip under the ceiling check by accident.
+                // query.C crosses the ABI as a signed i64 lane REINTERPRETED UNSIGNED (see
+                // AddonSimulationPump.TryValidateQuery's remarks) — compared as ulong here, BEFORE any narrowing
+                // cast, so a negative-reinterpreted-as-huge length reads as "too large" rather than wrapping into a
+                // small or negative `int` that could slip under the ceiling check.
                 var lengthUnsigned = unchecked((ulong)query.C);
 
                 if (lengthUnsigned > (ulong)AddonAbi.MaxMutationPayloadBytes) {
@@ -1832,23 +1797,17 @@ public sealed class WorldAddonRuntime : IDisposable {
                 }
 
                 // BUDGET CHECK — charge order is resolve -> IsRequested -> Allows -> budget -> dispatch: after the
-                // authority verdicts (so a denial stays precise and costs no budget — the ring's 64-cell ceiling already
-                // bounds that work) and before the dispatch it meters (the read below, and later a spatial verb's
-                // raymarch). Read fresh per query, exactly like Allows and for the identical staleness reason: a re-grant
-                // with a different budget (last-write-wins) takes effect on THIS query, not next tick.
+                // authority verdicts (so a denial stays precise and costs no budget) and before the dispatch it
+                // meters (the read below, and later a spatial verb's raymarch). Read fresh per query, like Allows and
+                // for the identical staleness reason: a re-grant with a different budget takes effect on THIS query.
                 //
-                // A row with NO recorded budget is UNREACHABLE BY CONSTRUCTION, not merely rare: every principal that
-                // reaches ResolveQueries at all is a mounted addon's own Principal (WorldPrincipal.Addon), always the
-                // untrusted kind, and PrincipalGrants.Add has exactly two call sites — WorldGrants.TryGrant and
-                // WorldGrants.SetControlRoute — of which only TryGrant can ever add an Observe subject (SetControlRoute
-                // hardcodes Control). TryGrant's own Conflicts gate already refuses an untrusted Observe grant that
-                // carries no budget before Add ever runs, so an Observe hold for this principal cannot exist in the
-                // table without a matching WorldGrants.m_budgets entry written in the same TryGrant call. If this branch
-                // ever fires, the grant table itself has gone inconsistent — an authority-table bug, not a quota event —
-                // so it REFUSES the query rather than dispatching it unmetered (an unmetered dispatch is the worse
-                // failure: it silently defeats the very budget this door exists to enforce). It reuses the same NoHold
-                // verdict the Allows-denied branch above answers with, and reports through its OWN latch so it can never
-                // be starved by DiscrepancyReported firing first at an unrelated site.
+                // A row with NO recorded budget is UNREACHABLE BY CONSTRUCTION: every principal reaching
+                // ResolveQueries is a mounted addon's own untrusted Principal, and TryGrant's own Conflicts gate
+                // already refuses an untrusted Observe grant that carries no budget before it can be added — so an
+                // Observe hold for this principal cannot exist without a matching budget entry. If this branch ever
+                // fires, the grant table itself has gone inconsistent, so it REFUSES the query rather than
+                // dispatching it unmetered. It reuses the Allows-denied branch's NoHold verdict and reports through
+                // its OWN latch so it can never be starved by DiscrepancyReported firing first at an unrelated site.
                 if (grants.TryGetBudget(principal: addon.Principal, capability: WorldCapability.Observe, subject: subject, out var budget)) {
                     if (addon.DispatchCounts[subject.Value] >= budget) {
                         QueueAnswer(addon: addon, ordinal: query.Ordinal, verdict: AddonVerdict.QuotaExhausted);
@@ -1913,20 +1872,14 @@ public sealed class WorldAddonRuntime : IDisposable {
 
     // Sort the tick's answers into (ordinal, part) order and place them behind the disclosures, whole groups at a time:
     // a multi-part answer is atomic, because half a pose is a value the guest cannot tell apart from a whole one. A
-    // group that no longer fits collapses to a single QuotaExhausted cell — the verdict exists so the guest reads a
-    // refusal rather than inferring one from an answer that never came. Once even that one cell does not fit, the
-    // remaining groups drop with no verdict cell at all — the ring is physically full, and the ABI's own ordinal
-    // contract (AddonAbi's remarks: "ORDINALS ... have no reserved value") rules out inventing a many-to-one
-    // aggregate cell to say so on the wire without a real ABI change; that is the ring-budget limit this method
-    // cannot design around. What it CAN do, and does: (addon.TotalAnswersDropped) turns the magnitude into a
-    // DURABLE, host-observable quantity (world.addons — the same saturating-lifetime shape as TotalFuelConsumed)
-    // rather than a fact that only ever existed on a stderr line the instant it scrolled past. QuotaDropReported
-    // itself is EDGE-TRIGGERED per saturation episode (reset in the finally below the moment a tick does not drop
-    // anything), never a once-per-process-lifetime latch — a second, later saturation episode must be able to say
-    // so again rather than staying silent forever after the first — and this was the ORIGINAL edge-triggered latch
-    // (the shape ResolveQueries' and FoldActs' own dispatch-budget latches copied), so it carries the identical
-    // try/finally hardening they do: the caller (StageBatch, which ResolveReads' own skip branch resets on a tick
-    // this method never runs) must never be able to leave this stuck on the strength of a throw it didn't plan for.
+    // group that no longer fits collapses to a single QuotaExhausted cell so the guest reads a refusal rather than
+    // inferring one from an answer that never came. Once even that one cell does not fit, the remaining groups drop
+    // with no verdict cell at all — the ring is physically full, and the ABI's ordinal contract rules out inventing a
+    // many-to-one aggregate cell to say so on the wire without a real ABI change. addon.TotalAnswersDropped turns the
+    // magnitude into a DURABLE, host-observable quantity (world.addons) rather than a fact that only ever existed on
+    // a stderr line the instant it scrolled past. QuotaDropReported is EDGE-TRIGGERED per saturation episode (reset
+    // in the finally below the moment a tick does not drop anything), never a once-per-process-lifetime latch, and
+    // is wrapped in try/finally so the caller can never leave it stuck on the strength of a throw it didn't plan for.
     private static void MergeAnswers(MountedAddon addon, int budget) {
         SortAnswers(answers: addon.Answers, count: addon.AnswerCount);
 
@@ -2125,14 +2078,14 @@ public sealed class WorldAddonRuntime : IDisposable {
     }
 
     /// <summary>Reports the channels a co-driving grant confers on <paramref name="principal"/> that the guest never
-    /// DECLARES, so a consent row naming a channel its holder cannot reach says so at the door instead of sitting
+    /// declares, so a consent row naming a channel its holder cannot reach says so at the door instead of sitting
     /// inert. Returns <see langword="null"/> when every granted channel is one the guest declared, when the principal
     /// names no mounted guest, or when the grant carries no channel mask.</summary>
-    /// <remarks>THE JOIN NOBODY WAS CHECKING. Both halves were already known and never compared: the guest's declared
+    /// <remarks>Both halves were already known and never compared: the guest's declared
     /// channel names are decoded once at the handshake, and the grant's channel mask is validated once at the door —
-    /// each against the WORLD's channel table, and neither against the other. So a grant could name a real channel the
+    /// each against the world's channel table, and neither against the other. So a grant could name a real channel the
     /// holder simply never emits, be accepted in full, and drive nothing; the operator's only evidence was an absence
-    /// of motion, which reads identically to a pool set too low or a body that will not move. It is REPORTED and never
+    /// of motion, which reads identically to a pool set too low or a body that will not move. It is reported and never
     /// refused, because a guest may legitimately gain the channel on a later reload — the row is a standing intent, not
     /// a lie. Nothing here changes what is granted; it only stops the grant table and the guest disagreeing in
     /// silence.</remarks>
@@ -2219,16 +2172,13 @@ public sealed class WorldAddonRuntime : IDisposable {
     }
 
     // Requesting is not receiving, but the reverse gap is the dangerous one: reporting only the intersection of
-    // "requested" and "held" lets a capability the addon holds but never declared go completely unmentioned — the
-    // direction that matters most, because unrequested authority is exactly what an operator reading this line needs
-    // to see. So this reports what the settled table says the addon's OWN principal HOLDS, right now, across every
-    // capability (via WorldGrants.Held — the same enumeration world.grants renders), and separately annotates the
-    // manifest's own wish list against that held set: granted (requested and held), withheld (requested, not held),
-    // and unrequested (held, never requested). The unrequested list is the INERT one: a hold outside the manifest
-    // materializes no handle (see IsRequested), so it is authority the table records and the guest can never reach.
-    // Called for EVERY row regardless of whether it declares Requests, because a document can grant an addon's
-    // principal something directly without the row ever asking for it, and that hold must never go unreported just
-    // because the manifest is silent about it.
+    // "requested" and "held" lets a capability the addon holds but never declared go completely unmentioned. So this
+    // reports what the settled table says the addon's OWN principal HOLDS, right now, across every capability (via
+    // WorldGrants.Held), and separately annotates the manifest's own wish list against that held set: granted
+    // (requested and held), withheld (requested, not held), and unrequested (held, never requested). The unrequested
+    // list is the INERT one: a hold outside the manifest materializes no handle (see IsRequested). Called for EVERY
+    // row regardless of whether it declares Requests, because a document can grant an addon's principal something
+    // directly without the row ever asking for it.
     private static void ReportCapabilityDisclosure(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
         var principal = WorldPrincipal.Addon(name: name);
         var held = grants.Held(principal: principal);
@@ -2336,11 +2286,10 @@ public sealed class WorldAddonRuntime : IDisposable {
             // The host-owned copy destination for stage 5's pointer-safety read — sized to the payload ceiling so
             // one buffer serves every act this guest ever submits, reused tick to tick, never per-act allocated.
             MutationPayloadBuffer = new byte[AddonAbi.MaxMutationPayloadBytes];
-            // The RESERVATION buffer (Phase-3 plan AXIS 2, I3): one slot per SubmitMutation act decoded THIS tick,
-            // reserved at whole-batch decode time (TickAddons -> ResolveMutations) before EmitDisclosures/
-            // MergeAnswers ever see the remaining budget. Sized to MaxOutCells, the same worst case Answers uses,
-            // because the ABI handshake already proves a guest's whole batch (every kind of act combined) cannot
-            // exceed its declared outCap.
+            // The RESERVATION buffer: one slot per SubmitMutation act decoded THIS tick, reserved at whole-batch
+            // decode time (TickAddons -> ResolveMutations) before EmitDisclosures/MergeAnswers ever see the
+            // remaining budget. Sized to MaxOutCells, the same worst case Answers uses, because the ABI handshake
+            // already proves a guest's whole batch (every kind of act combined) cannot exceed its declared outCap.
             ReservedAnswers = new AddonInCell[AddonAbi.MaxOutCells];
             Pending = new AddonInCell[AddonAbi.MaxInCells];
             Principal = WorldPrincipal.Addon(name: instance.Name);
@@ -2352,7 +2301,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         }
 
         /// <summary>One machine-memory watch's own state: whether a baseline value has been observed yet (the first
-        /// successful peek establishes it WITHOUT emitting an edge — there is no "previous" to compare against), and
+        /// successful peek establishes it without emitting an edge — there is no "previous" to compare against), and
         /// the last observed value.</summary>
         public readonly record struct WatchState(bool Initialized, long Value);
 
@@ -2377,7 +2326,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         public int[] DriveDispatchCounts { get; }
         /// <summary>Gets the guest instance.</summary>
         public AddonInstance Instance { get; }
-        /// <summary>Gets the cells staged for the NEXT tick's batch (disclosures, then answers).</summary>
+        /// <summary>Gets the cells staged for the next tick's batch (disclosures, then answers).</summary>
         public AddonInCell[] Pending { get; }
         /// <summary>Gets the mount-bound acting identity — never carried on a record.</summary>
         public WorldPrincipal Principal { get; }
@@ -2391,7 +2340,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }
-        /// <summary>Gets this tick's RESERVED answer cells (Phase-3 plan AXIS 2, I3) — one per <c>SubmitMutation</c> act
+        /// <summary>Gets this tick's reserved answer cells — one per <c>SubmitMutation</c> act
         /// decoded this tick, reserved at whole-batch decode time before <c>EmitDisclosures</c>/<c>MergeAnswers</c>
         /// ever see the remaining budget. <see cref="ResolveMutations"/> sets each slot's <c>Verdict</c> the
         /// moment it is known (synchronously for a stage 1-5 refusal; later, via <c>CompleteMutation</c>, for an
@@ -2400,7 +2349,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         public AddonInCell[] ReservedAnswers { get; }
         /// <summary>Gets how many of <see cref="ReservedAnswers"/> are live this tick.</summary>
         public int ReservedCount { get; set; }
-        /// <summary>Gets this tick's running mutation-payload byte total for THIS addon, metered against
+        /// <summary>Gets this tick's running mutation-payload byte total for this addon, metered against
         /// <see cref="AddonAbi.MaxMutationBytesPerTickPerAddon"/>.</summary>
         public int MutateBytesThisTick { get; set; }
         // The Mutate twins of DispatchBudgetExhaustedReported/MissingBudgetReported, beside them for the identical
@@ -2408,11 +2357,11 @@ public sealed class WorldAddonRuntime : IDisposable {
         public bool MutateDispatchBudgetExhaustedReported { get; set; }
         public bool MutateMissingBudgetReported { get; set; }
         public bool MutateByteBudgetExhaustedReported { get; set; }
-        /// <summary>Gets a value indicating whether an ADMITTED execution of this guest has ever been ATTEMPTED — set unconditionally the
+        /// <summary>Gets a value indicating whether an admitted execution of this guest has ever been attempted — set unconditionally the
         /// first time <see cref="TickAddons"/> reaches the point of driving it (regardless of whether the tick
-        /// traps), never cleared. The boot-anchored replay arm predicate (Phase-3 plan AXIS 1): offline replay
+        /// traps), never cleared. The boot-anchored replay arm predicate: offline replay
         /// creates fresh guests at sim-counter zero, so a guest's accumulated memory/tick state before this latch
-        /// was set is exactly what a recording begun AFTER it cannot re-establish.</summary>
+        /// was set is exactly what a recording begun after it cannot re-establish.</summary>
         public bool HasEverPumped { get; set; }
 
         public int AnswerCount { get; set; }
@@ -2438,9 +2387,8 @@ public sealed class WorldAddonRuntime : IDisposable {
         // The instance Generation (AddonInstance.Generation) the disclosure above was computed against. A
         // disable/enable cycle re-instantiates the SAME AddonInstance object in place (Puck.Scripting.AddonHost
         // reuses it; only AddonHost.Reload swaps the object), so DisclosedRevision alone cannot tell a live,
-        // still-known guest apart from one whose linear memory was just wiped — keyed on the instance's own
-        // generation counter rather than which lifecycle verb ran, so a future re-instantiation path this runtime
-        // does not yet have still forces a re-disclosure. -1 so the very first resolve always projects.
+        // still-known guest apart from one whose linear memory was just wiped. -1 so the very first resolve always
+        // projects.
         public int DisclosedGeneration { get; set; } = -1;
         public bool DisclosureOverflowReported { get; set; }
         // The revision an oversized disclosure set overflowed at — re-projection waits for the next grant-table
@@ -2451,14 +2399,13 @@ public sealed class WorldAddonRuntime : IDisposable {
         // (now-wiped) instance last overflowed at the same grant-table revision.
         public int OverflowedAtGeneration { get; set; } = -1;
         public bool FaultReported { get; set; }
-        // The cost surface: fuel consumed is measured
-        // every tick and was previously discarded at TickAddons' one call site. LastTickFuelConsumed is this tick's
-        // spend (0 on a tick the guest did not run — faulted, disabled, or skipped enabled-but-unadmitted);
-        // TotalFuelConsumed is a LIFETIME figure for this guest's name, since it was first mounted — SetEnabled never
-        // touches this object (a disable/enable mutates the same Instance in place), and Reload's wholesale
-        // MountedAddon replacement carries the prior value forward explicitly rather than re-zeroing it. DIAGNOSTIC
-        // ONLY: read by the world.addons verb, never by simulation state and never on a hashed path. Saturates at
-        // ulong.MaxValue rather than wrapping.
+        // The cost surface: fuel consumed is measured every tick. LastTickFuelConsumed is this tick's spend (0 on a
+        // tick the guest did not run — faulted, disabled, or skipped enabled-but-unadmitted); TotalFuelConsumed is a
+        // LIFETIME figure for this guest's name, since it was first mounted — SetEnabled never touches this object
+        // (a disable/enable mutates the same Instance in place), and Reload's wholesale MountedAddon replacement
+        // carries the prior value forward explicitly rather than re-zeroing it. DIAGNOSTIC ONLY: read by the
+        // world.addons verb, never by simulation state and never on a hashed path. Saturates at ulong.MaxValue
+        // rather than wrapping.
         public ulong LastTickFuelConsumed { get; set; }
         public ulong TotalFuelConsumed { get; set; }
         public int PendingCount { get; set; }
@@ -2479,7 +2426,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         /// <summary>Gets the per-watch last-observed state, parallel to <see cref="MemoryWatches"/> by index; null when the
         /// row declares no watches.</summary>
         public WatchState[]? MemoryWatchState { get; }
-        /// <summary>Gets this tick's lifetime EVENT GAP counter (the overflow doctrine's per-mount summary — see
+        /// <summary>Gets this tick's lifetime event-gap counter (the overflow doctrine's per-mount summary — see
         /// <c>Scripting.AddonAbi.ObservationVerbs.EventGap</c>'s own doc) — saturating, never reset. Every edge
         /// dropped because its per-row event budget or the ring ran out of room (world events or a memory-watch change
         /// alike) adds here.</summary>
@@ -2491,7 +2438,7 @@ public sealed class WorldAddonRuntime : IDisposable {
         /// <summary>Gets the route-engaged/disengaged cells delivered across this mount's lifetime; diagnostic only.</summary>
         public ulong RouteEventsDelivered { get; set; }
         /// <summary>Gets the <see cref="EventGapCount"/> value last actually staged into a batch — an <c>EventGap</c>
-        /// cell is only worth re-emitting when the count has MOVED since the last one that fit.</summary>
+        /// cell is only worth re-emitting when the count has moved since the last one that fit.</summary>
         public ulong LastReportedEventGap { get; set; }
     }
 }

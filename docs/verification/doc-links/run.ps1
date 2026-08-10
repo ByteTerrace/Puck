@@ -46,8 +46,8 @@ param(
         'docs/README.md',
         'docs/agent-guide.md',
         'docs/project-map.md',
-        'docs/capability-channels-plan.md',
-        'docs/capability-channels-STATE.md'
+        'docs/campaign.md',
+        'docs/vision.md'
     )
 )
 

@@ -77,25 +77,25 @@ public readonly record struct CompiledDiscreteMeasure64 {
         m_backend = BackendKind.Quadratic;
     }
 
-    /// <summary>Whether this value was produced by successful compilation.</summary>
+    /// <summary>Gets a value indicating whether this value was produced by successful compilation.</summary>
     public bool IsValid => (m_backend != BackendKind.Invalid);
-    /// <summary>Whether the unit-interval allocation repeats periodically.</summary>
+    /// <summary>Gets a value indicating whether the unit-interval allocation repeats periodically.</summary>
     public bool IsPeriodic => (IsValid
         ? (m_period > 0L)
         : throw new InvalidOperationException(message: "the compiled measure is default-initialized"));
-    /// <summary>Whether this value uses the bounded real-quadratic floor kernel.</summary>
+    /// <summary>Gets a value indicating whether this value uses the bounded real-quadratic floor kernel.</summary>
     public bool IsQuadratic => (m_backend == BackendKind.Quadratic);
-    /// <summary>The integral part of the non-negative rate for the rational backend; zero for the quadratic backend.</summary>
+    /// <summary>Gets the integral part of the non-negative rate for the rational backend; zero for the quadratic backend.</summary>
     public long IntegralRate { get; }
-    /// <summary>The numerator of the rate's reduced proper fractional part for the rational backend.</summary>
+    /// <summary>Gets the numerator of the rate's reduced proper fractional part for the rational backend.</summary>
     public long FractionalRateNumerator { get; }
-    /// <summary>The positive denominator of the rate's reduced proper fractional part.</summary>
+    /// <summary>Gets the positive denominator of the rate's reduced proper fractional part.</summary>
     public long FractionalRateDenominator { get; }
-    /// <summary>The numerator of the normalized rational offset in <c>[0, 1)</c>.</summary>
+    /// <summary>Gets the numerator of the normalized rational offset in <c>[0, 1)</c>.</summary>
     public long OffsetNumerator { get; }
-    /// <summary>The positive denominator of the normalized rational offset.</summary>
+    /// <summary>Gets the positive denominator of the normalized rational offset.</summary>
     public long OffsetDenominator { get; }
-    /// <summary>The exact period of the unit-interval allocation.</summary>
+    /// <summary>Gets the exact period of the unit-interval allocation.</summary>
     public long Period => (!IsValid
         ? throw new InvalidOperationException(message: "the compiled measure is default-initialized")
         : (IsPeriodic

@@ -79,7 +79,7 @@ public sealed class AgbMachineInstance : IDisposable {
         return fork;
     }
 
-    /// <summary>Releases the ROOT (non-pooled) instance — the one the factory handed out — tearing down its container and
+    /// <summary>Releases the root (non-pooled) instance — the one the factory handed out — tearing down its container and
     /// any nested fork pool. Idempotent. A pooled fork is never disposed through here: its <see cref="AgbMachineFork"/>
     /// owner routes a generation-gated dispose to the pool, so a stale handle cannot park or tear down a re-rented
     /// sibling.</summary>

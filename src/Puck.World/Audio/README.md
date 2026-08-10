@@ -9,17 +9,30 @@ and publishes `WorldAudioSnapshot`s here.
 
 ## The core (`WorldAudioMixer.cs`, `WorldAudioSnapshot.cs`)
 
-The rate is 48000 Hz, fixed — device-native, and exactly 200 frames per
-240 Hz sim step (`WorldAudioMixer.FramesPerSimStep`). `MixBlock` is fixed
-point end to end: s16 samples times Q16 composite gains, accumulated in
-int32, through a deterministic polynomial soft-clip back to s16 — never a
-libm call. Per block, each emitter derives target coefficients from the
-snapshot (finite-support squared-smoothstep distance attenuation whose zero
-IS the cull, equal-power pan from listener-relative azimuth) and the live
-coefficients ramp linearly across the block from the previous block's values,
-which is what prevents zipper noise. Each distinct source identity is pulled
-once per block and every feed taps the shared scratch, so a stereo pair is
-two rows over one source.
+The rate is 48000 Hz, fixed — device-native (`WorldAudioMixer.SampleRate`).
+It is NOT assumed to be a multiple of the world's simulation rate: 90 Hz and
+45 Hz (both required Steam Deck OLED refresh rates) divide the 50400
+engine-tick base cleanly but not 48000, so a sim step's frame count is not
+always a whole constant. `WorldAudioMixer.FramesPerStep` answers a one-off
+ceiling ("about how many frames is one step" — used as slack, never as a
+hash-critical value), and `WorldAudioMixer.CreateStepAccumulator`/
+`AdvanceStepFrames` carry the exact remainder across many consecutive steps
+with zero long-run drift — the same `Puck.Maths.FixedRateAccumulator`
+technique `WorldBody`'s motion integration already uses. `MaxBlockFrames`
+(256) is the device pump's own real-time quantum ceiling and is unrelated to
+any of this: a sim step's frame total can exceed one block (at 90 Hz a step
+spans ~2 blocks, at 45 Hz ~5), so `MixBlock` is never assumed to render
+exactly one step, and a step is never assumed to render in exactly one block.
+
+`MixBlock` is fixed point end to end: s16 samples times Q16 composite gains,
+accumulated in int32, through a deterministic polynomial soft-clip back to
+s16 — never a libm call. Per block, each emitter derives target coefficients
+from the snapshot (finite-support squared-smoothstep distance attenuation
+whose zero IS the cull, equal-power pan from listener-relative azimuth) and
+the live coefficients ramp linearly across the block from the previous
+block's values, which is what prevents zipper noise. Each distinct source
+identity is pulled once per block and every feed taps the shared scratch, so
+a stereo pair is two rows over one source.
 
 `MixBlock` is synchronous and owns no thread — the device pump below is one
 driver of it, and a headless harness is another. Its printed PCM hashes, when

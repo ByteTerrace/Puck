@@ -8,14 +8,14 @@ namespace Puck.World;
 /// panel, binding bars, gizmos, editor HUD, and toast) — the banded pipeline's ordering key.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldHudLayer>))]
 public enum WorldHudLayer : byte {
-    /// <summary>Draws BEFORE the first-party writers (document order among UNDER panels).</summary>
+    /// <summary>Draws before the first-party writers (document order among <see cref="Under"/> panels).</summary>
     Under,
 
-    /// <summary>Draws AFTER the first-party writers, or after the replace panels when any are live (document order
-    /// among OVER panels) — always the topmost band.</summary>
+    /// <summary>Draws after the first-party writers, or after the replace panels when any are live (document order
+    /// among <see cref="Over"/> panels) — always the topmost band.</summary>
     Over,
 
-    /// <summary>Takes the BASE slot the five first-party writers would otherwise occupy: while at least one live
+    /// <summary>Takes the base slot the five first-party writers would otherwise occupy: while at least one live
     /// panel declares <see cref="Replace"/>, every replace panel renders itself there (document order) and the five
     /// first-party writers do not run. Removing the last replace panel restores them.</summary>
     Replace,
@@ -73,8 +73,8 @@ public enum WorldHudStyleToken : byte {
     Danger,
 }
 
-/// <summary>A normalized rect (origin top-left, Y down) — a <see cref="WorldHudPanel"/>'s rect is in SCREEN space
-/// [0, 1] × [0, 1]; a <see cref="WorldHudElement"/>'s rect is in its OWNING PANEL's LOCAL [0, 1] × [0, 1] space.</summary>
+/// <summary>A normalized rect (origin top-left, Y down) — a <see cref="WorldHudPanel"/>'s rect is in screen space
+/// [0, 1] × [0, 1]; a <see cref="WorldHudElement"/>'s rect is in its owning panel's local [0, 1] × [0, 1] space.</summary>
 /// <param name="X">The rect's left edge, normalized.</param>
 /// <param name="Y">The rect's top edge, normalized.</param>
 /// <param name="Width">The rect's width, normalized — must be positive.</param>
@@ -83,15 +83,15 @@ public enum WorldHudStyleToken : byte {
 public readonly record struct WorldHudRect(float X, float Y, float Width, float Height);
 
 /// <summary>One HUD element row inside a <see cref="WorldHudPanel"/> — a stable id (unique within the owning panel),
-/// its kind, its LOCAL rect, its color role, an authored literal string (meaningful for <see cref="WorldHudElementKind.Text"/>),
+/// its kind, its local rect, its color role, an authored literal string (meaningful for <see cref="WorldHudElementKind.Text"/>),
 /// and an optional binding into the closed <see cref="HudBindingVocabulary"/> (meaningful for
-/// <see cref="WorldHudElementKind.Text"/> and <see cref="WorldHudElementKind.Gauge"/> — a bound TEXT element's live
-/// value REPLACES the authored literal; a bound GAUGE element's live value drives its fill; an unbound gauge draws
+/// <see cref="WorldHudElementKind.Text"/> and <see cref="WorldHudElementKind.Gauge"/> — a bound text element's live
+/// value replaces the authored literal; a bound gauge element's live value drives its fill; an unbound gauge draws
 /// empty).</summary>
 /// <param name="Id">The element's stable id (unique within the owning panel — the <c>world.row.set hud.panels</c>/
 /// <c>.remove</c> mutation address).</param>
 /// <param name="Kind">The element's rendered kind.</param>
-/// <param name="Rect">The element's rect, normalized to the OWNING PANEL's local space.</param>
+/// <param name="Rect">The element's rect, normalized to the owning panel's local space.</param>
 /// <param name="Style">The element's color role.</param>
 /// <param name="Text">The authored literal string a <see cref="WorldHudElementKind.Text"/> element draws when neither
 /// <paramref name="Binding"/> nor <paramref name="Template"/> is set; ignored for <see cref="WorldHudElementKind.Rect"/>
@@ -99,9 +99,9 @@ public readonly record struct WorldHudRect(float X, float Y, float Width, float 
 /// <param name="Binding">A closed <see cref="HudBindingVocabulary"/> token, or <see langword="null"/> for an unbound
 /// element. Refused alongside <paramref name="Template"/> — exactly one live-value source, never both. Omitted from
 /// the wire when null.</param>
-/// <param name="Template">A <see cref="WorldHudElementKind.Text"/> element's TEMPLATE string — authored literal text
+/// <param name="Template">A <see cref="WorldHudElementKind.Text"/> element's template string — authored literal text
 /// interleaved with <c>{token}</c> placeholders, each a closed <see cref="HudBindingVocabulary"/> token resolved
-/// through the SAME operand path <paramref name="Binding"/> uses (see <see cref="HudTemplate"/> for the brace/escape
+/// through the same operand path <paramref name="Binding"/> uses (see <see cref="HudTemplate"/> for the brace/escape
 /// grammar). A richer binding source than <paramref name="Binding"/> — many live facts composed into one string
 /// instead of one — never both on the same element. Ignored for <see cref="WorldHudElementKind.Rect"/> and
 /// <see cref="WorldHudElementKind.Gauge"/> (a gauge's fill is one fraction; it has no composed string to show).
@@ -117,13 +117,13 @@ public sealed record WorldHudElement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null
 );
 
-/// <summary>One HUD panel row — a stable id (unique within the section), a normalized VIEWPORT rect in screen space,
+/// <summary>One HUD panel row — a stable id (unique within the section), a normalized viewport rect in screen space,
 /// which band it draws in, its chrome style, and its child elements. <c>WorldMutation.UpsertHudPanel</c> carries
-/// the whole row (elements included) as ONE cross-row transaction boundary; <c>WorldMutation.UpsertHudElement</c>/
+/// the whole row (elements included) as one cross-row transaction boundary; <c>WorldMutation.UpsertHudElement</c>/
 /// <c>WorldMutation.RemoveHudElement</c> read-modify-write a single element within an already-declared panel.</summary>
 /// <param name="Id">The panel's stable id (unique within the section — the <c>world.row.set hud.panels</c>/<c>world.row.remove hud.panels</c>
 /// mutation address).</param>
-/// <param name="Rect">The panel's viewport rect, normalized to SCREEN space.</param>
+/// <param name="Rect">The panel's viewport rect, normalized to screen space.</param>
 /// <param name="Layer">Which band the panel draws in.</param>
 /// <param name="Style">The panel's chrome recipe.</param>
 /// <param name="Elements">The panel's child elements (default empty), each a whole-row unit under
@@ -143,7 +143,7 @@ public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer L
 /// <summary>The bare (non-hovering) drawn cursor's palette role — the authored twin of the overlay color roles the
 /// renderer maps this token onto (Puck.World.Data must not reference Puck.Overlays). Hover always lights the accent
 /// tier regardless, so accent here makes the bare cursor and its hover state indistinguishable — legal, but a
-/// world that wants hover to READ should pick another role.</summary>
+/// world that wants hover to read should pick another role.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldHudCursorRole>))]
 public enum WorldHudCursorRole : byte {
     /// <summary>The primary text hue.</summary>
@@ -186,7 +186,7 @@ public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = nul
     public static WorldHudDefaults Default { get; } = new(Enabled: true);
 }
 
-/// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. A REQUIRED section
+/// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. A required section
 /// every document carries; an empty panel list draws nothing (the built-in default).</summary>
 /// <param name="Defaults">The section defaults.</param>
 /// <param name="Panels">The authored world-scope panels (default empty), capped at
@@ -206,13 +206,12 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
     public static WorldHudSection Default { get; } = new(Defaults: WorldHudDefaults.Default, Panels: []);
 }
 
-/// <summary>The RATIFIED world-scope AND seat-scope HUD schema caps and the schema→render expansion cost — read by
-/// <see cref="WorldDefinitionValidator"/> for both visited and identity-owned worlds,
-/// and by <c>Puck.Overlays.OverlayChannelLeases</c>'s combined reservation (expansion cost; that project cannot
-/// reference this one, so its reservation constants restate these numbers by hand, checked by the static assertion
-/// there). The seat-scope reservation (one panel × <see cref="MaxElementsPerSeatPanel"/> elements × every LOCAL seat)
-/// was sized ahead of any author; an identity-owned world's first HUD panel is the first author to
-/// spend from it.</summary>
+/// <summary>The world-scope and seat-scope HUD schema caps and the schema→render expansion cost — read by
+/// <see cref="WorldDefinitionValidator"/> for both visited and identity-owned worlds, and by
+/// <c>Puck.Overlays.OverlayChannelLeases</c>'s combined reservation (that project cannot reference this one, so its
+/// reservation constants restate these numbers by hand, checked by the static assertion there). The seat-scope
+/// reservation (one panel × <see cref="MaxElementsPerSeatPanel"/> elements × every local seat) was sized ahead of
+/// any author; an identity-owned world's first HUD panel is the first author to spend from it.</summary>
 public static class WorldHudCapacity {
     /// <summary>The world-scope panel-row ceiling.</summary>
     public const int MaxWorldPanels = 4;
@@ -220,7 +219,7 @@ public static class WorldHudCapacity {
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
 
-    /// <summary>The per-seat player-scope panel's element-row ceiling — ONE panel per profile, capped smaller than
+    /// <summary>The per-seat player-scope panel's element-row ceiling — one panel per profile, capped smaller than
     /// the world scope's <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather
     /// than the whole screen.</summary>
     public const int MaxElementsPerSeatPanel = 12;
@@ -241,7 +240,7 @@ public static class WorldHudCapacity {
     public const int GaugeWordCost = 16;
 }
 
-/// <summary>The APPROVED closed v1 binding vocabulary a <see cref="WorldHudElement.Binding"/> names — validated at
+/// <summary>The approved closed v1 binding vocabulary a <see cref="WorldHudElement.Binding"/> names — validated at
 /// document validation (refuse-unknown by name) and resolved render-side, once per frame, by the writer.</summary>
 public enum HudBindingKind : byte {
     /// <summary>The live server tick counter.</summary>
@@ -262,15 +261,14 @@ public enum HudBindingKind : byte {
     /// <summary>The live active-population count.</summary>
     PopulationActive,
 
-    /// <summary>A named <c>state</c> row's live value, OR one of its cells — see <see cref="HudBinding.StateName"/>/
-    /// <see cref="HudBinding.StateCellKey"/>. The binding SHAPE is closed vocabulary (<c>state.&lt;row&gt;</c> binds
-    /// the row's own SLOT cell; <c>state.&lt;row&gt;.&lt;key&gt;</c> binds one named cell — unambiguous because
-    /// neither a row nor a cell name can hold a dot, so the FIRST dot after the <c>state.</c> prefix is always the
-    /// grammar separator, never part of either name). Whether the row (and, for the cell form, the key) actually
-    /// resolves to declared document data is validated separately (<see cref="WorldDefinitionValidator"/> checks
-    /// world-scope panels against the document's own <c>state</c> section; a seat-scope panel — authored
-    /// independent of any particular world — can never verify this and refuses every <c>state.*</c> token
-    /// instead).</summary>
+    /// <summary>A named <c>state</c> row's live value, or one of its cells — see <see cref="HudBinding.StateName"/>/
+    /// <see cref="HudBinding.StateCellKey"/>. The binding shape is closed vocabulary: <c>state.&lt;row&gt;</c> binds
+    /// the row's own slot cell, and <c>state.&lt;row&gt;.&lt;key&gt;</c> binds one named cell — unambiguous because
+    /// neither a row nor a cell name can hold a dot, so the first dot after the <c>state.</c> prefix is always the
+    /// grammar separator. Whether the row (and, for the cell form, the key) actually resolves to declared document
+    /// data is validated separately: <see cref="WorldDefinitionValidator"/> checks world-scope panels against the
+    /// document's own <c>state</c> section, while a seat-scope panel, authored independent of any particular world,
+    /// refuses every <c>state.*</c> token instead.</summary>
     StateNamed,
 }
 
@@ -289,7 +287,7 @@ public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, str
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
 /// (1-based seat index, <c>1..</c><see cref="WorldPopulationLimits.LocalSeatCount"/>), <c>population.active</c>,
 /// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>).
-/// A token outside this set refuses by name — the SAME parse both <see cref="WorldDefinitionValidator"/> (load-time)
+/// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
 /// and the render-side resolver (frame-time) call, so a document can never carry a binding the renderer would
 /// silently treat as unbound.
 /// </summary>
@@ -402,31 +400,30 @@ public static class HudBindingVocabulary {
     public static bool IsKnown(string? token) => TryParse(token: token, binding: out _);
 }
 
-/// <summary>One parsed run of a <see cref="WorldHudElement.Template"/> string — either a LITERAL text run drawn
-/// verbatim, or a PLACEHOLDER naming one <see cref="HudBindingVocabulary"/> token whose live value replaces it (see
+/// <summary>One parsed run of a <see cref="WorldHudElement.Template"/> string — either a literal text run drawn
+/// verbatim, or a placeholder naming one <see cref="HudBindingVocabulary"/> token whose live value replaces it (see
 /// <see cref="HudTemplate"/>).</summary>
 /// <param name="IsPlaceholder"><see langword="true"/> for a placeholder run; <see langword="false"/> for literal
 /// text.</param>
 /// <param name="Text">The literal text (when <paramref name="IsPlaceholder"/> is <see langword="false"/>) or the
-/// RAW placeholder token, brace-delimiters stripped (when <see langword="true"/>) — not yet validated against
+/// raw placeholder token, brace-delimiters stripped (when <see langword="true"/>) — not yet validated against
 /// <see cref="HudBindingVocabulary"/>.</param>
 public readonly record struct HudTemplateSegment(bool IsPlaceholder, string Text);
 
 /// <summary>
-/// The brace/escape grammar a <see cref="WorldHudElement.Template"/> string speaks, and the ONE place it is parsed:
-/// <c>{token}</c> interpolates one <see cref="HudBindingVocabulary"/> token, resolved through the SAME operand path
-/// a plain <see cref="WorldHudElement.Binding"/> uses; <c>{{</c> and <c>}}</c> escape a literal brace (the MS
-/// composite-format-string convention — <c>string.Format</c>/interpolated-string escaping — never a bespoke one).
-/// A lone unescaped <c>{</c> with no matching <c>}</c>, an empty <c>{}</c>, or a lone unescaped <c>}</c> is
-/// MALFORMED and refused by name rather than guessed at (never treated as literal text). This is the ONLY parse of
-/// the grammar anywhere: document validation calls it (<see cref="WorldDefinitionValidator"/>, which additionally
-/// resolves each placeholder against <see cref="HudBindingVocabulary"/> and, for a <c>state.*</c> token, the
-/// document's own <c>state</c> section); <c>Puck.World</c>'s <c>world.hud.template</c> console verb calls it (an AD
-/// HOC template, checked the same way against the LIVE document before anything resolves); and
-/// <c>Puck.World.WorldHudFeed</c> calls it on the structure rebuild, handing <c>Puck.Overlays</c> the PARSED runs.
-/// The render path therefore never parses a template — <c>Puck.Overlays.HudWriter</c> cannot reference this project
-/// (the architecture boundary) and does not need to, so unlike <see cref="WorldHudCapacity"/>'s constants (which
-/// <c>OverlayChannelLeases</c> does restate by hand) this grammar has no mirror that could drift.
+/// The brace/escape grammar a <see cref="WorldHudElement.Template"/> string speaks, and the one place it is parsed:
+/// <c>{token}</c> interpolates one <see cref="HudBindingVocabulary"/> token, resolved through the same operand path
+/// a plain <see cref="WorldHudElement.Binding"/> uses; <c>{{</c> and <c>}}</c> escape a literal brace (the
+/// <c>string.Format</c>/interpolated-string escaping convention, not a bespoke one). A lone unescaped <c>{</c> with
+/// no matching <c>}</c>, an empty <c>{}</c>, or a lone unescaped <c>}</c> is malformed and refused by name rather
+/// than guessed at.
+/// <para>This is the only parse of the grammar anywhere: document validation calls it
+/// (<see cref="WorldDefinitionValidator"/>, which additionally resolves each placeholder against
+/// <see cref="HudBindingVocabulary"/> and, for a <c>state.*</c> token, the document's own <c>state</c> section);
+/// the <c>world.hud.template</c> console verb calls it against the live document; and
+/// <c>Puck.World.WorldHudFeed</c> calls it on the structure rebuild, handing <c>Puck.Overlays</c> the parsed runs.
+/// The render path itself never parses a template — <c>Puck.Overlays.HudWriter</c> cannot reference this
+/// project.</para>
 /// </summary>
 public static class HudTemplate {
     /// <summary>Parses a template into its literal/placeholder run sequence.</summary>
@@ -510,7 +507,7 @@ public static class HudTemplate {
         return true;
     }
 
-    /// <summary>Wraps <see cref="TryParse"/> for a caller that only needs the placeholder TOKENS (document
+    /// <summary>Wraps <see cref="TryParse"/> for a caller that only needs the placeholder tokens (document
     /// validation does not need the literal runs back).</summary>
     /// <param name="template">The template text.</param>
     /// <param name="placeholders">Every placeholder token, in left-to-right order, on success.</param>

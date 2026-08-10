@@ -2,61 +2,80 @@ namespace Puck.World;
 
 /// <summary>
 /// The render-capacity oracle the server consults before it applies a scene/screen mutation — the seam that keeps the
-/// "capacity honesty" contract: the render envelope (program words, instances) was probed once at construction for the
-/// boot definition, so an applied mutation that would exceed it is REJECTED at apply time with a loud line naming the
-/// ceiling (never a crash, never a silent clamp). A shared DI singleton: <c>Puck.World.Client.WorldFrameSource</c> configures it
-/// with the probed floors and a measurer once the render node is built (before any stdin mutation lands), and
-/// <c>Puck.World.Server.WorldServer</c> reads it while draining its mutation queue.
+/// "capacity honesty" contract: each active renderer registers the render envelope (program words, instances) it
+/// probed at construction, so an applied mutation that would exceed ANY active consumer is REJECTED at apply time
+/// with a loud line naming the ceiling (never a crash, never a silent clamp). A shared DI singleton:
+/// <c>Puck.World.Client.WorldFrameSource</c>, session-screen views, and traveler-follow views each register their own
+/// floors and candidate measurer; <c>Puck.World.Server.WorldServer</c> reads their conjunction while draining its
+/// mutation queue.
 /// </summary>
 /// <remarks>Single-threaded: configured on the window-pump thread during startup, read on the same thread while the
 /// server drains its pre-tick queue, so no lock guards it. Unconfigured (a mutation somehow racing startup) reads as
 /// "fits" — the boot definition is what the envelope was probed for, so it always fits.</remarks>
 public sealed class WorldRenderEnvelope {
-    private int m_programWordCapacity;
-    private int m_instanceCapacity;
-    private Func<WorldDefinition, (int Words, int Instances)>? m_measure;
+    private readonly Dictionary<long, Constraint> m_constraints = [];
+    private long m_nextConstraintId;
 
-    /// <summary>Records the probed envelope floors and the worst-case program measurer.</summary>
+    /// <summary>Registers one active render consumer's probed floors and worst-case program measurer.</summary>
     /// <param name="programWordCapacity">The probed program-word ceiling (all avatars + the boot scene/screens/placements).</param>
     /// <param name="instanceCapacity">The probed instance ceiling.</param>
     /// <param name="measure">Measures a candidate definition's render-relevant sections (scene, screens, placements +
     /// their creations) against the same worst-case avatar build, returning its program-word and instance counts.</param>
+    /// <returns>The registration lease. Disposing it removes only this consumer's constraint; all other active
+    /// registrations continue to govern admission.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="measure"/> is <see langword="null"/>.</exception>
-    public void Configure(int programWordCapacity, int instanceCapacity, Func<WorldDefinition, (int Words, int Instances)> measure) {
+    public IDisposable Configure(int programWordCapacity, int instanceCapacity, Func<WorldDefinition, (int Words, int Instances)> measure) {
         ArgumentNullException.ThrowIfNull(argument: measure);
 
-        m_programWordCapacity = programWordCapacity;
-        m_instanceCapacity = instanceCapacity;
-        m_measure = measure;
+        var id = m_nextConstraintId++;
+
+        m_constraints.Add(key: id, value: new Constraint(
+            ProgramWordCapacity: programWordCapacity,
+            InstanceCapacity: instanceCapacity,
+            Measure: measure
+        ));
+
+        return new Registration(owner: this, id: id);
     }
 
     /// <summary>Tests whether a candidate definition's render-relevant sections fit the probed render envelope.</summary>
     /// <param name="candidate">The composed candidate definition.</param>
     /// <param name="reason">On a miss, the loud ceiling reason; empty otherwise.</param>
-    /// <returns><see langword="true"/> when the candidate fits (or the envelope is not yet configured).</returns>
+    /// <returns><see langword="true"/> when the candidate fits every active registration (or none exists).</returns>
     public bool TryFit(WorldDefinition candidate, out string reason) {
-        if (m_measure is not { } measure) {
-            reason = string.Empty;
+        foreach (var constraint in m_constraints.Values) {
+            var (words, instances) = constraint.Measure(arg: candidate);
 
-            return true;
-        }
+            if (words > constraint.ProgramWordCapacity) {
+                reason = $"program words {words} exceed the probed render envelope {constraint.ProgramWordCapacity}";
 
-        var (words, instances) = measure(arg: candidate);
+                return false;
+            }
 
-        if (words > m_programWordCapacity) {
-            reason = $"program words {words} exceed the probed render envelope {m_programWordCapacity}";
+            if (instances > constraint.InstanceCapacity) {
+                reason = $"instances {instances} exceed the probed render envelope {constraint.InstanceCapacity}";
 
-            return false;
-        }
-
-        if (instances > m_instanceCapacity) {
-            reason = $"instances {instances} exceed the probed render envelope {m_instanceCapacity}";
-
-            return false;
+                return false;
+            }
         }
 
         reason = string.Empty;
 
         return true;
+    }
+
+    private readonly record struct Constraint(int ProgramWordCapacity, int InstanceCapacity, Func<WorldDefinition, (int Words, int Instances)> Measure);
+
+    private sealed class Registration(WorldRenderEnvelope owner, long id) : IDisposable {
+        private WorldRenderEnvelope? m_owner = owner;
+
+        public void Dispose() {
+            if (m_owner is not { } current) {
+                return;
+            }
+
+            m_owner = null;
+            _ = current.m_constraints.Remove(key: id);
+        }
     }
 }

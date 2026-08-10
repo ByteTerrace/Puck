@@ -74,7 +74,7 @@ public sealed class PolynomialBeattyShadowEventualCertificate {
     public IReadOnlyList<PolynomialBeattyShadowNormDecisionCertificate> NormDecisions { get; }
     /// <summary>Gets the channels whose adjacent near-center boundary is eventually crossed.</summary>
     public IReadOnlyList<PolynomialBeattyShadowEventualChannel> ActiveChannels { get; }
-    /// <summary>Gets whether the discrepancy is certified zero at every index beyond <see cref="Cutoff"/>.</summary>
+    /// <summary>Gets a value indicating whether the discrepancy is certified zero at every index beyond <see cref="Cutoff"/>.</summary>
     public bool EventuallyIdenticallyZero => (ActiveChannels.Count == 0);
 }
 

@@ -3,21 +3,26 @@ using Puck.Maths;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-C stage for the scripted two-machine cross-gen-cart Cable Club trade. Two
-/// <see cref="ConsoleModel.Cgb"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
+/// Tier-C stage that runs a scripted two-machine cross-gen-cart Cable Club trade between two
+/// <see cref="ConsoleModel.Cgb"/> machines and asserts the trade committed deterministically.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Two <see cref="ConsoleModel.Cgb"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
 /// <see cref="TradeSaveFactory"/> battery save already in SRAM (side A leads with RATTATA 0x13, side B with PIDGEY
 /// 0x10), linked through a <see cref="SerialLinkSession"/> and driven together by <see cref="ScriptedTradeDriver"/>'s
 /// peek-gated phase machine: turn to the Trade Center receptionist, mash through the dialogue + save prompt, the
 /// <c>WaitForLinkedFriend</c> rendezvous, the room-match warp into TRADE_CENTER, the walk onto each side's vacated-CHRIS
-/// trade seat ((6,4) facing LEFT / (3,4) facing RIGHT — a directional bg_event fires from the tile ADJACENT to the
-/// console FACING it), the console A-press into <c>special TradeCenter</c>, the full mon-selection menu drive
+/// trade seat ((6,4) facing LEFT / (3,4) facing RIGHT — a directional bg_event fires from the tile adjacent to the
+/// console facing it), the console A-press into <c>special TradeCenter</c>, the full mon-selection menu drive
 /// (A → RIGHT → A through the STATS|TRADE submenu and the confirm popup), the trade animation + double auto-save, and
 /// the CANCEL handshake back out to the overworld.
+/// </para>
 /// <para>
 /// The gate asserts: (a) the rendezvous resolved to exactly one $01 (external/slave) and one $02 (internal/master) clock
 /// role — the mandated DIV-offset symmetry-break worked, no livelock; (b) both machines warped into TRADE_CENTER with
-/// <c>wLinkMode</c> = LINK_TRADECENTER — the link fully established; (c) the trade COMMITTED: each side's exported SRAM
-/// lead species is the OTHER side's crafted original (side A ends 0x10 PIDGEY, side B ends 0x13 RATTATA) with a valid
+/// <c>wLinkMode</c> = LINK_TRADECENTER — the link fully established; (c) the trade committed: each side's exported SRAM
+/// lead species is the other side's crafted original (side A ends 0x10 PIDGEY, side B ends 0x13 RATTATA) with a valid
 /// primary checksum — the auto-save wrote the swap; (d) the drive ran to completion (both sides cancelled out of the
 /// re-entry loop and landed back in the TRADE_CENTER overworld); (e) real, non-idle block-exchange serial traffic
 /// crossed the cable on both sides; (f) traffic fingerprints + final whole-machine snapshots + exported SRAMs are
@@ -34,12 +39,12 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// <para>
 /// The cartridge is a per-machine commercial asset, never committed: its path comes from <c>PUCK_GB_TRADEROM</c> (the same
-/// env var the <see cref="ScriptedTradeContinueStage"/> foundation gate uses, with known dev-box fallbacks), and the stage SKIPS
+/// env var the <see cref="ScriptedTradeContinueStage"/> foundation gate uses, with known dev-box fallbacks), and the stage skips
 /// cleanly when it is absent. Both machines are pinned to Cgb; this cart's link code never writes rKEY1/SC_SPEED so the link
-/// runs the normal (~8192&#160;Hz) serial clock — a property of the GAME, not a licence to pin the emulator's serial to a
+/// runs the normal (~8192&#160;Hz) serial clock — a property of the game, not a licence to pin the emulator's serial to a
 /// real-time rate.
 /// </para>
-/// </summary>
+/// </remarks>
 internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     private const string RomEnvironmentVariable = "PUCK_GB_TRADEROM";
 

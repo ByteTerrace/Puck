@@ -22,7 +22,7 @@ public enum RotationSnap {
 /// shape rotation for an oriented one).</param>
 /// <param name="Pitch">The per-axis object-lattice pitch, in reference-local space (a component &lt;= 0 disables the
 /// lattice on that axis; the face candidates still speak).</param>
-/// <param name="LocalHalfExtents">The reference's half-extents along its OWN axes — the butt-join face planes sit at
+/// <param name="LocalHalfExtents">The reference's half-extents along its own axes — the butt-join face planes sit at
 /// <c>±LocalHalfExtents.c</c> per axis.</param>
 /// <param name="FaceRadius">The face-snap capture radius (reference-local units): within it, a face/center candidate
 /// wins over a lattice node.</param>
@@ -47,18 +47,18 @@ public readonly record struct SnapConfig(
     RotationSnap Rotation,
     SnapReference? Reference
 ) {
-    /// <summary>Snapping off, zero pitch on every axis, no rotation snap, no reference — the neutral starting point
-    /// every session begins from (snapping is opt-in).</summary>
+    /// <summary>Gets the disabled configuration: snapping off, zero pitch on every axis, no rotation snap, no
+    /// reference — the neutral starting point every session begins from (snapping is opt-in).</summary>
     public static SnapConfig Disabled => default;
 
-    /// <summary>A disabled config pre-loaded with a uniform lattice pitch on all three axes (X/Y/Z alike) — the shape
-    /// a caller enables verbatim for full 3D placement (e.g. a free-floating workbench object).</summary>
+    /// <summary>Creates a disabled config pre-loaded with a uniform lattice pitch on all three axes (X/Y/Z alike) —
+    /// the shape a caller enables verbatim for full 3D placement (e.g. a free-floating workbench object).</summary>
     /// <param name="pitch">The per-axis lattice spacing, world units.</param>
     public static SnapConfig Uniform(float pitch) =>
         new(Enabled: false, Pitch: new Vector3(value: pitch), Rotation: RotationSnap.Off, Reference: null);
 
-    /// <summary>A disabled config pre-loaded with a lattice pitch on X/Z only (Y left free) — the shape a caller
-    /// enables verbatim for floor-rest placement, where vertical position is never snapped.</summary>
+    /// <summary>Creates a disabled config pre-loaded with a lattice pitch on X/Z only (Y left free) — the shape a
+    /// caller enables verbatim for floor-rest placement, where vertical position is never snapped.</summary>
     /// <param name="pitch">The X/Z lattice spacing, world units.</param>
     public static SnapConfig Planar(float pitch) =>
         new(Enabled: false, Pitch: new Vector3(x: pitch, y: 0f, z: pitch), Rotation: RotationSnap.Off, Reference: null);
@@ -66,10 +66,9 @@ public readonly record struct SnapConfig(
 
 /// <summary>
 /// Grid-locking's pure snap math — the authoring-side float core shared by every editing surface. Every function
-/// is pure (no state, no allocation) and takes an explicit
-/// <see cref="SnapConfig"/> so callers stay declarative. This is HOST-SIDE PRESENTATION math: it never enters the
-/// deterministic simulation or a saved wire format (it only changes the DISTRIBUTION of the plain
-/// <c>Position</c>/<c>YawDegrees</c> floats already written).
+/// is pure (no state, no allocation) and takes an explicit <see cref="SnapConfig"/> so callers stay declarative. This
+/// is host-side presentation math: it never enters the deterministic simulation or a saved wire format (it only
+/// changes the distribution of the plain <c>Position</c>/<c>YawDegrees</c> floats already written).
 /// </summary>
 public static class GridSnap {
     // The fraction a node must be departed before the magnetize band releases to the next node.
@@ -98,7 +97,7 @@ public static class GridSnap {
     /// <param name="intent">The un-snapped integrated cursor (the retained pre-snap intent — the
     /// magnetize-while-dragging source of truth).</param>
     /// <param name="config">The snap configuration.</param>
-    /// <param name="candidateLocalHalfExtents">The MOVED shape's half-extents along the REFERENCE frame's axes (for
+    /// <param name="candidateLocalHalfExtents">The moved shape's half-extents along the reference frame's axes (for
     /// true face-to-face butt-join); unused when there is no reference. Pass <see cref="Vector3.Zero"/> for
     /// center-on-face.</param>
     /// <param name="previousSnapped">The last committed (snapped) value, for the release-band hysteresis; pass

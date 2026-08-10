@@ -7,7 +7,7 @@ namespace Puck.Commands;
 /// <see cref="BindingProfile.Compile"/>) that <see cref="PagedInputBindings.Reload"/> swaps in atomically.
 /// </summary>
 /// <remarks>
-/// Resolution is group-scoped and prefix-deep: within a slot's active group, the page row with the LONGEST chord
+/// Resolution is group-scoped and prefix-deep: within a slot's active group, the page row with the longest chord
 /// that is a press-order prefix of the held modifiers answers the slot's sources (the resting page's empty chord
 /// is a prefix of everything, so it is the fallback), and a command row fires when the held order equals its
 /// chord exactly. Switching the active group is a pointer-level operation on this compiled instance — no
@@ -83,7 +83,7 @@ public sealed class CompiledBindingProfile {
     /// slot's lazily-populated <see cref="RowActivatorTracker"/> array is allocated to.</summary>
     public int ActivatorCount { get; }
 
-    /// <summary>Gets the index of the DEFAULT group — the first chord row's group, the group a fresh slot resolves in.</summary>
+    /// <summary>Gets the index of the default group — the first chord row's group, the group a fresh slot resolves in.</summary>
     public int DefaultGroupIndex => 0;
 
     /// <summary>Gets the group names, in first-declared order (index 0 is the default group).</summary>
@@ -112,7 +112,7 @@ public sealed class CompiledBindingProfile {
         return m_restingRowByGroup[groupIndex];
     }
 
-    /// <summary>Resolves the ACTIVE PAGE row for a group and held-modifier order: the page row with the longest
+    /// <summary>Resolves the active page row for a group and held-modifier order: the page row with the longest
     /// chord that is a press-order prefix of <paramref name="heldOrder"/>, falling back to the group's resting
     /// page. Command rows never answer this — they fire edges, they do not table sources.</summary>
     /// <param name="groupIndex">The active group index.</param>
@@ -191,7 +191,7 @@ public sealed class CompiledBindingProfile {
         );
     }
 
-    /// <summary>Whether a chord is a press-order prefix of a held-modifier order.</summary>
+    /// <summary>Determines whether a chord is a press-order prefix of a held-modifier order.</summary>
     /// <param name="chord">The chord's modifier indices.</param>
     /// <param name="heldOrder">The held modifier indices, in press order.</param>
     internal static bool IsPrefix(ReadOnlySpan<int> chord, ReadOnlySpan<int> heldOrder) {

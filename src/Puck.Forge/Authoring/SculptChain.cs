@@ -3,14 +3,14 @@ using System.Numerics;
 namespace Puck.Forge.Authoring;
 
 /// <summary>
-/// One defined chain's REST geometry, captured once when the chain is defined (<see cref="SculptModel.DefineChain"/>)
-/// and never touched again by solving — only the GOAL moves, and every solve re-derives the live pose from this
-/// frozen rest data. Shapes stay FLAT in <see cref="SculptShape"/> (no parent refs); a chain is purely a LIST of
+/// One defined chain's rest geometry, captured once when the chain is defined (<see cref="SculptModel.DefineChain"/>)
+/// and never touched again by solving — only the goal moves, and every solve re-derives the live pose from this
+/// frozen rest data. Shapes stay flat in <see cref="SculptShape"/> (no parent refs); a chain is purely a list of
 /// shape ids in root→tip order plus the rest-frame data the IK math needs:
 /// <list type="bullet">
-/// <item><description>Joint pivots: the shapes' REST positions, root→tip (joint i is shape i's rest position).</description></item>
+/// <item><description>Joint pivots: the shapes' rest positions, root→tip (joint i is shape i's rest position).</description></item>
 /// <item><description>Bone lengths: consecutive joint distances (Shapes.Count − 1 of them).</description></item>
-/// <item><description>Per-shape rest offset/orientation IN ITS BONE FRAME: since a shape's own authored position may
+/// <item><description>Per-shape rest offset/orientation in its bone frame: since a shape's own authored position may
 /// not sit exactly on the bone, the offset is captured relative to the joint and the shape's rest rotation, so
 /// <see cref="ChainSolver.PoseChain"/> can carry it along as the bone reorients.</description></item>
 /// </list>
@@ -19,14 +19,14 @@ namespace Puck.Forge.Authoring;
 /// </summary>
 /// <param name="Id">The chain's stable id (unique within the model).</param>
 /// <param name="Name">The player-given name (the console/goal-cycling handle); null for an unnamed chain.</param>
-/// <param name="ShapeIds">The member shape ids, ROOT→TIP order (2 for a single bone, 3 for a two-bone limb, N for
+/// <param name="ShapeIds">The member shape ids, root→tip order (2 for a single bone, 3 for a two-bone limb, N for
 /// an N-1-bone spine).</param>
 /// <param name="Kind"><see cref="ChainDocument.KindLimb"/> (exactly 3 shapes / 2 bones, solved by
 /// <see cref="ChainSolver.SolveLimb"/>) or <see cref="ChainDocument.KindSpine"/> (any length ≥ 2, solved by
 /// <see cref="ChainSolver.SolveSpine"/>).</param>
 /// <param name="RestJoints">The rest-pose joint positions, root→tip (length = <see cref="ShapeIds"/>.Count).</param>
 /// <param name="BoneLengths">Consecutive rest-joint distances (length = <see cref="ShapeIds"/>.Count − 1).</param>
-/// <param name="RestOffsets">Each shape's rest position minus ITS joint (its bone's start), in world/rest axes
+/// <param name="RestOffsets">Each shape's rest position minus its joint (its bone's start), in world/rest axes
 /// (length = <see cref="ShapeIds"/>.Count).</param>
 /// <param name="RestOrientations">Each shape's rest orientation (length = <see cref="ShapeIds"/>.Count).</param>
 /// <param name="Goal">The chain's live goal (model space) — the only field a solve reads as "live" input; defaults

@@ -1,0 +1,93 @@
+[
+  {
+    "Id": "mixed-scale.product-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.MixedScaleProduct (internal) — the wrapping one-rounding product of two raws carried at DIFFERENT fixed-point scales, over the full signed range of both factors and every fraction bit count in [0, 64] for each of the three scales",
+        "Against": "Oracles.MixedScaleProduct — the whole product formed in BigInteger at arbitrary width and rounded ONCE against an explicit power-of-two denominator by RoundRationalTiesToEven, which decides the tie by comparing 2r against d. The subject accumulates a sign-plus-UInt128 magnitude and decides the same tie by splitting the discarded bits against a half-unit it forms itself, then wraps the narrowed word; no width, no half-unit and no wrap is shared between the two",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the three fraction bit counts are folded onto [0, 64], so the rounding exponent stays in [-128, 64] and never reaches the shift-count corners (at or past 128 in either direction) where a CLR UInt128 shift would alias modulo 128. Those corners are pinned by mixed-scale.extreme-scale-counts-are-congruent instead, against hand-derived values, because an oracle built from a power-of-two denominator cannot form 2^int.MaxValue",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.checked-product-matches-representability",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryMixedScaleProduct (internal, two factors) — the refuse/succeed verdict AND the returned raw, over the same swept operands as mixed-scale.product-vs-oracle",
+        "Against": "Oracles.MixedScaleProduct's unwrapped representability verdict: the exact rounded product is compared against the signed 64-bit bounds in arbitrary width, where the subject decides the same question from an overflow flag its own left shift raises plus a magnitude-against-limit test. Agreement pins that the checked face declines EXACTLY where the value leaves the carrier — never earlier (a conservative refusal) and never later (a silent wrap)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refusal contract is 'false AND the output at zero', asserted against the SUBJECT directly on every declining draw rather than against the oracle, which could share a defect. Same fold envelope as mixed-scale.product-vs-oracle; shares the mixed-scale domain key with it deliberately, so the wrapping and refusing faces are compared over bit-identical operands",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.triple-product-vs-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryMixedScaleProduct (internal, THREE factors) — the refuse/succeed verdict and the returned raw for a product of three raws at three independent scales, rounded once",
+        "Against": "Oracles.MixedScaleTripleProduct — the triple product formed in BigInteger and rounded once, reporting separately whether the exact product's magnitude stays inside 2^128 and whether the rounded value fits the raw. The subject decides the width question by testing the third factor against UInt128.MaxValue divided by the running pair, an exact test rather than a bit-length estimate; the oracle decides it by comparing the exact magnitude against 2^128 directly",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the subject REFUSES whenever the exact triple product needs more than 128 bits, even where the scaled result would have fitted the raw — three 64-bit factors reach 2^189 and the accumulator is 128 bits wide. That is a declined answer, never a wrong one, and the law models it exactly rather than tolerating it: the expected verdict is (width fits AND value fits), so a subject that widened its refusal or narrowed it would both fail",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.extreme-scale-counts-are-congruent",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PINS THE SHIFT-COUNT CORNERS the swept laws deliberately do not reach, at five hand-derived witnesses. A fraction bit count is an int, so a caller can name a combination whose exponent would wrap in int arithmetic or alias a UInt128 shift count modulo 128. (1) fractionBitsA = fractionBitsB = 64 with fractionBitsOut = 0 shifts right by exactly 128: the largest product two raws form is 2^126, a quarter of the discarded unit, so the correctly rounded result is zero and the checked face must ANSWER it rather than refuse — a masked shift count would instead return the whole magnitude. (2) The same operands at fractionBitsOut = int.MaxValue shift left past the accumulator: the true value is a multiple of 2^64, so the wrapping face is congruent at zero while the checked face refuses. (3) fractionBitsA = int.MinValue drives the exponent to 0 - int.MinValue = 2^31, which stays POSITIVE only because the three counts are combined in long; computed in int it wraps to int.MinValue, turning a left shift into a rounding right shift and answering a different value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

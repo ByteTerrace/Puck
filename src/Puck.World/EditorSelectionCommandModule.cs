@@ -9,19 +9,18 @@ namespace Puck.World;
 /// <summary>
 /// The selection-and-manipulation console surface — the typed twin of every chord act, driven by the
 /// game-studio numeric-entry need. The targeting verb (<c>editor.select</c>) both selects a document row by
-/// section+id AND folds the next/prev proximity cycle and the deselect act onto itself: <c>editor.select
+/// section+id and folds the next/prev proximity cycle and the deselect act onto itself: <c>editor.select
 /// [&lt;section&gt; &lt;id&gt; | next | prev | none]</c> — bound with no argument on the select page's D-pad
 /// Right/Left (a constant Axis1D value picks next/prev) and West (a plain digital press means deselect, the
 /// simplest action, matching a genuinely argless typed line); <c>editor.pick</c> is its crosshair-driven sibling.
 /// The drag verbs (<c>editor.grab</c>/<c>drag</c>/<c>release</c>/<c>cancel</c>/<c>spawn.*</c>) drive the pending-row
-/// preview channel and commit ONE whole-row mutation on the release edge; the discrete verbs (<c>editor.move</c>/
+/// preview channel and commit one whole-row mutation on the release edge; the discrete verbs (<c>editor.move</c>/
 /// <c>place</c>/<c>delete</c>) submit an immediate whole-row mutation per act — <c>editor.move</c> is always an
-/// ABSOLUTE placement; a relative nudge is scripted as a move from a read-back <c>editor.status</c>/<c>world.save</c>
-/// position (there is no relative twin — it was the ledgered stale-read race class: a
-/// second seat's concurrent move between the read and the write raced the delta against a position that could
-/// already be stale by the time it applied). Mutations carry the ACTING SEAT principal, so grant denials land on the
-/// seat that asked. A SEPARATE module from <see cref="EditorCommandModule"/> to keep every class under its analyzer
-/// ceilings.
+/// absolute placement; a relative nudge is scripted as a move from a read-back <c>editor.status</c>/<c>world.save</c>
+/// position (there is no relative twin — a second seat's concurrent move between the read and the write would race
+/// the delta against a position that could already be stale by the time it applied). Mutations carry the acting seat
+/// principal, so grant denials land on the seat that asked. A separate module from <see cref="EditorCommandModule"/>
+/// keeps every class under its analyzer ceilings.
 /// </summary>
 /// <remarks>Verbs that submit a mutation route Simulation (the stdin barrier then serializes a following
 /// <c>world.status</c>/<c>editor.status</c> read-after-write); pure client-state verbs stay Immediate — including
@@ -167,9 +166,8 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
     // The no-arg fold: CommandContext.Source (non-null only for a bound dispatch — see
     // CommandDefinition.WithWireArgs's doctrine comment; Value.Kind is not a safe discriminator once this verb
     // declares Axis1D) distinguishes a bound row from a typed no-arg line. Bound: axis>0 next, axis<0 prev, axis==0
-    // deselect (the West chord's own constant). Typed (Source null): deselect too — preserving the RETIRED
-    // the typed no-arg ability exactly (it always succeeds and clears the selection; unlike
-    // editor.camera's toggle, this fold has a real prior ability to preserve here, not merely a redirect error).
+    // deselect (the West chord's own constant). Typed (Source null): deselect too — it always succeeds and clears
+    // the selection.
     private CommandResult NoArgSelectHandler(CommandContext context) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: WireArgs.Empty, at: 0, verb: "editor.select");
 

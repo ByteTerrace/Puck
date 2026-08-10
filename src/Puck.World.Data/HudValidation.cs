@@ -64,10 +64,10 @@ internal enum HudRefusal {
 /// <summary>
 /// Row-level HUD validation shared by <see cref="WorldDefinitionValidator"/> (world-scope panels, capped by
 /// <see cref="WorldHudCapacity.MaxElementsPerPanel"/>) and the identity-owned world validator (the one
-/// seat-scope panel a profile authors, capped by <see cref="WorldHudCapacity.MaxElementsPerSeatPanel"/>) — the SAME
+/// seat-scope panel a profile authors, capped by <see cref="WorldHudCapacity.MaxElementsPerSeatPanel"/>) — the same
 /// rect-sanity, element-id-uniqueness, and closed-binding-vocabulary checks apply at both scopes, so this is the one
-/// place they can never drift apart. Every check throws an ENUM-REASONED <see cref="HudValidationException"/> at its
-/// FIRST violation (the <c>sdf.decode</c>/<c>SdfRefusal</c> discipline).
+/// place they can never drift apart. Every check throws an enum-reasoned <see cref="HudValidationException"/> at its
+/// first violation (the <c>sdf.decode</c>/<c>SdfRefusal</c> discipline).
 /// </summary>
 internal static class HudRowValidation {
     /// <summary>Validates a normalized rect: every component finite, width/height strictly positive.</summary>
@@ -86,11 +86,11 @@ internal static class HudRowValidation {
 
     /// <summary>Validates one element row: a required id unique within <paramref name="elementIds"/>, a valid rect,
     /// and (when present) a binding token in the closed <see cref="HudBindingVocabulary"/> — for a
-    /// <c>state.&lt;row&gt;</c> token, ADDITIONALLY that the row resolves against <paramref name="stateRows"/>
+    /// <c>state.&lt;row&gt;</c> token, additionally that the row resolves against <paramref name="stateRows"/>
     /// (world scope only carries a real map; seat scope passes <see langword="null"/>, so every <c>state.*</c> token
     /// refuses there — a player-profile document is authored independent of any particular world and can never know
-    /// which state rows one will declare); for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token, ADDITIONALLY that the
-    /// key resolves against that row's OWN authored cells — a binding naming a row that exists but no such cell
+    /// which state rows one will declare); for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token, additionally that the
+    /// key resolves against that row's own authored cells — a binding naming a row that exists but no such cell
     /// refuses exactly like one naming no row at all, never a silently blank panel.</summary>
     /// <param name="element">The element to validate.</param>
     /// <param name="path">The dotted path to name in a thrown message.</param>
@@ -177,7 +177,7 @@ internal static class HudRowValidation {
 /// <summary>Thrown by <see cref="WorldDefinitionValidator"/>'s HUD checks, naming exactly one <see cref="HudRefusal"/>
 /// reason. <see cref="WorldDefinitionValidator.Validate"/> catches this and folds <see cref="Exception.Message"/> into
 /// the whole-document error list — the enum-reasoned throw and the aggregate error list are not in tension: the throw
-/// is HOW the section decides, the catch is how it reports alongside every other section's findings.</summary>
+/// is how the section decides, the catch is how it reports alongside every other section's findings.</summary>
 /// <param name="reason">Which of this door's finite refusal reasons fired.</param>
 /// <param name="message">The human-readable, refusal-named message.</param>
 internal sealed class HudValidationException(HudRefusal reason, string message) : Exception(message) {

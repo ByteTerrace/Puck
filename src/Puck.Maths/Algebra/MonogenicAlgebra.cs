@@ -28,7 +28,7 @@ namespace Puck.Maths;
 /// <para>
 /// Equality follows that split exactly, and is structural on both sides of it rather than the array reference identity
 /// the backing vectors would otherwise supply: a descriptor is its modulus tail, so two descriptors built from equal
-/// tails are equal; an <see cref="Element"/> or <see cref="Projective"/> is its coordinate vector ALONE, carrying no
+/// tails are equal; an <see cref="Element"/> or <see cref="Projective"/> is its coordinate vector alone, carrying no
 /// modulus, so two of them agree exactly when their coordinates agree — which is what the reinterpretation contract
 /// above already lets a receiver assume. A default value on either side equals only another default. Hashing folds with
 /// <see cref="Fnv1aHash"/> rather than <see cref="System.HashCode"/>, whose seed is randomized per process, so a digest
@@ -40,8 +40,8 @@ namespace Puck.Maths;
 /// ideal expression, wrapped to the raw carrier — there is no degree cliff and no coefficient-magnitude cliff.
 /// <see cref="CompanionPower"/> inherits that discipline per step rather than per result: it is square-and-multiply over
 /// the one-rounding <see cref="Multiply"/>, so its coordinates carry a chain of roundings whose length grows with the
-/// exponent's bit count. <b>Degree 2 IS the quadratic algebra</b>: the tail <c>[m_0, m_1]</c> is the relation
-/// <c>(P, Q) = (−m_1, −m_0)</c>, so the whole degree-2 surface DELEGATES to a stored
+/// exponent's bit count. <b>Degree 2 is the quadratic algebra</b>: the tail <c>[m_0, m_1]</c> is the relation
+/// <c>(P, Q) = (−m_1, −m_0)</c>, so the whole degree-2 surface delegates to a stored
 /// <see cref="QuadraticAlgebra{TScalar}"/> twin, making the discipline (and the bit-identity with it) structural rather
 /// than a reproduced kernel. A tail the carrier cannot negate exactly — a coefficient at the house carrier's raw
 /// <see cref="long.MinValue"/>, which negates to itself — builds no twin and runs the general lanes below instead, the
@@ -149,7 +149,7 @@ public readonly struct MonogenicAlgebra<TScalar> : IEquatable<MonogenicAlgebra<T
         /// <param name="other">The element to compare against.</param>
         /// <returns><see langword="true"/> when both carry equal-length, coordinate-wise equal vectors, or both are
         /// default; otherwise <see langword="false"/>.</returns>
-        /// <remarks>An element's identity is its coordinate vector ALONE — the modulus is deliberately no part of it.
+        /// <remarks>An element's identity is its coordinate vector alone — the modulus is deliberately no part of it.
         /// An element stores no modulus to compare, and the receiver-affinity contract is exactly that an
         /// equal-dimensional vector is reinterpreted under whichever algebra consumes it, so two elements carrying the
         /// same coordinates are the same value however they were built. Modulus identity lives on the descriptor,
@@ -239,7 +239,7 @@ public readonly struct MonogenicAlgebra<TScalar> : IEquatable<MonogenicAlgebra<T
         /// <param name="other">The window to compare against.</param>
         /// <returns><see langword="true"/> when both carry equal-length, coordinate-wise equal vectors, or both are
         /// default; otherwise <see langword="false"/>.</returns>
-        /// <remarks>A window's identity is its coordinate vector ALONE, for the same reason
+        /// <remarks>A window's identity is its coordinate vector alone, for the same reason
         /// <see cref="Element.Equals(Element)"/> gives: it stores no modulus, and a receiver deliberately reinterprets
         /// an equal-dimensional window under its own.</remarks>
         public bool Equals(Projective other) =>
@@ -297,9 +297,9 @@ public readonly struct MonogenicAlgebra<TScalar> : IEquatable<MonogenicAlgebra<T
     /// irreducible modulus. Every tail defines a valid unital rank-<c>n</c> algebra over the carrier, so nothing but the
     /// empty tail is rejected; whether the result is a field, a product of rings, or carries nilpotents is read from
     /// <see cref="CharacteristicDiscriminant"/> rather than enforced here.
-    /// <para>Over the house scalar <see cref="FixedQ4816"/> the fused one-rounding discipline is UNCONDITIONAL — every
+    /// <para>Over the house scalar <see cref="FixedQ4816"/> the fused one-rounding discipline is unconditional — every
     /// returned component of <see cref="Multiply"/>, <see cref="Norm"/>, <see cref="Trace"/>, and
-    /// <see cref="ProjectiveStep"/> is ONE ties-to-even rounding of the exact rational value of the ideal expression,
+    /// <see cref="ProjectiveStep"/> is one ties-to-even rounding of the exact rational value of the ideal expression,
     /// wrapped to the raw carrier, at every degree <c>n ≥ 2</c> and every coefficient magnitude; the
     /// <see cref="CompanionPower"/> they drive is square-and-multiply over that <see cref="Multiply"/>, so it rounds once
     /// per step rather than once per result.
@@ -747,7 +747,7 @@ public readonly struct MonogenicAlgebra<TScalar> : IEquatable<MonogenicAlgebra<T
     /// <see langword="false"/>.</returns>
     /// <remarks>The modulus tail is the whole of a descriptor's identity: the degree is its length, and the lane
     /// classification and degree-2 twin are pure functions of its contents, so descriptors built from equal tails
-    /// compute identical results and are interchangeable. Comparing the tail ARRAY would be reference identity —
+    /// compute identical results and are interchangeable. Comparing the tail array would be reference identity —
     /// every <see cref="Create"/> call copies its span, so no two descriptors would ever be equal.</remarks>
     public bool Equals(MonogenicAlgebra<TScalar> other) =>
         VectorsEqual(left: _modulus, right: other._modulus);

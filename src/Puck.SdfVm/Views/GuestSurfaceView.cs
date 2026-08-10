@@ -3,8 +3,8 @@ using System.Numerics;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// A screen source that samples SOMEONE ELSE'S already-produced image handle — the shape of a hosted guest's raw
-/// framebuffer (a booted cabinet's emulated machine), but ZERO emulator references: this type knows nothing beyond
+/// A screen source that samples someone else's already-produced image handle — the shape of a hosted guest's raw
+/// framebuffer (a booted cabinet's emulated machine), but zero emulator references: this type knows nothing beyond
 /// "call this delegate, get a handle." A CPU-drawn presentation feed (a procedural face, a console-mirror CRT) fits
 /// the same shape (see <see cref="ViewStack"/>'s remarks on <see cref="IViewContent.IsBudgeted"/>) and may register
 /// as one too, exactly as legitimately as a genuine hosted guest.

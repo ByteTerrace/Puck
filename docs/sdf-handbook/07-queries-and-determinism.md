@@ -21,7 +21,7 @@ to have resident that frame. None of that is acceptable for code that has to
 produce the *same* answer on every machine, every time.
 
 `IWorldQuery` is the seam that keeps those worlds apart. It is fully
-fixed-point (`FixedQ4816`/`FixedVector3`/`WorldCoord3`) end to end, and every
+fixed-point (`FixedQ4816`/`FixedVector3`/`FixedPosition`) end to end, and every
 method is synchronous — both implementations that exist today are cheap
 enough per call that no async plumbing is warranted.
 
@@ -31,11 +31,11 @@ enough per call that no async plumbing is warranted.
 public interface IWorldQuery {
     QueryCapabilities Capabilities { get; }
 
-    bool Raycast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
-    bool SphereCast(WorldCoord3 origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit);
-    bool Overlap(WorldCoord3 center, FixedQ4816 radius);
-    bool TryGroundHeight(WorldCoord3 position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY);
-    bool LineOfSight(WorldCoord3 from, WorldCoord3 to);
+    bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
+    bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit);
+    bool Overlap(FixedPosition center, FixedQ4816 radius);
+    bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY);
+    bool LineOfSight(FixedPosition from, FixedPosition to);
 }
 ```
 
@@ -130,7 +130,7 @@ fixed-point; presentation is float, and always has been.** The distinction
 is not "old code is fixed, new code is float" — it is a permanent boundary.
 Anything that decides what happens in the world — physics, gameplay
 outcomes, anything a query like `TryGroundHeight` feeds back into a
-decision — must be `FixedQ4816`/`FixedVector3`/`WorldCoord3`, with no
+decision — must be `FixedQ4816`/`FixedVector3`/`FixedPosition`, with no
 wall-clock reads and no unseeded randomness. Anything that only decides how
 something is *shown* — a camera's eased transition, an anchor's published
 position, a shading tweak — was never required to be fixed-point,
@@ -167,8 +167,8 @@ separate interface answers a question one level more abstract:
 ```csharp
 public interface IFieldEvaluator {
     FieldEvaluatorCapabilities Capabilities { get; }
-    bool TryDistance(WorldCoord3 position, out FixedQ4816 distance, out int material);
-    bool TryFieldGradient(WorldCoord3 position, out FixedVector3 gradient);
+    bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material);
+    bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient);
 }
 ```
 

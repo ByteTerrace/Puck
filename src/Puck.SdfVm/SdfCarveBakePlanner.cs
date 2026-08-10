@@ -4,14 +4,14 @@ using Puck.SdfVm.Debug;
 
 namespace Puck.SdfVm;
 
-/// <summary>The narrow engine-side seam the <see cref="SdfCarveBakePlanner"/> drives (carve-bake plan §3): request a
+/// <summary>The narrow engine-side seam the <see cref="SdfCarveBakePlanner"/> drives: request a
 /// sliced background bake into a pool slot, poll a slot's state, and ask whether the engine even owns a pool. A
-/// <see cref="SdfWorldEngine"/> IS this service (its <see cref="SdfWorldEngine.RequestBrickBake"/>/
+/// <see cref="SdfWorldEngine"/> is this service (its <see cref="SdfWorldEngine.RequestBrickBake"/>/
 /// <see cref="SdfWorldEngine.GetBrickState"/> match the shape), so the planner reaches the engine through this
-/// three-member surface without naming the concrete engine type — the poll-each-produced-frame contract the plan's
-/// §3 describes with "no callbacks, no cross-thread seams".</summary>
+/// three-member surface without naming the concrete engine type — a poll-each-produced-frame contract with no
+/// callbacks and no cross-thread seams.</summary>
 public interface ISdfBrickBakeService {
-    /// <summary>Whether this engine provisions a brick pool at all (its <c>BrickPoolVoxelCapacity</c> was non-zero).
+    /// <summary>Gets a value indicating whether this engine provisions a brick pool at all (its <c>BrickPoolVoxelCapacity</c> was non-zero).
     /// A pool-less engine cannot bake, so the planner never proposes one — it emits every carve analytically and the
     /// scene renders exactly as it does today.</summary>
     bool BrickBakeAvailable { get; }
@@ -35,12 +35,12 @@ public interface ISdfBrickBakeService {
 /// that bin as ONE <see cref="SdfShapeType.SampledRegion"/> instance the kernels sample O(1) instead of its dozens/
 /// hundreds of analytic subtraction instances. An in-flight or freshly edited cluster stays fully analytic; a bin
 /// hands off only when its bake reaches <see cref="BrickBakeState.Ready"/>, and hands back the instant a carve inside
-/// its bounds is added or removed (per-region invalidation, the Dreams "recompute only the touched region" note).
+/// its bounds is added or removed (per-region invalidation: only the touched region recomputes).
 /// <para>
-/// The planner is the representation-of-record's cache manager, NOT a new representation: deleting every brick (turn
-/// the switch <see cref="Enabled"/> off) reproduces the identical analytic scene, slower. A brick holds ONLY the
+/// The planner is the representation-of-record's cache manager, not a new representation: deleting every brick (turn
+/// the switch <see cref="Enabled"/> off) reproduces the identical analytic scene, slower. A brick holds only the
 /// settled hard-Subtraction carve union; smooth carves and sub-<see cref="MinCarveVoxelRadius"/>-voxel carves always
-/// stay analytic (plan §4). Two seams consume it: the interactive SDF-debug carve pool (settle
+/// stay analytic. Two seams consume it: the interactive SDF-debug carve pool (settle
 /// <see cref="DefaultSettleFrames"/>) and the <c>sdf.carves</c> bench workload (settle 0 — immediate, so the warm
 /// window absorbs the bake and the sampled window measures the baked steady state).
 /// </para>
@@ -73,9 +73,9 @@ public sealed class SdfCarveBakePlanner {
     /// membership change (plan §4 — 120 ≈ 2 s at 60 fps). The bench adapter and <c>sdf.bake now</c> use 0.</summary>
     public const int DefaultSettleFrames = 120;
 
-    // λ = √3 folded into the STORED brick values (plan §1's step-safety contract): the trilinear interpolant of c/λ is
-    // 1-Lipschitz, so a brick applies NO stepScale tax. The bake writes c·InvLambda; the outside-box boundary floor is
-    // margin·InvLambda. KEEP IN SYNC with the √3 the sdf-brick-bake.comp baker and sdfSampledRegion assume.
+    // λ = √3 folded into the STORED brick values: the trilinear interpolant of c/λ is 1-Lipschitz, so a brick applies
+    // NO stepScale tax. The bake writes c·InvLambda; the outside-box boundary floor is margin·InvLambda. KEEP IN SYNC
+    // with the √3 the sdf-brick-bake.comp baker and sdfSampledRegion assume.
     private const float InvLambda = 0.5773502691896258f;   // 1/√3 (λ = √3)
 
     // The per-slot request-buffer carve ceiling (KEEP IN SYNC with SdfWorldEngine.MaxBrickCarvesPerBake). A bin holding
@@ -83,14 +83,13 @@ public sealed class SdfCarveBakePlanner {
     // 4096-carve cap even if every carve lands in one bin, but the guard keeps the planner total.
     private const int MaxCarvesPerBrick = 4096;
 
-    // THE PROCESS-WIDE FEATURE GATE (plan §5). A single static flag every planner instance consults — the interactive
-    // debug pool AND the bench's carves workload — so the one `sdf.carve-bake` switch (BenchInstaller) reaches every
-    // planner without any single frame source owning them all (the GpuTimingControl.Shared static-control precedent).
-    // Enabled by default: dense analytic carve clusters benefit from the sampled-region cache.
-    // subtraction instances bake to ONE SampledRegion brick, collapsing the GPU frame 120 ms → 3.31 ms (beam
-    // 7.7 → 0.37 ms, views 111 → 2.9 ms) at native/shadows-on, so the recommended demo pairing (carve-bake ON,
-    // shadow-proxy OFF) ships on. An explicit `sdf.carve-bake off` still emits analytic, BIT-IDENTICAL to pre-arc —
-    // and deleting every brick reproduces the identical scene (the cache-not-representation contract, plan §1).
+    // THE PROCESS-WIDE FEATURE GATE. A single static flag every planner instance consults — the interactive debug pool
+    // AND the bench's carves workload — so one `sdf.carve-bake` switch (BenchInstaller) reaches every planner without
+    // any single frame source owning them all (the GpuTimingControl.Shared static-control precedent). Enabled by
+    // default: a dense cluster of many small hard-subtraction carves bakes to ONE SampledRegion brick, so the
+    // primary/shadow/AO marches stop paying per-carve cost. An explicit `sdf.carve-bake off` still emits analytic,
+    // BIT-IDENTICAL to every carve staying unbaked — and deleting every brick reproduces the identical scene (bricks
+    // are a cache, never the representation).
     private static volatile bool s_enabled = true;
 
     /// <summary>The process-wide carve-bake feature gate (plan §5). Off (the default) makes every planner emit analytic
@@ -143,7 +142,7 @@ public sealed class SdfCarveBakePlanner {
         m_settleFrames = Math.Max(val1: 0, val2: settleFrames);
     }
 
-    /// <summary>Advances the planner one produced frame against the current carve list (plan §3/§4): re-bins, counts
+    /// <summary>Advances the planner one produced frame against the current carve list: re-bins, counts
     /// quiet frames, polls bake states, requests newly-settled bakes, and adopts <see cref="BrickBakeState.Ready"/>
     /// bins. Off (<see cref="Enabled"/> false, or a pool-less engine) it releases any adopted bins back to analytic.
     /// Returns <see langword="true"/> when the emit plan changed, so the caller bumps its content revision to force the
@@ -169,7 +168,7 @@ public sealed class SdfCarveBakePlanner {
         m_lastRevision = carveRevision;
 
         // 1. Accumulate this frame's BAKEABLE membership per cell (hard subtraction, radius ≥ the fidelity floor).
-        //    Smooth and sub-4-voxel carves are excluded here — they always stay analytic (plan §4).
+        //    Smooth and sub-4-voxel carves are excluded here — they always stay analytic.
         m_scratch.Clear();
 
         var minRadius = (MinCarveVoxelRadius * (BinEdge / SdfBrickPoolLayout.BrickDim));
@@ -209,7 +208,7 @@ public sealed class SdfCarveBakePlanner {
             var eligible = ((accum.Count >= MinHardCarvesToBake) && (accum.Count <= MaxCarvesPerBrick));
 
             // INVALIDATION: a baked/baking bin whose membership no longer matches what it baked reverts to analytic
-            // (re-emitted this same rebuild) and re-settles from scratch — the per-region invalidation of plan §3/§4.
+            // (re-emitted this same rebuild) and re-settles from scratch.
             if ((bin.Phase != BinPhase.Analytic) && (signature != bin.BakeSignature)) {
                 ReleaseSlot(bin: bin);
                 bin.Phase = BinPhase.Analytic;
@@ -316,7 +315,7 @@ public sealed class SdfCarveBakePlanner {
         }
     }
 
-    /// <summary>Folds the planner's WORST CASE into a capacity probe (plan §4): <see cref="SdfBrickPoolLayout.MaxBricks"/>
+    /// <summary>Folds the planner's worst case into a capacity probe: <see cref="SdfBrickPoolLayout.MaxBricks"/>
     /// full-resolution <c>SampledRegion</c> instances — so a frozen envelope reserves room for every slot being baked
     /// on top of a full analytic carve pool (the worst mixed case). Never rendered; static because the worst case is
     /// pool-shaped, not instance-state.</summary>
@@ -398,7 +397,7 @@ public sealed class SdfCarveBakePlanner {
         }
 
         // Brick box = the members' tight AABB grown by margin m = maxRadius + 2h, so every carve surface sits ≥ m
-        // inside the box and the zero set never touches a face (plan §1). The cubic cell is h, enlarged only if the box
+        // inside the box and the zero set never touches a face. The cubic cell is h, enlarged only if the box
         // would otherwise exceed BrickDim voxels on its longest axis (keeps dims ≤ BrickDim; fidelity degrades a hair).
         var h = (BinEdge / SdfBrickPoolLayout.BrickDim);
         var margin = (accum.MaxRadius + (2f * h));
@@ -449,8 +448,8 @@ public sealed class SdfCarveBakePlanner {
     }
 
     // Finds a free slot, or evicts the least-recently-adopted BRICK bin (LRU) when all slots are taken — the evicted bin
-    // reverts to analytic (plan §4). Returns -1 when every slot is mid-bake (no adopted brick to evict) — the caller
-    // retries next frame. With the demo's defaults a 9th eligible bin never arises, so eviction stays theoretical.
+    // reverts to analytic. Returns -1 when every slot is mid-bake (no adopted brick to evict) — the caller retries
+    // next frame.
     private int AcquireSlot(Bin forBin) {
         for (var slot = 0; (slot < m_slotOwners.Length); slot++) {
             if (m_slotOwners[slot] is null) {
@@ -485,7 +484,7 @@ public sealed class SdfCarveBakePlanner {
         return ((victim == forBin) ? -1 : victimSlot);
     }
 
-    // Emits one adopted bin as a single SampledRegion subtraction instance (plan §2). The bound is the box circumsphere
+    // Emits one adopted bin as a single SampledRegion subtraction instance. The bound is the box circumsphere
     // — a real cull bound, so PackInstances/the grid/beam treat it as any Subtraction-blend instance. The lane values
     // come from the bin's stored geometry (what the bake wrote), never recomputed.
     private static void EmitBrick(SdfProgramBuilder builder, Bin bin, int slot, int material) {

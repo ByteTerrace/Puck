@@ -12,20 +12,20 @@ namespace Puck.Maths;
 /// It contributes no arithmetic and no product code. Everything here is a lookup or a bounded closure over
 /// <see cref="SymmetryLattice.Reflect(int, int)"/>, and its two outputs — <see cref="BondMatrix"/> and
 /// <see cref="TryEnumerateGroup"/> — are exactly the argument tuples <c>Presentations.Coxeter</c> and
-/// <c>Presentations.PermutationGroup</c> take. A reflection world therefore enters the presented algebra as MEASURED
+/// <c>Presentations.PermutationGroup</c> take. A reflection world therefore enters the presented algebra as measured
 /// data rather than as a hand-written table, which is what makes the presentation's relations a statement about the
 /// lattice rather than a claim beside it.
 /// </para>
 /// <para>
 /// <b>Words act on the right.</b> <see cref="Apply"/> applies a word's letters left to right, so a word is the product
 /// in the presentation's own order: <c>node · (u·v)</c> is <c>(node · u) · v</c>. The word that reads every mirror once
-/// in DESCENDING order is the lattice's own <see cref="SymmetryLattice.Cycle(int)"/>.
+/// in descending order is the lattice's own <see cref="SymmetryLattice.Cycle(int)"/>.
 /// </para>
 /// <para>
-/// <b>The group enumeration is a LIMIT and never a promise.</b> The whole lattice symmetry has order 696,729,600, which
+/// <b>The group enumeration is a limit and never a promise.</b> The whole lattice symmetry has order 696,729,600, which
 /// no enumeration of any budget reaches, so <see cref="TryEnumerateGroup"/> takes a search limit and refuses with
 /// <see cref="ClosureOutcome.SearchLimitReached"/> rather than running out of memory or time. The limit bounds the
-/// memory as well as the work, because one element is one permutation of the point set. What does NOT shrink is the
+/// memory as well as the work, because one element is one permutation of the point set. What does not shrink is the
 /// attempt: every proper sub-system of the eight simple mirrors that fits a budget is enumerated exactly.
 /// </para>
 /// </remarks>

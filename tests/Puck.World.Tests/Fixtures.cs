@@ -2,6 +2,8 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json.Nodes;
 
+using Xunit;
+
 using Puck.Commands;
 using Puck.Forge.Authoring;
 using Puck.Hosting;
@@ -73,6 +75,37 @@ internal static class Fixtures {
         new(Id: "seat-4", Position: new Vector3(x: 2f, y: 0f, z: 2f)),
     ];
 
+    /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "wander"
+    /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and
+    /// any other suite file's own custom kit — see <see cref="TransferAbortKitWideningLawTests"/>'s vehicle/swim
+    /// kits). Values mirror the shipped worlds' own "traveler"-style kit; none of them is exercised by any of these
+    /// suites' laws — WorldPopulation.SeedSeatWander unconditionally resolves this producer on the assigned kit's
+    /// row regardless of whether anything actually wanders (see <see cref="BuildKits"/>'s own remarks on why the
+    /// row must exist at all).</summary>
+    public static BodyProgramParameters TravelerWanderParameters { get; } = new(
+        Scalars: new Dictionary<string, float> {
+            ["forward"] = 0.375f,
+            ["softRadius"] = 45f,
+            ["weaveAmplitude"] = 0.5f,
+            ["inwardGain"] = 1.6f,
+            ["turnScale"] = 2.5f,
+            ["weaveFrequencyBase"] = 0.3f,
+            ["weaveFrequencyRange"] = 0.2f,
+            ["altitudeGain"] = 0.32f,
+            ["activityRateBase"] = 2.2f,
+            ["activityRateRange"] = 1.3f,
+            ["strafeWave"] = 0f,
+            ["turnWave"] = 0f,
+            ["upWave"] = 0f,
+            ["pitchWave"] = 0f,
+            ["rollTurn"] = 0f,
+            ["pressThreshold"] = 0f,
+            ["altitudeBase"] = 0f,
+            ["altitudeRange"] = 0f,
+        },
+        Channels: new Dictionary<string, string>()
+    );
+
     /// <summary>The one locomotion kit every fixture document declares — <see cref="BuildDocument"/> passes
     /// <see langword="null"/> (no law here needs a body collider); <see cref="BuildGradientUpDocument"/> is the
     /// ONE caller that supplies one, so every other law's compiled kit table is untouched byte-for-byte.</summary>
@@ -96,29 +129,7 @@ internal static class Fixtures {
             // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
             // shipped worlds' own "traveler"-style kit; none of them is exercised by this suite's laws.
             Producers: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = new BodyProgramParameters(
-                    Scalars: new Dictionary<string, float> {
-                        ["forward"] = 0.375f,
-                        ["softRadius"] = 45f,
-                        ["weaveAmplitude"] = 0.5f,
-                        ["inwardGain"] = 1.6f,
-                        ["turnScale"] = 2.5f,
-                        ["weaveFrequencyBase"] = 0.3f,
-                        ["weaveFrequencyRange"] = 0.2f,
-                        ["altitudeGain"] = 0.32f,
-                        ["activityRateBase"] = 2.2f,
-                        ["activityRateRange"] = 1.3f,
-                        ["strafeWave"] = 0f,
-                        ["turnWave"] = 0f,
-                        ["upWave"] = 0f,
-                        ["pitchWave"] = 0f,
-                        ["rollTurn"] = 0f,
-                        ["pressThreshold"] = 0f,
-                        ["altitudeBase"] = 0f,
-                        ["altitudeRange"] = 0f,
-                    },
-                    Channels: new Dictionary<string, string>()
-                ),
+                ["wander"] = TravelerWanderParameters,
             },
             Actions: new Dictionary<string, ActionSpec>(),
             Collider: seatCollider
@@ -199,7 +210,7 @@ internal static class Fixtures {
             // suite's laws exercise simulated/peer bodies. Pinning capacity to the seat count makes that loop empty
             // (LocalSeatCount..Capacity is 4..4) rather than declaring an unused producer just to satisfy it.
             Capacity: WorldPopulationLimits.LocalSeatCount,
-            ReconnectGraceTicks: 720
+            ReconnectGraceSeconds: 3.0f
         );
 
         var playerDefaults = new WorldPlayerDefaults(
@@ -286,7 +297,9 @@ internal static class Fixtures {
             Grants: [],
             Hud: WorldHudSection.Default,
             State: [],
-            InputHold: new WorldInputHoldSettings(CeilingTicks: 120, LowerAfterTicks: 60, DefaultTicks: 0, EqualizeByDefault: true, Participants: [])
+            // Authored seconds now (WorldDefinition.InputHold is the AUTHORED shape) — 120/60/0 ticks at the
+            // fixture's default 240 Hz (no Simulation section authored) is 0.5/0.25/0 seconds.
+            InputHold: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, LowerAfterSeconds: 0.25f, DefaultSeconds: 0f, EqualizeByDefault: true, Participants: [])
         );
     }
 
@@ -476,6 +489,33 @@ internal static class Fixtures {
     /// 240 Hz simulation rate, computed once and reused so every <see cref="WorldFixture.Step"/> call advances by
     /// the identical amount.</summary>
     public static ulong StepTicks { get; } = EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
+
+    /// <summary>Skips the calling law, by name, when <see cref="WorldReplayTape"/>'s REAL on-disk
+    /// <c>Replays</c> directory (under <see cref="WorldStateRoot.Resolve"/> — this test project has no seam to
+    /// redirect it, and <c>WorldStateRoot.Override</c> can only ever be applied ONCE per process, so no individual
+    /// law may safely pull that lever) is not writable in the CURRENT environment. Adversarial-review G6's own
+    /// finding: four replay laws failed in the reviewer's read-only sandbox not because the fix was wrong but
+    /// because nothing distinguished "the environment cannot write here" from "the code is broken" — every law that
+    /// calls <see cref="WorldReplayTape.StopRecording"/> (which persists unconditionally) should call this FIRST so
+    /// a genuinely read-only environment reads as a skip with a named reason, never a red law.</summary>
+    public static void SkipIfReplayDirectoryUnwritable() {
+        string probePath;
+
+        try {
+            probePath = Path.Combine(WorldReplayTape.Directory(), $".write-probe-{Guid.NewGuid():N}");
+
+            File.WriteAllBytes(path: probePath, bytes: [0]);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            Assert.Skip(reason: $"the Replays directory is not writable in this environment ({exception.GetType().Name}: {exception.Message}) — this law needs a real on-disk write to prove anything");
+
+            return;
+        }
+
+        try {
+            File.Delete(path: probePath);
+        } catch (IOException) {
+        }
+    }
 }
 
 /// <summary>A fresh, disposable <see cref="WorldServer"/> plus the resources its construction owns
@@ -485,6 +525,7 @@ internal sealed class WorldFixture : IDisposable {
     private readonly WorldMachineHost m_machines;
     private readonly string m_stateDirectory;
     private ulong m_tick;
+    private ulong m_elapsedTicks;
 
     internal WorldFixture(WorldServer server, WorldMachineHost machines, string stateDirectory) {
         Server = server;
@@ -500,8 +541,10 @@ internal sealed class WorldFixture : IDisposable {
     /// drain FIFO at the tick boundary, compose, revalidate, swap). Mirrors the composition root's own
     /// <c>WorldInstanceHost</c>'s per-instance tick counter (out of reach here — <c>Puck.World</c> is not
     /// referenced by this project).</summary>
-    public void Step() {
-        var context = new FixedStepContext(Tick: m_tick, ElapsedTicks: ((m_tick + 1UL) * Fixtures.StepTicks), StepTicks: Fixtures.StepTicks);
+    public void Step(ulong? stepTicks = null) {
+        var width = (stepTicks ?? Fixtures.StepTicks);
+        m_elapsedTicks = checked(m_elapsedTicks + width);
+        var context = new FixedStepContext(Tick: m_tick, ElapsedTicks: m_elapsedTicks, StepTicks: width);
 
         Server.Step(context: in context);
         m_tick++;

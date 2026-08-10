@@ -3,23 +3,33 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>
-/// The overlay-UI verb surface: <c>world.screenshot</c> (arm a one-shot PNG capture of the NEXT composed frame,
+/// The overlay-UI verb surface: <c>world.screenshot</c> (arm a one-shot PNG capture of the next composed frame,
 /// through the outermost render decorator, so the readback shows exactly what the player sees — overlay included)
-/// and <c>world.console</c> (show/hide the on-screen console mirror panel). A SEPARATE module from
+/// and <c>world.console</c> (show/hide the on-screen console mirror panel). A separate module from
 /// <see cref="WorldCommandModule"/> to keep every class under its analyzer ceilings. The drawn cursor's live
 /// read-back is <c>world.view.pointer</c> (<see cref="WorldViewCommandModule"/> — the <c>world.view.orbit</c>
 /// family, per-seat live presentation state).
 /// </summary>
-/// <remarks><c>world.screenshot</c> ARMS work; it does not do it. The file appears when a frame composes, which is
+/// <remarks><c>world.screenshot</c> arms work; it does not do it. The file appears when a frame composes, which is
 /// after this handler has returned and may be never — the run can end first, and a second request armed inside the
-/// same frame replaces the first. The echo therefore says PENDING and names the path as a request, never as a file
+/// same frame replaces the first. The echo therefore says pending and names the path as a request, never as a file
 /// that exists; the render chain prints the resolved path when the frame lands (<c>[capture] unified overlay -&gt;
 /// …</c> from the overlay decorator, <c>[debug] captured frame N -&gt; …</c> from the engine node beneath it); a
 /// request replaced before it was served is refused out loud, naming the path that will never be written; and
 /// <see cref="WorldPostBuildWiring"/> reports anything still outstanding when the run ends. A caller reading either
 /// stream can always tell "written" from "never happened" — which is the whole point, since a scripted caller that
-/// cannot is a caller being lied to.</remarks>
-internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldConsoleMirror consoleMirror) : ICommandModule {
+/// cannot is a caller being lied to.
+/// <para>Registered in every boot shape for command-vocabulary parity (the document validators must see the same
+/// committed vocabulary in every boot shape — <c>world.console</c> is a stock play-wheel sector every shipped world
+/// commits, and Play's own overlay is what every dungeon's copies it from). This one matters beyond ordinary parity:
+/// the console is the control plane (process stdin drives it; the on-screen panel is only a mirror of that pipe), so
+/// a headless boot that left <c>world.console</c> unregistered would refuse a world for authoring a wheel sector
+/// that opens the very mirror of the pipe driving it — an absurd refusal for a boot shape that has no on-screen
+/// panel to toggle in the first place. Both dependencies are optional (default <see langword="null"/> — DI supplies
+/// the default rather than throwing when <see cref="WorldBootComposition.AddWorldPresentation"/> never ran) and
+/// every handler refuses by name at use, never at registration or validation, when the dependency it needs is
+/// absent.</para></remarks>
+internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldConsoleMirror? consoleMirror = null) : ICommandModule {
     /// <summary>The console-mirror toggle verb name — bound to the backtick key by
     /// <see cref="WorldDefaultBindings"/>.</summary>
     public const string ConsoleCommand = "world.console";
@@ -33,6 +43,10 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldCo
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return CommandResult.Error(output: "[world.screenshot: a target path is required — world.screenshot <path.png>]");
+                }
+
+                if (renderProbe is null) {
+                    return CommandResult.Error(output: "[world.screenshot: requires a windowed boot — headless has no renderer to capture]");
                 }
 
                 if (renderProbe.Render is not { } render) {
@@ -68,6 +82,10 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe renderProbe, WorldCo
             name: ConsoleCommand,
             description: "Shows/hides the on-screen console mirror panel: world.console [on|off] — no argument TOGGLES the panel; on|off force a side. Bound to the backtick key by default (the console toggle), so it dispatches with no argument and flips visibility each press. Every form echoes the resulting state. The pipe keeps working either way; the panel is its visible twin.",
             handler: (_, args) => {
+                if (consoleMirror is null) {
+                    return CommandResult.Error(output: "[world.console: requires a windowed boot — headless registers this verb for vocabulary parity only]");
+                }
+
                 // A bound key dispatches with no argument, so the no-arg form must ACT, not query: it toggles and
                 // echoes the resulting state (which is also the state read a bare query would have wanted).
                 bool resolved;

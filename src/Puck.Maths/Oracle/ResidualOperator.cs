@@ -2,7 +2,7 @@ namespace Puck.Maths;
 
 /// <summary>
 /// The twist a residual carries — the algebra endomorphism <c>σ</c> that the twisted Leibniz rule
-/// <c>D_g(u·v) = (D_g u)·v + σ(u)·(D_g v)</c> applies to the left factor. It is DATA the caller selects, not a family of
+/// <c>D_g(u·v) = (D_g u)·v + σ(u)·(D_g v)</c> applies to the left factor. It is data the caller selects, not a family of
 /// operators: one loop reads it and three regimes fall out.
 /// </summary>
 /// <remarks>Each case is an algebra endomorphism of the free algebra, named by the image it gives one letter: the
@@ -40,7 +40,7 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// <para>
     /// <b>What it computes.</b> On a word the operator is the sum over every occurrence of the generator of "twist the
     /// prefix, drop the occurrence, keep the suffix":
-    /// <c>D_g(a₁…a_n) = Σ_{i : a_i = g} σ(a₁…a_{i−1})·(a_{i+1}…a_n)</c>. That single formula IS the twisted Leibniz
+    /// <c>D_g(a₁…a_n) = Σ_{i : a_i = g} σ(a₁…a_{i−1})·(a_{i+1}…a_n)</c>. That single formula is the twisted Leibniz
     /// rule <c>D_g(u·v) = (D_g u)·v + σ(u)·(D_g v)</c> — the rule is what the formula satisfies, not a second code path
     /// — and the three twists are three choices of <c>σ</c>. At <see cref="ResidualTwist.Counit"/> only the leading
     /// occurrence survives, so the result is the left quotient; at <see cref="ResidualTwist.Identity"/> every occurrence
@@ -48,13 +48,13 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// <see cref="ResidualTwist.ShiftGenerator"/> every prefix letter is preceded by the shift generator.
     /// </para>
     /// <para>
-    /// <b>The boundary, and it is the load-bearing one.</b> The rule is an identity of the FREE algebra, where it holds
+    /// <b>The boundary, and it is the load-bearing one.</b> The rule is an identity of the free algebra, where it holds
     /// by construction. It descends to a presented quotient exactly when the derivation annihilates every relation, and
     /// it does not descend when it does not: on the jet presentation <c>Monogenic([0, 0])</c> the identity twist gives
     /// <c>D(x·x) = 2x</c> while the relation forces <c>x·x = 0</c>, so <c>D(u·v)</c> and <c>(D u)·v + u·(D v)</c> agree
     /// in the unit component — which is exactly <see cref="FixedDual{TScalar}"/>'s chain rule, <c>a·e + b·c</c> — and
     /// differ above it. The result is normalized after differentiating, so what is returned is always a genuine element;
-    /// what is NOT promised is that the Leibniz rule survives a relation the derivation fails to annihilate. A
+    /// what is not promised is that the Leibniz rule survives a relation the derivation fails to annihilate. A
     /// presentation window is such a relation: it annihilates every term above its degree, and a derivation drops a
     /// degree, so a windowed presentation loses the rule at its own boundary exactly as a monic reduction does. On a
     /// free presentation with no relation at all — no reduction, no swap, no window — the rule holds at every operand,

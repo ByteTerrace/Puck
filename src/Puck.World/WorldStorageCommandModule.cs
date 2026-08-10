@@ -126,9 +126,8 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             : (Uri.TryCreate(uriString: present, uriKind: UriKind.Absolute, result: out _) ? present : "a connection string (redacted — it carries the account key)"));
     }
 
-    // The last push's ACTUAL outcome. This used to read the precondition bit alone, so a session in which every push
-    // was refused by a transport error still reported "ok" — a status line asserting the opposite of what the verb
-    // beside it had just printed.
+    // The last push's ACTUAL outcome, distinguishing a transport failure from a precondition failure — a status
+    // line must never assert the opposite of what the verb beside it just printed.
     private static string Word(WorldSyncWriteOutcome outcome) => outcome switch {
         WorldSyncWriteOutcome.PreconditionFailed => "precondition-failed",
         WorldSyncWriteOutcome.Failed => "failed",

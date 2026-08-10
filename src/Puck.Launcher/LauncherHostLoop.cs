@@ -5,7 +5,19 @@ namespace Puck.Launcher;
 
 internal static class LauncherHostLoop {
     public const int SpinThresholdMilliseconds = 2;
-    public const uint TargetUpdateRate = 240U;
+
+    /// <summary>The host's OWN pacing default — used when no <see cref="Puck.Hosting.IFixedStepSimulation"/> is
+    /// registered (a composition root that drives no fixed-step sim at all, so nothing declares a rate via
+    /// <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/>), AND as the fixed-step pump's own calling
+    /// cadence when a registered simulation's <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/> reports
+    /// 0 (a world whose authored <c>simulation.rateHz</c> is the durable stop) — <see cref="Puck.Hosting.EngineTicks.PerRate"/>
+    /// refuses zero outright (there is no step period for a simulation that never steps), so the PUMP'S OWN cadence,
+    /// which is presentation-adjacent host pacing and never simulation state, must never be derived from a rate that
+    /// can legitimately be zero. <c>Puck.Launcher</c> is a domain-agnostic generic host and owns no notion of "the"
+    /// simulation rate — a registered simulation (e.g. a loaded world document) is what actually declares one; this
+    /// is the fallback for both the null and the stopped case, never a value that silently overrides an authored
+    /// one (the registered simulation still gates its OWN actual stepping internally).</summary>
+    public const uint DefaultUpdateRate = 240U;
 
     public static T? SingleOrDefault<T>(IEnumerable<T> items, string name, string hostDescription)
         where T : class {

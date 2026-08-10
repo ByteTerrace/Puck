@@ -12,7 +12,7 @@ namespace Puck.World;
 
 /// <summary>
 /// Which locomotion model one <c>WorldBody</c> advances on, and that model's own tuning row — a kit declares both
-/// <see cref="WorldKit.BodyMotionProgram"/> (WHICH operations run each tick) and this (the SHAPE of the tuning those
+/// <see cref="WorldKit.BodyMotionProgram"/> (which operations run each tick) and this (the shape of the tuning those
 /// operations read). The <c>$type</c> string is the JSON discriminator; a new model is a new derived record, a new
 /// <see cref="JsonDerivedTypeAttribute"/> line, and the facet mapping <c>WorldDefinitionValidator</c> owns for it —
 /// never a hunt through <c>WorldBody</c>. These float values are compiled once into their model's own fixed-point
@@ -44,23 +44,23 @@ public abstract record WorldMotionModel {
     /// <param name="RiseGravity">The downward acceleration while rising (u/s²) — the floaty top of the arc.</param>
     /// <param name="FallGravity">The downward acceleration while falling (u/s²) — the snappy descent (heavier than the rise).</param>
     /// <param name="MaxFallSpeed">The terminal fall speed the descent is clamped to (u/s).</param>
-    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING. The empty
-    /// table snaps planar velocity instantly.</param>
+    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — it affects the simulation.
+    /// The empty table snaps planar velocity instantly.</param>
     /// <param name="SprintMultiplier">The held-sprint speed multiplier, applied while
     /// <paramref name="SprintChannel"/> reads held; <c>1</c> is a no-op.</param>
-    /// <param name="SprintChannel">The declared channel name a body reads HELD (not edge-triggered — a continuous
+    /// <param name="SprintChannel">The declared channel name a body reads while held (not edge-triggered — a continuous
     /// multiplier, unlike the press/release <see cref="ActionSpec"/> vocabulary) to apply <paramref name="SprintMultiplier"/>,
     /// or <see langword="null"/> (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside
     /// every other kit-channel name, by <see cref="FixedWorldKit.Compile"/> — an unresolvable name (validator-refused
     /// already) reads as "no sprint" rather than throwing.</param>
     /// <param name="MoveFrame">Which frame <c>MoveForward</c>/<c>MoveStrafe</c> resolve in.
     /// <see cref="MotionMoveFrame.Heading"/> (the default, the world's historical tank controls) rotates the commanded
-    /// planar target by the body's OWN integrated heading. <see cref="MotionMoveFrame.World"/> takes the two channels as
-    /// ALREADY-WORLD-FRAME axes — the seat's client composes the camera yaw into the submitted intent before it ever
+    /// planar target by the body's own integrated heading. <see cref="MotionMoveFrame.World"/> takes the two channels as
+    /// axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever
     /// reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).</param>
-    /// <param name="FacingSnap">Under <see cref="MotionMoveFrame.World"/> only: whether the body's facing SNAPS to
+    /// <param name="FacingSnap">Under <see cref="MotionMoveFrame.World"/> only: whether the body's facing snaps to
     /// <c>Atan2</c> of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather
-    /// than holding its heading. Ignored under <see cref="MotionMoveFrame.Heading"/>, where facing IS the integrated
+    /// than holding its heading. Ignored under <see cref="MotionMoveFrame.Heading"/>, where facing is the integrated
     /// heading by construction. <see langword="false"/> is the default (tank facing).</param>
     /// <param name="MoveSpeedEnvelope">The inclusive bound a seated player's live profile speed (and the profileless
     /// <paramref name="MoveSpeed"/> fallback) is clamped to at seat time, or <see langword="null"/> (the default) for
@@ -119,22 +119,22 @@ public abstract record WorldMotionModel {
     /// <param name="DriftSteerScale">The steering-authority multiplier while drifting (the tightened drift arc).</param>
     /// <param name="BoostMultiplier">The <paramref name="TopSpeed"/> multiplier while <paramref name="BoostChannel"/>
     /// reads held; <c>1</c> is a no-op. The timed item boost is <c>planarImpulse</c>, not this.</param>
-    /// <param name="DriftChannel">The declared channel name read HELD to drift, or <see langword="null"/> for a kit
+    /// <param name="DriftChannel">The declared channel name read while held to drift, or <see langword="null"/> for a kit
     /// that cannot drift. Resolved to an ordinal once by <see cref="FixedWorldKit.Compile"/>.</param>
-    /// <param name="BoostChannel">The declared channel name read HELD to boost, or <see langword="null"/> for a kit
+    /// <param name="BoostChannel">The declared channel name read while held to boost, or <see langword="null"/> for a kit
     /// with no held boost. Resolved through the same held-channel seam as <see cref="Grounded.SprintChannel"/>.</param>
     /// <param name="TopSpeedEnvelope">The racing-integrity clamp: the inclusive bound the resolved base
     /// <paramref name="TopSpeed"/> is pinned to at resolve time — a live <c>world.row.set kits</c> retune (deliberately
-    /// admitted even PAST the bound; <see cref="WorldDefinitionValidator"/> checks only the envelope's own shape,
+    /// admitted even past the bound; <see cref="WorldDefinitionValidator"/> checks only the envelope's own shape,
     /// never that <paramref name="TopSpeed"/> already sits inside it — the clamp exists precisely to catch a retune
     /// the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any
     /// future per-seat vehicle stat resolve, both pass through it, or <see langword="null"/> (the default) for no
-    /// bound. <paramref name="BoostMultiplier"/> multiplies AFTER this clamp, never before — the envelope pins the
-    /// base top speed, boost rides on top, the SAME sprint-after-clamp precedent
+    /// bound. <paramref name="BoostMultiplier"/> multiplies after this clamp, never before — the envelope pins the
+    /// base top speed, boost rides on top, the same sprint-after-clamp precedent
     /// <see cref="Grounded.MoveSpeedEnvelope"/> established for the grounded arm. The vehicle arm's resolve
-    /// deliberately never reads a seated profile's speed (a kart's speed is the kit's), so this is the ONLY seat-time
-    /// clamp the vehicle arm has — unlike the grounded arm's envelope, which bounds a FALLBACK a separate live
-    /// profile read can diverge from, so grounded's own baseline IS still required to sit inside its own bound.
+    /// deliberately never reads a seated profile's speed (a kart's speed is the kit's), so this is the only seat-time
+    /// clamp the vehicle arm has — unlike the grounded arm's envelope, which bounds a fallback a separate live
+    /// profile read can diverge from, so grounded's own baseline is still required to sit inside its own bound.
     /// See <see cref="MotionScalarEnvelope"/>.</param>
     public sealed record Vehicle(
         float TopSpeed,
@@ -160,17 +160,17 @@ public abstract record WorldMotionModel {
 
     /// <summary>
     /// Submerged locomotion in the world's standing-water medium (the <c>water</c> section, which a kit declaring
-    /// this arm REQUIRES): 3D thrust in the body's yaw frame with an explicit vertical channel, planar velocity
+    /// this arm requires): 3D thrust in the body's yaw frame with an explicit vertical channel, planar velocity
     /// converged through the response table (thrust against water drag — the engage rate is thrust authority, the
-    /// release rate is the drag coast), and ONE vertical channel owned end to end by the surface stage — the
+    /// release rate is the drag coast), and a single vertical channel owned end to end by the surface stage — the
     /// medium's own drift/settle folded into the commanded thrust target before that same response-row convergence
     /// runs, so nothing else writes vertical velocity independently. The ops family:
     /// <c>ResolveYawAttitudeAndPlanarFrame</c>, <c>ComputeSwimTargetVelocity</c>, <c>ShapePlanarVelocity</c>,
     /// <c>ApplyBuoyancyAndSurface</c>, <c>IntegratePlanarAndVerticalVelocity</c>. The body's attitude stays a pure
-    /// yaw rotation. Aim-directed diving is the SEAT's composition, and ONLY under <see cref="MotionMoveFrame.World"/>
-    /// (<see cref="MoveFrame"/>): the rendered camera's elevation splits the COMMANDED FORWARD into planar and
+    /// yaw rotation. Aim-directed diving is the seat's composition, and only under <see cref="MotionMoveFrame.World"/>
+    /// (<see cref="MoveFrame"/>): the rendered camera's elevation splits the commanded forward direction into planar and
     /// vertical channels client-side (the same determinism seam <see cref="Grounded.MoveFrame"/> documents), never a
-    /// camera pose entering the sim. The explicit MoveUp channel this splits INTO is orthogonal to that composition
+    /// camera pose entering the sim. The explicit MoveUp channel this splits into is orthogonal to that composition
     /// and stays live regardless of <see cref="MoveFrame"/> — a body dives on raw MoveUp input alone with no
     /// aim-composed seat at all.
     /// </summary>
@@ -179,27 +179,27 @@ public abstract record WorldMotionModel {
     /// <param name="TurnSpeed">Turn speed in radians per second (the profileless fallback counterpart).</param>
     /// <param name="VerticalThrustFraction">The fraction of <paramref name="ThrustSpeed"/> the vertical channel
     /// commands — swimmers climb and dive slower than they cruise. <c>1</c> is fully isotropic thrust.</param>
-    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — SIM-AFFECTING, read
-    /// for BOTH the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a
+    /// <param name="Response">The velocity-response table (see <see cref="MotionResponse"/>) — it affects the simulation, read
+    /// for both the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a
     /// water feel wants at least an always-row.</param>
-    /// <param name="Buoyancy">The medium's idle vertical DRIFT VELOCITY (u/s, signed) below the bob band: positive
+    /// <param name="Buoyancy">The medium's idle vertical drift velocity (u/s, signed) below the bob band: positive
     /// drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust
     /// target — see <see cref="FixedSwimTuning"/> — never applied as a separate acceleration.</param>
     /// <param name="MaxRiseSpeed">The terminal ascent speed (u/s) the vertical channel is clamped to.</param>
     /// <param name="MaxSinkSpeed">The terminal descent speed (u/s) the vertical channel is clamped to.</param>
-    /// <param name="SurfaceSettleRate">The proportional settle GAIN (1/s) toward the float line, applied inside the
+    /// <param name="SurfaceSettleRate">The proportional settle gain (1/s) toward the float line, applied inside the
     /// bob band and above it (breach recovery): the medium's target velocity there is the displacement from the
     /// line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.</param>
-    /// <param name="FloatDepth">How far below the waterline (world units) the body ORIGIN rests when floating — and
-    /// the bob band's half-width around that rest line (one knob deliberately: the band a body settles in IS the
+    /// <param name="FloatDepth">How far below the waterline (world units) the body origin rests when floating — and
+    /// the bob band's half-width around that rest line (one knob deliberately: the band a body settles in is the
     /// depth scale it settles at). The validator only checks this is positive and finite — it cannot see the
     /// document's contact geometry, so it does not (and cannot) check this against the local water column's depth. A
-    /// <see cref="FloatDepth"/> deeper than the floor below it parks the body ON THE FLOOR instead of at the float
+    /// <see cref="FloatDepth"/> deeper than the floor below it parks the body on the floor instead of at the float
     /// line, with <c>AtSurface</c> never true there — a geometry fact deliberately outside this validator's
     /// reach.</param>
     /// <param name="SprintMultiplier">The held-burst speed multiplier applied while <paramref name="SprintChannel"/>
     /// reads held; <c>1</c> is a no-op. Scales the whole thrust vector, vertical included.</param>
-    /// <param name="SprintChannel">The declared channel name read HELD for the burst, or <see langword="null"/>
+    /// <param name="SprintChannel">The declared channel name read while held for the burst, or <see langword="null"/>
     /// (the default) for a kit with no burst — the same resolution path <see cref="Grounded.SprintChannel"/>
     /// documents.</param>
     /// <param name="MoveFrame">Which frame <c>MoveForward</c>/<c>MoveStrafe</c> resolve in — the same two-frame
@@ -254,19 +254,19 @@ public abstract record WorldMotionModel {
 /// (<see cref="WorldMotionModel.Grounded.MoveFrame"/>), never a global switch.</summary>
 [JsonConverter(typeof(StrictEnumConverter<MotionMoveFrame>))]
 public enum MotionMoveFrame : byte {
-    /// <summary>Body-relative: the commanded planar target rotates by the body's OWN integrated heading (tank
+    /// <summary>Body-relative: the commanded planar target rotates by the body's own integrated heading (tank
     /// controls) — the world's historical, and default, behavior.</summary>
     Heading,
 
-    /// <summary>World-relative: the two channels are read as already-resolved world axes. The SEAT composes its
+    /// <summary>World-relative: the two channels are read as already-resolved world axes. The seat composes its
     /// camera yaw into the submitted intent client-side, before submission — the sim itself never sees a camera pose,
     /// preserving determinism (see <see cref="WorldMotionModel.Grounded.MoveFrame"/>'s remarks).</summary>
     World,
 }
 
 /// <summary>
-/// The world's MOTION defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
-/// This is the whole top-level motion section: gravity and the velocity-response table are PER-KIT
+/// The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
+/// This is the whole top-level motion section: gravity and the velocity-response table are per-kit
 /// (<see cref="WorldKit.Motion"/>), which is the only place
 /// a body ever reads them from, and <c>world.row.set kits</c> is the surface that moves them.
 /// </summary>
@@ -295,7 +295,7 @@ public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ48
 }
 
 /// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
-/// target while <paramref name="Gate"/> holds. Rows evaluate in order, FIRST match wins; a body matching no row
+/// target while <paramref name="Gate"/> holds. Rows evaluate in order, first match wins; a body matching no row
 /// snaps instantly (the built-in behavior, and the behavior of a kit with no table). The gate reuses the
 /// action-lane predicate vocabulary — only body-fact kinds (<c>now</c>/<c>recently</c>/<c>all</c>) are admissible.</summary>
 /// <param name="EngageRate">The convergence rate (world units/second²) while the stick is deflected — acceleration
@@ -304,8 +304,8 @@ public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ48
 /// <param name="Gate">The body-fact predicate that must hold for this row to win, or <see langword="null"/> for the
 /// always-row (permitted only as the final row).</param>
 /// <remarks><see cref="Gate"/> trails the two rates and carries an explicit <see langword="null"/> default because it
-/// is genuinely optional — the always-row omits it, and the writer already omits it when null. Parameter ORDER is what
-/// expresses that to the loader: a constructor parameter with no default is REQUIRED (the source-generated context
+/// is genuinely optional — the always-row omits it, and the writer already omits it when null. Parameter order is what
+/// expresses that to the loader: a constructor parameter with no default is required (the source-generated context
 /// enforces it), so an optional member has to be able to carry one, which means trailing the required ones. Document
 /// order is unaffected — JSON binds by name.</remarks>
 public sealed record MotionResponse(
@@ -316,7 +316,7 @@ public sealed record MotionResponse(
 
 /// <summary>An authored inclusive bound on one <see cref="WorldMotionModel"/> scalar — the reusable shape every
 /// arm's overridable scalar clamps through (today: <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/>; a
-/// future arm's own scalar adopts the SAME record, never a bespoke bound). Applied at the seat-time profile
+/// future arm's own scalar adopts the same record, never a bespoke bound). Applied at the seat-time profile
 /// resolve, never inside the sim: the value simulation reads is already clamped, so the guarantee holds regardless
 /// of what a player's identity requests. Absent (the field default) is wide-open — today's behavior exactly.</summary>
 /// <param name="Min">The least admitted value (inclusive).</param>
@@ -369,7 +369,7 @@ public abstract record WorldCollider {
 /// contact; any declared requirement selects the SDF field.</param>
 /// <param name="ContactSkin">The signed skin the solver keeps between a body and every surface (world units).</param>
 /// <param name="MaxIterations">The relaxation iteration count per tick (above 8 is a solver pathology, not a choice).</param>
-/// <param name="MaxSlopeDegrees">The steepest surface a body still counts as STANDING on. A contact whose normal leans
+/// <param name="MaxSlopeDegrees">The steepest surface a body still counts as standing on. A contact whose normal leans
 /// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
 /// <param name="GradientProbe">The finite-difference step field contact samples the surface normal with, in world
 /// units; 0 takes the evaluator's own default. Meaningful only when a requirement selects field contact.</param>
@@ -397,7 +397,7 @@ public enum WorldContactRequirement : byte {
 /// <param name="PickerThreshold">The stick magnitude that cycles a pending profile choice.</param>
 /// <param name="PickerNeutralColor">The pending-avatar desaturation target.</param>
 /// <param name="PickerNeutralBlend">The pending-avatar blend amount toward <paramref name="PickerNeutralColor"/>.</param>
-/// <param name="SeatLook">The control feel a seat of this document wakes with. REQUIRED — there is no engine
+/// <param name="SeatLook">The control feel a seat of this document wakes with. required — there is no engine
 /// fallback, so a document either states what its seats should feel like or fails validation. Read per seat from
 /// whichever document owns it: the world's for an unclaimed seat, the joined identity's own for a claimed one, which
 /// is how a player's feel travels with their profile (see <see cref="WorldSeatLook"/>).</param>
@@ -448,8 +448,8 @@ public static class WorldContactSelection {
     public static bool RequiresField(WorldCollision collision) => (collision.Requirements is { Count: > 0 });
 }
 
-/// <summary>An engine-published per-body sim fact the action predicates gate on. Facts are ENGINE code.</summary>
-/// <remarks>ADMISSION RULE: a new fact is privileged sim state the effects/predicates cannot derive from existing
+/// <summary>An engine-published per-body sim fact the action predicates gate on. Facts are engine code.</summary>
+/// <remarks>Admission rule: a new fact is privileged sim state the effects/predicates cannot derive from existing
 /// facts; add one only then.</remarks>
 [JsonConverter(typeof(StrictEnumConverter<ActionFact>))]
 public enum ActionFact : byte {
@@ -496,32 +496,32 @@ public abstract record ActionPredicate {
     /// refreshed while the fact holds and decaying otherwise (coyote time is <c>Recently(Grounded, w)</c>).</summary>
     public sealed record Recently(ActionFact Fact, float WindowSeconds) : ActionPredicate;
 
-    /// <summary>Compares a named state cell against either a fixed authored value, or — WORLD SCOPE ONLY — ANOTHER
-    /// named state cell/reserved channel read live at the SAME evaluation. Both spellings are authorable; exactly one
+    /// <summary>Compares a named state cell against either a fixed authored value, or — world scope only — another
+    /// named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one
     /// of <paramref name="Value"/> and <paramref name="ComparandState"/> may be present (refused by name when both or
-    /// neither are). The comparand-row spelling is what lets a gate track a MOVING threshold — <c>$tick</c> compared
+    /// neither are). The comparand-row spelling is what lets a gate track a moving threshold — <c>$tick</c> compared
     /// against a schedule row the rule's own effects advance is "every N ticks"; a round row compared against a
-    /// declared length row is a round boundary — composition over the SAME two-sided comparison, never a new
+    /// declared length row is a round boundary — composition over the same two-sided comparison, never a new
     /// mechanism.</summary>
-    /// <param name="State">At BODY scope, a named counter slot the kit declares. At WORLD scope (see
+    /// <param name="State">At body scope, a named counter slot the kit declares. At world scope (see
     /// <see cref="WorldRule"/>), a declared <c>state</c>-section row name, or one of
     /// <see cref="WorldRuleFacts"/>'s reserved channels.</param>
     /// <param name="Comparison">The comparison to apply.</param>
     /// <param name="Value">The authored constant comparand, or <see langword="null"/> when
     /// <paramref name="ComparandState"/> spells the comparand instead. Required (non-null) at body scope, where a
     /// comparand row reference is refused.</param>
-    /// <param name="Key">At WORLD scope, the CELL inside <paramref name="State"/> to read —
+    /// <param name="Key">At world scope, the cell inside <paramref name="State"/> to read —
     /// <see langword="null"/> reads the row's slot cell, which a keyed row does not have (refused by name rather
     /// than silently reading <c>cells[0]</c>). At body scope a non-null key is refused: a per-body action-state slot
     /// is not keyed, and a parsed-and-discarded field is worse than no field.</param>
-    /// <param name="ComparandState">WORLD SCOPE ONLY (refused at body scope, on the same terms as
+    /// <param name="ComparandState">world scope only (refused at body scope, on the same terms as
     /// <paramref name="Key"/>): another declared <c>state</c>-section row name, or one of
     /// <see cref="WorldRuleFacts"/>'s reserved channels, read live and compared instead of <paramref name="Value"/>.
     /// A dotted spelling (an author reaching for <c>row.key</c> in one string) is refused by name — address the cell
     /// with <paramref name="ComparandKey"/> instead. Comparing across incompatible cell kinds (an <c>int</c> row
     /// against a <c>fixed</c> row, say) is refused by name — mixing scales silently is worse than naming the
     /// mismatch.</param>
-    /// <param name="ComparandKey">The CELL inside <paramref name="ComparandState"/>, on the same (row, key) terms as
+    /// <param name="ComparandKey">The cell inside <paramref name="ComparandState"/>, on the same (row, key) terms as
     /// <paramref name="Key"/>. Refused when <paramref name="ComparandState"/> names a reserved channel or is absent.</param>
     public sealed record CompareState(
         string State,
@@ -546,6 +546,7 @@ public abstract record ActionPredicate {
 [JsonDerivedType(typeof(ActionEffect.PlanarImpulse), typeDiscriminator: "planarImpulse")]
 [JsonDerivedType(typeof(ActionEffect.SetState), typeDiscriminator: "setState")]
 [JsonDerivedType(typeof(ActionEffect.AddState), typeDiscriminator: "addState")]
+[JsonDerivedType(typeof(ActionEffect.CountdownState), typeDiscriminator: "countdownState")]
 [JsonDerivedType(typeof(ActionEffect.StartTimer), typeDiscriminator: "startTimer")]
 [JsonDerivedType(typeof(ActionEffect.Designate), typeDiscriminator: "designate")]
 [JsonDerivedType(typeof(ActionEffect.Generate), typeDiscriminator: "generate")]
@@ -572,29 +573,42 @@ public abstract record ActionEffect {
     /// world scope (see <see cref="WorldRule"/>).</summary>
     /// <param name="State">The counter slot (body scope) or state row name (world scope).</param>
     /// <param name="Value">The literal value to write, or <see langword="null"/> when <paramref name="FromState"/>
-    /// spells a live operand to copy instead — WORLD SCOPE ONLY, exactly one of the two is authored (refused by name
-    /// when both or neither are present, the SAME duality <see cref="ActionPredicate.CompareState"/>'s own comparand
+    /// spells a live operand to copy instead — world scope only, exactly one of the two is authored (refused by name
+    /// when both or neither are present, the same duality <see cref="ActionPredicate.CompareState"/>'s own comparand
     /// carries). Required (non-null) at body scope, where a live copy source is refused.</param>
     /// <param name="Target">The addressed entity — body scope only; a non-<see cref="ActionTarget.Self"/> target is
     /// refused at world scope, where there is no entity to select.</param>
-    /// <param name="Key">The CELL inside <paramref name="State"/> at world scope — <see langword="null"/> writes the
+    /// <param name="Key">The cell inside <paramref name="State"/> at world scope — <see langword="null"/> writes the
     /// row's slot cell, which a keyed row does not have (refused by name). Refused at body scope.</param>
-    /// <param name="FromState">WORLD SCOPE ONLY (refused at body scope, on the same terms as <paramref name="Value"/>):
+    /// <param name="FromState">world scope only (refused at body scope, on the same terms as <paramref name="Value"/>):
     /// another declared <c>state</c>-section row name, or one of <see cref="WorldRuleFacts"/>'s reserved channels,
-    /// read LIVE at fire time and copied in place of an authored <paramref name="Value"/> — the row that resets to
+    /// read live at fire time and copied in place of an authored <paramref name="Value"/> — the row that resets to
     /// another row's own current value (a shadow row mirroring a counter someone else advances), never only a
-    /// standing literal. Resolved through the SAME operand walk <see cref="ActionPredicate.CompareState"/>'s own
+    /// standing literal. Resolved through the same operand walk <see cref="ActionPredicate.CompareState"/>'s own
     /// <c>ComparandState</c> uses; mixing a <c>fixed</c> row into an <c>int</c> destination (or the reverse) is
     /// refused by name rather than coerced.</param>
-    /// <param name="FromKey">The CELL inside <paramref name="FromState"/>, on the same (row, key) terms as
+    /// <param name="FromKey">The cell inside <paramref name="FromState"/>, on the same (row, key) terms as
     /// <paramref name="Key"/>. Refused when <paramref name="FromState"/> names a reserved channel or is absent.</param>
+    /// <param name="ValueSeconds">world scope only (refused at body scope, on the same terms as <paramref name="Value"/>
+    /// and <paramref name="FromState"/> — exactly one of the three is authored): an alternative to
+    /// <paramref name="Value"/> for a <c>kind=int</c> state row a companion <see cref="CountdownState"/> effect
+    /// decrements once per simulation tick (a countdown/cooldown). Authored in seconds — a physical unit, not a tick count,
+    /// so a world's rate can change without silently retuning every cooldown — and converted once at rule compile
+    /// time to an exact whole engine-tick count via <see cref="Puck.Maths.FixedTickConversion.TryDurationEngineTicksExact"/>,
+    /// never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is
+    /// refused rather than silently rounded away (<see cref="WorldRuleRefusal.DurationNotExactEngineTicks"/>). Typed
+    /// <see cref="decimal"/> rather than <see langword="float"/> because JSON deserializes a number token to
+    /// <see cref="decimal"/> exactly (base-10, no binary-float intermediate), and most terminating decimals — the
+    /// only ones an author can spell — have no exact binary float or fixed-point spelling either. See
+    /// <see cref="WorldRuleCompiler"/>.</param>
     public sealed record SetState(
         string State,
         float? Value = null,
         ActionTarget Target = ActionTarget.Self,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null
     ) : ActionEffect;
 
     /// <summary>Adds to a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
@@ -604,17 +618,33 @@ public abstract record ActionEffect {
     /// live addend instead — see <see cref="SetState.Value"/>'s remarks; the same value/from duality, required
     /// (non-null) at body scope.</param>
     /// <param name="Target">The addressed entity — body scope only.</param>
-    /// <param name="Key">The CELL inside <paramref name="State"/> at world scope; refused at body scope.</param>
-    /// <param name="FromState">WORLD SCOPE ONLY — see <see cref="SetState.FromState"/>'s remarks; here the addend is
+    /// <param name="Key">The cell inside <paramref name="State"/> at world scope; refused at body scope.</param>
+    /// <param name="FromState">world scope only — see <see cref="SetState.FromState"/>'s remarks; here the addend is
     /// read live rather than the replacement.</param>
-    /// <param name="FromKey">The CELL inside <paramref name="FromState"/> — see <see cref="SetState.FromKey"/>.</param>
+    /// <param name="FromKey">The cell inside <paramref name="FromState"/> — see <see cref="SetState.FromKey"/>.</param>
+    /// <param name="ValueSeconds">world scope only — see <see cref="SetState.ValueSeconds"/>'s remarks; here the
+    /// converted tick count is the addend rather than the replacement.</param>
     public sealed record AddState(
         string State,
         float? Value = null,
         ActionTarget Target = ActionTarget.Self,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null
+    ) : ActionEffect;
+
+    /// <summary>Decrements a world-state countdown by the current simulation step's engine-tick width, saturating at
+    /// zero. world scope only: the destination must be a <c>kind=int nonNegative=true</c> row. Unlike an authored
+    /// <see cref="AddState"/> constant, this effect consumes the runtime step width, so changing the world's authored
+    /// tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed
+    /// decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a
+    /// negative candidate.</summary>
+    /// <param name="State">The countdown state-row name.</param>
+    /// <param name="Key">The cell inside <paramref name="State"/>; <see langword="null"/> addresses its slot.</param>
+    public sealed record CountdownState(
+        string State,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
     ) : ActionEffect;
 
     /// <summary>Starts a named timer slot with an authored duration.</summary>
@@ -625,47 +655,47 @@ public abstract record ActionEffect {
     /// <param name="Target">The subject source.</param>
     public sealed record Designate(string Register, ActionTarget Target = ActionTarget.AffectingSubject) : ActionEffect;
 
-    /// <summary>Redraws a DRAW SITE (a <c>state</c> row declaring a <see cref="WorldDraw"/>) — the ONE effect
-    /// admissible at BOTH scopes, and the join that makes authored randomness and world rules one arc rather than
-    /// two: a kit action, a world rule, and the <c>world.generate</c> console verb all reduce to composing the SAME
+    /// <summary>Redraws a draw site (a <c>state</c> row declaring a <see cref="WorldDraw"/>) — the one effect
+    /// admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than
+    /// two: a kit action, a world rule, and the <c>world.generate</c> console verb all reduce to composing the same
     /// <c>WorldMutation.Generate</c> and letting it drain through the ordinary tick boundary, so journal/undo cover a
-    /// draw for free wherever it was fired from. This is also how a draw's MOMENT is authored: a
+    /// draw for free wherever it was fired from. This is also how a draw's moment is authored: a
     /// <see cref="WorldDrawTiming.TickPeriod"/> site redraws on an ordinary <c>$tick</c>-scheduled rule and an
     /// <see cref="WorldDrawTiming.Event"/> site on an event-gated one, so timing costs no mutation ordinal. At body
-    /// scope the firing is STAGED during the body's advance and enqueued for the NEXT tick's drain (an honestly-
-    /// reported one-tick latency: this is the first <see cref="ActionEffect"/> to write the DOCUMENT rather than
+    /// scope the firing is staged during the body's advance and enqueued for the next tick's drain (an honestly-
+    /// reported one-tick latency: this is the first <see cref="ActionEffect"/> to write the document rather than
     /// per-body state, so it is the first to pay the pipeline's own round trip).</summary>
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
     public sealed record Generate(string Row) : ActionEffect;
 
-    /// <summary>Upserts a whole HUD panel row — WORLD SCOPE ONLY (refused at body scope: a per-body action has no HUD
+    /// <summary>Upserts a whole HUD panel row — world scope only (refused at body scope: a per-body action has no HUD
     /// panel of its own to author). Admits <see cref="WorldMutation.UpsertHudPanel"/> into the world-rule effect set
-    /// through the SAME seam <see cref="Generate"/> uses: the compiled effect submits the mutation stamped
+    /// through the same seam <see cref="Generate"/> uses: the compiled effect submits the mutation stamped
     /// <see cref="WorldPrincipal.World"/>, which <c>WorldServer.TryAdmitMutation</c> admits structurally, so the
     /// panel's own validation (capacity, unknown binding) is the ordinary whole-document revalidation every
     /// <see cref="UpsertHudPanel"/> submission — console, addon, or rule — already passes through.</summary>
     /// <param name="Panel">The whole panel row, elements included.</param>
     public sealed record UpsertHudPanel(WorldHudPanel Panel) : ActionEffect;
 
-    /// <summary>Removes a HUD panel row by id — WORLD SCOPE ONLY. See <see cref="UpsertHudPanel"/>'s remarks.</summary>
+    /// <summary>Removes a HUD panel row by id — world scope only. See <see cref="UpsertHudPanel"/>'s remarks.</summary>
     /// <param name="Id">The panel id to remove.</param>
     public sealed record RemoveHudPanel(string Id) : ActionEffect;
 
-    /// <summary>Upserts a whole placement row — WORLD SCOPE ONLY (refused at body scope: a per-body action has no
+    /// <summary>Upserts a whole placement row — world scope only (refused at body scope: a per-body action has no
     /// placement of its own to author). Admits <see cref="WorldMutation.UpsertPlacement"/> into the world-rule effect
-    /// set through the SAME seam <see cref="Generate"/> uses.</summary>
+    /// set through the same seam <see cref="Generate"/> uses.</summary>
     /// <param name="Placement">The whole placement row.</param>
     public sealed record UpsertPlacement(WorldPlacement Placement) : ActionEffect;
 
-    /// <summary>Removes a placement row by id — WORLD SCOPE ONLY. See <see cref="UpsertPlacement"/>'s remarks.</summary>
+    /// <summary>Removes a placement row by id — world scope only. See <see cref="UpsertPlacement"/>'s remarks.</summary>
     /// <param name="Id">The placement id to remove.</param>
     public sealed record RemovePlacement(string Id) : ActionEffect;
 
-    /// <summary>Writes a session snapshot of the world to its own loaded file — WORLD SCOPE ONLY (refused at body
-    /// scope: a per-body action has no world file of its own to save). A rule gate now decides WHEN a save happens (an
+    /// <summary>Writes a session snapshot of the world to its own loaded file — world scope only (refused at body
+    /// scope: a per-body action has no world file of its own to save). A rule gate now decides when a save happens (an
     /// every-N-ticks cadence, a boss-defeated edge), closing the one gap the mutation substrate could not: a rule
-    /// could already express any cadence over <c>$tick</c> or a state fact, but had nothing to FIRE that composed a
+    /// could already express any cadence over <c>$tick</c> or a state fact, but had nothing to fire that composed a
     /// save — every prior save was a human typing <c>world.save</c>, so a crashed server rewound to the last manual
     /// one.</summary>
     /// <remarks>
@@ -673,23 +703,23 @@ public abstract record ActionEffect {
     /// (<see cref="SetState"/>, <see cref="Generate"/>, <see cref="UpsertHudPanel"/>, <see cref="UpsertPlacement"/>, …)
     /// composes an ordinary mutation and rides <c>WorldServer.TryApplyMutation</c>: compose, whole-document validate,
     /// install, journal. <c>Save</c> does none of that — it writes no sim state, composes no candidate document, and
-    /// journals nothing. It is deterministic in WHEN it fires (an ordinary rule gate over tick/state facts, evaluated
-    /// the same way on every run) and projection-only in WHAT it does: the SAME settle-at-save capture
+    /// journals nothing. It is deterministic in when it fires (an ordinary rule gate over tick/state facts, evaluated
+    /// the same way on every run) and projection-only in what it does: the same settle-at-save capture
     /// <c>world.save</c> itself runs (<c>WorldSessionCapture.Capture</c>), which folds live session state into a
-    /// SNAPSHOT it serializes — it never mutates the in-memory definition. The sim state after a tick carrying a fired
+    /// snapshot it serializes — it never mutates the in-memory definition. The sim state after a tick carrying a fired
     /// save effect is bit-identical to a tick without one; a replay hash cannot see it, because there is nothing for a
     /// hash to see. That is why this effect needed no <c>KindMask</c> ordinal at all: it is not a mutation. It rides
     /// <c>WorldServer.FireWorldRuleEffect</c> directly instead — the one effect that does.</para>
     /// <para><b>No authored path — the world's own canonical home only.</b> A document that could point a rule's save
     /// at an arbitrary filesystem path is a hazard for no authoring benefit a fixed target does not already cover, so
-    /// this effect carries no path field: it always writes to <c>WorldDefinitionSource.SourcePath</c>, the SAME
+    /// this effect carries no path field: it always writes to <c>WorldDefinitionSource.SourcePath</c>, the same
     /// resolution the console's own no-argument <c>world.save</c> uses (the file the world was loaded from — an
     /// explicit <c>--world</c> path or the shipped default file, both always file-backed at boot; there is no
     /// "homeless world" boot shape in this engine, so this effect has no compile-time path refusal to author).</para>
     /// <para><b>Throttle honesty — no hidden guard.</b> A <see cref="ActionTriggerMode.Level"/> rule gating this
-    /// effect fires it EVERY TICK the gate holds — 240 saves/second of disk I/O at the fixed step. This effect adds no
+    /// effect fires it every tick the gate holds — 240 saves/second of disk I/O at the fixed step. This effect adds no
     /// throttle beyond the ordinary <see cref="ActionTriggerMode"/> vocabulary every other effect already uses: that
-    /// is the author's own footgun, the SAME one <see cref="WorldRule.Mode"/>'s own remarks document for a
+    /// is the author's own footgun, the same one <see cref="WorldRule.Mode"/>'s own remarks document for a
     /// level-triggered <c>addState</c> ("wrote 503 journal entries across 500 ticks before this mode existed, which is
     /// a measurement, not a style preference") — <see cref="ActionTriggerMode.Edge"/> is what an autosave cadence
     /// wants, for the identical reason. A hidden per-effect guard would be exactly the config surface this repository
@@ -715,36 +745,33 @@ public enum ActionTarget : byte {
     AffectingSubject,
 }
 
-/// <summary>ONE engine edge/latch vocabulary, shared by every gated trigger the engine evaluates — a per-body fact
+/// <summary>One engine edge/latch vocabulary, shared by every gated trigger the engine evaluates — a per-body fact
 /// trigger (<see cref="ActionFactTrigger"/>) and a world rule (<see cref="WorldRule"/>) alike. It is deliberately not
 /// two concepts with two spellings: "fires while the condition holds" and "fires once when the condition becomes
 /// true" is the same distinction at both scopes, so it is the same enum.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ActionTriggerMode>))]
 public enum ActionTriggerMode : byte {
-    /// <summary>Fires EVERY evaluation the condition holds. The historical behaviour of every fact trigger, and the
-    /// right shape for a continuous effect (a per-tick drain, a standing impulse).</summary>
+    /// <summary>Fires every evaluation the condition holds — the default, and the right shape for a continuous effect
+    /// (a per-tick drain, a standing impulse).</summary>
     Level,
 
-    /// <summary>Fires ONCE on the condition CROSSING from not-holding to holding, and re-arms only when it crosses
-    /// back. The right shape for anything that writes a document row: a level-triggered <c>addState</c> rule wrote
-    /// 503 journal entries across 500 ticks before this mode existed, which is a measurement, not a style
-    /// preference.</summary>
+    /// <summary>Fires once on the condition crossing from not-holding to holding, and re-arms only when it crosses
+    /// back — the right shape for anything that writes a document row, since a level-triggered write fires once per
+    /// tick the condition holds rather than once per crossing.</summary>
     Edge,
 }
 
 /// <summary>One trigger channel of a lane binding: a gate, a press latch (the buffer — a press stays pending until the
 /// gate opens or the latch expires; the release channel latches nothing), and the effects a fire applies in order.</summary>
 /// <param name="Gate">The predicate that must hold to fire, or <see langword="null"/> for always.</param>
-/// <param name="LatchSeconds">How long a press stays pending waiting for the gate. <c>0</c> means THIS TICK ONLY —
-/// the press fires if the gate is open on its own edge tick and is dropped otherwise — which is what this field
-/// always documented and, until the latch arithmetic was corrected, never did (a zero latch made the press
-/// unreachable, since the fire condition demanded a strictly positive latch). Legitimate only on
+/// <param name="LatchSeconds">How long a press stays pending waiting for the gate. <c>0</c> means this tick only —
+/// the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on
 /// <see cref="ActionSpec.OnPress"/>: the release channel latches nothing, so a non-zero value on
-/// <see cref="ActionSpec.OnRelease"/> is REFUSED by name at validation rather than parsed and discarded.</param>
+/// <see cref="ActionSpec.OnRelease"/> is refused by name at validation rather than parsed and discarded.</param>
 /// <param name="Effects">The effects applied on fire, in order.</param>
 public sealed record ActionTrigger(ActionPredicate? Gate, float LatchSeconds, IReadOnlyList<ActionEffect> Effects);
 
-/// <summary>A lane's full binding: the press trigger and the release trigger. What a channel DOES is this data — the
+/// <summary>A lane's full binding: the press trigger and the release trigger. What a channel does is this data — the
 /// engine implements only the facts, predicates, and effects.</summary>
 /// <param name="OnPress">The rising-edge trigger, or <see langword="null"/>.</param>
 /// <param name="OnRelease">The falling-edge trigger (evaluated immediately, never latched), or <see langword="null"/>.</param>
@@ -752,16 +779,15 @@ public sealed record ActionTrigger(ActionPredicate? Gate, float LatchSeconds, IR
 /// <param name="OnFact">Engine-fact-triggered effect lists evaluated independently of channel edges.</param>
 public sealed record ActionSpec(ActionTrigger? OnPress, ActionTrigger? OnRelease, IReadOnlyList<ActionStateSlot>? State = null, IReadOnlyList<ActionFactTrigger>? OnFact = null);
 
-/// <summary>An authored effect list fired by one engine fact pulse — gated and edged by the SAME
+/// <summary>An authored effect list fired by one engine fact pulse — gated and edged by the same
 /// <see cref="ActionTriggerMode"/> vocabulary a world rule uses.</summary>
 /// <param name="Fact">The fact that fires the rule.</param>
 /// <param name="Effects">The effects applied in order.</param>
 /// <param name="Gate">An additional predicate that must hold beside <paramref name="Fact"/>, or
-/// <see langword="null"/> for none. Before this existed a fact trigger was ungated — the only trigger channel in the
-/// engine that could not narrow, which forced authors to spend a whole extra action lane on a condition.</param>
+/// <see langword="null"/> for none.</param>
 /// <param name="Mode">Whether the trigger fires every tick the condition holds (<see cref="ActionTriggerMode.Level"/>,
-/// the historical behaviour and the default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). The
-/// condition is <paramref name="Fact"/> AND <paramref name="Gate"/> together — an edge trigger re-arms only when
+/// the default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). The
+/// condition is <paramref name="Fact"/> and <paramref name="Gate"/> together — an edge trigger re-arms only when
 /// that conjunction stops holding.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ActionFactTrigger(
@@ -911,10 +937,10 @@ public static class BodyTargetConeSense {
 /// <summary>Selects whether authored target decisions require the deterministic solid-field query provider.</summary>
 public static class WorldTargetSelection {
     /// <summary>Returns whether any designation envelope, sensed source, or world-rule <c>$los:</c> operand requires
-    /// line of sight — the ONE gate <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build
-    /// the solid field at all. A world rule's <c>$los:</c> channel rides the SAME
+    /// line of sight — the one gate <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build
+    /// the solid field at all. A world rule's <c>$los:</c> channel rides the same
     /// <c>Server.WorldPopulation.HasLineOfSight</c> primitive a sensed target's own check does, and that primitive
-    /// reads a field the population would otherwise never build if nothing ELSE in the document asked for one —
+    /// reads a field the population would otherwise never build if nothing else in the document asked for one —
     /// admitting it here is what keeps a rules-only <c>$los:</c> authoring from silently reading "always false"
     /// forever.</summary>
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
@@ -963,7 +989,7 @@ public static class WorldTargetSelection {
 /// <param name="Motion">The locomotion model the kit's bodies compile (a seat's profile speeds still override its
 /// speed fields) — see <see cref="WorldMotionModel"/>.</param>
 /// <param name="Producers">Producer parameter maps keyed by authored producer-program name.</param>
-/// <param name="Actions">The kit's composition bindings, keyed by declared CHANNEL NAME (validated against the
+/// <param name="Actions">The kit's composition bindings, keyed by declared channel name (validated against the
 /// world's channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
 /// entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal.</param>
 /// <param name="Collider">The kit's body volume solved against the world contact field, or
@@ -1073,6 +1099,40 @@ public static class ActionStateComparisons {
         ActionStateComparison.Greater => (value > expected),
         _ => (value >= expected),
     };
+
+    /// <summary>Evaluates the comparison when either side may be positive infinity — a fact whose magnitude exceeds
+    /// every representable number (today only the <c>$parked:</c> channel's forever case). Infinity compares as
+    /// strictly greater than every finite value and equal to itself, so <c>&gt; finite</c> holds, <c>&lt;= finite</c>
+    /// does not, and <c>== finite</c> never does. A sentinel numeric encoding was deliberately rejected: any finite
+    /// stand-in is a value an authored comparand could legitimately equal, and a comparison that cannot distinguish
+    /// "forever" from one particular number is lying about one of them.</summary>
+    /// <param name="comparison">The comparison to evaluate.</param>
+    /// <param name="value">The observed value; ignored when <paramref name="valueIsForever"/>.</param>
+    /// <param name="valueIsForever">Whether the observed side is positive infinity.</param>
+    /// <param name="expected">The value compared against; ignored when <paramref name="expectedIsForever"/>.</param>
+    /// <param name="expectedIsForever">Whether the expected side is positive infinity.</param>
+    /// <returns><see langword="true"/> when the comparison holds.</returns>
+    public static bool Holds(this ActionStateComparison comparison, FixedQ4816 value, bool valueIsForever, FixedQ4816 expected, bool expectedIsForever) {
+        if (!valueIsForever && !expectedIsForever) {
+            return comparison.Holds(value: value, expected: expected);
+        }
+
+        // Exactly one or both sides are infinite; the finite magnitudes no longer matter, only the ordering sign.
+        var sign = ((valueIsForever, expectedIsForever)) switch {
+            (true, true) => 0,
+            (true, false) => 1,
+            _ => -1,
+        };
+
+        return comparison switch {
+            ActionStateComparison.Equal => (sign == 0),
+            ActionStateComparison.NotEqual => (sign != 0),
+            ActionStateComparison.Less => (sign < 0),
+            ActionStateComparison.LessOrEqual => (sign <= 0),
+            ActionStateComparison.Greater => (sign > 0),
+            _ => (sign >= 0),
+        };
+    }
 }
 
 /// <summary>Declares one named persistent state slot shared by the kit's actions.</summary>
@@ -1206,7 +1266,7 @@ public sealed class CompiledBodyMotionProgram {
     /// (<see cref="BodyMotionOp.ApplyVerticalGravity"/> — the same op <c>WorldDefinitionValidator</c>'s
     /// <c>GravityArc</c> tuning facet maps from). This is the vertical-contact-authority signal
     /// <c>WorldBody.ResolveProgramContacts</c> gates its vertical write-back on: a program that owns this
-    /// integrates its OWN vertical channel (e.g. <see cref="BodyMotionOp.ApplyVerticalDecay"/>'s bleed) and must
+    /// integrates its own vertical channel (e.g. <see cref="BodyMotionOp.ApplyVerticalDecay"/>'s bleed) and must
     /// not have contact resolution overwrite it — feeding a decay channel's own prior value back into itself
     /// every tick is an unbounded loop, not a correction.</summary>
     public bool OwnsVerticalContactState => Contains(operation: BodyMotionOp.ApplyVerticalGravity);
@@ -1316,7 +1376,7 @@ public enum CompiledPredicateKind : byte {
 }
 
 /// <summary>One compiled instruction shared by program phases and action triggers.</summary>
-/// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s DRAW SITE — the one row a generate names,
+/// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s draw site — the one row a generate names,
 /// since a site's source and cursor are its own — and is <see langword="null"/> for every other operation. Nothing is
 /// bound at kit-compile time here: the site is a world-global <c>state</c> row, not this kit's per-body slot table, so
 /// resolution happens where the mutation is composed.</remarks>
@@ -1495,8 +1555,8 @@ public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigge
                 StateSlot: -1,
                 Target: impulse.Target
             ),
-            ActionEffect.SetState set => new CompiledBodyInstruction(Operation: BodyMotionOp.SetState, Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(value: set.Value, fromState: set.FromState, fromKey: set.FromKey, actionName: actionName, effectName: "setState", state: set.State)), Direction: default, DurationTicks: 0UL, StateSlot: ResolveState(name: set.State, stateSlots: stateSlots, key: set.Key, effect: "setState"), Target: set.Target, StateName: set.State),
-            ActionEffect.AddState add => new CompiledBodyInstruction(Operation: BodyMotionOp.AddState, Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(value: add.Value, fromState: add.FromState, fromKey: add.FromKey, actionName: actionName, effectName: "addState", state: add.State)), Direction: default, DurationTicks: 0UL, StateSlot: ResolveState(name: add.State, stateSlots: stateSlots, key: add.Key, effect: "addState"), Target: add.Target, StateName: add.State),
+            ActionEffect.SetState set => new CompiledBodyInstruction(Operation: BodyMotionOp.SetState, Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(value: set.Value, fromState: set.FromState, fromKey: set.FromKey, valueSeconds: set.ValueSeconds, actionName: actionName, effectName: "setState", state: set.State)), Direction: default, DurationTicks: 0UL, StateSlot: ResolveState(name: set.State, stateSlots: stateSlots, key: set.Key, effect: "setState"), Target: set.Target, StateName: set.State),
+            ActionEffect.AddState add => new CompiledBodyInstruction(Operation: BodyMotionOp.AddState, Value: FixedQ4816.FromDouble(value: RequireBodyEffectValue(value: add.Value, fromState: add.FromState, fromKey: add.FromKey, valueSeconds: add.ValueSeconds, actionName: actionName, effectName: "addState", state: add.State)), Direction: default, DurationTicks: 0UL, StateSlot: ResolveState(name: add.State, stateSlots: stateSlots, key: add.Key, effect: "addState"), Target: add.Target, StateName: add.State),
             ActionEffect.StartTimer timer => new CompiledBodyInstruction(
                 Operation: BodyMotionOp.StartTimer,
                 Value: default,
@@ -1527,10 +1587,11 @@ public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigge
                 Target: ActionTarget.Self,
                 StateName: generate.Row
             ),
-            // upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD document rows — a per-body
+            // countdownState/upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD state/document
+            // rows — a per-body
             // action has none of its own, so these are refused BY NAME here rather than parsed and discarded
             // (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect).
-            ActionEffect.UpsertHudPanel or ActionEffect.RemoveHudPanel or ActionEffect.UpsertPlacement or ActionEffect.RemovePlacement =>
+            ActionEffect.CountdownState or ActionEffect.UpsertHudPanel or ActionEffect.RemoveHudPanel or ActionEffect.UpsertPlacement or ActionEffect.RemovePlacement =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
             // save writes the WORLD's own file — a per-body action has no world file of its own to save, so this is
             // refused BY NAME here too (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect and
@@ -1560,9 +1621,13 @@ public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigge
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
-    private static float RequireBodyEffectValue(float? value, string? fromState, string? fromKey, string actionName, string effectName, string state) {
+    private static float RequireBodyEffectValue(float? value, string? fromState, string? fromKey, decimal? valueSeconds, string actionName, string effectName, string state) {
         if ((fromState is not null) || (fromKey is not null)) {
             throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries a 'fromState'/'fromKey' — a per-body action-state slot has no world state row to copy from; a live copy source is legitimate only in a world rule.");
+        }
+
+        if (valueSeconds is not null) {
+            throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries a 'valueSeconds' — that spelling is WORLD SCOPE ONLY (a state row a world rule decrements once per simulation tick); a per-body effect writes an authored constant via 'value', or starts a proper timer via 'startTimer'.");
         }
 
         return (value ?? throw new InvalidOperationException(message: $"Action '{actionName}' effect '{effectName}' on action state '{state}' carries no 'value' — a per-body effect writes an authored constant; a live copy source is legitimate only in a world rule."));
@@ -1633,12 +1698,12 @@ public readonly record struct CompiledFactTrigger(ActionFact Fact, CompiledPredi
 /// <summary>A <see cref="WorldKit"/>'s compiled motion program, producer bindings, and action bindings.</summary>
 /// <param name="BodyMotionProgram">The compiled body motion program the kit's bodies execute.</param>
 /// <param name="Producers">The kit's producer bindings keyed by authored program name.</param>
-/// <param name="Actions">The kit's compiled composition bindings, indexed by channel ORDINAL
+/// <param name="Actions">The kit's compiled composition bindings, indexed by channel ordinal
 /// (<see cref="ChannelLimits.MaxChannels"/> slots; unbound ordinals are <see langword="null"/>) — the channel-name map
 /// resolved once against the world's <see cref="WorldChannelTable"/>.</param>
 /// <param name="ActionThresholds">The binary crossing threshold for each ordinal in <paramref name="Actions"/>
 /// (meaningful only where a binding exists).</param>
-/// <param name="ActionShapes">The world's declared channel shape for EVERY ordinal (not just where a binding
+/// <param name="ActionShapes">The world's declared channel shape for every ordinal (not just where a binding
 /// exists) — the held-image composition (<c>Puck.World.Server.WorldBody.NextIntent</c>) needs a composition
 /// ordinal's shape whether or not this kit binds an action to it.</param>
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
@@ -1873,9 +1938,8 @@ public sealed class WorldChannelTable {
     /// <summary>Resolves a declared channel name to its ordinal.</summary>
     public bool TryGetOrdinal(string name, out int ordinal) => m_ordinalByName.TryGetValue(key: name, value: out ordinal);
 
-    /// <summary>Resolves a binding channel reference to its authored ordinal. (<see cref="ChannelRef"/> carries only
-    /// the declared-name arm today — the former engine-motion-role arm resolved through <c>m_roleOrdinals</c> was
-    /// retired as a duplicate of the name form; see <c>ChannelRef.cs</c>'s remarks.)</summary>
+    /// <summary>Resolves a binding channel reference to its authored ordinal. <see cref="ChannelRef"/> carries only
+    /// the declared-name arm; see <c>ChannelRef.cs</c>'s remarks.</summary>
     public bool TryGetOrdinal(ChannelRef reference, out int ordinal) {
         switch (reference) {
             case ChannelRef.Name name:
@@ -1924,8 +1988,8 @@ public sealed class WorldChannelTable {
         });
     }
 
-    /// <summary>Composes exactly two simultaneous held-image values. Unipolar/binary reproduce the old ActionLanes
-    /// OR by taking the maximum of two already-ranged operands. Bipolar instead sums and clamps once to
+    /// <summary>Composes exactly two simultaneous held-image values. Unipolar/binary take the maximum of two
+    /// already-ranged operands (an OR). Bipolar instead sums and clamps once to
     /// <c>[-One, One]</c>, making zero an additive identity that cannot overwrite a genuinely negative value.</summary>
     /// <remarks>Pairwise clamping is safe here only because both callers combine exactly two already-settled operands:
     /// the owning seat with the tick's completed contributor accumulator in
@@ -1946,7 +2010,7 @@ public sealed class WorldChannelTable {
     }
 
     /// <summary>Returns the declared channel name at this ordinal, or <see langword="null"/> when <see cref="IsDeclared"/> is
-    /// <see langword="false"/> for it — the reverse of name-to-ordinal resolution, for a read-back that must NAME a
+    /// <see langword="false"/> for it — the reverse of name-to-ordinal resolution, for a read-back that must name a
     /// channel (<c>player.channels</c>) rather than address it.</summary>
     public string? Name(int ordinal) => m_names[ordinal];
 
@@ -1999,8 +2063,8 @@ public sealed record WorldChannel(
 );
 
 /// <summary>
-/// One creation ASSET row — a whole <c>puck.creation.v1</c> document embedded INLINE-CANONICAL in the world
-/// file with its identity hash pinned beside it. The document and hash MUST come from the SAME
+/// One creation asset row — a whole <c>puck.creation.v1</c> document embedded inline, in canonical form, in the world
+/// file with its identity hash pinned beside it. The document and hash must come from the same
 /// <see cref="Puck.Forge.Authoring.CanonicalDocument{TDocument}"/>: the compose boundary canonicalizes on upsert
 /// and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a
 /// tampered world file rejects loudly. World files stay self-contained — the CAS is an authoring-time import/export
@@ -2017,10 +2081,10 @@ public sealed record WorldCreation(string Id, CreationDocument Document, string 
 /// <param name="Offset">The signed plane offset along the normalized <paramref name="Normal"/>.</param>
 public sealed record WorldPlacementMirror(Vector3 Normal, float Offset);
 
-/// <summary>A placement's INHABIT facet — the row's binding to live population bodies. An inhabited placement is a
+/// <summary>A placement's inhabit facet — the row's binding to live population bodies. An inhabited placement is a
 /// normal entry in the entity table: it holds a <c>Puck.World.Server.WorldBody</c>, integrates under the named
 /// kit, and is addressable as <see cref="WorldAnchor.Entity"/> like any avatar. Its stamp rides the body's pose instead
-/// of the row's static transform; the row's position/yaw become its SPAWN pose. Absent (null) = decoration, the
+/// of the row's static transform; the row's position/yaw become its spawn pose. Absent (null) = decoration, the
 /// unchanged furniture behaviour.</summary>
 /// <param name="Kit">The <see cref="WorldKit.Name"/> the bodies move under. Null resolves the creation's own
 /// <see cref="Puck.Forge.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
@@ -2044,8 +2108,8 @@ public sealed record WorldPlacementInhabit(
 /// per-instance override channel.</summary>
 /// <param name="Face">The declared <see cref="Puck.Forge.Authoring.CreationFaceDocument.Name"/> to override.</param>
 /// <param name="Source">The screen source the face shows, in the existing <see cref="WorldScreenSource"/> vocabulary.</param>
-/// <param name="Portal">The face's PORTAL facet (see <see cref="WorldPlacementPortal"/>) — absent (the default)
-/// means this face is not a door. OPTIONAL and TRAILING deliberately: a face authored before this facet existed
+/// <param name="Portal">The face's portal facet (see <see cref="WorldPlacementPortal"/>) — absent (the default)
+/// means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed
 /// round-trips unchanged, and it composes freely with <paramref name="Source"/> — the door and the screen it shows
 /// are independent facts about the same face.</param>
 public sealed record WorldPlacementFace(
@@ -2054,53 +2118,53 @@ public sealed record WorldPlacementFace(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null
 );
 
-/// <summary>A placement's REGION facet — a NAMED VOLUME row, not a trigger system: any placement may carry one,
+/// <summary>A placement's region facet — a named volume row, not a trigger system: any placement may carry one,
 /// turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see
-/// <c>Server.WorldEventFeed</c> and the <c>observe region:&lt;name&gt;</c> grant subject). The region's name IS the
+/// <c>Server.WorldEventFeed</c> and the <c>observe region:&lt;name&gt;</c> grant subject). The region's name is the
 /// carrying placement's <see cref="WorldPlacement.Id"/> — one identity, never a second string kept in sync by hand.
-/// The volume is a SPHERE centered on the placement's <see cref="WorldPlacement.Position"/> (the placement's own
+/// The volume is a sphere centered on the placement's <see cref="WorldPlacement.Position"/> (the placement's own
 /// <see cref="WorldPlacement.Scale"/>/<see cref="WorldPlacement.YawDegrees"/> do not affect it — a region's size is
 /// its own authored radius, never derived from the creation's visual bounds). Presentation-only in itself (drawing
-/// no geometry); sensing reads the SAME document-authored center every tick, converted to fixed-point at the same
-/// boundary <see cref="WorldSolid"/> facets already cross through — UNLESS the row also carries
-/// <see cref="WorldPlacement.Attach"/>, in which case the center is the resolved LIVE body pose instead
+/// no geometry); sensing reads the same document-authored center every tick, converted to fixed-point at the same
+/// boundary <see cref="WorldSolid"/> facets already cross through — unless the row also carries
+/// <see cref="WorldPlacement.Attach"/>, in which case the center is the resolved live body pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, the same resolve <c>world.attachments</c> answers): the sensing
 /// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
 /// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
 public sealed record WorldPlacementRegion(float Radius);
 
-/// <summary>A placement's ATTACH facet — binds the row's stamp to a live population body's transform, so the
-/// resolved world pose FOLLOWS that body every tick (an avatar's hat, held item, nameplate, or aura) instead of
+/// <summary>A placement's attach facet — binds the row's stamp to a live population body's transform, so the
+/// resolved world pose follows that body every tick (an avatar's hat, held item, nameplate, or aura) instead of
 /// sitting at the row's own authored <see cref="WorldPlacement.Position"/>/<see cref="WorldPlacement.YawDegrees"/>.
-/// The offset rides the body's OWN local frame — rotated by the body's orientation before adding, the
+/// The offset rides the body's own local frame — rotated by the body's orientation before adding, the
 /// <c>Puck.SdfVm.Views.OrientedFollowRig</c>/<c>FirstPersonRig</c> convention for a moving anchor, never the
 /// world-axis <c>FollowRig</c> shape a fixed subject would use. The resolved pose is never written back into the
-/// document, and it is derived TWICE, at two clocks, from the one authored facet:
+/// document, and it is derived twice, at two clocks, from the one authored facet:
 /// <list type="bullet">
-/// <item><description>the AUTHORITATIVE answer is fixed point — the body's fixed-point pose composed with this
+/// <item><description>the authoritative answer is fixed point — the body's fixed-point pose composed with this
 /// facet's authored (float, quantized at resolution like every other placement field) offset, by
 /// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand: <c>world.attachments</c> is its only
 /// caller today, so it runs when a reader asks rather than on a schedule;</description></item>
-/// <item><description>the RENDERED pose is presentation float — the same composition over the client's
-/// INTERPOLATED body pose, packed every frame by <c>Client.WorldStampPool</c>, which is what makes an attached row
+/// <item><description>the rendered pose is presentation float — the same composition over the client's
+/// interpolated body pose, packed every frame by <c>Client.WorldStampPool</c>, which is what makes an attached row
 /// visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and
-/// NOT as a static stamp (<c>Client.WorldPlacementStamper.IsStaticStamp</c>), and it charges
+/// not as a static stamp (<c>Client.WorldPlacementStamper.IsStaticStamp</c>), and it charges
 /// <see cref="WorldPlacementPolicy.MaxStampRegistrations"/> like an animated row does.</description></item>
 /// </list>
-/// REGION, SOLID (under the analytic contact provider), and EMISSION were once refused on the same row as this one
-/// because each read the row's own STATIC transform — all three now read the SAME resolved dynamic pose instead
+/// Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one
+/// because each read the row's own static transform — all three now read the same resolved dynamic pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, <c>Server.WorldColliderSet.RefreshAttached</c>,
 /// <c>Client.WorldStampPool.TryShapePosition</c>/<c>RootPose</c>), so a region's aura, an analytic collider's
 /// hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point
-/// rides the body it is attached to. What stays refused: DISTRIBUTION/MIRROR (static-stamp-only, the same rule an
-/// animated or inhabited row already enforces), INHABIT (a row cannot both spawn its own driven bodies and ride
-/// another's), and SOLID specifically under the FIELD contact provider (it compiles every solid row's geometry once
+/// rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an
+/// animated or inhabited row already enforces), inhabit (a row cannot both spawn its own driven bodies and ride
+/// another's), and solid specifically under the field contact provider (it compiles every solid row's geometry once
 /// into one SDF program and never rebuilds it per tick) — refused by name rather than defining a blend (see
 /// <see cref="WorldDefinitionValidator"/>).</summary>
-/// <param name="BodyIndex">The 0-based population entity index the placement rides — the SAME indexing
-/// <see cref="WorldAnchor.Entity"/> and the console's <c>body:&lt;n&gt;</c> grant subject use, NOT the 1-based
+/// <param name="BodyIndex">The 0-based population entity index the placement rides — the same indexing
+/// <see cref="WorldAnchor.Entity"/> and the console's <c>body:&lt;n&gt;</c> grant subject use, not the 1-based
 /// <c>player.*</c> seat number (<c>body:1</c> is "player 2"). Validated within <c>0..</c>the world's authored
-/// population capacity; the target need not be ACTIVE at author time (see remarks — an inactive body at RUNTIME
+/// population capacity; the target need not be active at author time (see remarks — an inactive body at runtime
 /// makes the row contribute nothing, it does not refuse).</param>
 /// <param name="LocalOffset">The stamp's position offset in the body's own local frame, world units.</param>
 /// <param name="LocalYawDegrees">The stamp's yaw offset from the body's own heading, degrees. Zero rides the
@@ -2108,9 +2172,9 @@ public sealed record WorldPlacementRegion(float Radius);
 public sealed record WorldPlacementAttach(int BodyIndex, Vector3 LocalOffset, float LocalYawDegrees = 0f);
 
 /// <summary>
-/// One placement INSTANCE row — a creation asset stamped into the world by reference: transform + facets as
+/// One placement instance row — a creation asset stamped into the world by reference: transform + facets as
 /// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is
-/// ANIMATED: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror
+/// animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror
 /// facets are static-stamp-only and reject on an animated row). A placement carrying an <paramref name="Inhabit"/>
 /// facet is a live population body rather than furniture (see <see cref="WorldPlacementInhabit"/>); its declared
 /// creation eyes derive <see cref="WorldCamera"/> feeds and its declared faces derive screens (both at the delivery
@@ -2119,10 +2183,10 @@ public sealed record WorldPlacementAttach(int BodyIndex, Vector3 LocalOffset, fl
 /// <param name="Id">The row's stable string id (its mutation address).</param>
 /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
-/// <param name="Position">The stamp position, world space. INERT (still validated and stored, but read by nothing —
+/// <param name="Position">The stamp position, world space. Inert (still validated and stored, but read by nothing —
 /// neither the resolve nor the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved
 /// attachment, never this authored one.</param>
-/// <param name="YawDegrees">The stamp yaw about +Y, degrees. Same ATTACH caveat as <paramref name="Position"/>.</param>
+/// <param name="YawDegrees">The stamp yaw about +Y, degrees. Same attach caveat as <paramref name="Position"/>.</param>
 /// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
 /// <param name="Distribution">The placement distribution, or <see langword="null"/> for a single copy. Static
 /// placements currently accept a lattice region with a <c>none</c> fill. Refused together with <paramref name="Attach"/>.</param>
@@ -2130,22 +2194,22 @@ public sealed record WorldPlacementAttach(int BodyIndex, Vector3 LocalOffset, fl
 /// together with <paramref name="Attach"/>.</param>
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
 /// <see cref="WorldEmission"/>), or <see langword="null"/> for silent. Under <paramref name="Distribution"/> the emission
-/// binds to the placement ROOT only. Omitted from the wire when null. Composes with <paramref name="Attach"/>: an
+/// binds to the placement root only. Omitted from the wire when null. Composes with <paramref name="Attach"/>: an
 /// attached row's source point rides the resolved live pose (<c>Client.WorldStampPool.TryShapePosition</c>) instead
 /// of the row's static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.</param>
 /// <param name="Solid">The placement's solidity facet (see <see cref="WorldSolid"/>). Both contact providers compile
 /// the creation's emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for
-/// planes. Omitted from the wire when null. Composes with <paramref name="Attach"/> under the analytic provider ONLY
+/// planes. Omitted from the wire when null. Composes with <paramref name="Attach"/> under the analytic provider only
 /// (<c>WorldColliderSet.RefreshAttached</c> recomputes an attached row's colliders every tick from the resolved live
-/// pose); still refused together under the FIELD provider, which compiles every solid row's geometry once into one
+/// pose); still refused together under the field provider, which compiles every solid row's geometry once into one
 /// SDF program and never rebuilds it per tick.</param>
 /// <param name="Inhabit">The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from
-/// the wire when null. Refused together with <paramref name="Attach"/> — a row cannot both SPAWN its own driven
-/// bodies and RIDE another body's pose.</param>
+/// the wire when null. Refused together with <paramref name="Attach"/> — a row cannot both spawn its own driven
+/// bodies and ride another body's pose.</param>
 /// <param name="FaceSources">Per-instance overrides of the creation's declared faces (null = every face shows its
 /// declared default). Omitted from the wire when null. Orthogonal to <paramref name="Attach"/> (a content selector,
 /// not a transform) — composes freely, like every other facet that now tracks the dynamic pose.</param>
-/// <param name="Region">The placement's region facet (see <see cref="WorldPlacementRegion"/>) — a NAMED VOLUME the
+/// <param name="Region">The placement's region facet (see <see cref="WorldPlacementRegion"/>) — a named volume the
 /// world-events feed watches for body enter/exit, or <see langword="null"/> for none. Omitted from the wire when null.
 /// Composes with <paramref name="Attach"/>: an attached row's sensing sphere centers on the resolved live pose
 /// (<c>Server.WorldEventFeed.CollectRegions</c>) instead of the row's static position — see
@@ -2195,13 +2259,14 @@ public static class WorldPlacementStamp {
 [JsonDerivedType(typeof(WorldScreenSource.Capture), typeDiscriminator: "capture")]
 [JsonDerivedType(typeof(WorldScreenSource.Console), typeDiscriminator: "console")]
 [JsonDerivedType(typeof(WorldScreenSource.Qr), typeDiscriminator: "qr")]
+[JsonDerivedType(typeof(WorldScreenSource.Session), typeDiscriminator: "session")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldScreenSource {
     private WorldScreenSource() {
     }
 
     /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
-    /// test-card / striped no-signal look, NEVER black).</summary>
+    /// test-card / striped no-signal look, never black).</summary>
     public sealed record None() : WorldScreenSource;
 
     /// <summary>The deterministic animated test pattern (<see cref="Puck.SdfVm.Views.TestPatternSource"/>), rendered
@@ -2237,28 +2302,28 @@ public abstract record WorldScreenSource {
     /// <param name="MonitorIndex">The 0-based monitor to capture whole (0 = primary), or <see langword="null"/> for window mode.</param>
     public sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldScreenSource;
 
-    /// <summary>A screen showing the DEVELOPER CONSOLE as an object in the world — the diegetic half of the control plane
-    /// the unification contract names ("the on-screen panel AND process stdin"). The frame is CPU-composed into a
+    /// <summary>A screen showing the developer console as an object in the world — the diegetic half of the control plane
+    /// the unification contract names ("the on-screen panel and process stdin"). The frame is CPU-composed into a
     /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
     /// nothing about it is a render-graph node. Complementary to — never a duplicate of — <c>WorldConsoleMirror</c>,
-    /// which publishes the SAME content to the screen-space overlay. At most one <c>console</c> source may be LIVE
+    /// which publishes the same content to the screen-space overlay. At most one <c>console</c> source may be live
     /// (declared) at a time; an unselected console entry sitting in a magazine is legal.</summary>
     /// <param name="Rows">Console text rows the framebuffer composes, 1..120. Sizes the CPU buffer.</param>
     /// <param name="Columns">Console text columns, 1..400.</param>
     /// <param name="Procedural">When true the slot shows the sibling generated pattern instead of console text — carried
-    /// as a MODE of this variant rather than as a seventh union case.</param>
+    /// as a mode of this variant rather than as a seventh union case.</param>
     public sealed record Console(int Rows = 24, int Columns = 64, bool Procedural = false) : WorldScreenSource;
 
-    /// <summary>An AUTHORABLE QR code (ISO/IEC 18004) — the document names a payload string and the engine derives the
-    /// scannable module grid (<see cref="Puck.World.Qr.QrEncoder"/>), rendered CPU-side into a STATIC B8G8R8A8
+    /// <summary>An authorable QR code (ISO/IEC 18004) — the document names a payload string and the engine derives the
+    /// scannable module grid (<see cref="Puck.World.Qr.QrEncoder"/>), rendered CPU-side into a static B8G8R8A8
     /// framebuffer and uploaded once, never re-derived from the tick like <see cref="TestPattern"/>. The driving case
     /// is a link one human hands another off an in-world screen. This record is the document-authored half only —
     /// nothing here mints a payload at runtime; <c>screen.source &lt;index&gt; qr</c> is the live-authoring twin, and <c>world.identify</c>
-    /// is the one caller that MINTS its payload (the running world's own documentId and content-address pin) rather
+    /// is the one caller that mints its payload (the running world's own documentId and content-address pin) rather
     /// than being handed one.</summary>
     /// <param name="Payload">The encoded string, UTF-8 byte mode. Must fit within version
     /// <see cref="Puck.World.Qr.QrEncoder.MaxSupportedVersion"/> at <paramref name="EcLevel"/> — validation refuses an
-    /// oversized payload BY NAME (its byte count against the level's capacity), never truncates it.</param>
+    /// oversized payload by name (its byte count against the level's capacity), never truncates it.</param>
     /// <param name="EcLevel">The error-correction level: <c>L</c>, <c>M</c>, <c>Q</c>, or <c>H</c> (case-insensitive,
     /// parsed by <see cref="Puck.World.Qr.QrErrorCorrection.TryParse"/>). Defaults to <c>M</c>.</param>
     /// <param name="QuietZoneModules">The white quiet-zone border width in modules on every side. ISO/IEC 18004
@@ -2266,23 +2331,79 @@ public abstract record WorldScreenSource {
     /// scan) — the document may still author it (validation only refuses a negative width), since a screen's physical
     /// framing sometimes supplies the margin itself.</param>
     public sealed record Qr(string Payload, string EcLevel = "M", int QuietZoneModules = 4) : WorldScreenSource;
+
+    /// <summary>
+    /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/world-model.md,
+    /// "Observation and display"). The face/screen resolves the same resolver-owned identity a
+    /// portal crossing at the same door would land in (<see cref="Puck.World.WorldSessionResolver"/>), attaches an
+    /// observation lease to the resolved instance's server, and mirrors just enough of its delivered
+    /// definition/snapshots to render its static authored geometry through <paramref name="CameraName"/> (or the
+    /// destination's default projection). It never re-derives durability/scope/generation itself — those are the
+    /// destination row's own facts.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Staged boundary — no avatar/pose mirroring yet.</b> The session projection renders the destination's
+    /// authored static placement geometry (terrain, structures — whatever a fixed camera would already show with
+    /// nobody standing in the world); live embodied bodies in the destination are not yet mirrored into the image.</para>
+    /// <para><b>Staged boundary — no sub-tick interpolation.</b> The projection re-renders whenever the destination
+    /// delivers a new definition (a real content change), never on the host's own presentation alpha — it reads
+    /// neither <see cref="Puck.SdfVm.ISdfFrameSource.CaptureFrame"/>'s host delta/alpha nor the destination's
+    /// Tick/StepTicks for easing, so "the destination's clock, never the host's" is satisfied by construction rather
+    /// than by a second interpolation implementation. Smooth interpolation of moving destination content is
+    /// meaningless before the avatar mirror above lands, so it is deferred with it.</para>
+    /// <para><b>Staged boundary — global scope only.</b> A <c>user</c>/<c>group</c>-scoped destination makes the
+    /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
+    /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
+    /// non-global destination refuses at bind time by name rather than binding to an arbitrary viewer's resolution.
+    /// Per-viewport binding is future work (docs/world-model.md, "User/group-scoped destinations make images
+    /// viewer-dependent").</para>
+    /// </remarks>
+    /// <param name="Destination">The <see cref="Puck.World.WorldDestination.Name"/> this face/screen observes. Must
+    /// resolve to a declared <c>destinations</c> row — an undeclared name refuses at boot (validated, like a portal
+    /// facet's own <c>destination</c>).</param>
+    /// <param name="CameraName">The destination's own placeable-camera name to render through, or
+    /// <see langword="null"/> for its default projection (its first declared camera, else a fixed overview derived
+    /// from its spawn points). Wire name <c>camera</c> — plain <c>Camera</c> would collide with the sibling
+    /// <see cref="WorldScreenSource.Camera"/> arm's own type name inside this enclosing record. Validated only as
+    /// non-empty when present at author time — the destination's own definition is not joined at boot (references
+    /// assert naming intent, not reachability), so an unknown camera name is refused loudly at bind time instead,
+    /// once the destination is actually resolved, falling back to the default projection rather than refusing the
+    /// whole bind. Ignored under <see cref="WorldScreenProjection.Window"/> (see <paramref name="Projection"/>).</param>
+    /// <param name="Projection">How the destination render projects onto this face (see <see cref="WorldScreenProjection"/>).
+    /// Default <see cref="WorldScreenProjection.Camera"/> — unauthored worlds and every session facet authored before
+    /// this member existed render byte-identically. Optional and trailing (the same widen-without-moving-existing-members
+    /// shape <paramref name="CameraName"/> itself already follows). <see cref="WorldScreenProjection.Window"/> requires
+    /// this same face's <see cref="WorldPlacementFace.Portal"/> to author <see cref="WorldPortalArrival.Mapped"/> with a
+    /// <see cref="WorldPlacementPortal.Counterpart"/> — refused by name otherwise (see <see cref="WorldDefinitionValidator"/>);
+    /// a top-level <c>screens</c> row or magazine entry carries no face to pair with, so <c>window</c> is refused there
+    /// unconditionally.</param>
+    /// <param name="Resolution">The offscreen target's <c>[width, height]</c> in pixels, or <see langword="null"/> for
+    /// the engine default (<c>Puck.SdfVm.Views.WorldSessionView.DefaultWidth</c> x <c>DefaultHeight</c> — today's
+    /// 160x144 panel, unchanged for an unauthored facet). Each axis is validated within
+    /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
+    public sealed record Session(
+        string Destination,
+        [property: JsonPropertyName("camera"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CameraName = null,
+        WorldScreenProjection Projection = WorldScreenProjection.Camera,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null
+    ) : WorldScreenSource;
 }
 
 /// <summary>An ordered set of sources one screen may show, plus the entry its selector starts on — the cycle primitive. A
-/// selection is a POINTER into this list; changing it never changes how many screen slots exist, so a magazine costs no
+/// selection is a pointer into this list; changing it never changes how many screen slots exist, so a magazine costs no
 /// render envelope. Entries are the same closed <see cref="WorldScreenSource"/> vocabulary the declared source uses, so a
 /// screen may rotate a cartridge, the webcam, and a jumbotron view through one slot.</summary>
 /// <param name="Entries">The ordered source list (at least one entry).</param>
-/// <param name="Selected">The 0-based entry the selector STARTS on (what <c>screen.select</c> advances from), not what the
+/// <param name="Selected">The 0-based entry the selector starts on (what <c>screen.select</c> advances from), not what the
 /// screen boots showing — a screen always wakes on its declared <c>Source</c> (the one-live-console ceiling depends on
 /// this). Live selection drifts from this and is folded back by <c>world.save</c> (see <c>Puck.World.WorldSessionCapture</c>).</param>
 /// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
 /// when false the selector clamps at both ends.</param>
 public sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);
 
-/// <summary>A cable-linked group of screens whose machines advance as ONE interleaved unit. The binder steps the link,
+/// <summary>A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link,
 /// never its members individually, so the engine's deterministic interleave — not the host's frame order — decides who
-/// runs when. Every member must resolve to a machine from the SAME engine, and that engine must implement
+/// runs when. Every member must resolve to a machine from the same engine, and that engine must implement
 /// <c>IMachineLinkingEngine</c>; a link whose members do not currently satisfy that is reported dormant, never silently
 /// dropped.</summary>
 /// <param name="Name">The link's stable kebab-case name (its mutation address).</param>
@@ -2354,7 +2475,7 @@ public readonly record struct WorldScreenTranslationRow(string Channel, WorldPad
 /// optional members each default to the inert/baked choice: no auto-boot, no gesture channel, every channel reached,
 /// and the engine's default translation (the two movement roles to the left stick — <c>MoveStrafe</c>/
 /// <c>MoveForward</c>, structural ordinals, never a channel name). The default names no gameplay channel: a
-/// route whose machine needs a face button (or any other element) MUST author that row explicitly — see
+/// route whose machine needs a face button (or any other element) must author that row explicitly — see
 /// <c>Server.WorldEngagement.CompileTranslation</c>.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
@@ -2362,11 +2483,11 @@ public readonly record struct WorldScreenTranslationRow(string Channel, WorldPad
 /// <param name="AutoInsert">When set, engaging the screen first boots the selected magazine entry (the "walk over, press
 /// the button, the screen lights" gesture), so the interaction is one act rather than an insert then an engage.</param>
 /// <param name="EngageChannel">The world-event channel whose arrival on a body engages this screen, or
-/// <see langword="null"/> (the default) for a route that does not answer gestures. THE NAME IS THE AUTHOR'S: nothing in
-/// the engine special-cases a spelling. Omitted from the wire when null.</param>
+/// <see langword="null"/> (the default) for a route that does not answer gestures. The author chooses this name freely;
+/// the engine never special-cases a spelling. Omitted from the wire when null.</param>
 /// <param name="CycleChannel">Same, for advancing the magazine selector. Omitted from the wire when null.</param>
 /// <param name="Channels">The declared channel names this route's mask reaches — a masked-out channel keeps flowing to
-/// the routed body's OWN pose (relevant under the capture:false MIRROR policy) but never reaches this route's target.
+/// the routed body's own pose (relevant under the capture:false mirror policy) but never reaches this route's target.
 /// <see langword="null"/> (the default) reaches every declared channel. Omitted from the wire when null.</param>
 /// <param name="Translation">The authored channel→pad-element rows this route's target reads, replacing the engine's
 /// default when present. <see langword="null"/> uses the engine mapping. Omitted from the wire when
@@ -2383,7 +2504,7 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SdfVm.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or the procedural fallback when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
-/// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the SAMPLED surface frame and must match the
+/// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the sampled surface frame and must match the
 /// slab's placement; the frame source bakes the geometry translate from it.</summary>
 /// <param name="Index">The engine screen-surface index (0..<see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/>−1)
 /// this slab declares — the key the source/light providers bind under.</param>
@@ -2440,10 +2561,10 @@ public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ48
 
 /// <summary>The one-time fixed-point compilation of an authored <see cref="WorldMotionModel.Grounded"/> row. Runtime
 /// simulation reads only this form.</summary>
-/// <remarks>SIM-AFFECTING extension: <see cref="Response"/> promotes a slice of the tuning that the shaping stage of
+/// <remarks>A simulation-affecting extension: <see cref="Response"/> promotes a slice of the tuning that the shaping stage of
 /// <c>WorldBody</c>'s grounded operations reads. <see cref="ResponseRecencyFacts"/>/<see cref="ResponseRecencyWindows"/>
 /// are the shared recency-clock table across every row's <see cref="ActionPredicate.Recently"/> gate (the per-tick clock
-/// updater walks it), slotted by the SAME <see cref="CompiledActionSpec.FlattenPredicate"/> the lane bindings use.</remarks>
+/// updater walks it), slotted by the same <see cref="CompiledActionSpec.FlattenPredicate"/> the lane bindings use.</remarks>
 public readonly record struct FixedMotionTuning(
     FixedQ4816 MoveSpeed,
     FixedQ4816 TurnSpeed,
@@ -2475,7 +2596,7 @@ public readonly record struct FixedMotionTuning(
         moveSpeedEnvelope: tuning.MoveSpeedEnvelope
     );
 
-    /// <summary>Compiles an authored swim motion row's SHARED half — speeds, response table, sprint, frame — to the
+    /// <summary>Compiles an authored swim motion row's shared half — speeds, response table, sprint, frame — to the
     /// same fixed-point form every model rides (the gravity fields compile to zero; the swim program's facet
     /// coherence already refused any op that would read them). The swim-specific half is
     /// <see cref="FixedSwimTuning.Compile"/>.</summary>
@@ -2746,7 +2867,7 @@ public enum SeatActivationPolicy : byte {
 /// <summary>The built-in session census. Local players occupy the split-screen seats; network players are represented
 /// by authoritative local stand-ins until a transport supplies their intent stream.</summary>
 /// <param name="SeatActivation">The per-seat boot-activation policy, exactly <see
-/// cref="WorldPopulationLimits.LocalSeatCount"/> entries in seat order. Seat 0 (player 1) MUST be <see
+/// cref="WorldPopulationLimits.LocalSeatCount"/> entries in seat order. Seat 0 (player 1) must be <see
 /// cref="SeatActivationPolicy.Eager"/> (refused otherwise — the session always needs a first player); the
 /// remaining seats are ordinarily authored <see cref="SeatActivationPolicy.OnDemand"/> so a friend's controller or
 /// an explicit <c>player.join</c> claims one only when someone actually shows up, rather than every local seat
@@ -2756,31 +2877,37 @@ public enum SeatActivationPolicy : byte {
 /// cref="IntentSource.Producer(string)"/> in the built-in world).</param>
 /// <param name="SeatSpawns">The spawn-point name selected by each local seat ordinal.</param>
 /// <param name="Distribution">How simulated peers are distributed at spawn.
-/// A THIRD timing class within this row: it is LIVE for FUTURE activations but INERT for bodies already standing
+/// A third timing class within this row: it is live for future activations but inert for bodies already standing
 /// (a change re-clusters only peers spawned after it), narrated in the accept echo.</param>
 /// <param name="PeerVariation">The independently authored producer-state sequences for peer bodies.</param>
 /// <param name="SeatVariation">The independently authored producer-state sequences for local-seat bodies.</param>
 /// <param name="PeerColors">The stand-in color sequence, independent of producer-state variation.</param>
 /// <param name="Capacity">The total authoritative body capacity, including reserved local seats.</param>
-/// <param name="ReconnectGraceTicks">How many simulation ticks a disconnected body stays PARKED — retained in the
-/// sim/collider set at its last pose, still counted <c>IsHumanOccupied</c> — before the deferred teardown (body
-/// drop, and for a peer, its generation's grants) actually fires. <c>0</c> disables the grace window outright: a
-/// disconnect tears the body down immediately, the pre-park behavior. Read once at construction/rebuild, like the
-/// rest of this section (<c>SetPopulationDefaults</c>'s own timing class) — a live edit takes effect on the NEXT
-/// disconnect, never retroactively on an already-parked body. See <c>Server.WorldPopulation</c>'s park-with-grace
+/// <param name="ReconnectGraceSeconds">How long a disconnected body stays parked — retained in the sim/collider
+/// set at its last pose, still counted <c>IsHumanOccupied</c> — before the deferred teardown (body drop, and for a
+/// peer, its generation's grants) actually fires. <c>0</c> disables the grace window outright: a disconnect tears
+/// the body down immediately, the pre-park behavior. A positive value authored against a world whose
+/// <see cref="WorldDefinition.SimulationRateHz"/> is 0 parks the body forever — there is no tick mapping for a
+/// world that never advances, so the deferred teardown never fires (never, not immediately and not zero; see
+/// <see cref="CompiledTickDuration"/>). Authored in seconds — a physical unit, not a tick count, so a world's rate
+/// can change without silently retuning this window — and compiled once to
+/// <see cref="WorldDefinition.PopulationReconnectGraceTicks"/> via <see cref="WorldSimulationTickConversion"/>.
+/// Read once at construction/rebuild,
+/// like the rest of this section (<c>SetPopulationDefaults</c>'s own timing class) — a live edit takes effect on the
+/// next disconnect, never retroactively on an already-parked body. See <c>Server.WorldPopulation</c>'s park-with-grace
 /// remarks and the <c>$parked:&lt;bodyRef&gt;</c> reserved rule channel (<see cref="WorldRuleFacts.ParkedPrefix"/>)
-/// that reads a parked body's remaining count. Default 720 ticks — 3 seconds at the fixed 240 Hz simulation
+/// that reads a parked body's remaining count. Default 3 seconds — 720 ticks at the fixed 240 Hz simulation
 /// rate.</param>
 /// <param name="CapacityDraw">The census's authored-randomness facet, or <see langword="null"/> for an ordinary
-/// literal <paramref name="Capacity"/>. A BOOT-ONLY site (<see cref="WorldDrawSites.PopulationCapacity"/>): settled
+/// literal <paramref name="Capacity"/>. A boot-only site (<see cref="WorldDrawSites.PopulationCapacity"/>): settled
 /// into <paramref name="Capacity"/>, cleared, and narrated exactly like
 /// <see cref="WorldHostDefaults.BackendDraw"/>.
 /// <para><b>The census coherence rule.</b> The site's admissible domain is not the capacity ceiling alone —
-/// <paramref name="NetworkPlayers"/> is validated against capacity MINUS the local seats, so a drawn capacity below
-/// that sum is a document this same validator would refuse once resolved. The domain is narrowed STATICALLY at
+/// <paramref name="NetworkPlayers"/> is validated against capacity minus the local seats, so a drawn capacity below
+/// that sum is a document this same validator would refuse once resolved. The domain is narrowed statically at
 /// authoring instead, so the roll can never decide whether the world boots.</para>
 /// <para><b>Not an XOR.</b> Unlike <see cref="WorldHostDefaults.BackendDraw"/>, this site cannot refuse
-/// both-declared: <see cref="WorldPopulationDefaults"/> is a STRUCT, so an authored <c>capacity: 128</c> and the C#
+/// both-declared: <see cref="WorldPopulationDefaults"/> is a struct, so an authored <c>capacity: 128</c> and the C#
 /// default 128 are indistinguishable once parsed. When both are present the draw simply wins — a stated limitation,
 /// not a silent guess.</para></param>
 public readonly record struct WorldPopulationDefaults(
@@ -2793,12 +2920,16 @@ public readonly record struct WorldPopulationDefaults(
     WorldPopulationVariation SeatVariation,
     WorldSequence PeerColors,
     int Capacity = 128,
-    int ReconnectGraceTicks = 720,
+    float ReconnectGraceSeconds = 3.0f,
     // OPTIONAL — the authored-randomness facet over Capacity above (see the param docs).
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? CapacityDraw = null
 );
 
-/// <summary>One participant-specific input-hold override. An omitted body uses the section defaults.</summary>
+/// <summary>One participant-specific input-hold override. An omitted body uses the section defaults. The compiled
+/// shape — <see cref="Ticks"/> is simulation ticks, the unit the runtime actually consumes. The document and the
+/// <c>world.row.set inputHold</c> console verb both author this in seconds instead
+/// (<see cref="WorldInputHoldParticipantAuthoring"/>); <see cref="WorldInputHoldAuthoring.Compile"/> is the one seam
+/// that converts between the two, so this type itself never sees a raw tick literal from a document.</summary>
 /// <param name="BodyIndex">The participant's 0-based population body index.</param>
 /// <param name="Ticks">The authored hold floor, in simulation ticks.</param>
 /// <param name="Equalized">Whether this participant contributes to and receives the shared maximum.</param>
@@ -2806,7 +2937,14 @@ public readonly record struct WorldInputHoldParticipant(int BodyIndex, int Ticks
 
 /// <summary>The world's participant input-hold policy. Measured holds raise authored floors, the applied value is
 /// capped by <see cref="CeilingTicks"/>, and a lower target must remain unchanged for <see cref="LowerAfterTicks"/>
-/// before the applied hold descends one tick per simulation tick.</summary>
+/// before the applied hold descends one tick per simulation tick. The compiled shape — every <c>*Ticks</c> field is
+/// simulation ticks, the unit <c>Server.WorldInputHoldRuntime</c> actually consumes — never what
+/// <see cref="WorldDefinition.InputHold"/> itself stores (that field is the authored seconds shape,
+/// <see cref="WorldInputHoldAuthoring"/>; see its own remarks). <see cref="WorldInputHoldAuthoring.Compile"/> and
+/// <see cref="ToAuthoring"/> are the two conversions, both parameterized on a simulation rate rather than a pinned
+/// constant, since a world's rate is authored (<see cref="WorldSimulationDefaults"/>). The separate addon-mutation ABI
+/// (<c>Puck.World.Server.WorldAddonMutationDecoder</c>) still constructs this type directly with raw ticks — a live
+/// runtime API, not authored document content, and out of either conversion's reach by architecture.</summary>
 /// <param name="CeilingTicks">The maximum applied hold, in simulation ticks.</param>
 /// <param name="LowerAfterTicks">How many simulation ticks a lower target must remain unchanged before descent.</param>
 /// <param name="DefaultTicks">The authored hold floor for participants without an override.</param>
@@ -2818,7 +2956,37 @@ public readonly record struct WorldInputHoldSettings(
     int DefaultTicks,
     bool EqualizeByDefault,
     IReadOnlyList<WorldInputHoldParticipant> Participants
-);
+) {
+    /// <summary>Decompiles this compiled (ticks) settings row back to its authored (seconds) shape, at
+    /// <paramref name="ratePerSecond"/> — the inverse of <see cref="WorldInputHoldAuthoring.Compile"/>. Exact whenever
+    /// every tick count is a multiple of <paramref name="ratePerSecond"/> (every value a live seconds-authored
+    /// <c>world.row.set inputHold</c> compiled through <see cref="WorldInputHoldAuthoring.Compile"/> is); a raw tick
+    /// count from the addon-mutation ABI that is not may round-trip to the nearest second, one tick off on
+    /// reconversion — see <see cref="WorldSimulationTickConversion.SecondsFromTicks"/>'s remarks.</summary>
+    /// <param name="ratePerSecond">The simulation rate (Hz) this settings row runs under — a world's own
+    /// <see cref="WorldDefinition.SimulationRateHz"/>.</param>
+    public WorldInputHoldAuthoring ToAuthoring(uint ratePerSecond) {
+        var participants = new WorldInputHoldParticipantAuthoring[Participants.Count];
+
+        for (var index = 0; (index < participants.Length); index++) {
+            var participant = Participants[index];
+
+            participants[index] = new WorldInputHoldParticipantAuthoring(
+                BodyIndex: participant.BodyIndex,
+                Seconds: WorldSimulationTickConversion.SecondsFromTicks(ticks: participant.Ticks, ratePerSecond: ratePerSecond),
+                Equalized: participant.Equalized
+            );
+        }
+
+        return new WorldInputHoldAuthoring(
+            CeilingSeconds: WorldSimulationTickConversion.SecondsFromTicks(ticks: CeilingTicks, ratePerSecond: ratePerSecond),
+            LowerAfterSeconds: WorldSimulationTickConversion.SecondsFromTicks(ticks: LowerAfterTicks, ratePerSecond: ratePerSecond),
+            DefaultSeconds: WorldSimulationTickConversion.SecondsFromTicks(ticks: DefaultTicks, ratePerSecond: ratePerSecond),
+            EqualizeByDefault: EqualizeByDefault,
+            Participants: participants
+        );
+    }
+}
 public static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
@@ -2897,10 +3065,10 @@ public sealed record WorldRenderDefaults(
 public readonly record struct WorldSpawnPoint(string Id, Vector3 Position, float YawDegrees = 0f);
 
 /// <summary>The row-to-entity assignment declaration — nothing about <see cref="Sequence"/>/<see cref="Rows"/> is kit-specific,
-/// so the SAME primitive distributes the kit table (a way of MOVING) and the look table (a way of LOOKING) across the
+/// so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the
 /// population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The
-/// kit assignment is SIM-AFFECTING (it selects the compiled tuning/action bindings); the look assignment is
-/// PRESENTATION-ONLY (it selects the appearance row).</summary>
+/// kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is
+/// presentation-only (it selects the appearance row).</summary>
 /// <param name="Sequence">The sequence that selects a row.</param>
 /// <param name="Rows">An authored row-name view, or empty to select from every declared row in declaration order.</param>
 public sealed record WorldRowAssignment(WorldSequence Sequence, IReadOnlyList<string> Rows) {
@@ -2915,17 +3083,16 @@ public sealed record WorldRowAssignment(WorldSequence Sequence, IReadOnlyList<st
 }
 
 /// <summary>Where a <see cref="WorldLook"/> resolves an entity's appearance from — a pinned catalog rig or a sculpted
-/// creation. The appearance peer of a way of MOVING: a new way of LOOKING is a row, never a new renderer.</summary>
+/// creation. The appearance peer of a way of moving: a new way of looking is a row, never a new renderer.</summary>
 [JsonDerivedType(typeof(WorldLookSource.Catalog), typeDiscriminator: "catalog")]
 [JsonDerivedType(typeof(WorldLookSource.Creation), typeDiscriminator: "creation")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldLookSource {
     private WorldLookSource() { }
 
-    /// <summary>The procedural humanoid catalog (<c>WorldAvatarCatalog</c>) — one look source among others,
-    /// no longer "the avatar system".</summary>
+    /// <summary>The procedural humanoid catalog (<c>WorldAvatarCatalog</c>) — one look source among others.</summary>
     /// <param name="Index">The procedural renderer catalog rig to pin, or
-    /// <see langword="null"/> for the index-derived pick (the pre-look behaviour every body had).</param>
+    /// <see langword="null"/> for the index-derived pick.</param>
     public sealed record Catalog(int? Index) : WorldLookSource {
         /// <summary>The procedural renderer's fixed rig count.</summary>
         public const int RigCount = 128;
@@ -2936,7 +3103,7 @@ public abstract record WorldLookSource {
     public sealed record Creation(string CreationId) : WorldLookSource;
 }
 
-/// <summary>How a look animates with the body it clothes. PRESENTATION-ONLY: read by the client's stamp pool and the
+/// <summary>How a look animates with the body it clothes. presentation-only: read by the client's stamp pool and the
 /// catalog packer, never by <c>WorldBody</c>. Catalog looks read <see cref="GaitAmplitude"/>; creation looks read
 /// <see cref="ReplayFrames"/> and <see cref="SecondsPerFrame"/>.</summary>
 /// <param name="GaitAmplitude">The catalog rig's limb-swing scale (1 = the pre-look default; 0 stills the gait).</param>
@@ -2947,11 +3114,11 @@ public readonly record struct WorldLookMotion(float GaitAmplitude, bool ReplayFr
     public static WorldLookMotion Default { get; } = new WorldLookMotion(GaitAmplitude: 1f, ReplayFrames: false, SecondsPerFrame: 0f);
 }
 
-/// <summary>One LOOK row — the appearance peer of <see cref="WorldKit"/>'s way of MOVING. Every appearance a world
+/// <summary>One look row — the appearance peer of <see cref="WorldKit"/>'s way of moving. Every appearance a world
 /// offers is a row of this data, never a renderer branch; <c>world.looks</c> prints these names.</summary>
 /// <param name="Name">The look's stable kebab-case name (unique within the definition), assignable by the look table.</param>
 /// <param name="Source">Where the appearance resolves from (a catalog rig or a creation).</param>
-/// <param name="Scale">The uniform render scale. Appearance ONLY — it does not resize the body's motion tuning or its
+/// <param name="Scale">The uniform render scale. Appearance only — it does not resize the body's motion tuning or its
 /// collision volume.</param>
 /// <param name="Motion">How the look animates with the body (see <see cref="WorldLookMotion"/>).</param>
 public sealed record WorldLook(string Name, WorldLookSource Source, float Scale, WorldLookMotion Motion) {
@@ -2982,14 +3149,14 @@ public readonly record struct FixedSpawnPoint(FixedVector3 Position, FixedQ4816 
 /// <c>Server.WorldAddonRuntime</c>.</summary>
 /// <param name="Name">The addon's identifying name — unique within the definition; used by console verbs and logging.</param>
 /// <param name="ModulePath">The WASM module file path (machine-local; existence/hash verification is the run path's job).</param>
-/// <param name="Hash">The content-address integrity pin (<c>sha256-64/{16 hex}</c>). REQUIRED — a guest whose module
+/// <param name="Hash">The content-address integrity pin (<c>sha256-64/{16 hex}</c>). required — a guest whose module
 /// is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a
 /// security one.</param>
 /// <param name="Fuel">The per-tick fuel budget before a deterministic halt.</param>
 /// <param name="Enabled">Whether the addon starts enabled.</param>
-/// <param name="Requests">The addon's manifest — what it ASKS for, as data (see
+/// <param name="Requests">The addon's manifest — what it asks for, as data (see
 /// <see cref="Protocol.WorldCapabilityRequest"/>): a designation only, never authority. Deny by default holds
-/// regardless of what this names, and so does the converse — this is the LEFT half of requests ∧ grants, so a hold the
+/// regardless of what this names, and so does the converse — this is the left half of requests ∧ grants, so a hold the
 /// manifest never names materializes no handle and the guest can never reach it (see
 /// <c>Server.WorldAddonRuntime</c>). Null/empty means the row asked for nothing and therefore reaches nothing.
 /// Reviewed by an operator before mounting, or by the runtime's own loud mount-time line naming exactly which requested
@@ -2997,18 +3164,18 @@ public readonly record struct FixedSpawnPoint(FixedVector3 Position, FixedQ4816 
 /// applied) honors for this addon's principal right now, which it withholds, and which it holds beyond the
 /// manifest.</param>
 /// <param name="MemoryWatches">The addon's machine-memory watch rows (the fifth event family — see
-/// <see cref="WorldAddonMemoryWatch"/>): declared alongside <see cref="Requests"/>, materializing ONLY where the
-/// settled grant table also holds <c>Observe/screen:&lt;n&gt;</c> WITH an event budget for the watched screen (the
+/// <see cref="WorldAddonMemoryWatch"/>): declared alongside <see cref="Requests"/>, materializing only where the
+/// settled grant table also holds <c>Observe/screen:&lt;n&gt;</c> with an event budget for the watched screen (the
 /// same requested ∧ granted rule every other capability here already enforces). Null/empty means no watches.</param>
 public sealed record WorldAddonRow(string Name, string ModulePath, string Hash, ulong Fuel, bool Enabled,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCapabilityRequest>? Requests = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAddonMemoryWatch>? MemoryWatches = null);
 
-/// <summary>One machine-memory watch row — an addon's declaration of ONE byte range on ONE screen's machine to poll
+/// <summary>One machine-memory watch row — an addon's declaration of one byte range on one screen's machine to poll
 /// for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The
-/// address space is the machine's WHOLE bus view (<see cref="Puck.Abstractions.Machines.IMachineMemoryPeek"/>
+/// address space is the machine's whole bus view (<see cref="Puck.Abstractions.Machines.IMachineMemoryPeek"/>
 /// already covers WRAM and external/battery RAM uniformly — a single flat address, never a split
-/// WRAM-vs-SRAM shape). PUBLISHES NOTHING on a headless host: the peek provider is registered only when presentation
+/// WRAM-vs-SRAM shape). Publishes nothing on a headless host: the peek provider is registered only when presentation
 /// composes a screen's machine (see <c>Puck.World.WorldScreenBinder</c>'s registration and
 /// <c>Server.WorldEventFeed</c>'s own remarks) — the retired <c>arcade.world.json</c> proof world this family was
 /// built for was local play, so this is a stated, permanent scope, not a gap to close later. No shipped world
@@ -3030,7 +3197,7 @@ public sealed record WorldBindingOverlay(string Id, BindingProfileDocument Docum
 
 /// <summary>
 /// The world's storage host-section defaults — the per-user cloud endpoint, an explicit user-id override, and the
-/// direct-to-account discovery endpoint — authored as DATA so durable configuration lives in the world file (never a
+/// direct-to-account discovery endpoint — authored as data so durable configuration lives in the world file (never a
 /// <c>PUCK_*</c> env var; World has no such surface). An endpoint plus a resolved identity wires the owned-world sync
 /// engine (<c>storage.push</c> / <c>storage.pull</c>); anything less leaves the catalog local-only. A
 /// <c>--storage-uri</c> / <c>--user-id</c> / <c>--storage-discovery-uri</c> CLI reflection overrides each at boot.
@@ -3042,10 +3209,10 @@ public sealed record WorldBindingOverlay(string Id, BindingProfileDocument Docum
 /// connection-string override (CLI-only — see the validator) is raw-shaped.</param>
 /// <param name="UserId">An explicit user-id override (an Entra <c>oid</c> Guid string for a dev box or agent), or
 /// <see langword="null"/> to decline identity (local-only). Fed to the identity resolver's explicit-override source.</param>
-/// <param name="DiscoveryEndpoint">The direct-to-account connection container LIST uses when <see cref="Endpoint"/>
+/// <param name="DiscoveryEndpoint">The direct-to-account connection container listing uses when <see cref="Endpoint"/>
 /// resolves to an edge-shaped target — the platform edge cannot serve List at all (see
 /// <c>AzureBlobObjectStorageTarget.DirectEndpoint</c>'s remarks), so an edge-shaped target with this
-/// <see langword="null"/> refuses discovery BY NAME instead of a request the edge cannot answer. Validated as an
+/// <see langword="null"/> refuses discovery by name instead of a request the edge cannot answer. Validated as an
 /// absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator
 /// shape. Ignored when <see cref="Endpoint"/> is raw-shaped (a raw target lists directly, like it reads and
 /// writes).</param>
@@ -3062,41 +3229,42 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// consumption classes share this one row (whole-row mutable like every other section — never split into two
 /// sections for a consumption nuance that consumers already handle honestly):
 /// <list type="bullet">
-/// <item><description><b>BOOT-CONSUMED</b> (<see cref="AuthoringHeadroomScreens"/>,
-/// <see cref="AuthoringHeadroomPlacements"/>): read exactly ONCE, at
+/// <item><description><b>Boot-consumed</b> (<see cref="AuthoringHeadroomScreens"/>,
+/// <see cref="AuthoringHeadroomPlacements"/>): read exactly once, at
 /// <c>Client.WorldSceneEmitter</c> construction, into the frozen render-envelope capacity floor (the probe's
 /// worst-case word/instance reservation). The one honest exception: a live edit to these capacity-floor fields is
 /// journaled but the running session's floor cannot retroactively grow — it applies at the next boot (the validator
 /// still gates the new value against engine caps immediately, so a bad authored value never reaches a boot).</description></item>
-/// <item><description><b>LIVE-CONSUMED</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
+/// <item><description><b>Live-consumed</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
 /// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>, <see cref="WorkbenchFraction"/>,
 /// <see cref="PreviewDeadlineFrames"/>): read fresh from the delivered definition at each use site (a candidate
 /// gather, a layout resolve, a drag-freeze tick) — a mutation takes effect at the very next tick/frame, no restart.
 /// </description></item>
 /// </list>
 /// </summary>
-/// <param name="AuthoringHeadroomScreens">BOOT-CONSUMED. The extra screen slots the probe reserves, bounded by the
+/// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
 /// engine's <see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
-/// <param name="AuthoringHeadroomPlacements">BOOT-CONSUMED. The placement rows of headroom the probe reserves beyond
+/// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
 /// the boot placements (see <c>Client.WorldPlacementStamper.StaticStampInstances</c>).</param>
-/// <param name="MinPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's floor — a pure validator
+/// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
-/// <param name="MaxPlacementScale">LIVE-CONSUMED. The placement uniform-scale envelope's ceiling — also the worst-case
+/// <param name="MaxPlacementScale">Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case
 /// scale <c>Client.WorldStampPool</c>'s probe bound-radius reads (bound radius is spatial-cull metadata,
 /// never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).</param>
-/// <param name="CandidateRadius">LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat's editor
+/// <param name="CandidateRadius">Live-consumed. The proximity-candidate radius (world units) around a seat's editor
 /// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
-/// <param name="CandidateCap">LIVE-CONSUMED. The candidate-count cap: at most this many nearest in-radius rows enter
+/// <param name="CandidateCap">Live-consumed. The candidate-count cap: at most this many nearest in-radius rows enter
 /// the cycle ring.</param>
-/// <param name="WorkbenchFraction">LIVE-CONSUMED. The full-height fraction a SOLE editing seat's viewport takes when
+/// <param name="WorkbenchFraction">Live-consumed. The full-height fraction a sole editing seat's viewport takes when
 /// 2+ seats are joined (the remaining width splits as a live rail among the playing seats) — read fresh each captured
 /// frame by <c>Client.WorldFrameSource.LayoutRegion(int, int, int, float)</c>.</param>
-/// <param name="PreviewDeadlineFrames">LIVE-CONSUMED. The drag preview channel's missing-response fallback: a
+/// <param name="PreviewDeadlineFrames">Live-consumed. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
-/// <param name="DerivedFaceScreens">BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation
-/// FACES (a face declared by a placement's creation, lit by a feed), registered at
+/// <param name="DerivedFaceScreens">Boot-consumed. The derived screen slots the binder reserves at boot for creation
+/// faces (a face declared by a placement's creation, lit by a feed), registered at
 /// <c>[<c>Client.WorldCreationFacets.DerivedFaceBase</c>, DerivedFaceBase + this)</c>. Bounded so the range
-/// stays within the engine's screen-surface ceiling.</param>
+/// stays below <see cref="WorldPlacementPolicy.AwaySeatScreenBase"/>, where traveler-follow presentation owns the
+/// engine table's final local-seat-sized band.</param>
 public sealed record WorldAuthoringDefaults(
     int AuthoringHeadroomScreens,
     int AuthoringHeadroomPlacements,
@@ -3122,9 +3290,9 @@ public sealed record WorldAuthoringDefaults(
     );
 }
 
-/// <summary>Which graphics backend a world PREFERS. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
+/// <summary>Which graphics backend a world prefers. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
 /// so a shared world document is portable across an OS boundary; an explicit preference the running OS cannot satisfy
-/// degrades LOUDLY (a document author preference) or hard-exits (a CLI operator assertion) rather than silently
+/// degrades loudly (a document author preference) or hard-exits (a CLI operator assertion) rather than silently
 /// mispresenting.</summary>
 public enum WorldBackendPreference : byte {
     /// <summary>Pick the OS-appropriate backend at boot — Direct3D 12 on Windows 10+, Vulkan elsewhere.</summary>
@@ -3138,9 +3306,44 @@ public enum WorldBackendPreference : byte {
 }
 
 /// <summary>
+/// The world's simulation rate — how many fixed steps the authoritative server advances per second. It is simulation
+/// state, unlike <see cref="WorldHostDefaults"/> (presentation-only, never simulation state): the rate is
+/// simulation input (rule 4) — it is what <c>Puck.Hosting.EngineTicks.PerRate</c> turns into the exact fixed-point
+/// step width every kit tuning, motion program, and physics constant is authored against, so two worlds authoring
+/// different rates are two different, equally deterministic simulations, never a presentation preference.
+/// </summary>
+/// <param name="RateHz">The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping
+/// world — a static diorama the authoritative server never advances a fixed step for, though it still applies
+/// ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a
+/// rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a
+/// positive value means never — not zero and not "already expired" — since there is no tick mapping for a world
+/// that never advances (see <see cref="CompiledTickDuration"/>, <see cref="WorldDefinition.PopulationReconnectGraceTicks"/>).
+/// A positive rate must be a divisor of <see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> (50400)
+/// exactly, so <c>Puck.Hosting.EngineTicks.PerRate</c> always derives a whole engine-tick step width — never
+/// truncated, never remainder-carried (<see cref="WorldDefinitionValidator"/> refuses a non-divisor, naming the
+/// nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's
+/// two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). Defaults to
+/// <see cref="DefaultRateHz"/> (240), the fixed rate every world ran at before this section existed, so a world
+/// authoring no <c>simulation</c> section boots byte-identically to before.
+/// <para><b>The derived-floor seam.</b> This record is deliberately the one place a follow-on validation pass adds
+/// the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived
+/// contact clamp (<c>contactHertz &lt;= RateHz * n / 8</c> at substep count <c>n</c> — it coincides with
+/// <c>RateHz / 4</c> only at <c>n</c> = 2), and the representable band — none of which is built yet. The clamp's
+/// <c>n</c> is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived
+/// floor belongs here, beside the rate it constrains, never as a second section.</para></param>
+public sealed record WorldSimulationDefaults(
+    int RateHz = WorldSimulationDefaults.DefaultRateHz
+) {
+    /// <summary>The simulation rate every world ran at before this section existed (Hz) — the fallback
+    /// <see cref="WorldDefinition.SimulationRateHz"/> uses for a world authoring no <see cref="WorldDefinition.Simulation"/>
+    /// section.</summary>
+    public const int DefaultRateHz = 240;
+}
+
+/// <summary>
 /// How the world boots its presentation shell — the closed vocabulary <see cref="WorldHostDefaults.Presentation"/> and
 /// the <c>--headless</c> CLI reflection resolve to (see <c>Puck.World.WorldHostSettings.Headless</c>). Deciding this
-/// BEFORE any other registration is the boot-shape split's own precondition: <see cref="None"/> composes
+/// before any other registration is the boot-shape split's own precondition: <see cref="None"/> composes
 /// <c>AddWorldAuthoritativeCore</c> alone (no GPU device, no swapchain, no window), <see cref="Windowed"/> composes it
 /// plus <c>AddWorldPresentation</c>.
 /// </summary>
@@ -3149,22 +3352,22 @@ public enum WorldHostPresentation : byte {
     /// <summary>Boot a native window, GPU device, and swapchain — World's original, still-default shape.</summary>
     Windowed,
 
-    /// <summary>Boot the authoritative server, console, and tape ONLY — no window, no GPU device, no swapchain, no
+    /// <summary>Boot the authoritative server, console, and tape only — no window, no GPU device, no swapchain, no
     /// audio device. Every presentation-only console verb (<c>world.fps</c>/<c>.gpu</c>/<c>render*</c>/<c>view*</c>/
-    /// <c>.screenshot</c>, <c>screen.*</c>, audio, editor) refuses as UNKNOWN — the honest reflection of the composed
+    /// <c>.screenshot</c>, <c>screen.*</c>, audio, editor) refuses as unknown — the honest reflection of the composed
     /// set, not a special-cased denial.</summary>
     None,
 }
 
 /// <summary>
-/// The world's HOST defaults — how the world asks to be PRESENTED, independent of what it contains. PRESENTATION-ONLY
+/// The world's host defaults — how the world asks to be presented, independent of what it contains. presentation-only
 /// throughout (never simulation state). Two consumption classes share this one row, named per field:
 /// <list type="bullet">
-/// <item><description><b>BOOT-ONLY</b> (<see cref="Presentation"/>, <see cref="Backend"/>, <see cref="Width"/>,
+/// <item><description><b>boot-only</b> (<see cref="Presentation"/>, <see cref="Backend"/>, <see cref="Width"/>,
 /// <see cref="Height"/>, <see cref="SurfaceFormat"/>, <see cref="Fullscreen"/>, <see cref="PresentMode"/>,
 /// <see cref="ExitAfterSeconds"/>, <see cref="RayQuery"/>, <see cref="Genlock"/>): read once at composition; a live
 /// edit is journaled and validated immediately but takes effect next boot.</description></item>
-/// <item><description><b>BOOT-DEFAULT WITH A LIVE LEVER</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
+/// <item><description><b>Boot-default with a live lever</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
 /// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on; <c>Puck.World.WorldSessionCapture</c>
 /// folds the live values back at <c>world.save</c>.</description></item>
 /// </list>
@@ -3178,16 +3381,16 @@ public enum WorldHostPresentation : byte {
 /// <see langword="null"/> when <paramref name="BackendDraw"/> draws it — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
 /// <param name="BackendDraw">The backend choice's authored-randomness facet, or <see langword="null"/> for an ordinary
-/// literal <paramref name="Backend"/>. A BOOT-ONLY site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
-/// it once at composition, writes the settled preference into <paramref name="Backend"/>, CLEARS this facet, and
+/// literal <paramref name="Backend"/>. A boot-only site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
+/// it once at composition, writes the settled preference into <paramref name="Backend"/>, clears this facet, and
 /// narrates the settlement on stderr — the only surface that can say the backend was drawn at all, since a settled
 /// field is indistinguishable from an authored one thereafter.
-/// <para>Its natural spelling is a weighted TEXT source over the backend TOKENS (<c>auto</c>/<c>directx</c>/
+/// <para>Its natural spelling is a weighted text source over the backend tokens (<c>auto</c>/<c>directx</c>/
 /// <c>vulkan</c> — a one-context Markov table with <c>bound</c> 1, the degenerate flat weighted draw), parsed through
-/// <see cref="WorldHostTokens.ParseBackend"/> at settle. A token naming no backend refuses BY NAME. Drawing the NAME
+/// <see cref="WorldHostTokens.ParseBackend"/> at settle. A token naming no backend refuses by name. Drawing the name
 /// rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is
 /// inserted, and reads at the authoring site as a number nothing explains.</para>
-/// <para>Declared together with <paramref name="Backend"/> it is refused by name — this record is a CLASS, so
+/// <para>Declared together with <paramref name="Backend"/> it is refused by name — this record is a class, so
 /// presence is honestly observable here, unlike <see cref="WorldPopulationDefaults.CapacityDraw"/>'s struct-typed
 /// site.</para></param>
 /// <param name="Width">The window client width in pixels.</param>
@@ -3202,11 +3405,11 @@ public enum WorldHostPresentation : byte {
 /// <param name="Timing">Whether GPU per-pass timing boots armed; the <c>world.timing</c> live lever owns it thereafter.</param>
 /// <param name="Genlock">The external-clock election policy, consumed at boot by the clock registry (which tolerates an
 /// unknown source id): <see langword="null"/> for the launcher's automatic election, or a non-whitespace source id /
-/// <c>off</c>. SHAPE-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
+/// <c>off</c>. Shape-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
 /// <param name="Listen">The TCP listen endpoint (<c>host:port</c>) the authoritative host binds for remote peer
 /// admission, or <see langword="null"/> to stay loopback-only (no socket ever opens). Durable configuration per the
 /// unification contract — the <c>--listen</c> CLI flag reflects it for a single run without editing the document.
-/// SHAPE-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldTcpHost</c> is what actually
+/// Shape-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldTcpHost</c> is what actually
 /// parses and binds it.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
@@ -3277,89 +3480,117 @@ public sealed record WorldHostDefaults(
 /// each seat's profile bindings.</param>
 /// <param name="Storage">The storage host-section defaults — the per-user cloud endpoint and explicit
 /// user-id override, authored as data.</param>
-/// <param name="Creations">The creation ASSET rows (default empty) — whole <c>puck.creation.v1</c> documents
+/// <param name="Creations">The creation asset rows (default empty) — whole <c>puck.creation.v1</c> documents
 /// embedded inline-canonical with their identity hashes pinned (see <see cref="WorldCreation"/>).</param>
-/// <param name="Placements">The placement INSTANCE rows (default empty) — creations stamped by reference (see
+/// <param name="Placements">The placement instance rows (default empty) — creations stamped by reference (see
 /// <see cref="WorldPlacement"/>).</param>
 /// <param name="Authoring">The editor/authoring policy row — headroom, placement
 /// scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data
-/// (see <see cref="WorldAuthoringDefaults"/>) — a REQUIRED section every document carries.</param>
+/// (see <see cref="WorldAuthoringDefaults"/>) — a required section every document carries.</param>
 /// <param name="Speakers">The placeable speaker rows (default empty) — the camera family's audio sibling (see
 /// <see cref="WorldSpeaker"/>): name-keyed transducers whose feeds tap shared sources.</param>
-/// <param name="Tunes">The tune ASSET rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
+/// <param name="Tunes">The tune asset rows (default empty) — whole <c>puck.audio.v1</c> documents embedded
 /// inline-canonical with pinned hashes (see <see cref="WorldTune"/>).</param>
-/// <param name="Patches">The synth-patch ASSET rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
+/// <param name="Patches">The synth-patch asset rows (default empty) — whole <c>puck.synth.v1</c> documents embedded
 /// inline-canonical with pinned hashes (see <see cref="WorldPatch"/>).</param>
 /// <param name="Audio">The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the
-/// listener policy — see <see cref="WorldAudioDefaults"/>) — a REQUIRED section every document carries.</param>
-/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — SIM-AFFECTING.</param>
-/// <param name="Host">The host-section defaults — how the world asks to be PRESENTED (window/backend/present/pacing/
+/// listener policy — see <see cref="WorldAudioDefaults"/>) — a required section every document carries.</param>
+/// <param name="Collision">The contact-solver tuning (see <see cref="WorldCollision"/>) — it affects the simulation.</param>
+/// <param name="Host">The host-section defaults — how the world asks to be presented (window/backend/present/pacing/
 /// timing/genlock — see <see cref="WorldHostDefaults"/>). The CLI window/backend flags override it at boot (a
 /// deployment surface laid over the author's intent).</param>
 /// <param name="Views">The window-composition defaults — the seat framing every seat wakes on plus the authored named
 /// layouts (see <see cref="WorldViewDefaults"/>). An empty layout list falls the composer through to the built-in seat
 /// ladder.</param>
-/// <param name="Looks">The LOOK rows (default empty) — authored appearances the population wears, the peer of
+/// <param name="Looks">The look rows (default empty) — authored appearances the population wears, the peer of
 /// <see cref="Kits"/> (see <see cref="WorldLook"/>). Empty resolves every entity to the implicit single catalog look.</param>
 /// <param name="LookAssignment">The look→entity assignment policy, the same <see cref="WorldRowAssignment"/> primitive
 /// <see cref="Assignment"/> uses for kits.</param>
 /// <param name="Links">The cable-link rows (default empty) — groups of screens whose machines advance as one
 /// interleaved unit (see <see cref="WorldScreenLink"/>).</param>
-/// <param name="Grants">The document-authored grant rows (default empty) — capability holds a world SHIPS with,
-/// reviewable here rather than only typed at a console (see <see cref="Protocol.WorldGrant"/>). Applied at BOOT, in
-/// order, through the SAME <c>Server.WorldServer.Grant</c> path <c>world.grant</c> submits through, on top of
+/// <param name="Grants">The document-authored grant rows (default empty) — capability holds a world ships with,
+/// reviewable here rather than only typed at a console (see <see cref="Protocol.WorldGrant"/>). Applied at boot, in
+/// order, through the same <c>Server.WorldServer.Grant</c> path <c>world.grant</c> submits through, on top of
 /// the permissive seed — never in place of it. Empty (the default) is byte-identical to every world authored before
 /// this section existed: nothing here changes boot behavior unless a row is actually added.</param>
 /// <param name="Hud">The <c>hud</c> section — the world-scope HUD panel rows plus their defaults (see
-/// <see cref="WorldHudSection"/>). PRESENTATION-ONLY: overlay geometry and bindings, never simulation state. Defaults
+/// <see cref="WorldHudSection"/>). presentation-only: overlay geometry and bindings, never simulation state. Defaults
 /// to <see cref="WorldHudSection.Default"/> (enabled, no authored panels) — byte-identical boot behavior for every
 /// world authored before this section existed.</param>
 /// <param name="State">The <c>state</c> section (default empty) — genre-neutral named cells (see
 /// <see cref="WorldStateRow"/>): score, rounds, inventory, flags, or a keyed table (a slot is a table with one key —
-/// the primitive threat tables and the signed-carriage bearer high-water mark both want). SIMULATION STATE: every
+/// the primitive threat tables and the signed-carriage bearer high-water mark both want). It is simulation state: every
 /// row's whole shape mutates only through
 /// <see cref="Protocol.WorldMutation.UpsertStateRow"/>/<see cref="Protocol.WorldMutation.RemoveStateRow"/>, or — for
 /// a per-cell write only —
 /// <see cref="Protocol.WorldMutation.UpsertStateCell"/>/<see cref="Protocol.WorldMutation.RemoveStateCell"/>; the
-/// same journaled/undoable/saved pipeline every other section rides. A genre world is different DATA here, never a
+/// same journaled/undoable/saved pipeline every other section rides. A genre world is different data here, never a
 /// new message shape or an engine-interpreted name.</param>
-/// <param name="InputHold">The simulation-affecting participant input-hold policy. Every checked-in world authors the
-/// section explicitly; measured tick counts arrive on tick-stamped intent submissions and never read a clock here.</param>
-/// <param name="Rules">The <c>rules</c> section (default null = none) — world-scoped rules, the SAME
+/// <param name="InputHold">The simulation-affecting participant input-hold policy, in its authored shape — every
+/// checked-in world authors the section explicitly, in seconds (<c>ceilingSeconds</c>/<c>lowerAfterSeconds</c>/
+/// <c>defaultSeconds</c>, and each participant's own <c>seconds</c>). <see cref="CompiledInputHold"/> is the compiled
+/// simulation-tick form (<see cref="WorldInputHoldSettings"/>) <c>Server.WorldInputHoldRuntime</c> actually consumes —
+/// compiled lazily off this document's own <see cref="SimulationRateHz"/> rather than at parse, since a document's rate
+/// is just another sibling section with no parse-order guarantee ahead of this one (see <see cref="SimulationRateHz"/>'s
+/// remarks). Measured tick counts arrive on tick-stamped intent submissions and never read a clock here.</param>
+/// <param name="Rules">The <c>rules</c> section (default null = none) — world-scoped rules, the same
 /// <see cref="ActionPredicate"/>/<see cref="ActionEffect"/>/<see cref="ActionTriggerMode"/> primitive a kit's
-/// per-body actions already use, widened one level up (see <see cref="WorldRule"/>). OPTIONAL, deliberately: a new
-/// REQUIRED section would refuse every existing document at boot for declaring nothing.</param>
+/// per-body actions already use, widened one level up (see <see cref="WorldRule"/>). Optional, deliberately: a new
+/// required section would refuse every existing document at boot for declaring nothing.</param>
 /// <param name="Identity">The identity carried when this is an owned world.</param>
 /// <param name="Groups">The <c>groups</c> section (default null = none) — the group+membership binding substrate:
-/// the group-kind policy catalog and the group roster (see <see cref="WorldGroupsSection"/>). OPTIONAL, for the
-/// SAME reason <see cref="Rules"/> is: a new REQUIRED section would refuse every existing document at boot for
+/// the group-kind policy catalog and the group roster (see <see cref="WorldGroupsSection"/>). Optional, for the
+/// same reason <see cref="Rules"/> is: a new required section would refuse every existing document at boot for
 /// declaring nothing.</param>
-/// <param name="Properties">The <c>properties</c> section (default null = none) — the carrier-property NAME
-/// vocabulary (see <see cref="WorldPropertyRegistrySection"/>), validated the SAME way a group kind name is: unknown-
-/// by-name. OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
+/// <param name="Properties">The <c>properties</c> section (default null = none) — the carrier-property name
+/// vocabulary (see <see cref="WorldPropertyRegistrySection"/>), validated the same way a group kind name is: unknown-
+/// by-name. Optional, for the same reason <see cref="Rules"/> is.</param>
 /// <param name="Interactions">The <c>interactions</c> section (default null = none) — the generalized
 /// <c>property x property</c> (or <c>property x region</c>) <c>-&gt; effect</c> table (see
-/// <see cref="WorldInteractionsSection"/>), which LOWERS to the SAME rule substrate <see cref="Rules"/> evaluates
-/// rather than a second engine. OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
+/// <see cref="WorldInteractionsSection"/>), which lowers to the same rule substrate <see cref="Rules"/> evaluates
+/// rather than a second engine. Optional, for the same reason <see cref="Rules"/> is.</param>
 /// <param name="Generation">The <c>generation</c> section (default null = <see cref="WorldGenerationDefaults.Default"/>,
-/// world seed 0) — the draw seed ladder's WORLD rung (see <see cref="WorldGeneratorEngine.ComputeSeedState"/>).
-/// OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
-/// <param name="Generators">The <c>generators</c> section (default empty) — stochastic SOURCES declared under a name
+/// world seed 0) — the draw seed ladder's world rung (see <see cref="WorldGeneratorEngine.ComputeSeedState"/>).
+/// Optional, for the same reason <see cref="Rules"/> is.</param>
+/// <param name="Generators">The <c>generators</c> section (default empty) — stochastic sources declared under a name
 /// (see <see cref="WorldGeneratorRow"/>) for any number of <see cref="WorldDraw"/> sites to reference. A source is a
-/// pure declaration and holds no position: the cursor and dealt decks live on each drawing SITE, which is what lets
-/// two sites share one table and still draw independently. OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
+/// pure declaration and holds no position: the cursor and dealt decks live on each drawing site, which is what lets
+/// two sites share one table and still draw independently. Optional, for the same reason <see cref="Rules"/> is.</param>
 /// <param name="Water">The <c>water</c> section (default null = a dry world) — the world's standing-water medium
 /// (see <see cref="WorldWaterSection"/>): one authored waterline, echoed by <c>world.status</c> and read by the swim
-/// motion model's stages. OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
+/// motion model's stages. Optional, for the same reason <see cref="Rules"/> is.</param>
 /// <param name="References">The <c>references</c> section (default null = names nothing) — rows naming another
 /// world by document path (see <see cref="WorldReference"/>), echoed by <c>world.references</c>. No boot-time
-/// file-existence check; resolution is a consumer's job. OPTIONAL, for the SAME reason <see cref="Rules"/> is.</param>
+/// file-existence check; resolution is a consumer's job. Optional, for the same reason <see cref="Rules"/> is.</param>
 /// <param name="Portals">The <c>portals</c> section (default null = every portal facet falls back to
 /// <see cref="WorldPortalTravel.Body"/>) — the world-scope travel default a placement face's
 /// <see cref="WorldPlacementPortal"/> facet resolves against when it authors none of its own (see
-/// <see cref="WorldPortalsSection"/>), echoed by <c>world.portals</c>. OPTIONAL, for the SAME reason
+/// <see cref="WorldPortalsSection"/>), echoed by <c>world.portals</c>. Optional, for the same reason
 /// <see cref="Rules"/> is; slotted immediately after <see cref="References"/> — the two complete the world-topology
 /// cluster a portal composes from.</param>
+/// <param name="Simulation">The <c>simulation</c> section (default null = <see cref="WorldSimulationDefaults.DefaultRateHz"/>,
+/// 240 Hz — see <see cref="SimulationRateHz"/>) — the authoritative server's fixed step rate. Optional, for the same
+/// reason <see cref="Rules"/> is: a required section would refuse every world checked in before it existed. Echoed by
+/// <c>world.status</c>'s <c>rate</c> field. boot-only: no <see cref="Protocol.WorldSection"/> axis and no
+/// <c>MutationKind</c>, exactly like <see cref="References"/>/<see cref="Portals"/> — nothing mutates it live.</param>
+/// <param name="Destinations">The <c>destinations</c> section (default null = names nothing) — scoped-selection rows
+/// layered over exactly one <see cref="References"/> row each (see <see cref="WorldDestination"/>), echoed by
+/// <c>world.destinations</c>. A <see cref="WorldPlacementPortal"/> facet's <see cref="WorldPlacementPortal.Destination"/>
+/// resolves against this section, not <see cref="References"/> directly. No boot-time file-existence check; resolution
+/// is a consumer's job. Optional, for the same reason <see cref="Rules"/> is. boot-only like <see cref="References"/>/
+/// <see cref="Portals"/> — no live mutation arm yet.</param>
+/// <param name="Admission">The <c>admission</c> section (default null = admits no remote peer) — the durable
+/// vocabulary of which identities/issuers this world's TCP socket admits (see <see cref="WorldAdmissionEntry"/>),
+/// and what each is minted once verified. <see cref="WorldAdmissionDoor"/> is the one consumer, at the Hello
+/// handshake, off the tick thread — this replaces the game socket's former blanket "admit as Control/all" wire
+/// admission (docs/world-model.md's "Authenticating the game wire" row) with a verified-identity-to-principal
+/// mapping. boot-only like <see cref="References"/>/<see cref="Portals"/>/<see cref="Destinations"/> — no live
+/// mutation arm. A trailing addition over the section set shipped before it, never reordered among it — the same
+/// trailing convention <see cref="Market"/> follows after it.</param>
+/// <param name="Market">The <c>market</c> section (default null = no local auction house — every <c>market.*</c>
+/// verb refuses by name) — see <see cref="WorldMarketSection"/>. Optional, for the same reason <see cref="Rules"/>
+/// is. Trailing by design, after <see cref="Admission"/>, for the identical reason every optional section here
+/// is.</param>
 public sealed record WorldDefinition(
     WorldMotionDefaults Motion,
     IReadOnlyList<WorldSpawnPoint> SpawnPoints,
@@ -3395,7 +3626,7 @@ public sealed record WorldDefinition(
     IReadOnlyList<WorldGrant> Grants,
     WorldHudSection Hud,
     IReadOnlyList<WorldStateRow> State,
-    WorldInputHoldSettings InputHold,
+    WorldInputHoldAuthoring InputHold,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRule>? Rules = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityDefinition? Identity = null,
     // OPTIONAL, exactly like Rules above: a required section would refuse every existing world at boot for
@@ -3416,7 +3647,23 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
     // OPTIONAL, exactly like References above — a null section resolves every portal facet's absent travel to
     // WorldPortalTravel.Body, no fallback object needed.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalsSection? Portals = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalsSection? Portals = null,
+    // OPTIONAL, exactly like Portals above — a world authoring none reads WorldSimulationDefaults.DefaultRateHz
+    // (240 Hz) through SimulationRateHz below, the fixed rate every world ran at before this section existed, so
+    // nothing already checked in needs an edit to keep its exact byte-for-byte boot behavior.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
+    // OPTIONAL, exactly like Simulation above — a null section names no destinations. Trailing by design: added
+    // over the shipped section set rather than inserted beside References/Portals, so every existing document's
+    // member ORDER (irrelevant to JSON parsing, but relevant to anyone diffing a document by eye) stays untouched.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDestination>? Destinations = null,
+    // OPTIONAL, exactly like Destinations above — a null section names no admission entries, which is DENY BY
+    // DEFAULT for the TCP door: no remote peer can ever verify against an absent/empty section, matching an empty
+    // Puck.Carriage.TrustList's own posture. Trailing by design, for the identical reason Destinations is.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdmissionEntry>? Admission = null,
+    // OPTIONAL, exactly like Admission above — a null section IS today's no-market behavior, no fallback object
+    // needed beyond `current.Market ?? WorldMarketSection.Empty`. Trailing by design, for the identical reason
+    // every optional section above it is.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMarketSection? Market = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -3431,10 +3678,44 @@ public sealed record WorldDefinition(
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a
     /// reserved-prefix key ('$' schema-like keys, '_' comments) round-trips as an intentional escape hatch, but any
-    /// other unrecognized key is a HARD LOAD FAILURE — not a passive round-trip bag — because an unknown section
+    /// other unrecognized key is a hard load failure — not a passive round-trip bag — because an unknown section
     /// surviving silently is how authoring drift starts. Null when the document carries no unknown members. A
     /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
+
+    /// <summary>Gets the effective simulation rate in Hz — <see cref="Simulation"/>'s authored
+    /// <see cref="WorldSimulationDefaults.RateHz"/>, or <see cref="WorldSimulationDefaults.DefaultRateHz"/> (240) when
+    /// this world authors no <see cref="Simulation"/> section. The seam every simulation-tick-scoped duration on this
+    /// document compiles through (see <see cref="PopulationReconnectGraceTicks"/>, <see cref="CompiledInputHold"/>):
+    /// computed here, on the fully-parsed aggregate, rather than threaded as a parameter to each sub-section's own
+    /// converter, because a sub-section (e.g. <see cref="WorldPopulationDefaults"/>, a struct) has no reference back to
+    /// the document that carries both it and the rate, and the rate itself is just another sibling property in the same
+    /// JSON object being parsed — there is no ordering guarantee that would let a nested converter see it first. A
+    /// caller that already holds a <see cref="WorldDefinition"/> reads this property directly; nothing threads a raw
+    /// rate parameter by hand.</summary>
+    [JsonIgnore]
+    public int SimulationRateHz => (Simulation?.RateHz ?? WorldSimulationDefaults.DefaultRateHz);
+
+    /// <summary>Gets the compiled form of <see cref="WorldPopulationDefaults.ReconnectGraceSeconds"/> — a
+    /// <see cref="CompiledTickDuration"/>, the unit <c>Server.WorldPopulation</c> actually consumes. Not a raw tick
+    /// count: at <see cref="SimulationRateHz"/> 0 a positive authored grace has no tick mapping at all
+    /// (<see cref="CompiledTickDuration.Never"/> — a disconnected body parks forever rather than tearing down
+    /// immediately), which a raw <see langword="int"/> could not distinguish from an authored-disabled zero grace
+    /// (<see cref="CompiledTickDuration.IsZero"/>, the immediate-teardown case, unaffected by the rate). Lives here
+    /// rather than on <see cref="WorldPopulationDefaults"/> itself because compiling a duration needs
+    /// <see cref="SimulationRateHz"/>, which only the whole document can supply — see
+    /// <see cref="SimulationRateHz"/>'s remarks. Read once at construction/rebuild, like the rest of
+    /// <see cref="Population"/> — a live edit takes effect on the next disconnect, never retroactively on an
+    /// already-parked body.</summary>
+    [JsonIgnore]
+    public CompiledTickDuration PopulationReconnectGraceTicks => WorldSimulationTickConversion.CompiledDuration(seconds: Population.ReconnectGraceSeconds, ratePerSecond: (uint)SimulationRateHz);
+
+    /// <summary>Gets the compiled form of <see cref="InputHold"/> — every <c>*Ticks</c> field in simulation ticks, the
+    /// unit <c>Server.WorldInputHoldRuntime</c> actually consumes. <see cref="InputHold"/> itself stays the authored
+    /// seconds shape (see its remarks); this compiles it once through <see cref="SimulationRateHz"/>, for the identical
+    /// reason <see cref="PopulationReconnectGraceTicks"/> does.</summary>
+    [JsonIgnore]
+    public WorldInputHoldSettings CompiledInputHold => InputHold.Compile(ratePerSecond: (uint)SimulationRateHz);
 
 }

@@ -28,6 +28,10 @@ internal sealed class WorldCollisionCommandModule(WorldServer server) : ICommand
                     return Census();
                 }
 
+                if (args.Count > 1) {
+                    return CommandResult.Error(output: "[world.contacts: too many arguments — expected [<body-index>]]");
+                }
+
                 if (!args.TryInt(index: 0, value: out var index) || (index < 1) || (index > server.Population.Capacity)) {
                     return CommandResult.Error(output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{server.Population.Capacity}]");
                 }
@@ -54,7 +58,9 @@ internal sealed class WorldCollisionCommandModule(WorldServer server) : ICommand
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, _) => Status()
+            handler: (_, args) => (args.Count == 0
+                ? Status()
+                : CommandResult.Error(output: $"[world.collision.status: unrecognized '{args[0]}' — expected no arguments]"))
         );
     }
 

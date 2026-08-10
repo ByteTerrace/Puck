@@ -18,14 +18,12 @@ public sealed record WorldGenerationDefaults(ulong WorldSeed = 0UL) {
 /// WHEN a <see cref="WorldDraw"/> site's value is decided, and whether it may ever be decided again.
 /// </summary>
 /// <remarks>
-/// <para>A <see cref="Boot"/> site draws exactly once — at first fill (process load, or a fresh
-/// <c>world.instance.start</c>) — and refuses a later <c>generate</c> BY NAME. <see cref="TickPeriod"/> and
-/// <see cref="Event"/> sites also draw at first fill but stay redrawable for the rest of the session through the
-/// SAME <c>generate</c> effect/mutation the substrate already carries; the engine draws no operational distinction
-/// between those two, because the actual cadence or event gate is spelled with the ordinary <c>rules</c> vocabulary
-/// (a <c>$tick</c>-scheduled Edge rule, or an event-flag-gated one) rather than a third engine mechanism. The split
-/// is AUTHORED INTENT made legible at the site, and it costs no mutation ordinal — the catalog is full at 64/64, and
-/// this facet adds none.</para>
+/// <para>A <see cref="Boot"/> site draws exactly once, at first fill (process load or a fresh
+/// <c>world.instance.start</c>), and refuses a later <c>generate</c> by name. <see cref="TickPeriod"/> and
+/// <see cref="Event"/> sites also draw at first fill but stay redrawable through the same <c>generate</c>
+/// effect/mutation; the engine draws no operational distinction between the two — cadence or event gating is
+/// authored separately with the ordinary <c>rules</c> vocabulary (a <c>$tick</c>-scheduled Edge rule, or an
+/// event-flag-gated one). The split is authored intent made legible at the site.</para>
 /// </remarks>
 [JsonConverter(typeof(StrictEnumConverter<WorldDrawTiming>))]
 public enum WorldDrawTiming : byte {
@@ -47,20 +45,17 @@ public enum WorldDrawTiming : byte {
 /// SAME mechanism pointed at different sites.
 /// </summary>
 /// <remarks>
-/// <para><b>Reference or inline, never a second vocabulary.</b> Exactly one of <see cref="Source"/> (naming a row of
-/// the document's <c>generators</c> section) and <see cref="Generator"/> (an inline source) is declared. The inline
-/// form is pure sugar: it compiles to an ANONYMOUS source of the identical <see cref="WorldGenerator"/> family, so
-/// nothing is expressible one way and not the other. The REFERENCE is what unifies the substrate — a text site
-/// referencing a Markov source and a capacity site referencing a uniform source are one facet reading one family.</para>
-/// <para><b>A referenced source draws on the SITE's stream, and the cursor is the SITE's.</b> Two sites naming one
-/// source draw INDEPENDENT sequences: the seed ladder folds the site descriptor, and the position
-/// (<see cref="WorldStateRow.DrawCursor"/>) and dealt decks (<see cref="WorldStateRow.DrawDecks"/>) live on the site.
-/// That is precisely what makes references safe — sharing a source shares its SHAPE and never its position, so
-/// pointing a second site at an existing table can never perturb the first site's sequence.</para>
-/// <para><b>The refusals a reference adds.</b> Naming a source that does not exist, naming one whose emission kind
-/// the site cannot hold (one predicate, <c>WorldGeneratorEngine.TryCheckTargetKind</c>, asked by every door), and
-/// naming one the site's own timing cannot drive (a dealing source at a settle-and-clear boot site has no second
-/// draw to deal into) each refuse BY NAME at validate, before any draw runs.</para>
+/// <para>Exactly one of <see cref="Source"/> (naming a row of the document's <c>generators</c> section) and
+/// <see cref="Generator"/> (an inline source) is declared. The inline form compiles to an anonymous source of the
+/// identical <see cref="WorldGenerator"/> family, so nothing is expressible one way and not the other.</para>
+/// <para>A referenced source draws on the site's own stream: two sites naming one source draw independent
+/// sequences, since the seed ladder folds the site descriptor and the position
+/// (<see cref="WorldStateRow.DrawCursor"/>) and dealt decks (<see cref="WorldStateRow.DrawDecks"/>) live on the
+/// site. Sharing a source shares its shape and never its position, so pointing a second site at an existing table
+/// can never perturb the first site's sequence.</para>
+/// <para>A reference refuses at validate, before any draw runs, when it names a source that does not exist, names
+/// one whose emission kind the site cannot hold, or names one the site's own timing cannot drive (a dealing source
+/// at a settle-and-clear boot site has no second draw to deal into).</para>
 /// </remarks>
 /// <param name="Source">The declared source to draw from, by name — or <see langword="null"/> when
 /// <see cref="Generator"/> inlines one.</param>
@@ -79,18 +74,15 @@ public sealed record WorldDraw(
 /// from a site's class.
 /// </summary>
 /// <remarks>
-/// <para><b>Two site classes.</b> A BOOT-ONLY site is a document FIELD read exactly once at composition
-/// (<c>population.capacity</c>, <c>host.backend</c>): the boot resolver draws it, writes the settled value into the
-/// ordinary literal field, CLEARS the facet, and NARRATES the settlement on stderr — which is the only surface that
-/// can say the value was random at all, since a settled field is indistinguishable from an authored one thereafter.
-/// A STATE site is a <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and decks persist in the
-/// document, and a save/reload resumes the sequence exactly where it stopped rather than re-rolling a value the
-/// player has already seen.</para>
-/// <para><b>A descriptor is an IDENTITY, never a position.</b> A positional ordinal would be read off the LIVE
-/// document's site set, and that set moves under ordinary operation — the boot resolver clears a settled facet, a
-/// <c>world.row.remove state</c> retires a draw row, an <c>UpsertStateRow</c> adds one. Every such move would renumber
-/// every later site, silently re-pointing a live site's stream while its cursor kept counting, so the cursor would no
-/// longer resume the sequence its stored value came from.</para>
+/// <para>A boot-only site is a document field read exactly once at composition (<c>population.capacity</c>,
+/// <c>host.backend</c>): the boot resolver draws it, writes the settled value into the ordinary literal field, and
+/// clears the facet — a settled field is indistinguishable from an authored one thereafter, so stderr narration at
+/// settlement time is the only surface that can say the value was random at all. A state site is a
+/// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and decks persist in the document, and a
+/// save/reload resumes the sequence exactly where it stopped.</para>
+/// <para>A descriptor is an identity, never a position: a positional ordinal would renumber under ordinary
+/// operation (a settled facet clearing, a <c>world.row.remove state</c> retiring a row, an <c>UpsertStateRow</c>
+/// adding one), silently re-pointing a live site's stream while its cursor kept counting.</para>
 /// </remarks>
 public static class WorldDrawSites {
     /// <summary>The descriptor <c>population.capacityDraw</c> resolves under.</summary>

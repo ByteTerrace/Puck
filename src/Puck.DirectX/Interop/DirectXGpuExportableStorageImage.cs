@@ -13,7 +13,7 @@ namespace Puck.DirectX.Interop;
 /// <summary>
 /// A Direct3D 12 compute storage image in <em>shared</em> GPU memory implementing
 /// <see cref="IGpuExportableStorageImage"/>. It is the compute-dispatch counterpart of
-/// <see cref="DirectXGpuExportableRenderTarget"/>: a DEFAULT-heap texture created with both
+/// <see cref="DirectXGpuExportableRenderTarget"/>: a default-heap texture created with both
 /// <c>ALLOW_UNORDERED_ACCESS</c> (a compute shader writes it as a UAV) and the shared heap flag, an NT handle to it
 /// (from <c>CreateSharedHandle</c>), and a fence to drain the producer's queue. Another backend on the same adapter
 /// (a Vulkan host) imports <see cref="SharedHandle"/> and samples the texture without a CPU round-trip.
@@ -69,8 +69,8 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         };
         // The simultaneous-access (cross-API-writable) variant swaps UAV capability for RENDER_TARGET: its foreign
         // Direct3D 11 writer opens the handle with D3D11-expressible binds (BGRA has no D3D11 UAV, so a UAV-flagged
-        // texture is refused with E_INVALIDARG), and this device never dispatches into it. The historic D3D12-writes
-        // shape keeps ALLOW_UNORDERED_ACCESS (the compute producer's UAV).
+        // texture is refused with E_INVALIDARG), and this device never dispatches into it. The D3D12-writes shape
+        // keeps ALLOW_UNORDERED_ACCESS (the compute producer's UAV).
         var textureDesc = new D3D12_RESOURCE_DESC {
             DepthOrArraySize = 1,
             Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,

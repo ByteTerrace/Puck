@@ -18,27 +18,26 @@ internal readonly record struct SdfInstanceGridInput(Vector3 Center, float Radiu
 
 /// <summary>Builds the deterministic world-space uniform grid the tile-cull beam prepass walks instead of testing every
 /// instance in every tile. Static, maskable instances are
-/// counting-sorted BY CENTER into a CSR cell directory — exactly ONE cell per instance (count → exclusive prefix-sum →
+/// counting-sorted by center into a CSR cell directory — exactly one cell per instance (count → exclusive prefix-sum →
 /// scatter, all in instance-index order — deterministic by construction, no atomics, no wave intrinsics). The immutable
 /// program block keeps dynamic and unmaskable instances in an always-tested list; the live frame-grid rebuild resolves
 /// and bins maskable dynamic instances, leaving only unmaskable instances always-tested. The beam then tests only the
-/// instances in the grid cells its cone footprint overlaps plus the always-list, so beam cost tracks instances NEAR
+/// instances in the grid cells its cone footprint overlaps plus the always-list, so beam cost tracks instances near
 /// the tile's cone, not the total. The immutable program block provides the construction/reference representation;
 /// live rendering rebuilds the same layout in a reusable ring-local workspace only when an active maskable dynamic
 /// instance can move. Otherwise program upload seeds the invariant table into every ring slot once.
-/// <para>BIN-BY-CENTER is the load-bearing pairing with the header's <c>footprintPad</c>: because an instance occupies
-/// only its center's cell, the beam's query AABB must be inflated by the LARGEST binned bound radius (footprintPad =
+/// <para>Binning by center is the load-bearing pairing with the header's <c>footprintPad</c>: because an instance occupies
+/// only its center's cell, the beam's query AABB must be inflated by the largest binned bound radius (footprintPad =
 /// max binned radius) — an instance whose bound touches the cone at a point q has its center within that radius of q,
-/// so the padded query reaches the center's cell. The pad is CORRECTNESS, not slop: shrinking it below the max binned
-/// radius holes the mask. The rejected alternative (scatter each instance into every covered cell + pad anyway)
-/// duplicated entries and re-tested each instance from many neighboring cells — measured as a net beam REGRESSION at
-/// every bench rung.</para>
+/// so the padded query reaches the center's cell. The pad is a correctness requirement, not slop: shrinking it below the
+/// max binned radius holes the mask. Scattering each instance into every cell its bound covers instead of only its
+/// center's cell would duplicate entries and re-test each instance from many neighboring cells.</para>
 /// <para>The packed block is a self-contained <see cref="uint"/> array appended to the program word stream after the
 /// world-segment list. KEEP IN SYNC with the grid decode in Assets/Shaders/Sdf/sdf-vm.hlsli (<c>sdfGrid*</c>) and the
 /// cell walk in sdf-world.hlsli (<c>collectInstanceGridMask</c>). Extracted from <see cref="SdfProgram"/> as its own
 /// type both to keep that class under its analyzer complexity ceilings and because the grid build is a self-contained
 /// packer.</para>
-/// <para>Block layout (all <see cref="uint"/>-granular, indices RELATIVE to the block start; the whole block is padded to
+/// <para>Block layout (all <see cref="uint"/>-granular, indices relative to the block start; the whole block is padded to
 /// a 4-uint boundary so the containing <c>uint4</c> stream stays aligned):</para>
 /// <list type="table">
 /// <item><description><b>Header</b> (16 uints = 4 <c>uint4</c> rows): <c>[0]</c> enabled (1 = grid path, 0 = flat
@@ -57,15 +56,15 @@ internal readonly record struct SdfInstanceGridInput(Vector3 Center, float Radiu
 /// <item><description><b>alwaysList</b> (<c>alwaysCount</c> uints @ <c>alwaysWord</c>): the always-tested instance
 /// indices, ascending.</description></item>
 /// </list>
-/// A DISABLED block is the 16-uint header alone (enabled = 0): the beam then falls back to the flat per-instance loop
-/// over EVERY instance (the pre-grid path), which is what makes a zero-binnable or single-cell program correct with no
+/// A disabled block is the 16-uint header alone (enabled = 0): the beam then falls back to the flat per-instance loop
+/// over every instance (the pre-grid path), which is what makes a zero-binnable or single-cell program correct with no
 /// special case.</summary>
 internal static class SdfInstanceGrid {
     /// <summary>The header length in uints (4 <c>uint4</c> rows). KEEP IN SYNC with <c>SDF_GRID_HEADER_WORDS</c> in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     internal const int HeaderWords = 16;
-    /// <summary>Target cell edge in median binned-bound DIAMETERS (the 2–4× band the bench notes call for; 3× is the
-    /// middle). DERIVED from the median, never hand-picked per scene — the median is robust to a few outliers, and a
+    /// <summary>Target cell edge in median binned-bound diameters (the 2–4× band the bench notes call for; 3× is the
+    /// middle). Derived from the median, never hand-picked per scene — the median is robust to a few outliers, and a
     /// too-fine derivation is coarsened by <see cref="CellCapacityFactor"/> / <see cref="MaxDimension"/>.</summary>
     private const float CellDiameterFactor = 3.0f;
     /// <summary>The grid-resolution ceiling: <c>cellCount ≤ CellCapacityFactor · maxInstances</c>, so the frozen word
@@ -74,12 +73,12 @@ internal static class SdfInstanceGrid {
     /// HeaderWords + (CellCapacityFactor + 1) × maxInstances + binned + always ≤ HeaderWords +
     /// (CellCapacityFactor + 2) × maxInstances uints. The derivation coarsens the cell size until the resolution fits.</summary>
     private const int CellCapacityFactor = 4;
-    /// <summary>The per-AXIS cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
+    /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
     /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
     /// <c>SDF_GRID_MAX_SLABS</c> in sdf-vm.hlsli.</summary>
     private const int MaxDimension = 64;
-    /// <summary>The float-safety epsilon folded into the packed <c>footprintPad</c>, in CELL EDGES: the host bins a
+    /// <summary>The float-safety epsilon folded into the packed <c>footprintPad</c>, in cell edges: the host bins a
     /// center by <c>floor((center − origin) · invCellSize)</c> and the beam rasterizes its query AABB through the same
     /// mapping — a center within a few ulps of a cell wall could land on either side, so the query is padded strictly
     /// past every rounding disagreement. 1e-3 of a cell edge dwarfs the ~1e-6 relative float error while staying
@@ -89,9 +88,9 @@ internal static class SdfInstanceGrid {
     /// produce a zero or denormal cell size.</summary>
     private const float MinCellSize = 1.0e-4f;
 
-    /// <summary>The largest packed block <see cref="Build"/> can produce for an instance envelope. The frame-local
-    /// grid buffers use this exact ceiling: header + at most 4N cells' N+1 prefix entries + N binned entries + N
-    /// always-list entries, rounded to a uint4 boundary.</summary>
+    /// <summary>Returns the largest packed block <see cref="Build"/> can produce for an instance envelope. The
+    /// frame-local grid buffers use this exact ceiling: header + at most 4N cells' N+1 prefix entries + N binned
+    /// entries + N always-list entries, rounded to a uint4 boundary.</summary>
     internal static int WordCapacity(int maxInstances) {
         var count = Math.Max(val1: 0, val2: maxInstances);
         var rawLength = ((HeaderWords + 1) + ((CellCapacityFactor + 2) * count));
@@ -287,8 +286,8 @@ internal static class SdfInstanceGrid {
     /// <param name="instances">One <see cref="SdfInstanceGridInput"/> per program instance, in declaration (index) order.</param>
     /// <param name="maxInstances">The instance ceiling (<see cref="SdfProgramBuilder.MaxInstances"/>) — the resolution
     /// cap is measured against it so the envelope is a real ceiling.</param>
-    /// <param name="enabled">When <see langword="false"/>, return a DISABLED block regardless of the instances, so the
-    /// beam falls back to the flat per-instance loop — the reference path the grid-cull gate compares against.</param>
+    /// <param name="enabled">When <see langword="false"/>, return a disabled block regardless of the instances, so the
+    /// beam falls back to the flat per-instance loop over the same instances.</param>
     /// <returns>The grid block as a <see cref="uint"/> array whose length is a multiple of 4 (padded), ready to copy into
     /// the program word stream after the world-segment list.</returns>
     internal static uint[] Build(IReadOnlyList<SdfInstanceGridInput> instances, int maxInstances, bool enabled = true) {

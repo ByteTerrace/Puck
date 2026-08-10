@@ -6,22 +6,24 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The HuC3 mapper: full-byte ROM banking (a written zero reading as one), full-byte RAM banking, an infrared
-/// transceiver, and a real-time clock reached through a nibble command protocol. A write to
-/// <c>0x0000</c>–<c>0x1FFF</c> selects the mode of the <c>0xA000</c>–<c>0xBFFF</c> window: <c>0xA</c>&#160;=&#160;RAM,
+/// transceiver, and a real-time clock reached through a nibble command protocol.
+/// </summary>
+/// <remarks>
+/// A write to <c>0x0000</c>–<c>0x1FFF</c> selects the mode of the <c>0xA000</c>–<c>0xBFFF</c> window: <c>0xA</c>&#160;=&#160;RAM,
 /// <c>0xB</c>&#160;=&#160;RTC command, <c>0xC</c>&#160;=&#160;RTC read, <c>0xD</c>&#160;=&#160;status semaphore
 /// (always ready), <c>0xE</c>&#160;=&#160;IR (no peer, so no incoming light). Each RTC command carries a nibble:
 /// <c>0x1n</c> fetches the register at the access index (post-increment), <c>0x2n</c>/<c>0x3n</c> store one
 /// (<c>0x3n</c> post-increments), <c>0x4n</c>/<c>0x5n</c> set the index's low/high nibble, and <c>0x6n</c> arms the
 /// command flags. The IR window (<c>0xE</c>) is a view of the machine's one shared <see cref="IInfrared"/> transceiver —
 /// the same LED and receiver the Color RP register drives: an IR-mode read reports the received-light bit, and an
-/// IR-mode write drives the shared cart LED from bit 0 — so with no peer it reads dark, the lone-hardware value.
+/// IR-mode write drives the shared cart LED from bit 0, so with no peer it reads dark, the lone-hardware value.
 /// <para>
 /// The clock counts minutes (three nibbles, <c>0</c>–<c>1439</c>) and days (four nibbles, wrapping at twelve bits) and
-/// is <b>deterministic</b>: it is an LCD-domain <see cref="IClockedComponent"/> that advances one minute per
-/// <see cref="DotsPerMinute"/> emulated dots — exactly like the MBC3 clock, never from host wall-clock — so identical
+/// is deterministic: it is an LCD-domain <see cref="IClockedComponent"/> that advances one minute per
+/// <see cref="DotsPerMinute"/> emulated dots, exactly like the MBC3 clock, never from host wall-clock, so identical
 /// runs read identical time.
 /// </para>
-/// </summary>
+/// </remarks>
 public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredCartridge {
     // One RTC minute is 60 * 2^22 PPU dots; the LCD clock's rate is speed-switch independent, like the RTC crystal.
     private const int DotsPerMinute = (60 * 4194304);

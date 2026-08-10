@@ -25,7 +25,7 @@ namespace Puck.Maths;
 /// arithmetic operators of its own; two fields are equal when their degree and tail agree.
 /// </para>
 /// <para>
-/// A DEFAULT-INITIALIZED value names no field: its degree is zero, which no modulus has, and its tail has the zero
+/// A default-initialized value names no field: its degree is zero, which no modulus has, and its tail has the zero
 /// constant term the factories refuse. Every member that performs or asserts field arithmetic — the identities
 /// included — therefore throws <see cref="InvalidOperationException"/> rather than answering, which is the same posture
 /// <see cref="FixedRateAccumulator"/> takes toward an unbound time base and the same posture
@@ -69,7 +69,7 @@ public readonly record struct BinaryField<T> where T : IBinaryInteger<T>, IUnsig
     /// <remarks>
     /// The modulus arrives as a <see cref="BinaryPolynomial"/>, whose packed carrier tops out at degree 63, so the
     /// degree-64 through degree-128 fields — including the catalog's own <c>Degree64</c> and <c>Degree128</c> — can
-    /// only be built through <see cref="Create(int, T)"/>. The degree and the tail are DERIVED from the modulus rather
+    /// only be built through <see cref="Create(int, T)"/>. The degree and the tail are derived from the modulus rather
     /// than supplied, so every refusal names <paramref name="modulus"/>: the caller passed one argument and reads back
     /// one parameter name, whichever of the derived values the validation rejected. The validation itself is the same
     /// body <see cref="Create(int, T)"/> runs, in the same order, so the two factories cannot drift apart.
@@ -176,7 +176,7 @@ public readonly record struct BinaryField<T> where T : IBinaryInteger<T>, IUnsig
 
         return BinaryFieldKernels.Inverse(value: value, degree: Degree, tail: ReductionTail);
     }
-    /// <summary>Gets whether the modulus is irreducible, which is what makes the quotient ring a field.</summary>
+    /// <summary>Determines whether the modulus is irreducible, which is what makes the quotient ring a field.</summary>
     /// <returns><see langword="true"/> when the modulus is irreducible; otherwise <see langword="false"/>.</returns>
     /// <remarks>The Ben-Or/Rabin criterion. It is construction-time validation rather than a hot path, and <see cref="Inverse(T)"/> and <see cref="Divide(T, T)"/> are meaningless without it.</remarks>
     /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
@@ -185,7 +185,7 @@ public readonly record struct BinaryField<T> where T : IBinaryInteger<T>, IUnsig
 
         return BinaryFieldKernels.IsIrreducible(degree: Degree, tail: ReductionTail);
     }
-    /// <summary>Gets whether a packed value is already a reduced field element.</summary>
+    /// <summary>Determines whether a packed value is already a reduced field element.</summary>
     /// <param name="value">The packed value to test.</param>
     /// <returns><see langword="true"/> when every non-zero coefficient of <paramref name="value"/> sits below <see cref="Degree"/>; otherwise <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
@@ -360,7 +360,7 @@ public readonly record struct BinaryField<T> where T : IBinaryInteger<T>, IUnsig
 
         return new BinaryField<T>(degree: degree, reductionTail: reductionTail);
     }
-    /// <summary>Gets whether <typeparamref name="T"/> is one of the supported element carriers.</summary>
+    /// <summary>Determines whether <typeparamref name="T"/> is one of the supported element carriers.</summary>
     /// <returns><see langword="true"/> when the carrier has one of the five supported fixed widths; otherwise <see langword="false"/>.</returns>
     private static bool IsSupportedCarrier() =>
         (((typeof(T) == typeof(byte)) || (typeof(T) == typeof(ushort))) ||

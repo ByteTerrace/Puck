@@ -24,9 +24,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
 
     private const uint PipelineStageColorAttachmentOutputBit = 0x00000400;
     private const uint StructureTypePresentInfoKhr = 1000001001;
-    // VK_STRUCTURE_TYPE_PRESENT_ID_KHR — the present-INFO struct chained into VkPresentInfoKhr.PNext. NOTE the adjacent
-    // value 1000294001 is VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR (the feature struct, used by the
-    // device factory); the two are trivially transposed — do not swap them.
+    // VK_STRUCTURE_TYPE_PRESENT_ID_KHR — the present-info struct chained into VkPresentInfoKhr.PNext.
+    // Adjacent value 1000294001 is VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR (the feature
+    // struct, used by the device factory) — the two are trivially transposed; do not swap them.
     private const uint StructureTypePresentIdKhr = 1000294000;
     private const uint StructureTypeSubmitInfo = 4;
 
@@ -205,10 +205,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
                 ptr: waitSemaphorePointer,
                 val: request.ImageAvailableSemaphoreHandle
             );
-            // This submission IS the present-path graphics blit, so the acquired image is first touched at
-            // COLOR_ATTACHMENT_OUTPUT — the correct wait stage for this path. (A compute-first submission would wait at
-            // a different stage; the presenter never issues one, so this stage is fixed by the path's purpose, not an
-            // assumption that could silently break.)
+            // This submission is the present-path graphics blit, so the acquired image is first touched at
+            // COLOR_ATTACHMENT_OUTPUT — the correct wait stage here. A compute-first submission would wait at a
+            // different stage, but the presenter never issues one.
             Marshal.WriteInt32(
                 ptr: waitStagePointer,
                 val: unchecked((int)PipelineStageColorAttachmentOutputBit)

@@ -1,16 +1,15 @@
 namespace Puck.Commands;
 
 /// <summary>
-/// One ingress door for pre-resolved commands, BOUND at construction to the identity and lane it speaks for. The
+/// One ingress door for pre-resolved commands, bound at construction to the identity and lane it speaks for. The
 /// <see cref="CommandRegistry"/> hands a <see cref="CommandRouting.Simulation"/>-class submitted line to a sink
 /// instead of running it inline; the sink stamps its own principal and folds the result into the
 /// <see cref="InputRouter"/>'s per-tick <see cref="CommandSnapshot"/>.
 /// </summary>
 /// <remarks>
-/// The type IS the guarantee. Its predecessor was a generic <c>Inject(CommandInjection)</c> whose caller chose the
-/// command id AND the lane, so "the injection's principal is host-bound" could only ever be a comment. Here the
-/// principal is a constructor argument the injecting code never sees again: a second producer that wants to inject
-/// gets its OWN sink bound to its own identity, and there is no shape that lets either one speak as the other.
+/// The type is the guarantee: the principal is a constructor argument the injecting code never sees again, so a
+/// second producer that wants to inject gets its own sink bound to its own identity, and there is no shape that
+/// lets either one speak as the other.
 /// </remarks>
 public sealed class CommandInjectionSink {
     private readonly CommandPrincipal m_principal;
@@ -23,7 +22,7 @@ public sealed class CommandInjectionSink {
         m_slot = slot;
     }
 
-    /// <summary>The identity every command this sink queues acts as.</summary>
+    /// <summary>Gets the identity every command this sink queues acts as.</summary>
     public CommandPrincipal Principal => m_principal;
 
     // Queues one pre-resolved command under this sink's bound identity and lane. Internal: the registry's text path is

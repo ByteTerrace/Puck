@@ -6,7 +6,8 @@
   ],
   "properties": {
     "id": {
-      "description": "The stable owned-world id."
+      "description": "The stable owned-world id.",
+      "type": "string"
     },
     "name": {
       "description": "The display name.",
@@ -17,13 +18,16 @@
       "type": "string"
     },
     "moveSpeedState": {
-      "description": "The fixed state row supplying locomotion speed."
+      "description": "The fixed state row supplying locomotion speed.",
+      "type": "string"
     },
     "turnSpeedState": {
-      "description": "The fixed state row supplying turn speed."
+      "description": "The fixed state row supplying turn speed.",
+      "type": "string"
     },
     "invertLookState": {
-      "description": "The bool state row supplying look inversion."
+      "description": "The bool state row supplying look inversion.",
+      "type": "string"
     },
     "controllers": {
       "description": "Machine/device state-slot references used for controller pre-selection.",
@@ -39,10 +43,12 @@
         ],
         "properties": {
           "machineState": {
-            "description": "The row containing the machine id."
+            "description": "The row containing the machine id.",
+            "type": "string"
           },
           "deviceState": {
-            "description": "The row containing the device id."
+            "description": "The row containing the device id.",
+            "type": "string"
           }
         },
         "required": [

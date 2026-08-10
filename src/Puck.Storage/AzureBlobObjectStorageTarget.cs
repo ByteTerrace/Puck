@@ -47,13 +47,13 @@ public sealed record AzureBlobObjectStorageTarget : ObjectStorageTarget {
     /// resolved exactly like <see cref="ServiceUri"/>/<see cref="ConnectionString"/>. The edge's
     /// <c>/{namespace}/{container}/{rest}</c> path rewrite has no segment for a query-string-only List
     /// Blobs/Containers request to occupy, so a list sent through the edge 404s unconditionally, for every prefix,
-    /// before ever reaching blob storage — LIST can never be served through the edge, by construction, not by a
-    /// fixable bug (verified live against the platform edge, 2026-08-05). An edge-shaped target therefore never
-    /// sends LIST through its <see cref="ServiceUri"/>: it resolves against this property instead, or
-    /// <see cref="AzureBlobObjectBlobStoreBackend.ListAsync"/> refuses BY NAME — never a silent empty result — when
+    /// before ever reaching blob storage — list can never be served through the edge, by construction, not by a
+    /// fixable bug. An edge-shaped target therefore never
+    /// sends list through its <see cref="ServiceUri"/>: it resolves against this property instead, or
+    /// <see cref="AzureBlobObjectBlobStoreBackend.ListAsync"/> refuses by name — never a silent empty result — when
     /// this is <see langword="null"/>. A raw-shaped target (<see cref="EdgeNamespace"/> null) never consults this
     /// property; it is already a direct account connection and lists exactly like it reads and writes.
-    /// <para>Going direct means addressing what the account actually STORES, which is not what the edge shows: the
+    /// <para>Going direct means addressing what the account actually stores, which is not what the edge shows: the
     /// rewrite lands an edge-shaped address in container <c>{objectId}</c>, blob <c>{namespace}/{key}</c>, so the
     /// list enumerates the object's own container beneath a <c>{namespace}/</c> prefix — the only shape the
     /// per-user access policy grants, since it reaches the caller's own container and only the namespace paths

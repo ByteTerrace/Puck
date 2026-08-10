@@ -43,4 +43,21 @@ internal sealed class WorldConsoleWaitGate {
     public bool IsHolding() {
         return m_armed;
     }
+
+    /// <summary>Force-releases an armed hold whose release tick can no longer be reached — the boot world stopped
+    /// advancing (paused, or an authored <c>rateHz</c> of 0) while a wait was armed, so <see cref="PublishTick"/>
+    /// will never fire again to satisfy it on its own. A hold that can never complete must never be left hanging:
+    /// this is what lets the held console stream behind it (including the very <c>world.rate resume</c> that would
+    /// otherwise sit trapped behind its own release condition) keep draining.</summary>
+    /// <returns><see langword="true"/> when a hold was actually released; <see langword="false"/> when nothing was
+    /// armed (the ordinary case, checked every call so callers never need their own redundant guard).</returns>
+    public bool ReleaseStalled() {
+        if (!m_armed) {
+            return false;
+        }
+
+        m_armed = false;
+
+        return true;
+    }
 }

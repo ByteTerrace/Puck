@@ -1,14 +1,14 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// The canonical context header that is ALWAYS part of a carriage envelope's signing input
+/// The canonical context header that is always part of a carriage envelope's signing input
 /// (docs/world-model.md, "Signed carriage"): the associated-data half of AEAD applied to signatures, so a
 /// signature cannot be lifted into a situation it was never minted for. Only the payload differs between a
 /// key binding and a claim — see <see cref="CarriagePurposes.KeyBinding"/>.
 /// </summary>
 /// <param name="Domain">The root fingerprint of the chain the signer belongs to.</param>
 /// <param name="Subject">The signer's platform user id, or <see langword="null"/> when the signer is a root or issuing key.</param>
-/// <param name="Algorithm">The signer's claimed algorithm. Checked against the PINNED key's algorithm at verify time — never used to select it (the algorithm rule).</param>
+/// <param name="Algorithm">The signer's claimed algorithm. Checked against the pinned key's algorithm at verify time — never used to select it (the algorithm rule).</param>
 /// <param name="Purpose">What this envelope is for. <see cref="CarriagePurposes.KeyBinding"/> is reserved; every other value is game-defined and stops a binding being replayed as a claim.</param>
 /// <param name="NotBefore">The issuer-authored validity window start, Unix seconds.</param>
 /// <param name="NotAfter">The issuer-authored validity window end, Unix seconds. The tighter of this and the verifier's own maximum age governs.</param>
@@ -95,13 +95,13 @@ public sealed record SealedPayload(
 /// bytes <i>as they arrived</i>, never against a re-encoding of what it parsed out of them. An envelope
 /// that carried only the parsed fields could not honour that: the verifier would have to re-derive the
 /// signing input, and every decoder laxity anywhere in the stack would silently become an accepted
-/// alternate wire form for one claim. So the arrived bytes travel WITH the envelope and
+/// alternate wire form for one claim. So the arrived bytes travel with the envelope and
 /// <see cref="CarriageVerifier"/> verifies against them.</para>
 /// <para><b>The projection cannot drift from the bytes.</b> <see cref="Header"/>,
 /// <see cref="PayloadKind"/>, and <see cref="PayloadBytes"/> are get-only rather than <c>init</c>, so
 /// <c>envelope with { PayloadKind = … }</c> does not compile: there is no way to change what the envelope
 /// says without going back through a codec, which recomputes the bytes. <see cref="Signature"/> stays
-/// settable because it sits OUTSIDE the signed portion — rewriting it is an honest attack to model, and
+/// settable because it sits outside the signed portion — rewriting it is an honest attack to model, and
 /// it desynchronises nothing.</para>
 /// </remarks>
 public sealed record SignedCarriageEnvelope {
@@ -120,8 +120,8 @@ public sealed record SignedCarriageEnvelope {
     }
 
     /// <summary>
-    /// Builds an envelope around signed-portion bytes that ALREADY exist — a decoder's arrived bytes, or
-    /// the bytes a signer just put its pen to. <paramref name="signedPortion"/> MUST be the encoding of
+    /// Builds an envelope around signed-portion bytes that already exist — a decoder's arrived bytes, or
+    /// the bytes a signer just put its pen to. <paramref name="signedPortion"/> must be the encoding of
     /// the other three signed arguments; nothing re-derives it, which is the whole point.
     /// </summary>
     /// <param name="header">The context header those bytes encode.</param>
@@ -139,7 +139,7 @@ public sealed record SignedCarriageEnvelope {
         new(header: header, payloadKind: payloadKind, payloadBytes: payloadBytes, signature: signature, signedPortion: signedPortion);
 
     /// <summary>
-    /// Builds an envelope by ENCODING the given fields under <paramref name="codec"/> — the wire form a
+    /// Builds an envelope by encoding the given fields under <paramref name="codec"/> — the wire form a
     /// party holding these values would actually transmit. This is how a modified envelope is constructed
     /// (a tampered payload kind, a rewritten header): the bytes move with the model, exactly as they would
     /// on the wire, so the signature is then checked against what an attacker really sent.
@@ -164,21 +164,21 @@ public sealed record SignedCarriageEnvelope {
             signedPortion: codec.EncodeSignedPortion(header: header, payloadKind: payloadKind, payloadBytes: payloadBytes.Span)
         );
 
-    /// <summary>The canonical context header, always part of the signing input.</summary>
+    /// <summary>Gets the canonical context header, always part of the signing input.</summary>
     public CarriageEnvelopeHeader Header { get; }
 
-    /// <summary>The payload, already encoded by whichever <see cref="ICarriageCodec"/> produced this envelope.</summary>
+    /// <summary>Gets the payload, already encoded by whichever <see cref="ICarriageCodec"/> produced this envelope.</summary>
     public ReadOnlyMemory<byte> PayloadBytes { get; }
 
-    /// <summary>Which shape <see cref="PayloadBytes"/> decodes as.</summary>
+    /// <summary>Gets the shape <see cref="PayloadBytes"/> decodes as.</summary>
     public CarriagePayloadKind PayloadKind { get; }
 
-    /// <summary>The ECDSA signature (IEEE P1363 fixed-field r‖s) over <see cref="SignedPortion"/>.</summary>
+    /// <summary>Gets the ECDSA signature (IEEE P1363 fixed-field r‖s) over <see cref="SignedPortion"/>.</summary>
     public ReadOnlyMemory<byte> Signature { get; init; }
 
     /// <summary>
-    /// The exact bytes the signature covers — the codec's signed-portion encoding of <see cref="Header"/>,
-    /// <see cref="PayloadKind"/>, and <see cref="PayloadBytes"/>, as they ARRIVED rather than as they would
+    /// Gets the exact bytes the signature covers — the codec's signed-portion encoding of <see cref="Header"/>,
+    /// <see cref="PayloadKind"/>, and <see cref="PayloadBytes"/>, as they arrived rather than as they would
     /// re-encode. This is what <see cref="CarriageVerifier"/> verifies against.
     /// </summary>
     public ReadOnlyMemory<byte> SignedPortion { get; }

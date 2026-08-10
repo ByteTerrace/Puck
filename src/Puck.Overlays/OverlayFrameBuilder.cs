@@ -11,7 +11,7 @@ public enum OverlayPanelStyle : uint {
 }
 
 /// <summary>
-/// The unified overlay's record packer: writers call the <c>Write*</c> methods in PIXEL coordinates (the design
+/// The unified overlay's record packer: writers call the <c>Write*</c> methods in pixel coordinates (the design
 /// tokens are px values) and the builder packs normalized screen-space records into the one storage-buffer scratch —
 /// panels, then a flat element list (rects, fixed-cell text runs, icon chips), then the pre-resolved glyph-code
 /// words the text runs index. Preallocated once; <see cref="BeginFrame"/> resets it with zero steady-state
@@ -21,14 +21,14 @@ public enum OverlayPanelStyle : uint {
 /// Buffer geography (32-bit words): <c>[0, TokenWords)</c> the <see cref="OverlayTokenBlock"/> slab and
 /// <c>[TokenWords, PanelBaseWords)</c> the glyph SDF pack — both static, uploaded once by the node —
 /// then the per-frame region this builder owns: panel records, element records, glyph-code words, and the clip
-/// table. <para>CHANNEL CONTRACT: every write belongs to a declared <see cref="OverlayChannel"/>, opened with
+/// table. <para><b>Channel contract.</b> Every write belongs to a declared <see cref="OverlayChannel"/>, opened with
 /// <see cref="BeginChannel"/> and closed with <see cref="EndChannel"/>; a write outside a channel scope is a
 /// programming error and throws. A channel may write up to its <see cref="OverlayChannelLeases">lease</see> and no
-/// further: it clips at its OWN boundary, the drop is attributed to it (<see cref="Dropped"/>), and it can never
-/// consume another channel's capacity.</para><para>CLIP CONTRACT: a writer scoping per-seat UI wraps its records in
+/// further: it clips at its own boundary, the drop is attributed to it (<see cref="Dropped"/>), and it can never
+/// consume another channel's capacity.</para><para><b>Clip contract.</b> A writer scoping per-seat UI wraps its records in
 /// <see cref="BeginClip"/>/<see cref="EndClip"/>; every record carries a clip index (word 9; 0 = unclipped) into
 /// the clip table and the shader discards the record's contribution outside its rect — placement inside a seat
-/// viewport is therefore also CLIPPING to it. A scope whose rect could not be recorded still SCOPES (its records
+/// viewport is therefore also clipping to it. A scope whose rect could not be recorded still scopes (its records
 /// drop rather than bleed past a seat boundary), and the scope's end unwinds that state, so an overflowed scope can
 /// never take the records that follow it down with it.</para>
 /// </remarks>
@@ -39,23 +39,23 @@ public sealed class OverlayFrameBuilder {
     public const int ElementWords = 12;
     /// <summary>Words per clip-table rect (normalized x, y, w, h).</summary>
     public const int ClipWords = 4;
-    /// <summary>The panel-record CEILING — a cannot-overflow backstop, never a budget.</summary>
-    /// <remarks>What a capacity here IS: the point past which a record cannot be addressed at all. The BUDGET is
-    /// <see cref="OverlayChannelLeases"/>' per-channel reservations (the five first-party writers PLUS the authored
+    /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
+    /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all. The budget is
+    /// <see cref="OverlayChannelLeases"/>' per-channel reservations (the five first-party writers plus the authored
     /// world-scope-and-reserved-seat-scope HUD reservation — see <c>OverlayChannelLeases</c>'
     /// <c>HudPanels</c>/<c>HudElements</c>/<c>HudTextWords</c>/<c>HudClips</c>), which sum strictly below every
-    /// capacity; the remainder below is simply UNCLAIMED — no addon/lease admission model reads it (that Phase-3
-    /// contributor-lease design was never built and is not being built here). Capacity costs MEMORY ONLY: the
-    /// fragment shader loops to the WRITTEN counts it receives in push constants, never to a capacity, so raising a
+    /// capacity; the remainder below is simply unclaimed — no addon/lease admission model reads it (that
+    /// contributor-lease design was never built and is not being built here). Capacity costs memory only: the
+    /// fragment shader loops to the written counts it receives in push constants, never to a capacity, so raising a
     /// ceiling never enters per-pixel cost.</remarks>
     public const int MaxPanels = 16;
-    /// <summary>The element-record CEILING (rects + rings + text runs + icon chips together) — a cannot-overflow
+    /// <summary>The element-record ceiling (rects + rings + text runs + icon chips together) — a cannot-overflow
     /// backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxElements = 1024;
-    /// <summary>The clip-rect CEILING (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
+    /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
     /// cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxClips = 32;
-    /// <summary>The glyph-code word CEILING every text run in a frame draws from — a cannot-overflow backstop, never
+    /// <summary>The glyph-code word ceiling every text run in a frame draws from — a cannot-overflow backstop, never
     /// a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int TextWordCapacity = 16384;
 
@@ -174,7 +174,7 @@ public sealed class OverlayFrameBuilder {
     public int ClipCount => m_clipCount;
     /// <summary>Gets whether any channel lost content this frame — either by exceeding its reservation
     /// (<see cref="Dropped"/>) or by refusing its own excess at a self-declared cap (<see cref="Refused"/>) — the
-    /// node's narration gate for BOTH causes.</summary>
+    /// node's narration gate for both causes.</summary>
     public bool HasOverflow { get; private set; }
     /// <summary>Gets whether this frame packed anything to draw.</summary>
     public bool HasContent => ((m_panelCount > 0) || (m_elementCount > 0));
@@ -187,7 +187,7 @@ public sealed class OverlayFrameBuilder {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
     public OverlayChannelUsage Written(OverlayChannel channel) => Usage(counters: in m_written[IndexOf(channel: channel)]);
 
-    /// <summary>The records one channel lost at ITS OWN RESERVATION this frame. Non-zero means that channel
+    /// <summary>The records one channel lost at its own reservation this frame. Non-zero means that channel
     /// exceeded the hard maximum it declares — no other channel's content was touched. Distinct from
     /// <see cref="Refused"/>: this is a capacity failure, never a deliberate authored limit.</summary>
     /// <param name="channel">The channel.</param>
@@ -195,10 +195,10 @@ public sealed class OverlayFrameBuilder {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
     public OverlayChannelUsage Dropped(OverlayChannel channel) => Usage(counters: in m_dropped[IndexOf(channel: channel)]);
 
-    /// <summary>The records one channel refused at ITS OWN DECLARED CAP this frame — content it chose never to
+    /// <summary>The records one channel refused at its own declared cap this frame — content it chose never to
     /// offer the builder (<see cref="NoteRefused"/>) or a <see cref="WriteText"/> run truncated by its caller's own
-    /// <c>maxChars</c>. Non-zero here does NOT mean the channel is anywhere near its reservation; it means the
-    /// WRITER authored a smaller, deliberate, pinned limit of its own. Distinct from <see cref="Dropped"/>.</summary>
+    /// <c>maxChars</c>. Non-zero here does not mean the channel is anywhere near its reservation; it means the
+    /// writer authored a smaller, deliberate, pinned limit of its own. Distinct from <see cref="Dropped"/>.</summary>
     /// <param name="channel">The channel.</param>
     /// <returns>The channel's refused counts.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
@@ -212,7 +212,7 @@ public sealed class OverlayFrameBuilder {
 
     /// <summary>Resets the per-frame region (records + glyph codes + clip table), the clip and channel scopes, and
     /// every channel's written/dropped/refused counts. The static token/glyph prefix is untouched.</summary>
-    /// <remarks>The clear is bounded to the PREVIOUS frame's own high-water mark in each region (its
+    /// <remarks>The clear is bounded to the previous frame's own high-water mark in each region (its
     /// <see cref="PanelCount"/>/<see cref="ElementCount"/>/<see cref="TextWordCount"/>/<see cref="ClipCount"/> —
     /// read here before this call resets them), never the capacity-sized region behind it: only a word a prior
     /// frame actually wrote can hold stale record data, since everything past that mark was already zeroed the same
@@ -270,7 +270,7 @@ public sealed class OverlayFrameBuilder {
         m_channel = -1;
     }
 
-    /// <summary>Records content the CHANNEL ITSELF refused at its own declared cap, before it was ever offered to
+    /// <summary>Records content the channel itself refused at its own declared cap, before it was ever offered to
     /// the builder — a writer that clamps a repeating row to a pinned maximum reports the remainder here so the
     /// truncation lands on an attributed, narrated path instead of vanishing. Reported as <see cref="Refused"/>,
     /// never as <see cref="Dropped"/>: this is a deliberate, pinned limit the writer authored, not a reservation
@@ -281,11 +281,11 @@ public sealed class OverlayFrameBuilder {
     public void NoteRefused(int elements, int textWords) => RefuseOwnCap(index: ActiveChannel(), elements: elements, textWords: textWords);
 
     /// <summary>Opens a clip scope: records written before <see cref="EndClip"/> are discarded by the shader outside
-    /// this rect — the per-seat viewport invariant every split-screen writer rides. Scopes do NOT nest: a
+    /// this rect — the per-seat viewport invariant every split-screen writer rides. Scopes do not nest: a
     /// <see cref="BeginClip"/> called while one is already open throws rather than silently clobbering the outer
     /// scope's bookkeeping (an outer scope that opened before an inner one could never hand its own slot back on an
     /// empty scope — a real, if latent, clip-table leak with only one active-scope slot tracked). A scope the
-    /// channel has no clip reservation left for still SCOPES: its records DROP (counted) rather than bleed across a
+    /// channel has no clip reservation left for still scopes: its records drop (counted) rather than bleed across a
     /// seat, and <see cref="EndClip"/> unwinds that state.</summary>
     /// <param name="x">Left, px.</param>
     /// <param name="y">Top, px.</param>
@@ -322,7 +322,7 @@ public sealed class OverlayFrameBuilder {
         m_activeClip = m_clipCount;
     }
 
-    /// <summary>Closes the clip scope (records return to unclipped). A scope that wrote NOTHING hands its table slot
+    /// <summary>Closes the clip scope (records return to unclipped). A scope that wrote nothing hands its table slot
     /// back — the count decrements — so a writer with an empty seat never burns its clip reservation, and an
     /// overflowed scope's drop-everything state ends here with the scope that caused it.</summary>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
@@ -401,7 +401,7 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
 
-    /// <summary>Packs one stroked hairline RING (the gizmo radius indicator). Word layout (12): 0..1 center
+    /// <summary>Packs one stroked hairline ring (the gizmo radius indicator). Word layout (12): 0..1 center
     /// (normalized) · 2 radius (px float) · 4 = 3 | (role &lt;&lt; 4) · 7 alpha · 9 clip index.</summary>
     /// <param name="centerX">The ring center x, px.</param>
     /// <param name="centerY">The ring center y, px.</param>
@@ -425,7 +425,7 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
 
-    /// <summary>Packs one fixed-cell text run (codes stored PRE-RESOLVED as atlas glyph indices; anything outside
+    /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside
     /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
     /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text
     /// region) · 6 glyph count · 7 alpha · 9 clip index.</summary>
@@ -510,9 +510,9 @@ public sealed class OverlayFrameBuilder {
     /// <param name="glyph">The physical-button badge glyph.</param>
     /// <param name="icon">The bound action's icon.</param>
     /// <param name="alpha">The chip opacity.</param>
-    /// <param name="pressed">The HELD tier-1 state.</param>
-    /// <param name="accent">The ACCENT tier-1 state (the context-primary action).</param>
-    /// <param name="bound">Whether an action is bound (<see langword="false"/> = the DISABLED tier-0 look).</param>
+    /// <param name="pressed">The held tier-1 state.</param>
+    /// <param name="accent">The accent tier-1 state (the context-primary action).</param>
+    /// <param name="bound">Whether an action is bound (<see langword="false"/> = the disabled tier-0 look).</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
     public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, OverlayGlyphId glyph, OverlayIconId icon, float alpha, bool pressed, bool accent, bool bound) {
         if (!TryTakeElement()) {
@@ -538,7 +538,7 @@ public sealed class OverlayFrameBuilder {
         m_elementCount++;
     }
 
-    /// <summary>The on-screen glyph cell height for a token type SIZE — the size-to-cell ratio
+    /// <summary>The on-screen glyph cell height for a token type size — the size-to-cell ratio
     /// (<c>TypeMonoLine / TypeMonoSize</c> = 1.5), so a 12px mono run gets an 18px cell.</summary>
     /// <param name="sizePx">The token type size, px.</param>
     /// <returns>The cell height, px.</returns>

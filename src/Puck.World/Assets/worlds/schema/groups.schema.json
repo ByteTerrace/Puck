@@ -113,7 +113,7 @@
         ],
         "properties": {
           "id": {
-            "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal.",
+            "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal. WorldSafeName-typed (the For precedent: a scoped session\u0027s process-local instance name is composed FROM this id, literal separators and all, in WorldSessionResolver.MintInstanceName \u2014 typing it here is what makes that composition injective BY CONSTRUCTION rather than by an escaping step downstream that could collapse two distinct ids onto one name).",
             "type": "string"
           },
           "kindName": {
@@ -123,6 +123,20 @@
           "members": {
             "description": "The current membership \u2014 FLAT ONLY: every entry is a PRINCIPAL, never a group (a Group entry is refused by name \u2014 a member holding another group\u0027s memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind\u0027s own Capacity.",
             "type": "array"
+          },
+          "tags": {
+            "description": "The row\u0027s own tags \u2014 what a Tagged destination selector matches against (docs/world-model.md Campaign 1 item 3): a traveler resolving a tagged destination is expected to hold exactly one membership among rows carrying the selector\u0027s tag, never zero or several. Validated non-empty and distinct when present; null/absent means this row carries none, which is not the same as an authored empty list (refused \u2014 omit the member instead).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
           }
         },
         "required": [

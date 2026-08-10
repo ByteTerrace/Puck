@@ -6,43 +6,43 @@ using Puck.World.Server;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The overworld's geometry, as ONE <see cref="ISdfSceneEmitter"/> composed by <see cref="SdfCompositionFrameSource"/>:
+/// The overworld's geometry, as one <see cref="ISdfSceneEmitter"/> composed by <see cref="SdfCompositionFrameSource"/>:
 /// the diegetic screen slabs, the static placement stamps and the
 /// creation-stamp pool (animated and body-attached rows), and the population's active avatars as leaf-level dynamic
-/// instances. It owns WHAT geometry
+/// instances. It owns what geometry
 /// exists; <see cref="WorldFrameSource"/> owns how a frame presents it (views, cameras, gizmos, audio).
 /// </summary>
 /// <remarks>
 /// <para>
-/// THE PROBE BRANCH (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
+/// The probe branch (the contract in <see cref="ISdfSceneEmitter"/>): <see cref="Emit"/> under
 /// <see cref="SdfEmitContext.Probe"/> emits the complete 128-rig catalog, the worst-case animated pool, the reserved
-/// placement instances, AND the authoring headroom (screens and placement stamps) that reserves live editing
-/// room. The headroom padding lives HERE, inside the worst case, rather than being applied to the emitter's inputs by
+/// placement instances, and the authoring headroom (screens and placement stamps) that reserves live editing
+/// room. The headroom padding lives here, inside the worst case, rather than being applied to the emitter's inputs by
 /// a caller — the capacity-probe doctrine's rule that an emitter's probe branch must dominate its own live branch on
 /// its own.
 /// </para>
 /// <para>
-/// ADMISSION (<see cref="ComposeCandidate"/>) is World POLICY, not composition-host business: what may ENTER the
+/// Admission (<see cref="ComposeCandidate"/>) is world policy, not composition-host business: what may enter the
 /// document is the document owner's question, so it is a member on this type rather than a mode on the generic
-/// emitter contract. It composes a candidate through the same emit path into a SHARED builder — see
+/// emitter contract. It composes a candidate through the same emit path into a shared builder — see
 /// <see cref="Puck.World.Client.WorldFrameSource"/>'s joint measurer, which composes it alongside whatever
 /// <c>puck.sdf.v1</c> document is currently loaded before measuring the counts the render envelope compares, so a
 /// mutation is judged against the same program that would actually be built.
 /// </para>
 /// <para>
-/// THE REBUILD CADENCE is a set of NUMBERS, never a time the host queries: <see cref="WriteRevision"/> reports the
-/// client/selection/drag/workbench watches AND a shimmer counter this type bumps itself from the content clock
+/// The rebuild cadence is a set of numbers, never a time the host queries: <see cref="WriteRevision"/> reports the
+/// client/selection/drag/workbench watches and a shimmer counter this type bumps itself from the content clock
 /// (<see cref="AdvanceContentClock"/>), so the composition host's existing "rebuild when a revision component moved"
 /// predicate carries the shimmer pulse's per-frame cadence without knowing what a shimmer is. They are reported side by
 /// side rather than combined — see <see cref="WriteRevision"/> for why any sum on this path could silently cancel.
 /// </para>
 /// <para>
-/// SLOT LAYOUT: this emitter's declared range (<see cref="DynamicSlotCount"/>) is the frozen avatar catalog followed by
+/// Slot layout: this emitter's declared range (<see cref="DynamicSlotCount"/>) is the frozen avatar catalog followed by
 /// the creation-stamp pool, both addressed from the base the host assigns
-/// (<see cref="SdfEmitContext.SlotBase"/>). STANDING CONDITION: two readers outside this emitter —
+/// (<see cref="SdfEmitContext.SlotBase"/>). Standing condition: two readers outside this emitter —
 /// <see cref="WorldEntityPartResolver"/> and the audio director's entity-part resolution — index the shared buffer
-/// ABSOLUTELY, so they are correct only while this emitter's base is 0. It is today (it is the composition's only
-/// emitter); registering another emitter AHEAD of it must re-base those two readers in the same change.
+/// absolutely, so they are correct only while this emitter's base is 0. It is today (it is the composition's only
+/// emitter); registering another emitter ahead of it must re-base those two readers in the same change.
 /// </para>
 /// </remarks>
 internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
@@ -55,6 +55,17 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The binder's boot-reserved derived-face slot count — the band the headroom screen scan must leave alone (the
     // binder registers it at boot from the same field, WorldFrameSource.m_derivedFaceScreens).
     private readonly int m_derivedFaceScreens;
+    // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
+    // WorldFrameSource.ReconcileDelivery's ONE WorldCreationFacets.Derive call each delivery via ObserveDelivery,
+    // NEVER re-derived here: the geometry this emitter composes and the binder's bound sources must read the SAME
+    // set or a face's slab and its bound texture could disagree about which placement it belongs to. Seeded at
+    // construction to the reserved-band PLACEHOLDER rows (WorldCreationFacets.ReservedFaceSlots — the identical
+    // shape WorldBootComposition's own boot registration uses), so the ONE construction-time capacity probe (which
+    // runs before any delivery can land — see SdfCompositionFrameSource's ctor) reserves program-word/instance
+    // capacity for the derived band by construction, exactly like every other worst-case branch this type owns.
+    // Always exactly m_derivedFaceScreens entries (Derive pads the reserved range with placeholders), so the word
+    // cost this band contributes is IDENTICAL between the probe and every live build.
+    private IReadOnlyList<WorldScreen> m_derivedFaceRows;
     private readonly float m_noseFactor;
     // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
     // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
@@ -138,6 +149,11 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
         m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
         m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
+        // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
+        // WorldFrameSource can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
+        // though no delivery has landed yet.
+        m_derivedFaceRows = WorldCreationFacets.ReservedFaceSlots(derivedFaceBase: WorldCreationFacets.DerivedFaceBase, derivedFaceScreens: m_derivedFaceScreens);
 
         // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
         // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
@@ -153,8 +169,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// the reserved creation-stamp pool, in that order.</summary>
     public int DynamicSlotCount => (WorldAvatarCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
 
-    /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy made that true
-    /// by accident before the world scene was composed; the scope makes it STRUCTURAL, so a positional stride this
+    /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
+    /// true; the scope makes it structural, so a positional stride this
     /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials
     /// this emitter itself registered. The scene emits no positional stride today, so the clamp is inert and the
     /// composed words are byte-identical to the unscoped build.</summary>
@@ -168,8 +184,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// selection (highlight), drag-overlay, and sculpt-workbench counters, and the shimmer counter this type bumps from
     /// the content clock.
     /// <para>
-    /// SEVEN COMPONENTS, NOT THEIR SUM, AND THE CLIENT'S THREE STAY SPLIT TOO. One of them — the client's server
-    /// revision — is assigned from a snapshot and can move DOWN, so any addition anywhere on this path can cancel: a
+    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
     /// server revision falling by one while the targeting counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
     /// that impossible rather than merely unlikely (see <see cref="ISdfSceneEmitter.WriteRevision"/>).
@@ -184,9 +200,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 3)] = m_shimmerRevision;
     }
 
-    /// <summary>Advances this emitter's CONTENT clock and, while a change-shimmer pulse is live, bumps the shimmer
+    /// <summary>Advances this emitter's content clock and, while a change-shimmer pulse is live, bumps the shimmer
     /// component of <see cref="WriteRevision"/> so the composition host rebuilds and the pulse's decay animates. Call once per produced
-    /// frame, BEFORE the host captures, with the world's presentation clock — never a wall-clock read: the number the
+    /// frame, before the host captures, with the world's presentation clock — never a wall-clock read: the number the
     /// host compares and the number the pulse tint is computed from are the same one.</summary>
     /// <param name="seconds">The world's content clock, in seconds.</param>
     public void AdvanceContentClock(double seconds) {
@@ -198,30 +214,41 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
 
     /// <summary>Re-baselines the change shimmer against a freshly delivered definition, pulsing every row the delivery
-    /// changed. Call at the delivery boundary (a definition-revision move), with the content clock.</summary>
+    /// changed, and re-points this emitter's derived-face screen rows at the same set <see cref="WorldFrameSource"/>
+    /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldCreationFacets.Derive"/>'s
+    /// one call site), so the slab geometry this emitter composes and the binder's bound sources can never disagree
+    /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move), with
+    /// the content clock.</summary>
     /// <param name="definition">The delivered definition.</param>
-    public void ObserveDelivery(WorldDefinition definition) {
+    /// <param name="derivedFaces">This delivery's derived-face screen rows — always exactly
+    /// <c>authoring.derivedFaceScreens</c> entries (<see cref="WorldCreationFacets.Derive"/> pads the reserved range
+    /// with placeholders), composed alongside <paramref name="definition"/>'s own declared screens on every
+    /// subsequent rebuild until the next delivery.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="derivedFaces"/> is
+    /// <see langword="null"/>.</exception>
+    public void ObserveDelivery(WorldDefinition definition, IReadOnlyList<WorldScreen> derivedFaces) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: derivedFaces);
 
         m_shimmer.Observe(placements: definition.Placements, speakers: definition.Speakers, now: m_contentSeconds);
+        m_derivedFaceRows = derivedFaces;
     }
 
-    /// <summary>The pulse intensity for one speaker row — the editor gizmo chip's HELD tier, read by the frame source
+    /// <summary>The pulse intensity for one speaker row — the editor gizmo chip's held tier, read by the frame source
     /// while it projects chips (a speaker has no world geometry, so its pulse rides its chip).</summary>
     /// <param name="name">The speaker name.</param>
     /// <returns>The intensity in [0, 1]; 0 when the row is quiet.</returns>
     public float SpeakerPulse(string name) => m_shimmer.SpeakerIntensity(name: name, now: m_contentSeconds);
 
-    /// <summary>Composes a CANDIDATE definition's render-relevant sections into <paramref name="builder"/> — World
-    /// admission POLICY (what may enter the document is the document owner's question, never a mode on the generic
-    /// emitter contract), factored so the render-capacity oracle can measure it COMPOSED alongside whatever
+    /// <summary>Composes a candidate definition's render-relevant sections into <paramref name="builder"/> — World
+    /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
+    /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
     /// <c>puck.sdf.v1</c> document (see <see cref="WorldSdfDocumentEmitter"/>) is currently loaded — see
     /// <see cref="Puck.World.Client.WorldFrameSource"/>'s joint measurer. The packed tables a program carries (the
-    /// instance grid, segment directory, world-segment list, rigid plan) are computed over the WHOLE composed
+    /// instance grid, segment directory, world-segment list, rigid plan) are computed over the whole composed
     /// program and are not additive across emitters, so measuring this emitter alone in a throwaway builder would let
-    /// a mutation spend capacity a loaded document already holds — the defect a standalone
-    /// <c>MeasureCandidate</c> used to have.</summary>
-    /// <param name="builder">The shared program builder under construction. Opens and closes its OWN material scope
+    /// a mutation spend capacity a loaded document already holds.</summary>
+    /// <param name="builder">The shared program builder under construction. Opens and closes its own material scope
     /// (this emitter owns its palette; see <see cref="OwnsMaterialScope"/>), so the caller must not already be inside
     /// one belonging to this emitter.</param>
     /// <param name="candidate">The composed candidate definition.</param>
@@ -235,6 +262,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             Compose(
                 builder: builder,
                 screens: candidate.Screens,
+                derivedFaces: m_derivedFaceRows,
                 placements: candidate.Placements,
                 creations: candidate.Creations,
                 probeWorstCase: true,
@@ -263,6 +291,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             Compose(
                 builder: builder,
                 screens: WithAuthoringHeadroom(screens: boot.Screens),
+                derivedFaces: m_derivedFaceRows,
                 placements: boot.Placements,
                 creations: boot.Creations,
                 probeWorstCase: true,
@@ -290,6 +319,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         Compose(
             builder: builder,
             screens: m_drag.ComposeScreens(live: definition.Screens),
+            derivedFaces: m_derivedFaceRows,
             placements: m_workbench.ComposePlacements(live: m_drag.ComposePlacements(live: definition.Placements)),
             creations: m_workbench.ComposeCreations(live: definition.Creations),
             probeWorstCase: false,
@@ -302,7 +332,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a DISTANCE-driven gait phase (an
+    /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a distance-driven gait phase (an
     /// idle avatar holds its pose; a teleport is clamped so it cannot spin the limbs through dozens of cycles), and the
     /// animated/body-rooted stamps follow in the replay pool's range. Local seats fire one footstep cue per gait
     /// half-cycle. Slots this call does not write hold the host's park position, which is the same point below the
@@ -401,7 +431,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // own body + accent material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces
     // the static stamps with the reserved worst case (the construction probe only); the animated pool and the avatars
     // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
-    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, float maxPlacementScale, double shimmerNow, int slotBase) {
+    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, float maxPlacementScale, double shimmerNow, int slotBase) {
         var client = m_client;
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
@@ -424,21 +454,26 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // world frame (Origin/Right/Up) baked into the surface table for UV mapping; the geometry rounded box is
         // placed by translating to its CENTER, which sits one HalfDepth behind the face along the face normal
         // (Right × Up). The material sentinel the overload assigns needs no palette entry.
+        //
+        // TWO SOURCES, ONE EMISSION PATH: `screens` (the document's declared rows, padded with authoring headroom)
+        // and `derivedFaces` (the reserved-band rows a creation's own faces resolve to — see WorldCreationFacets;
+        // WorldFrameSource threads the SAME derived set here that it hands the screen binder, so the geometry a
+        // derived face's slab occupies and the source the binder samples for it can never disagree about which
+        // placement it belongs to). Both index ranges are disjoint by construction (WithAuthoringHeadroom skips the
+        // reserved band), so emitting them back-to-back cannot double-declare a screen index.
         foreach (var screen in screens) {
-            var normal = Vector3.Normalize(value: Vector3.Cross(vector1: screen.Right, vector2: screen.Up));
-            var center = (screen.Origin - (normal * screen.HalfDepth));
+            WorldScreenStamper.Emit(builder: builder, screen: screen);
+        }
 
-            _ = builder
-                .Translate(offset: center)
-                .ScreenSlab(
-                    halfExtents: new Vector3(x: screen.HalfWidth, y: screen.HalfHeight, z: screen.HalfDepth),
-                    round: screen.Round,
-                    worldOrigin: screen.Origin,
-                    worldRight: screen.Right,
-                    worldUp: screen.Up,
-                    screenIndex: screen.Index
-                )
-                .ResetPoint();
+        foreach (var screen in derivedFaces) {
+            WorldScreenStamper.Emit(builder: builder, screen: screen);
+        }
+
+        // The traveler-follow stage-1 away-seat quads (WorldAwaySeatQuad): four reserved, always-emitted, STATIC
+        // screen surfaces — the SAME "emitted every build, no probe branch" shape as the declared/derived screens
+        // above, since they never vary with population or authoring state.
+        for (var seat = 0; (seat < WorldAwaySeatQuad.Count); seat++) {
+            WorldAwaySeatQuad.EmitQuad(builder: builder, slot: seat);
         }
 
         // The placement stamps: the construction probe reserves (boot static instances + the authoring headroom)
@@ -514,7 +549,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var authored = used.Count;
 
         for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            if (WorldCreationFacets.IsReservedFaceIndex(index: index, derivedFaceScreens: m_derivedFaceScreens)) {
+            if (WorldCreationFacets.IsReservedFaceIndex(index: index, derivedFaceScreens: m_derivedFaceScreens) || WorldAwaySeatQuad.IsReservedIndex(index: index)) {
                 _ = used.Add(item: index);
             }
         }
@@ -542,7 +577,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         if (added < m_authoringHeadroomScreens) {
-            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {m_authoringHeadroomScreens} reserved screen slot(s), but only {added} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authored} carry an authored screen and {m_derivedFaceScreens} are reserved for derived creation faces at indices {WorldCreationFacets.DerivedFaceBase}..{((WorldCreationFacets.DerivedFaceBase + m_derivedFaceScreens) - 1)}. Lower authoring.authoringHeadroomScreens by {(m_authoringHeadroomScreens - added)}, lower authoring.derivedFaceScreens, or author fewer screens.");
+            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {m_authoringHeadroomScreens} reserved screen slot(s), but only {added} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authored} carry an authored screen, {m_derivedFaceScreens} are reserved for derived creation faces at indices {WorldCreationFacets.DerivedFaceBase}..{((WorldCreationFacets.DerivedFaceBase + m_derivedFaceScreens) - 1)}, and {WorldAwaySeatQuad.Count} are reserved for the traveler-follow away-seat quads at indices {WorldAwaySeatQuad.Base}..{((WorldAwaySeatQuad.Base + WorldAwaySeatQuad.Count) - 1)}. Lower authoring.authoringHeadroomScreens by {(m_authoringHeadroomScreens - added)}, lower authoring.derivedFaceScreens, or author fewer screens.");
         }
 
         return padded;

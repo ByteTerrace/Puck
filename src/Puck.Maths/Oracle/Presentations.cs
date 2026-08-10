@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Puck.Maths;
 
 /// <summary>
-/// The presentation catalogue — instance DATA and only data. Every entry here builds a
+/// The presentation catalogue — instance data and only data. Every entry here builds a
 /// <see cref="ChargedPresentation{TValue, TOps}"/> value; not one of them contributes a line of product code, which is
 /// the whole claim the presented algebra makes.
 /// </summary>
@@ -21,9 +21,9 @@ public static class Presentations {
     private static readonly ReadOnlyMemory<int> SingleColour = new int[] { 0 };
 
     /// <summary>
-    /// The Cayley–Dickson tower at a given number of floors: the twisted group algebra of <c>(ℤ/2)^floors</c> whose
-    /// 2-cochain is COMPUTED by the doubling recursion rather than tabulated. Floor 2 is the quaternions, floor 3 the
-    /// octonions, floor 4 the sedenions, and the ladder continues.
+    /// Builds the Cayley–Dickson tower at a given number of floors: the twisted group algebra of <c>(ℤ/2)^floors</c>
+    /// whose 2-cochain is computed by the doubling recursion rather than tabulated. Floor 2 is the quaternions, floor 3
+    /// the octonions, floor 4 the sedenions, and the ladder continues.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; it must be signed, since the cochain takes both signs.</typeparam>
@@ -35,7 +35,7 @@ public static class Presentations {
     /// <param name="material">The material.</param>
     /// <param name="liveAssociator">Whether to declare the tower's associator 3-cochain as re-association rule data. It
     /// is computed from the same doubling recursion the product's 2-cochain comes from, as the four signs
-    /// <c>σ(b,c)·σ(a,b⊕c)·σ(a,b)·σ(a⊕b,c)</c>, so a bracketing is CHARGED during normalization instead of silently
+    /// <c>σ(b,c)·σ(a,b⊕c)·σ(a,b)·σ(a⊕b,c)</c>, so a bracketing is charged during normalization instead of silently
     /// flattened. It changes no cell and no product: the compiled table of a floor is the same table either way, and
     /// what changes is what a bracketed <see cref="Term"/> normalizes to.</param>
     /// <returns>The presentation. Its generators are the basis elements themselves and its rules are the ordered
@@ -109,9 +109,9 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The Clifford signature <c>(p, q, r)</c>: one generator per basis vector, a swap charge of minus one, and a
-    /// reduction sending each generator's square to its signature value — with a degenerate generator's square
-    /// annihilating outright, which is the charge-zero mechanism rather than a second kind of rule.
+    /// Builds the Clifford presentation of signature <c>(p, q, r)</c>: one generator per basis vector, a swap charge of
+    /// minus one, and a reduction sending each generator's square to its signature value — with a degenerate
+    /// generator's square annihilating outright, which is the charge-zero mechanism rather than a second kind of rule.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; it must be signed, since the swap charge is minus one.</typeparam>
@@ -168,15 +168,15 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// A Coxeter presentation: one involutive generator per mirror, and one braid relation per pair of them, read off a
-    /// bond matrix. It is the reflection regime — generators that square to the unit and pairs that satisfy
+    /// Builds a Coxeter presentation: one involutive generator per mirror, and one braid relation per pair of them,
+    /// read off a bond matrix. It is the reflection regime — generators that square to the unit and pairs that satisfy
     /// <c>(s·t)^m = 1</c> — and its brackets stay uniform, because a Coxeter group associates.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; every charge here is one, so any material serves.</typeparam>
     /// <param name="rank">The number of generators, from one through thirty-two.</param>
     /// <param name="bonds">The row-major bond matrix: one on the diagonal, and off it either a bond of two or more —
-    /// the order of the pair's product — or zero, which declares NO relation between the pair at all. The matrix must be
+    /// the order of the pair's product — or zero, which declares no relation between the pair at all. The matrix must be
     /// symmetric.</param>
     /// <param name="material">The material.</param>
     /// <returns>The presentation. Its normal forms are the words no relation shortens or lowers, which for a rank-two
@@ -189,14 +189,14 @@ public static class Presentations {
     /// <para>
     /// <b>Every rule decreases in the presentation's own well-founded order</b>, so normalization is bounded and needs
     /// no separate termination argument: an involution shortens, and a braid relation keeps the length while lowering
-    /// the leading symbol, which is exactly what a <see cref="RuleKind.Swap"/> rule is. A bond of two IS the ordinary
+    /// the leading symbol, which is exactly what a <see cref="RuleKind.Swap"/> rule is. A bond of two is the ordinary
     /// swap rule, so the commuting case is not a special case.
     /// </para>
     /// <para>
-    /// <b>What this system decides, and what it does not.</b> Involution plus braid is a COMPLETE rewriting system at
+    /// <b>What this system decides, and what it does not.</b> Involution plus braid is a complete rewriting system at
     /// every diagram whose connected pieces have rank at most two: there the irreducible words are exactly the group's
     /// elements and <see cref="ChargedPresentation{TValue, TOps}.NormalFormCount"/> is its order, one dihedral factor at
-    /// a time and their product together. It is NOT complete once a piece reaches rank three: the alternating word of a
+    /// a time and their product together. It is not complete once a piece reaches rank three: the alternating word of a
     /// rank-three Coxeter element repeats forever without ever exposing a redex, so the irreducible language is
     /// infinite, the presentation reports no finite basis, and every certificate it can offer says
     /// <see cref="ClosureOutcome.SearchLimitReached"/>. That is the word
@@ -273,8 +273,8 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The free commutative monoid on a set of pairwise coprime generators — the primes — windowed to the integers
-    /// <c>[1, window]</c>. Its normal forms ARE those integers, its product IS Dirichlet convolution, and the
+    /// Builds the free commutative monoid on a set of pairwise coprime generators — the primes — windowed to the
+    /// integers <c>[1, window]</c>. Its normal forms are those integers, its product is Dirichlet convolution, and the
     /// total-degree grading it carries is <c>Ω</c>, the count of prime factors with multiplicity.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -304,7 +304,7 @@ public static class Presentations {
     /// whose product leaves the window — the same charge-zero mechanism a degenerate Clifford generator uses.
     /// </para>
     /// <para>
-    /// <b>Generator symbols run DESCENDING by prime.</b> The well-founded order sorts a word ascending by symbol, so a
+    /// <b>Generator symbols run descending by prime.</b> The well-founded order sorts a word ascending by symbol, so a
     /// normal form reads its largest prime first, and a minimal out-of-window word therefore begins with its largest
     /// prime. That places the bulk of the annihilation rules in the buckets of the rare large primes instead of in the
     /// bucket of two, which is worth roughly thirty times the normalization work at a window of a hundred.
@@ -395,7 +395,7 @@ public static class Presentations {
         );
     }
 
-    /// <summary>The free monoid on a given number of letters — the associative regime, whose only rule is the
+    /// <summary>Builds the free monoid on a given number of letters — the associative regime, whose only rule is the
     /// re-association charge.</summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material.</typeparam>
@@ -420,9 +420,9 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The incidence algebra of a finite partially ordered set: the intervals are the generators, two of them compose
-    /// exactly when the first one's upper endpoint is the second one's lower endpoint, and every other ordered pair
-    /// annihilates. It is <see cref="Quiver"/>'s shape at a sub-quiver — the poset read as a category — so the
+    /// Builds the incidence algebra of a finite partially ordered set: the intervals are the generators, two of them
+    /// compose exactly when the first one's upper endpoint is the second one's lower endpoint, and every other ordered
+    /// pair annihilates. It is <see cref="Quiver"/>'s shape at a sub-quiver — the poset read as a category — so the
     /// convolution over the factorizations of an interval is the ordinary product and nothing here is a second kernel.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -443,12 +443,12 @@ public static class Presentations {
     /// <b>The zeta element is the coefficient one at every interval, and its convolution inverse is the Möbius
     /// function of the order.</b> The strict part carries no interval of chain length zero, so its <c>k</c>-th power
     /// carries none below chain length <c>k</c> and the sum over all lengths terminates at the order's height: the
-    /// finiteness of the poset IS the closure certificate, exactly as a divisibility window's bound is.
+    /// finiteness of the poset is the closure certificate, exactly as a divisibility window's bound is.
     /// </para>
     /// <para>
     /// <b>The divisibility window is this algebra's quotient, not this algebra.</b>
     /// <see cref="DivisibilityWindow"/> presents the free commutative monoid on a prime set, whose basis is the
-    /// integers of the window; the incidence algebra of the same divisibility order has the ordered divisor PAIRS for
+    /// integers of the window; the incidence algebra of the same divisibility order has the ordered divisor pairs for
     /// a basis. The two are related by the interval type <c>[a, b] ↦ b / a</c>, under which the window is the reduced
     /// incidence algebra — so <c>μ([a, b])</c> here equals <c>μ(b / a)</c> there, and neither entry is a
     /// specialization of the other.
@@ -564,16 +564,16 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// One generator with a monic reduction <c>xⁿ → −Σ m_j·x^j</c>. Degree two is the quadratic algebra — the tail
-    /// <c>[m₀, m₁]</c> being the relation <c>(P, Q) = (−m₁, −m₀)</c> — and over the parity material a degree-<c>k</c>
-    /// tail is the binary field of that degree, modulus and all.
+    /// Builds the monogenic presentation: one generator with a monic reduction <c>xⁿ → −Σ m_j·x^j</c>. Degree two is
+    /// the quadratic algebra — the tail <c>[m₀, m₁]</c> being the relation <c>(P, Q) = (−m₁, −m₀)</c> — and over the
+    /// parity material a degree-<c>k</c> tail is the binary field of that degree, modulus and all.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; it must be signed, since the reduction negates the tail.</typeparam>
     /// <param name="modulus">The modulus tail <c>[m₀, m₁, …, m_{n−1}]</c>, low exponent first; the leading <c>xⁿ</c> is
     /// implicit.</param>
     /// <param name="material">The material.</param>
-    /// <returns>The presentation, whose normal forms are the powers below <c>n</c>, so a key IS its exponent.</returns>
+    /// <returns>The presentation, whose normal forms are the powers below <c>n</c>, so a key is its exponent.</returns>
     /// <exception cref="ArgumentException">The tail is empty, or the material is not signed.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The tail is longer than 512 coefficients.</exception>
     public static ChargedPresentation<TValue, TOps> Monogenic<TValue, TOps>(ReadOnlySpan<TValue> modulus, TOps material)
@@ -614,7 +614,7 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The group algebra of a permutation group: the generators ARE the group's elements and the rules ARE its
+    /// Builds the group algebra of a permutation group: the generators are the group's elements and the rules are its
     /// composition table, so a finite group enters the presented algebra the same way a Cayley-Dickson floor does —
     /// as a basis with an ordered product, not as a word rewriting.
     /// </summary>
@@ -626,7 +626,7 @@ public static class Presentations {
     /// <c>(i·j)</c> sends a point through <c>i</c> and then through <c>j</c>.</param>
     /// <param name="material">The material.</param>
     /// <returns>The presentation, whose normal forms are the group's elements — so
-    /// <see cref="ChargedPresentation{TValue, TOps}.NormalFormCount"/> IS the group's order — keyed by ascending
+    /// <see cref="ChargedPresentation{TValue, TOps}.NormalFormCount"/> is the group's order — keyed by ascending
     /// lexicographic order of their point images, which puts the identity at key zero.</returns>
     /// <exception cref="ArgumentException">A row is not a permutation of the points, two rows repeat, the identity is
     /// missing, or the table is not closed under composition.</exception>
@@ -645,7 +645,7 @@ public static class Presentations {
     /// its basis is its element set and the compiled table is that squared. So the reflection groups a bounded
     /// enumeration can reach are presentable here and the ones it cannot are not, which is the same limit stated twice
     /// rather than a second policy: <see cref="ReflectionSystem.TryEnumerateGroup"/> refuses to enumerate the whole
-    /// lattice symmetry long before this entry would refuse to present it. The point cap of 512 is the OTHER side of
+    /// lattice symmetry long before this entry would refuse to present it. The point cap of 512 is the other side of
     /// the table: the input is one row of point images per element, so admitting a point count above the element cap's
     /// own reach only widens rows that name the same group. It is set at twice the element cap so that a faithful
     /// action on more points than the group has elements — which is what a reflection world hands over, the lattice's
@@ -749,9 +749,9 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The planar tangle algebra at a bounded boundary width: the generators ARE the planar diagrams and the rules ARE
-    /// their composition table, so a generator whose output boundary is wider or narrower than its input boundary — a
-    /// cup, a cap — is an ordinary basis element and co-arity greater than one costs the kernel nothing.
+    /// Builds the planar tangle algebra at a bounded boundary width: the generators are the planar diagrams and the
+    /// rules are their composition table, so a generator whose output boundary is wider or narrower than its input
+    /// boundary — a cup, a cap — is an ordinary basis element and co-arity greater than one costs the kernel nothing.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; every charge here is a power of the loop charge, so any material serves.</typeparam>
@@ -765,7 +765,7 @@ public static class Presentations {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximumWidth"/> is negative or above six.</exception>
     /// <remarks>
     /// <para>
-    /// <b>A diagram is a non-crossing perfect matching of its boundary points, and that matching IS its canonical
+    /// <b>A diagram is a non-crossing perfect matching of its boundary points, and that matching is its canonical
     /// form.</b> The <c>k</c> input points and <c>m</c> output points are read once around the boundary — the inputs in
     /// order, then the outputs in reverse — so a planar <c>(k, m)</c> diagram is a non-crossing perfect matching of
     /// <c>k + m</c> points on a circle. It exists only when <c>k + m</c> is even, planarity makes the matching unique
@@ -776,7 +776,7 @@ public static class Presentations {
     /// <para>
     /// <b>Composition is arc tracing, which is why the table is self-proving.</b> The left diagram's outputs are glued
     /// to the right diagram's inputs; walking a free boundary point along the two matchings and the glue reaches another
-    /// free point, and those walks ARE the composite's arcs, while whatever the walks never reach is a closed loop. The
+    /// free point, and those walks are the composite's arcs, while whatever the walks never reach is a closed loop. The
     /// walk is linear in the glued boundary and it associates by construction, so no associativity check is owed — the
     /// <see cref="PermutationGroup"/> argument, at a category rather than a group.
     /// </para>
@@ -784,7 +784,7 @@ public static class Presentations {
     /// <b>The width cap is derived, not chosen.</b> The basis is every planar <c>(k, m)</c> diagram with both widths at
     /// most <paramref name="maximumWidth"/>, so its size is the sum of <c>C((k + m) / 2)</c> over the even-sum pairs,
     /// which reads 6, 15, 43, 123 and 377 at widths two through six and 1182 at width seven. A finite basis of this
-    /// library holds 512 normal forms, so width six is the last width that HAS one and width seven names an object with
+    /// library holds 512 normal forms, so width six is the last width that has one and width seven names an object with
     /// no finite basis at all — every certificate, the compiled table, the guarded star and the tensor would refuse
     /// there, as they do at every other basis-less presentation. Width seven is therefore refused at construction
     /// rather than admitted and then found unusable.
@@ -864,9 +864,9 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// A quiver on a given number of objects: the arrows are the generators, composition is by endpoint match, and a
-    /// mismatch annihilates. The codiscrete case — every ordered pair present — IS the matrix algebra, so a transition
-    /// matrix is an element of this algebra and stepping it is the ordinary product.
+    /// Builds a quiver on a given number of objects: the arrows are the generators, composition is by endpoint match,
+    /// and a mismatch annihilates. The codiscrete case — every ordered pair present — is the matrix algebra, so a
+    /// transition matrix is an element of this algebra and stepping it is the ordinary product.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material.</typeparam>
@@ -947,21 +947,21 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The shift on jets of bounded degree: one generator <c>x</c> with <c>x^(degreeBound+1) → 0</c>, so an element is a
-    /// truncated sequence and multiplying by <c>x</c> delays it by one place.
+    /// Builds the shift on jets of bounded degree: one generator <c>x</c> with <c>x^(degreeBound+1) → 0</c>, so an
+    /// element is a truncated sequence and multiplying by <c>x</c> delays it by one place.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material; it must be signed, since it is a monic reduction.</typeparam>
     /// <param name="degreeBound">The highest surviving degree; the jet holds <c>degreeBound + 1</c> places.</param>
     /// <param name="material">The material.</param>
     /// <returns>The presentation, whose normal forms are the powers of <c>x</c> below <c>degreeBound + 1</c>, so a key
-    /// IS its degree.</returns>
+    /// is its degree.</returns>
     /// <exception cref="ArgumentException">The material is not signed.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="degreeBound"/> is negative or above 511.</exception>
     /// <remarks>
     /// It is <see cref="Monogenic"/> at an all-zero modulus, named because the finite-calculus reading is what earns it:
     /// the shift is nilpotent, so the sum over all lengths <c>1 + x + x² + …</c> terminates under a computed
-    /// <see cref="ClosureCertificate.Nilpotent"/> and IS the antidifference — the prefix-sum operator whose inverse is
+    /// <see cref="ClosureCertificate.Nilpotent"/> and is the antidifference — the prefix-sum operator whose inverse is
     /// the backward difference <c>1 − x</c>.
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> Shift<TValue, TOps>(int degreeBound, TOps material)
@@ -977,8 +977,8 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The SECOND product on words: the generators are the words of a bounded length and their product is the charged
-    /// sum of the distinct interleavings, each carrying the number of ways it is interleaved. An empty
+    /// Builds the second product on words: the generators are the words of a bounded length and their product is the
+    /// charged sum of the distinct interleavings, each carrying the number of ways it is interleaved. An empty
     /// <paramref name="letterProduct"/> is the shuffle exactly; a non-empty one lets two heads collide into one letter
     /// and is the quasi-shuffle. One entry, two products, and the degenerate case is the simpler one.
     /// </summary>
@@ -998,7 +998,7 @@ public static class Presentations {
     /// holds, or <paramref name="letterProduct"/> is neither empty nor one entry per ordered pair of letters.</exception>
     /// <remarks>
     /// <para>
-    /// <b>The generators are words rather than letters</b>, because the shuffle of a letter with itself is TWICE the
+    /// <b>The generators are words rather than letters</b>, because the shuffle of a letter with itself is twice the
     /// two-letter word: the letters do not span this algebra over the integers, so there is no presentation on them. A
     /// generator's <see cref="Generator.Degree"/> is its word's length, which is the grading both products carry.
     /// </para>
@@ -1009,16 +1009,16 @@ public static class Presentations {
     /// from data, and nothing searches.
     /// </para>
     /// <para>
-    /// <b>The window truncates by the RESULT's length, and that is the only truncation an algebra admits here.</b> Every
+    /// <b>The window truncates by the result's length, and that is the only truncation an algebra admits here.</b> Every
     /// interleaving of two words is at least as long as the longer of them, so the words past the window span a
     /// two-sided ideal and the quotient by it is an algebra — which is what this entry builds, by dropping the over-long
-    /// replacement terms of every pair. For the SHUFFLE that is exactly a degree window: every interleaving of two words
+    /// replacement terms of every pair. For the shuffle that is exactly a degree window: every interleaving of two words
     /// is their combined length, so either all of a pair's terms survive or none do, and the pairs whose lengths sum past
-    /// the window annihilate outright. The quasi-shuffle is only FILTERED, not graded — a collision shortens the
+    /// the window annihilate outright. The quasi-shuffle is only filtered, not graded — a collision shortens the
     /// result — so a degree window there would annihilate pairs whose merged terms still fit, and the truncated product
     /// would not associate: at one letter and a window of three, <c>(a·a)·a²</c> would reach <c>3a³ + 2a²</c> where
     /// <c>a·(a·a²)</c> reaches <c>6a³ + 4a²</c>. Truncating by the result's length keeps both associative, which
-    /// <see cref="PresentedAlgebra{TValue, TOps}.Certify"/> COMPUTES rather than this entry asserting it. So the
+    /// <see cref="PresentedAlgebra{TValue, TOps}.Certify"/> computes rather than this entry asserting it. So the
     /// presentation carries no <see cref="ChargedPresentation{TValue, TOps}.WindowDegree"/> of its own: the truncation
     /// sits in the cells, where a shuffle pair that outgrows the window annihilates and a quasi-shuffle pair keeps
     /// whatever its collisions shortened back into range.
@@ -1027,7 +1027,7 @@ public static class Presentations {
     /// <b>Both caps are the 512 normal forms a finite basis holds.</b> The word count is
     /// <c>(k^(L+1) − 1) / (k − 1)</c>, so two letters at a window of eight name 511 words and are admitted while a
     /// window of nine names 1023 and is refused. A letter is a word of length one, so an alphabet above the cap names
-    /// letters no basis holds; and at one letter the words ARE the lengths through the window, so a window above 511
+    /// letters no basis holds; and at one letter the words are the lengths through the window, so a window above 511
     /// names more than 512 of them. Each is the same cap read at a different argument rather than a second policy.
     /// </para>
     /// <para>
@@ -1040,7 +1040,7 @@ public static class Presentations {
     /// <para>
     /// Nothing here requires the letter product to be commutative or associative, and neither is enforced: whether the
     /// resulting algebra is either is a mathematical fact about the declared data, so it is
-    /// <see cref="PresentedAlgebra{TValue, TOps}.Certify"/>'s to compute. What IS refused is a collision naming a letter
+    /// <see cref="PresentedAlgebra{TValue, TOps}.Certify"/>'s to compute. What is refused is a collision naming a letter
     /// outside the alphabet, because that term names no element of this algebra at all.
     /// </para>
     /// </remarks>
@@ -1098,8 +1098,8 @@ public static class Presentations {
     }
 
     /// <summary>
-    /// The tensor product of two finite presentations: the Kronecker pair-up, stated as a presentation whose generators
-    /// ARE the pairs of basis elements and whose rules are the pairs of compiled cells.
+    /// Builds the tensor product of two finite presentations: the Kronecker pair-up, stated as a presentation whose
+    /// generators are the pairs of basis elements and whose rules are the pairs of compiled cells.
     /// </summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
     /// <typeparam name="TOps">The material.</typeparam>
@@ -1114,7 +1114,7 @@ public static class Presentations {
     /// <remarks>
     /// <para>
     /// It contributes no product code: the cells of the pair are read out of the two factors' own generated cells, so
-    /// the tensor is the SAME kernel at a bigger presentation. That is why the pair-up needs no second multiply and no
+    /// the tensor is the same kernel at a bigger presentation. That is why the pair-up needs no second multiply and no
     /// second element type.
     /// </para>
     /// <para>
@@ -1368,12 +1368,12 @@ public static class Presentations {
     }
 
     // Two generators compose exactly when the wires the first hands over ARE the wires the second takes: the same
-    // number of them, in the same colours, in the same order. ONE comparison says all of that, because a span
-    // comparison compares length before contents: a diagram whose boundaries differ in WIDTH and a quiver arrow or
-    // poset interval whose endpoints disagree in COLOUR both fail this same line, and a one-colour arity-one
-    // presentation runs it against one-entry lists, which is the endpoint test it used to write out by hand. Restating
-    // the width as a separate conjunct would read as two independent halves and be neither — the length test it names
-    // is already inside the one below, and a Generator's Coarity and Arity ARE those two lengths.
+    // number of them, in the same colours, in the same order. One comparison says all of that, because a span
+    // comparison compares length before contents: a diagram whose boundaries differ in width and a quiver arrow or
+    // poset interval whose endpoints disagree in colour both fail this same line, and a one-colour arity-one
+    // presentation runs it against one-entry lists — the same test in that degenerate case. Restating the width as
+    // a separate conjunct would read as two independent halves and be neither — the length test it names is already
+    // inside the one below, and a Generator's Coarity and Arity ARE those two lengths.
     private static bool BoundariesMeet(in Generator left, in Generator right) =>
         left.Outputs.SequenceEqual(other: right.Inputs);
 

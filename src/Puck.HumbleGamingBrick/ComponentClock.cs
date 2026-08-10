@@ -19,10 +19,10 @@ namespace Puck.HumbleGamingBrick.Timing;
 /// are due. The driver holds no emulated state of its own beyond the speed flag, so the machine remains fully captured
 /// by snapshotting the clock and the components.
 /// <para>
-/// The component set is FIXED at composition time, so the driver holds each component as a typed field and the
-/// per-T-cycle fan-out is direct sealed calls — zero interface dispatch in the hot loop (the ideal plan's §7 mandate).
-/// Tick order is the registration order the Contract pins (timer BEFORE serial at an equal timestamp, §3.5), CPU
-/// domain first, then LCD domain; the constructor verifies each field's declared <see cref="IClockedComponent.Domain"/>
+/// The component set is fixed at composition time, so the driver holds each component as a typed field and the
+/// per-T-cycle fan-out is direct sealed calls — zero interface dispatch in the hot loop. Tick order is the
+/// registration order: timer before serial at an equal timestamp, CPU domain first, then LCD domain; the
+/// constructor verifies each field's declared <see cref="IClockedComponent.Domain"/>
 /// against its hard-coded slot so a component cannot silently change domain without this driver noticing. The only
 /// polymorphic slot is the cartridge's timed facet (an MBC3/HuC3 real-time clock); untimed mappers leave it null and
 /// pay a predicted-not-taken branch instead of a no-op call.

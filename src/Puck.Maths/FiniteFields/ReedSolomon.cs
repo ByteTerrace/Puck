@@ -24,7 +24,7 @@ namespace Puck.Maths;
 /// for short codewords and pooled for long ones, and a pooled buffer is cleared before it re-enters the shared pool.
 /// </para>
 /// <para>
-/// Correctness rests on the roots being DISTINCT, which holds when <c>rootBase</c>'s multiplicative order exceeds the
+/// Correctness rests on the roots being distinct, which holds when <c>rootBase</c>'s multiplicative order exceeds the
 /// largest root exponent the generator uses; a primitive element gives the longest code the field admits. The
 /// precondition is documented rather than enforced, the same posture <see cref="BinaryField{T}"/> takes toward
 /// irreducibility, and for the same reason: the test costs more than the operation and a caller that already chose its

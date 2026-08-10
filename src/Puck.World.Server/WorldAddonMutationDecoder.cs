@@ -6,22 +6,22 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The addon mutation seam's STAGE 6 decoder (see <see cref="WorldAddonRuntime"/>'s <c>ResolveMutations</c>): turns
+/// The addon mutation seam's stage 6 decoder (see <see cref="WorldAddonRuntime"/>'s <c>ResolveMutations</c>): turns
 /// one guest-submitted JSON payload — already copied host-side out of guest linear memory by stage 5's
-/// pointer-safety gate — into a typed <see cref="WorldMutation"/>. Hand-walked <see cref="JsonDocument"/>, the SAME
+/// pointer-safety gate — into a typed <see cref="WorldMutation"/>. Hand-walked <see cref="JsonDocument"/>, the same
 /// discipline <c>Puck.World.Client.Sdf.SdfDocumentDecoder</c> uses for its own untrusted-shaped door: every object's
 /// members are collected once (a repeated key refuses, never silently resolves to whichever <c>JsonSerializer</c>
 /// would have picked), checked against a per-kind allowed-member list (an unrecognized key refuses by name, never
-/// ignored), and every scalar is finite-and-signedness-checked before it is trusted. NEVER source-gen POCO
+/// ignored), and every scalar is finite-and-signedness-checked before it is trusted. Never source-gen POCO
 /// deserialization — see the seam's own doc for why.
 /// </summary>
-/// <remarks>SCOPE (2026-08, this landing): wires the 5 HUD kinds
+/// <remarks>Wires the 5 HUD kinds
 /// (<see cref="WorldMutation.UpsertHudPanel"/>/<see cref="WorldMutation.RemoveHudPanel"/>/
 /// <see cref="WorldMutation.UpsertHudElement"/>/<see cref="WorldMutation.RemoveHudElement"/>/
-/// <see cref="WorldMutation.SetHudDefaults"/>) — the ones <c>wasm/puck-addon-hudbuilder</c> exercises — PLUS the
+/// <see cref="WorldMutation.SetHudDefaults"/>) — the ones <c>wasm/puck-addon-hudbuilder</c> exercises — plus the
 /// state section's two kinds (<see cref="WorldMutation.UpsertStateRow"/>/<see cref="WorldMutation.RemoveStateRow"/>)
 /// and the placement rows (<see cref="WorldMutation.UpsertPlacement"/>/<see cref="WorldMutation.RemovePlacement"/>,
-/// the FULL <see cref="WorldPlacement"/> wire shape the document validator accepts — every facet: transform, distribution,
+/// the full <see cref="WorldPlacement"/> wire shape the document validator accepts — every facet: transform, distribution,
 /// mirror, emission, solid, inhabit, faceSources, region, attach), plus <see cref="WorldMutation.SetInputHold"/>. Other
 /// declared kinds have no entry yet;
 /// <see cref="TryDecode"/> refuses an unwired ordinal by name rather than guessing a shape for it, so wiring one in
@@ -111,7 +111,7 @@ internal static class WorldAddonMutationDecoder {
     /// guest-controlled input — every failure returns <see langword="false"/> with a human-readable reason.</summary>
     /// <param name="kindOrdinal">The wire-declared <see cref="MutationKindAttribute.Ordinal"/> the act named.</param>
     /// <param name="section">The section the deciding grant row's mask was checked against — a defense-in-depth
-    /// cross-check that the decoded kind's OWN declared section agrees, never trusted from the wire alone.</param>
+    /// cross-check that the decoded kind's own declared section agrees, never trusted from the wire alone.</param>
     /// <param name="payload">The host-copied payload bytes (UTF-8 JSON) — <see cref="ReadOnlyMemory{T}"/>, never a
     /// <see cref="Span{T}"/>, because <see cref="JsonDocument.Parse(ReadOnlyMemory{byte}, JsonDocumentOptions)"/> is
     /// the overload that accepts one without an intermediate array copy.</param>
@@ -342,11 +342,10 @@ internal static class WorldAddonMutationDecoder {
 
     // ---- State section (UpsertStateRow 46 / RemoveStateRow 47) ----
 
-    // ONE shape, matching WorldStateRowJsonConverter's exactly: a name, a kind, the optional envelope fields, and
-    // EITHER a bare `value` (sugar for the one cell keyed WorldStateRow.SlotKey) or a keyed `cells` array. There is
-    // no $type discriminator to branch on any more, so there is no per-$type member list either — one list, one
-    // walk. Both-or-neither Min/Max, the value's own in-range check, the capacity ceiling, and the text-length
-    // ceiling are ALL WorldDefinitionValidator's job (WorldStateCapacity); this only turns wire scalars into the
+    // One shape, matching WorldStateRowJsonConverter's exactly: a name, a kind, the optional envelope fields, and
+    // either a bare `value` (sugar for the one cell keyed WorldStateRow.SlotKey) or a keyed `cells` array — one
+    // list, one walk, no per-$type branching. Both-or-neither Min/Max, the value's own in-range check, and the
+    // capacity/text-length ceilings are all WorldDefinitionValidator's job; this only turns wire scalars into the
     // typed row, exactly like the HUD decoders leave capacity/authoring-policy checks to the same validate stage.
     private static WorldMutation DecodeUpsertStateRow(JsonElement root, WorldPrincipal principal) {
         const string Context = "UpsertStateRow";

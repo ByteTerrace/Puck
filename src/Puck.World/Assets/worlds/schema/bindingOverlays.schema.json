@@ -223,10 +223,11 @@
                 "holdPages": {
                   "type": "array",
                   "items": {
-                    "type": "string"
-                  },
-                  "minItems": 1,
-                  "uniqueItems": true
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
                 },
                 "rings": {
                   "type": "array",
@@ -265,31 +266,85 @@
                   }
                 },
                 "style": {
-                  "type": ["object", "null"],
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "properties": {
-                    "pointerSelection": { "type": "string", "enum": ["Disabled", "Angle", "HitTarget"], "default": "Angle" },
-                    "placement": { "type": "string", "enum": ["Pointer", "ViewportCenter"], "default": "Pointer" },
-                    "deadZoneFraction": { "type": "number", "minimum": 0, "exclusiveMaximum": 0.5, "default": 0.1 },
-                    "ringWidthFraction": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 0.5, "default": 0.07 },
-                    "outerGraceRingFraction": { "type": "number", "minimum": 0, "default": 0.5 },
-                    "rotationDegrees": { "type": "number", "default": 0 },
-                    "clockwise": { "type": "boolean", "default": true },
-                    "initialRing": { "type": "integer", "minimum": 0, "default": 0 },
-                    "ringSelection": { "type": "string", "enum": ["Explicit", "Excursion"], "default": "Explicit" },
+                    "pointerSelection": {
+                      "enum": [
+                        "Disabled",
+                        "Angle",
+                        "HitTarget"
+                      ],
+                      "default": "Angle"
+                    },
+                    "placement": {
+                      "enum": [
+                        "Pointer",
+                        "ViewportCenter"
+                      ],
+                      "default": "Pointer"
+                    },
+                    "deadZoneFraction": {
+                      "type": "number",
+                      "default": 0.1
+                    },
+                    "ringWidthFraction": {
+                      "type": "number",
+                      "default": 0.07
+                    },
+                    "outerGraceRingFraction": {
+                      "type": "number",
+                      "default": 0.5
+                    },
+                    "rotationDegrees": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "clockwise": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "initialRing": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "ringSelection": {
+                      "enum": [
+                        "Explicit",
+                        "Excursion"
+                      ],
+                      "default": "Explicit"
+                    },
                     "excursion": {
-                      "type": ["object", "null"],
+                      "type": [
+                        "object",
+                        "null"
+                      ],
                       "properties": {
-                        "deadZone": { "type": "number", "minimum": 0 },
+                        "deadZone": {
+                          "type": "number"
+                        },
                         "thresholds": {
                           "type": "array",
-                          "items": { "type": "number", "exclusiveMinimum": 0 },
-                          "description": "One boundary per adjacent ring pair. The current maxItems tracks BindingWheelDefinition.MaxRings - 1.",
-                          "maxItems": 2
+                          "items": {
+                            "type": "number"
+                          }
                         },
-                        "spatialTravelFraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.25 },
-                        "hysteresis": { "type": "number", "minimum": 0, "default": 0.02 }
+                        "spatialTravelFraction": {
+                          "type": "number",
+                          "default": 0.25
+                        },
+                        "hysteresis": {
+                          "type": "number",
+                          "default": 0.02
+                        }
                       },
-                      "required": ["deadZone", "thresholds"],
+                      "required": [
+                        "deadZone",
+                        "thresholds"
+                      ],
                       "additionalProperties": false,
                       "default": null
                     }
