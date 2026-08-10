@@ -1,5 +1,5 @@
 {
-  "description": "The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the listener policy \u2014 see WorldAudioDefaults) \u2014 a REQUIRED section every document carries.",
+  "description": "The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the listener policy \u2014 see WorldAudioDefaults) \u2014 a required section every document carries.",
   "type": "object",
   "properties": {
     "masterGain": {
@@ -26,7 +26,7 @@
       "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
       "type": "array",
       "items": {
-        "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s CUE TABLE: when the named engine event fires, the referenced patch voices through a short-lived TRANSIENT emitter placed per Placement. Event tokens are a CLOSED, published vocabulary of engine MECHANISMS (EventTokens): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.",
+        "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are a closed, published vocabulary of engine mechanisms (EventTokens): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.",
         "type": [
           "object",
           "null"

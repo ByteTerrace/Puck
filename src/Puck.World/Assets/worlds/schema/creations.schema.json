@@ -1,8 +1,8 @@
 {
-  "description": "The creation ASSET rows (default empty) \u2014 whole puck.creation.v1 documents embedded inline-canonical with their identity hashes pinned (see WorldCreation).",
+  "description": "The creation asset rows (default empty) \u2014 whole puck.creation.v1 documents embedded inline-canonical with their identity hashes pinned (see WorldCreation).",
   "type": "array",
   "items": {
-    "description": "One creation ASSET row \u2014 a whole puck.creation.v1 document embedded INLINE-CANONICAL in the world file with its identity hash pinned beside it. The document and hash MUST come from the SAME CanonicalDocument\u00601: the compose boundary canonicalizes on upsert and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a tampered world file rejects loudly. World files stay self-contained \u2014 the CAS is an authoring-time import/export cache, never a load-time dependency.",
+    "description": "One creation asset row \u2014 a whole puck.creation.v1 document embedded inline, in canonical form, in the world file with its identity hash pinned beside it. The document and hash must come from the same CanonicalDocument\u00601: the compose boundary canonicalizes on upsert and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a tampered world file rejects loudly. World files stay self-contained \u2014 the CAS is an authoring-time import/export cache, never a load-time dependency.",
     "type": [
       "object",
       "null"

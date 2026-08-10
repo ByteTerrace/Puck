@@ -1,8 +1,8 @@
 {
-  "description": "The LOOK rows (default empty) \u2014 authored appearances the population wears, the peer of Kits (see WorldLook). Empty resolves every entity to the implicit single catalog look.",
+  "description": "The look rows (default empty) \u2014 authored appearances the population wears, the peer of Kits (see WorldLook). Empty resolves every entity to the implicit single catalog look.",
   "type": "array",
   "items": {
-    "description": "One LOOK row \u2014 the appearance peer of WorldKit\u0027s way of MOVING. Every appearance a world offers is a row of this data, never a renderer branch; world.looks prints these names.",
+    "description": "One look row \u2014 the appearance peer of WorldKit\u0027s way of moving. Every appearance a world offers is a row of this data, never a renderer branch; world.looks prints these names.",
     "type": [
       "object",
       "null"
@@ -20,13 +20,13 @@
         ],
         "anyOf": [
           {
-            "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others, no longer \u0022the avatar system\u0022.",
+            "description": "The procedural humanoid catalog (WorldAvatarCatalog) \u2014 one look source among others.",
             "properties": {
               "$type": {
                 "const": "catalog"
               },
               "index": {
-                "description": "The procedural renderer catalog rig to pin, or null for the index-derived pick (the pre-look behaviour every body had).",
+                "description": "The procedural renderer catalog rig to pin, or null for the index-derived pick.",
                 "type": [
                   "integer",
                   "null"
@@ -57,7 +57,7 @@
         ]
       },
       "scale": {
-        "description": "The uniform render scale. Appearance ONLY \u2014 it does not resize the body\u0027s motion tuning or its collision volume.",
+        "description": "The uniform render scale. Appearance only \u2014 it does not resize the body\u0027s motion tuning or its collision volume.",
         "type": "number"
       },
       "motion": {

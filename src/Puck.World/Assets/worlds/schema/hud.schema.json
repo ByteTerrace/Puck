@@ -1,5 +1,5 @@
 {
-  "description": "The hud section \u2014 the world-scope HUD panel rows plus their defaults (see WorldHudSection). PRESENTATION-ONLY: overlay geometry and bindings, never simulation state. Defaults to Default (enabled, no authored panels) \u2014 byte-identical boot behavior for every world authored before this section existed.",
+  "description": "The hud section \u2014 the world-scope HUD panel rows plus their defaults (see WorldHudSection). presentation-only: overlay geometry and bindings, never simulation state. Defaults to Default (enabled, no authored panels) \u2014 byte-identical boot behavior for every world authored before this section existed.",
   "type": "object",
   "properties": {
     "defaults": {
@@ -53,7 +53,7 @@
       "description": "Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
       "type": "array",
       "items": {
-        "description": "One HUD panel row \u2014 a stable id (unique within the section), a normalized VIEWPORT rect in screen space, which band it draws in, its chrome style, and its child elements. WorldMutation.UpsertHudPanel carries the whole row (elements included) as ONE cross-row transaction boundary; WorldMutation.UpsertHudElement/ WorldMutation.RemoveHudElement read-modify-write a single element within an already-declared panel.",
+        "description": "One HUD panel row \u2014 a stable id (unique within the section), a normalized viewport rect in screen space, which band it draws in, its chrome style, and its child elements. WorldMutation.UpsertHudPanel carries the whole row (elements included) as one cross-row transaction boundary; WorldMutation.UpsertHudElement/ WorldMutation.RemoveHudElement read-modify-write a single element within an already-declared panel.",
         "type": [
           "object",
           "null"

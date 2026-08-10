@@ -323,7 +323,8 @@
       "minPitch": -0.35,
       "maxPitch": 1.2,
       "arming": "RightButton",
-      "worldAxes": false
+      "worldAxes": false,
+      "stickLookRate": 2.6
     }
   },
   "channels": [

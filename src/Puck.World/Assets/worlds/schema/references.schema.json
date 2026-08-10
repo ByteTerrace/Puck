@@ -1,5 +1,5 @@
 {
-  "description": "The references section (default null = names nothing) \u2014 rows naming another world by document path (see WorldReference), echoed by world.references. No boot-time file-existence check; resolution is a consumer\u0027s job. OPTIONAL, for the SAME reason Rules is.",
+  "description": "The references section (default null = names nothing) \u2014 rows naming another world by document path (see WorldReference), echoed by world.references. No boot-time file-existence check; resolution is a consumer\u0027s job. Optional, for the same reason Rules is.",
   "type": [
     "array",
     "null"

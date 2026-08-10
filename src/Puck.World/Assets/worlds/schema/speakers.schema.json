@@ -39,7 +39,7 @@
         "additionalProperties": false
       },
       {
-        "description": "A speaker anchored to a WorldAnchor \u2014 the entity/part/placement pose it rides supplies the live position; Offset is the exact attachment point in the anchor\u0027s local axes on top of that. Unlike cameras, speakers resolve EVERY anchor kind, placements included (the placement\u0027s stamped transform is reachable client-side from the definition plus the animator state).",
+        "description": "A speaker anchored to a WorldAnchor \u2014 the entity/part/placement pose it rides supplies the live position; Offset is the exact attachment point in the anchor\u0027s local axes on top of that. Unlike cameras, speakers resolve every anchor kind, placements included (the placement\u0027s stamped transform is reachable client-side from the definition plus the animator state).",
         "properties": {
           "$type": {
             "const": "anchored"
@@ -88,7 +88,7 @@
         "additionalProperties": false
       },
       {
-        "description": "An ambient bed \u2014 a region PRESENCE, not a position: center-panned, its gain an envelope of the listener\u0027s distance from Center \u2014 full inside InnerRadius, zero at Radius \u2014 with its presence slew bounded by FadeSeconds. Box extents become a later $type only if a sphere proves dishonest.",
+        "description": "An ambient bed \u2014 a region presence, not a position: center-panned, its gain an envelope of the listener\u0027s distance from Center \u2014 full inside InnerRadius, zero at Radius \u2014 with its presence slew bounded by FadeSeconds. Box extents become a later $type only if a sphere proves dishonest.",
         "properties": {
           "$type": {
             "const": "bed"
@@ -126,7 +126,7 @@
             ],
             "properties": {
               "radius": {
-                "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is CULLED (finite support IS the cull).",
+                "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is culled (finite support is the cull).",
                 "type": "number"
               },
               "curve": {

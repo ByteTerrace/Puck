@@ -1,5 +1,5 @@
 {
-  "description": "The contact-solver tuning (see WorldCollision) \u2014 SIM-AFFECTING.",
+  "description": "The contact-solver tuning (see WorldCollision) \u2014 it affects the simulation.",
   "type": "object",
   "properties": {
     "requirements": {
@@ -22,7 +22,7 @@
       "type": "integer"
     },
     "maxSlopeDegrees": {
-      "description": "The steepest surface a body still counts as STANDING on. A contact whose normal leans further from the body\u0027s up axis than this pushes the body but never grounds it \u2014 the walkable-slope limit.",
+      "description": "The steepest surface a body still counts as standing on. A contact whose normal leans further from the body\u0027s up axis than this pushes the body but never grounds it \u2014 the walkable-slope limit.",
       "type": "number"
     },
     "gradientProbe": {

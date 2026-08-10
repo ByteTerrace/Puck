@@ -1,41 +1,41 @@
 {
-  "description": "The editor/authoring policy row \u2014 headroom, placement scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data (see WorldAuthoringDefaults) \u2014 a REQUIRED section every document carries.",
+  "description": "The editor/authoring policy row \u2014 headroom, placement scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data (see WorldAuthoringDefaults) \u2014 a required section every document carries.",
   "type": "object",
   "properties": {
     "authoringHeadroomScreens": {
-      "description": "BOOT-CONSUMED. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
+      "description": "Boot-consumed. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
       "type": "integer"
     },
     "authoringHeadroomPlacements": {
-      "description": "BOOT-CONSUMED. The placement rows of headroom the probe reserves beyond the boot placements (see Client.WorldPlacementStamper.StaticStampInstances).",
+      "description": "Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements (see Client.WorldPlacementStamper.StaticStampInstances).",
       "type": "integer"
     },
     "minPlacementScale": {
-      "description": "LIVE-CONSUMED. The placement uniform-scale envelope\u0027s floor \u2014 a pure validator bound, revalidated on every placement mutation.",
+      "description": "Live-consumed. The placement uniform-scale envelope\u0027s floor \u2014 a pure validator bound, revalidated on every placement mutation.",
       "type": "number"
     },
     "maxPlacementScale": {
-      "description": "LIVE-CONSUMED. The placement uniform-scale envelope\u0027s ceiling \u2014 also the worst-case scale Client.WorldStampPool\u0027s probe bound-radius reads (bound radius is spatial-cull metadata, never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).",
+      "description": "Live-consumed. The placement uniform-scale envelope\u0027s ceiling \u2014 also the worst-case scale Client.WorldStampPool\u0027s probe bound-radius reads (bound radius is spatial-cull metadata, never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).",
       "type": "number"
     },
     "candidateRadius": {
-      "description": "LIVE-CONSUMED. The proximity-candidate radius (world units) around a seat\u0027s editor focus point \u2014 cycling never walks the whole world (the explicit candidate policy).",
+      "description": "Live-consumed. The proximity-candidate radius (world units) around a seat\u0027s editor focus point \u2014 cycling never walks the whole world (the explicit candidate policy).",
       "type": "number"
     },
     "candidateCap": {
-      "description": "LIVE-CONSUMED. The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring.",
+      "description": "Live-consumed. The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring.",
       "type": "integer"
     },
     "workbenchFraction": {
-      "description": "LIVE-CONSUMED. The full-height fraction a SOLE editing seat\u0027s viewport takes when 2\u002B seats are joined (the remaining width splits as a live rail among the playing seats) \u2014 read fresh each captured frame by Client.WorldFrameSource.LayoutRegion(int, int, int, float).",
+      "description": "Live-consumed. The full-height fraction a sole editing seat\u0027s viewport takes when 2\u002B seats are joined (the remaining width splits as a live rail among the playing seats) \u2014 read fresh each captured frame by Client.WorldFrameSource.LayoutRegion(int, int, int, float).",
       "type": "number"
     },
     "previewDeadlineFrames": {
-      "description": "LIVE-CONSUMED. The drag preview channel\u0027s missing-response fallback: a released overlay with no definition delivery after this many produced frames drops honestly.",
+      "description": "Live-consumed. The drag preview channel\u0027s missing-response fallback: a released overlay with no definition delivery after this many produced frames drops honestly.",
       "type": "integer"
     },
     "derivedFaceScreens": {
-      "description": "BOOT-CONSUMED. The derived screen slots the binder reserves at boot for creation FACES (a face declared by a placement\u0027s creation, lit by a feed), registered at [Client.WorldCreationFacets.DerivedFaceBase, DerivedFaceBase \u002B this). Bounded so the range stays below AwaySeatScreenBase, where traveler-follow presentation owns the engine table\u0027s final local-seat-sized band.",
+      "description": "Boot-consumed. The derived screen slots the binder reserves at boot for creation faces (a face declared by a placement\u0027s creation, lit by a feed), registered at [Client.WorldCreationFacets.DerivedFaceBase, DerivedFaceBase \u002B this). Bounded so the range stays below AwaySeatScreenBase, where traveler-follow presentation owns the engine table\u0027s final local-seat-sized band.",
       "type": "integer"
     }
   },

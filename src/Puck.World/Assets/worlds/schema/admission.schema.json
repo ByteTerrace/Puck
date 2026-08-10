@@ -1,22 +1,22 @@
 {
-  "description": "The admission section (default null = admits no remote peer) \u2014 the durable vocabulary of which identities/issuers this world\u0027s TCP socket admits (see WorldAdmissionEntry), and what each is minted once verified. WorldAdmissionDoor is the one consumer, at the Hello handshake, off the tick thread \u2014 this replaces the game socket\u0027s former blanket \u0022admit as Control/all\u0022 wire admission (docs/world-model.md\u0027s \u0022Authenticating the game wire\u0022 row) with a verified-identity-to-principal mapping. BOOT-ONLY like References/Portals/Destinations \u2014 no live mutation arm. A trailing addition over the section set shipped before it, never reordered among it \u2014 the same trailing convention Market follows after it.",
+  "description": "The admission section (default null = admits no remote peer) \u2014 the durable vocabulary of which identities/issuers this world\u0027s TCP socket admits (see WorldAdmissionEntry), and what each is minted once verified. WorldAdmissionDoor is the one consumer, at the Hello handshake, off the tick thread \u2014 this replaces the game socket\u0027s former blanket \u0022admit as Control/all\u0022 wire admission (docs/world-model.md\u0027s \u0022Authenticating the game wire\u0022 row) with a verified-identity-to-principal mapping. boot-only like References/Portals/Destinations \u2014 no live mutation arm. A trailing addition over the section set shipped before it, never reordered among it \u2014 the same trailing convention Market follows after it.",
   "type": [
     "array",
     "null"
   ],
   "items": {
-    "description": "One row of the admission section \u2014 durable configuration naming ONE identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the ONLY consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Carriage.TrustList already carries.",
+    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Carriage.TrustList already carries.",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "domain": {
-        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this MUST be PublicKey\u0027s OWN fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash.",
+        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey\u0027s own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash.",
         "type": "string"
       },
       "subject": {
-        "description": "The platform user id this entry pins, REQUIRED for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here).",
+        "description": "The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here).",
         "type": [
           "string",
           "null"
@@ -41,7 +41,7 @@
         "description": "What a peer verified under this entry is minted, INSTEAD OF the blanket Control/all every admitted peer used to receive unconditionally. Empty (never null) is a legitimate authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a socket open, but unable to submit anything the grant table would honor.",
         "type": "array",
         "items": {
-          "description": "One capability a verified admission entry mints for the connecting peer once its identity checks out \u2014 the SAME fields WorldGrant carries for a Peer principal, minus Principal itself (unknowable until Server.WorldPopulation.TryAdmitRemotePeer assigns the connection\u0027s body index and generation) and minus the co-driving payloads (Reach/Consent/ Ceiling), which are seat-authored pool mechanics that presuppose a body already exists to author them \u2014 never something an admission template mints ahead of a connection. Server.WorldServer.TryAdmitPeerConnection rebinds each template onto WorldPrincipal.Peer(index, generation) the moment the body is admitted, through the SAME Server.WorldServer.Grant door world.grant and the document\u0027s own grants section already go through \u2014 an admission-minted grant is subject to the identical budget/exclusivity rules a live world.grant row is, and prints the same loud accept/reject line rather than being force-fed past the table.",
+          "description": "One capability a verified admission entry mints for the connecting peer once its identity checks out \u2014 the same fields WorldGrant carries for a Peer principal, minus Principal itself (unknowable until Server.WorldPopulation.TryAdmitRemotePeer assigns the connection\u0027s body index and generation) and minus the co-driving payloads (Reach/Consent/ Ceiling), which are seat-authored pool mechanics that presuppose a body already exists. Server.WorldServer.TryAdmitPeerConnection rebinds each template onto WorldPrincipal.Peer(index, generation) the moment the body is admitted, through the same Server.WorldServer.Grant door the document\u0027s own grants section goes through \u2014 an admission-minted grant is subject to the identical budget/exclusivity rules a live world.grant row is.",
           "type": "object",
           "properties": {
             "capability": {
@@ -62,7 +62,7 @@
               "type": "boolean"
             },
             "budget": {
-              "description": "The untrusted-principal per-tick dispatch budget \u2014 REQUIRED by the live grant door on a Drive/Observe row, and on an untrusted Mutate/section:\u003Cname\u003E row, exactly as it is for any other Peer/Addon grant; an admission entry that omits it on such a row mints a row the door refuses at admission time (a loud reject, never a silent grant of \u0022some\u0022 budget).",
+              "description": "The untrusted-principal per-tick dispatch budget \u2014 required by the live grant door on a Drive/Observe row, and on an untrusted Mutate/section:\u003Cname\u003E row, exactly as for any other Peer/Addon grant; an admission entry that omits it on such a row mints a row the door refuses at admission time.",
               "type": [
                 "integer",
                 "null"
@@ -76,7 +76,7 @@
               ]
             },
             "kindMask": {
-              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 REQUIRED by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach, exactly as any other Peer/Addon Mutate/section row)."
+              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 required by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach)."
             }
           },
           "additionalProperties": false

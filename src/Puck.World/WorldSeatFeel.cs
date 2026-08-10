@@ -54,8 +54,9 @@ internal sealed class WorldSeatFeel {
     }
 
     /// <summary>Re-points the world's own feel after a definition delivery, so a live
-    /// <c>world.row.set playerDefaults.seatLook</c> takes effect on the very next drag for every seat still sitting at
-    /// the world's floor. A seat carrying its own profile feel is unaffected — that is the point of the split.</summary>
+    /// <c>world.row.set playerDefaults.seatLook</c> takes effect on the very next pointer drag or rendered-frame stick
+    /// integration for every seat still sitting at the world's floor. A seat carrying its own profile feel is
+    /// unaffected — that is the point of the split.</summary>
     /// <param name="worldLook">The delivered document's authored feel.</param>
     /// <exception cref="ArgumentNullException"><paramref name="worldLook"/> is <see langword="null"/>.</exception>
     public void SetWorldLook(WorldSeatLook worldLook) {

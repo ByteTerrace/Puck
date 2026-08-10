@@ -17,7 +17,7 @@
         "type": "string"
       },
       "hash": {
-        "description": "The content-address integrity pin (sha256-64/{16 hex}). REQUIRED \u2014 a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.",
+        "description": "The content-address integrity pin (sha256-64/{16 hex}). required \u2014 a guest whose module is unpinned makes the state it touches depend on a file on disk, which is a determinism hole before it is a security one.",
         "type": "string"
       },
       "fuel": {
@@ -29,13 +29,13 @@
         "type": "boolean"
       },
       "requests": {
-        "description": "The addon\u0027s manifest \u2014 what it ASKS for, as data (see WorldCapabilityRequest): a designation only, never authority. Deny by default holds regardless of what this names, and so does the converse \u2014 this is the LEFT half of requests \u2227 grants, so a hold the manifest never names materializes no handle and the guest can never reach it (see Server.WorldAddonRuntime). Null/empty means the row asked for nothing and therefore reaches nothing. Reviewed by an operator before mounting, or by the runtime\u0027s own loud mount-time line naming exactly which requested pairs the settled grant table (the permissive seed plus any Grants row already applied) honors for this addon\u0027s principal right now, which it withholds, and which it holds beyond the manifest.",
+        "description": "The addon\u0027s manifest \u2014 what it asks for, as data (see WorldCapabilityRequest): a designation only, never authority. Deny by default holds regardless of what this names, and so does the converse \u2014 this is the left half of requests \u2227 grants, so a hold the manifest never names materializes no handle and the guest can never reach it (see Server.WorldAddonRuntime). Null/empty means the row asked for nothing and therefore reaches nothing. Reviewed by an operator before mounting, or by the runtime\u0027s own loud mount-time line naming exactly which requested pairs the settled grant table (the permissive seed plus any Grants row already applied) honors for this addon\u0027s principal right now, which it withholds, and which it holds beyond the manifest.",
         "type": [
           "array",
           "null"
         ],
         "items": {
-          "description": "One capability/subject pair a WorldAddonRow\u0027s manifest REQUESTS (see Requests) \u2014 a DESIGNATION only, never authority: requesting is not receiving. Deny by default holds regardless of what a manifest names here; the console\u0027s grant table (live, via world.grant) or the document\u0027s own Grants section decide what subset, if any, is actually held. The requesting principal is always the addon\u0027s own Addon identity \u2014 implicit, never carried on the row itself, because a manifest can only ever ask on its own behalf.",
+          "description": "One capability/subject pair a WorldAddonRow\u0027s manifest requests (see Requests) \u2014 a designation only, never authority: requesting is not receiving. Deny by default holds regardless of what a manifest names here; the console\u0027s grant table (live, via world.grant) or the document\u0027s own Grants section decide what subset, if any, is actually held. The requesting principal is always the addon\u0027s own Addon identity \u2014 implicit, never carried on the row itself, because a manifest can only ever ask on its own behalf.",
           "type": "object",
           "properties": {
             "capability": {
@@ -57,13 +57,13 @@
         "default": null
       },
       "memoryWatches": {
-        "description": "The addon\u0027s machine-memory watch rows (the fifth event family \u2014 see WorldAddonMemoryWatch): declared alongside Requests, materializing ONLY where the settled grant table also holds Observe/screen:\u003Cn\u003E WITH an event budget for the watched screen (the same requested \u2227 granted rule every other capability here already enforces). Null/empty means no watches.",
+        "description": "The addon\u0027s machine-memory watch rows (the fifth event family \u2014 see WorldAddonMemoryWatch): declared alongside Requests, materializing only where the settled grant table also holds Observe/screen:\u003Cn\u003E with an event budget for the watched screen (the same requested \u2227 granted rule every other capability here already enforces). Null/empty means no watches.",
         "type": [
           "array",
           "null"
         ],
         "items": {
-          "description": "One machine-memory watch row \u2014 an addon\u0027s declaration of ONE byte range on ONE screen\u0027s machine to poll for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The address space is the machine\u0027s WHOLE bus view (IMachineMemoryPeek already covers WRAM and external/battery RAM uniformly \u2014 a single flat address, never a split WRAM-vs-SRAM shape). PUBLISHES NOTHING on a headless host: the peek provider is registered only when presentation composes a screen\u0027s machine (see Puck.World.WorldScreenBinder\u0027s registration and Server.WorldEventFeed\u0027s own remarks) \u2014 the retired arcade.world.json proof world this family was built for was local play, so this is a stated, permanent scope, not a gap to close later. No shipped world authors a memory-watch row today.",
+          "description": "One machine-memory watch row \u2014 an addon\u0027s declaration of one byte range on one screen\u0027s machine to poll for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The address space is the machine\u0027s whole bus view (IMachineMemoryPeek already covers WRAM and external/battery RAM uniformly \u2014 a single flat address, never a split WRAM-vs-SRAM shape). Publishes nothing on a headless host: the peek provider is registered only when presentation composes a screen\u0027s machine (see Puck.World.WorldScreenBinder\u0027s registration and Server.WorldEventFeed\u0027s own remarks) \u2014 the retired arcade.world.json proof world this family was built for was local play, so this is a stated, permanent scope, not a gap to close later. No shipped world authors a memory-watch row today.",
           "type": [
             "object",
             "null"
