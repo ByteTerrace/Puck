@@ -88,7 +88,7 @@ Client code never mutates local state before the server's verdict
 echoes it, in the same change — a decision nothing can echo can only be
 asserted through downstream inference. `world.why`, `world.grants`,
 `player.channels`, `world.hud`, `world.status`, `world.addons`,
-`world.refusals` are the pattern.
+`world.refusals`, `world.binding-bar` are the pattern.
 
 **Keep parsing strict and sweep shipped worlds.** Refuse unmapped JSON members by name on
 every nested row; only the document root's `Extensions` bag round-trips

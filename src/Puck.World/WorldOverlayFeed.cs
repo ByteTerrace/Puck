@@ -49,6 +49,7 @@ internal sealed class WorldOverlayFeed {
     }
 
     private readonly WorldSeatBindings m_bindings;
+    private readonly WorldBindingBarControl m_bindingBar;
     private readonly WorldClient m_client;
     private readonly WorldEditorDrag m_drag;
     private readonly WorldEditorSession m_editor;
@@ -95,6 +96,7 @@ internal sealed class WorldOverlayFeed {
     /// <summary>Initializes a new instance of the <see cref="WorldOverlayFeed"/> class.</summary>
     /// <param name="roster">The participant roster (which seats are joined).</param>
     /// <param name="bindings">The per-seat binding resolver (each seat's active page view).</param>
+    /// <param name="bindingBar">The per-seat authored binding-bar policy and live visibility resolver.</param>
     /// <param name="client">The client view (its definition revision keys the HUD re-format).</param>
     /// <param name="editor">The per-seat editor mode (the sole-editor layout policy + editing liveness).</param>
     /// <param name="targeting">The editor selection state the HUD narrates.</param>
@@ -112,8 +114,9 @@ internal sealed class WorldOverlayFeed {
     /// <param name="audio">The audio director (the master-volume lever — a drift dimension).</param>
     /// <param name="pacing">The present-pacing control (the world.target lever — a drift dimension).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio, Puck.Launcher.PresentPacingControl pacing) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio, Puck.Launcher.PresentPacingControl pacing) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
+        ArgumentNullException.ThrowIfNull(argument: bindingBar);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: drag);
@@ -134,6 +137,7 @@ internal sealed class WorldOverlayFeed {
         m_pacing = pacing;
         m_workbench = workbench;
         m_bindings = bindings;
+        m_bindingBar = bindingBar;
         m_binder = binder;
         m_client = client;
         m_drag = drag;
@@ -222,6 +226,8 @@ internal sealed class WorldOverlayFeed {
 
             var modifierCount = BindingBarSeatComposer.ComposeModifiers(destination: m_modifiers[viewIndex], view: view);
             var viewport = WorldFrameSource.LayoutRegion(count: joined, index: viewIndex, soleEditorIndex: soleEditorViewIndex, workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction);
+            var barStatus = m_bindingBar.Status(slot: slot);
+            var authoredLayout = barStatus.Authoring.ResolvedLayout;
 
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
@@ -230,7 +236,16 @@ internal sealed class WorldOverlayFeed {
                 Modifiers: m_modifiers[viewIndex].AsMemory(start: 0, length: modifierCount),
                 PageId: view.PageId,
                 Slots: m_slots[viewIndex],
-                Viewport: viewport
+                Viewport: viewport,
+                Layout: new BindingBarLayoutOptions(
+                    ButtonSize: authoredLayout.ButtonSize,
+                    CenterGap: authoredLayout.CenterGap,
+                    AnchorOffsetY: authoredLayout.AnchorOffsetY,
+                    GlyphOffsetRatio: authoredLayout.GlyphOffsetRatio,
+                    GlyphSizeRatio: authoredLayout.GlyphSizeRatio,
+                    Scale: authoredLayout.Scale
+                ),
+                Visible: !barStatus.Hidden
             );
 
             if (m_editor.IsEditing(slot: slot)) {

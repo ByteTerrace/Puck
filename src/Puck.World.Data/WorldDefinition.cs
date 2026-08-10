@@ -3186,6 +3186,50 @@ public sealed record WorldAddonRow(string Name, string ModulePath, string Hash, 
 /// <c>i64</c> lane on the wire, so a range wider than 8 bytes has nowhere to carry its value and is refused).</param>
 public sealed record WorldAddonMemoryWatch(int Screen, int Address, int Length);
 
+/// <summary>The authored layout of one on-screen binding bar. Lengths are fractions of the seat viewport's height;
+/// <see cref="Scale"/> uniformly scales the slot cluster around its bottom-center anchor.</summary>
+/// <param name="ButtonSize">The unscaled slot-plate size.</param>
+/// <param name="CenterGap">The unscaled extra half-gap between the mirrored clusters.</param>
+/// <param name="AnchorOffsetY">The anchor's lift above the viewport's bottom edge.</param>
+/// <param name="GlyphOffsetRatio">The gamepad glyph's corner offset as a fraction of <paramref name="ButtonSize"/>.</param>
+/// <param name="GlyphSizeRatio">The gamepad glyph's size as a fraction of <paramref name="ButtonSize"/>.</param>
+/// <param name="Scale">The uniform cluster scale.</param>
+public sealed record WorldBindingBarLayout(
+    float ButtonSize,
+    float CenterGap,
+    float AnchorOffsetY,
+    float GlyphOffsetRatio,
+    float GlyphSizeRatio,
+    float Scale
+) {
+    /// <summary>Gets the layout used when an overlay authors no binding-bar policy.</summary>
+    public static WorldBindingBarLayout Default { get; } = new(
+        ButtonSize: (45f / 600f),
+        CenterGap: (60f / 600f),
+        AnchorOffsetY: (220f / 600f),
+        GlyphOffsetRatio: 0.4375f,
+        GlyphSizeRatio: (24f / 45f),
+        Scale: 1f
+    );
+}
+
+/// <summary>The authored visibility, rest behavior, and layout of the on-screen binding bar.</summary>
+/// <param name="Enabled">Whether the bar is shown when no live override hides it.</param>
+/// <param name="HideAfterRestSeconds">The idle duration after which the bar hides; zero disables rest hiding.</param>
+/// <param name="Layout">The bar layout; <see langword="null"/> uses <see cref="WorldBindingBarLayout.Default"/>.</param>
+public sealed record WorldBindingBarAuthoring(
+    bool Enabled = true,
+    float HideAfterRestSeconds = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarLayout? Layout = null
+) {
+    /// <summary>Gets the policy that preserves the binding bar's unauthored behavior.</summary>
+    public static WorldBindingBarAuthoring Default { get; } = new();
+
+    /// <summary>Gets the resolved authored layout.</summary>
+    [JsonIgnore]
+    public WorldBindingBarLayout ResolvedLayout => (Layout ?? WorldBindingBarLayout.Default);
+}
+
 /// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered over the engine
 /// default beneath every seat's profile bindings, so a world can contextualize the controls (a kart world remapping a
 /// lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result
@@ -3193,7 +3237,13 @@ public sealed record WorldAddonMemoryWatch(int Screen, int Address, int Length);
 /// <param name="Id">The overlay's stable id — its mutation address (unique within the definition; carries no meaning
 /// beyond identity).</param>
 /// <param name="Document">The overlay binding document merged into the composed mapping.</param>
-public sealed record WorldBindingOverlay(string Id, BindingProfileDocument Document);
+/// <param name="BindingBar">The on-screen bar policy carried with this binding layer; <see langword="null"/> preserves
+/// the always-visible reference layout.</param>
+public sealed record WorldBindingOverlay(
+    string Id,
+    BindingProfileDocument Document,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAuthoring? BindingBar = null
+);
 
 /// <summary>
 /// The world's storage host-section defaults — the per-user cloud endpoint, an explicit user-id override, and the

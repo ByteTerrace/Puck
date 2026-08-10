@@ -42,6 +42,8 @@ public readonly record struct OverlayBindingModifier(
 /// <param name="Modifiers">The declared modifiers, in profile order.</param>
 /// <param name="Hints">The active group's command-chord hint lines (e.g. <c>"LT+RT Snapshot"</c>), pre-formatted
 /// ASCII — rendered as small text above the modifier pips so a chord-fired act is discoverable.</param>
+/// <param name="Layout">The authored layout resolved for this seat.</param>
+/// <param name="Visible">Whether this seat's bar currently draws.</param>
 public readonly record struct OverlayBindingSeat(
     NormalizedRect Viewport,
     string PageId,
@@ -49,7 +51,9 @@ public readonly record struct OverlayBindingSeat(
     string Label,
     ReadOnlyMemory<OverlayBindingSlot> Slots,
     ReadOnlyMemory<OverlayBindingModifier> Modifiers,
-    ReadOnlyMemory<string> Hints
+    ReadOnlyMemory<string> Hints,
+    BindingBarLayoutOptions Layout,
+    bool Visible
 );
 
 /// <summary>The per-frame binding-bar snapshot the unified overlay renders — one entry per joined seat.</summary>

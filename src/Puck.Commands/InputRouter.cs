@@ -38,6 +38,7 @@ public sealed class InputRouter {
     private readonly IInputClock? m_clock;
     private readonly HashSet<HeldControl> m_heldControls = [];
     private readonly Dictionary<int, Dictionary<ushort, CommandEntry>> m_heldBySlot = [];
+    private readonly Dictionary<int, ulong> m_lastInputTickBySlot = [];
     // A BindingEntryMode.Toggle latch, keyed by (slot, commandId) — the destination's flip state, independent of
     // which physical control (or device) toggled it. Lives here, not in Puck.World.Server: the sim reads a plain
     // held channel either way (see BindingEntryMode's remarks).
@@ -168,6 +169,14 @@ public sealed class InputRouter {
             )
             && held.ContainsKey(key: commandId));
     }
+
+    /// <summary>Gets the simulation tick at which a seat most recently produced a physical or synthesized raw input
+    /// signal.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="tick">The last input tick, meaningful only when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the seat has produced an input signal.</returns>
+    /// <remarks>Pump-thread only, on the same terms as <see cref="IsCommandHeld(int, string)"/>.</remarks>
+    public bool TryGetLastInputTick(int slot, out ulong tick) => m_lastInputTickBySlot.TryGetValue(key: slot, value: out tick);
 
     /// <summary>Queues one deterministic cancellation per carried logical command, then clears every carried digital
     /// and analog value, AND releases every slot's chord/modifier state (<see cref="IInputBindings.ResetAll"/>).
@@ -422,7 +431,7 @@ public sealed class InputRouter {
 
         foreach (var captured in due) {
             if (captured.Signal is InputSignal signal) {
-                ApplySignal(workingBySlot: m_workingBySlot, signal: signal);
+                ApplySignal(workingBySlot: m_workingBySlot, signal: signal, tick: tick);
             } else if (captured.Injection is CommandInjection injection) {
                 ApplyInjection(workingBySlot: m_workingBySlot, injection: injection);
             }
@@ -476,7 +485,7 @@ public sealed class InputRouter {
             CompletesTextSubmission = injection.CompletesTextSubmission,
         });
     }
-    private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal) {
+    private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick) {
         // Resolve the device's slot first, then ask for THAT slot's bindings — so each player's mapping (an
         // optional override layered over the engine default) drives their own input.
         var slot = m_slotResolver(arg: signal.DeviceId);
@@ -484,6 +493,8 @@ public sealed class InputRouter {
         if (slot < 0) {
             return;
         }
+
+        m_lastInputTickBySlot[slot] = tick;
 
         var bindings = m_bindings.Resolve(slot: slot, signal: signal);
 

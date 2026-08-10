@@ -21,17 +21,14 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     private const float MinRegionExtent = 0.05f;
 
     private readonly IBindingBarSource m_source;
-    private readonly BindingBarLayoutOptions m_layoutOptions;
 
     /// <summary>Initializes a new instance of the <see cref="BindingBarWriter"/> class.</summary>
     /// <param name="source">The binding-bar snapshot source.</param>
-    /// <param name="layoutOptions">The layout tuning; <see langword="null"/> uses <see cref="BindingBarLayoutOptions.Default"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public BindingBarWriter(IBindingBarSource source, BindingBarLayoutOptions? layoutOptions = null) {
+    public BindingBarWriter(IBindingBarSource source) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_source = source;
-        m_layoutOptions = (layoutOptions ?? BindingBarLayoutOptions.Default);
     }
 
     /// <summary>Emits this frame's per-seat bars, when a snapshot has been published.</summary>
@@ -56,10 +53,11 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) {
         var region = seat.Viewport;
 
-        if ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
+        if (!seat.Visible || (region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
             return;
         }
 
+        var layout = seat.Layout;
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
@@ -74,7 +72,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 continue;
             }
 
-            var placement = BindingBarLayout.Place(aspect: regionAspect, index: index, options: in m_layoutOptions);
+            var placement = BindingBarLayout.Place(aspect: regionAspect, index: index, options: in layout);
 
             builder.WriteIcon(
                 accent: slot.Accent,
@@ -94,11 +92,12 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         // The modifier pips sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
-        var anchor = BindingBarLayout.BarAnchor(anchorOffsetY: m_layoutOptions.AnchorOffsetY, aspect: regionAspect);
+        var anchor = BindingBarLayout.BarAnchor(anchorOffsetY: layout.AnchorOffsetY, aspect: regionAspect);
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
-        var pipHalf = ((m_layoutOptions.ButtonSize * 0.35f) * regionHeightPx);
-        var pipSpacing = ((m_layoutOptions.ButtonSize * 1.1f) * regionHeightPx);
+        var scaledButtonSize = (layout.ButtonSize * layout.Scale);
+        var pipHalf = ((scaledButtonSize * 0.35f) * regionHeightPx);
+        var pipSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
         // The page NAME rides directly under the pips — the visible half of the page model: squeeze a trigger chord
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
         var labelCell = Math.Max(val1: 12, val2: (int)(pipHalf * 1.9f));

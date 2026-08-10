@@ -120,12 +120,12 @@ foreach ($id in $worlds) {
 
     # Blank lines and '#' comments are skipped by the engine's stdin reader, so the script is annotated in place.
     Set-Content -Path $stdinPath -Value @"
-# A harmless leading Immediate read-back: a leading world.wait would silently swallow every line behind it.
-replay.status
+    # A harmless leading Immediate read-back: a leading world.wait would silently swallow every line behind it.
+    replay.status
 
-# The forced recompose. A value-kind mismatch anywhere in this seat's composed binding document rejects the WHOLE
-# seat document HERE (only narrated at boot), so this line is what turns a silent binding failure loud.
-player.bind 1 keyboard.p editor.status
+    # The forced recompose. A value-kind mismatch anywhere in this seat's composed binding document rejects the WHOLE
+    # seat document HERE (only narrated at boot), so this line is what turns a silent binding failure loud.
+    player.bind 1 keyboard.p editor.status
 
 # Control feel is PER SEAT, and every seat's feel must resolve on every charter world — a world whose
 # playerDefaults.seatLook failed to load would not refuse here, it would simply answer with someone else's numbers.
