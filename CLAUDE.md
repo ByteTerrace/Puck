@@ -54,8 +54,9 @@ For an area's settled contract facts, load its skill: `sdf-world`,
 `gaming-bricks`, `rom-forge`, `symbol-analysis`, `maths-usage`,
 `maths-laws`, `documentation`, `boy-scout`. There is deliberately no
 verification-routing skill: the one that existed described `Puck.Post` and was
-deleted with it, and only the two emulator batteries (`gaming-bricks`) and
-`tests/Puck.Maths.Tests` (`maths-laws`) still gate anything.
+deleted with it. The two emulator batteries (`gaming-bricks`),
+`tests/Puck.Maths.Tests` (`maths-laws`), and the narrow deterministic
+real-World canaries run by `puck landing` are the live gates.
 
 ## `InternalsVisibleTo` is not endorsed — publicity is the better option
 
@@ -117,7 +118,10 @@ correct them where they live.
    `Puck.World`, and no plan of record sequences bringing them over.) Verify
    game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
-   0 or less runs until the window is closed), never by a gate; never add a `--validate-*` flag or a Post stage for a game
+   0 or less runs until the window is closed). Narrow deterministic headless
+   canaries MAY gate `puck landing` only by launching that real executable and
+   observing its normal stdin/stdout/stderr contract; never substitute a
+   build-only gate, add a `--validate-*` flag, or add a Post stage for a game
    feature. **`Puck.Post` is QUARANTINED** (`experimental/Puck.Post`, 2026-08-02)
    — it is not built, not run, and not cited; the shared engine contract it
    used to gate (cross-backend render path, SDF VM ISA, document schemas,

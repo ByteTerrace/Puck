@@ -3,6 +3,7 @@ using System.Text;
 using Puck.Cli.Analysis;
 using Puck.Cli.Architecture;
 using Puck.Cli.Bench;
+using Puck.Cli.Canary;
 using Puck.Cli.Citations;
 using Puck.Cli.Format;
 using Puck.Cli.Landing;
@@ -23,6 +24,7 @@ Console.OutputEncoding = Encoding.UTF8;
 return args switch {
     ["architecture", .. var architectureArgs] => ArchitectureCommand.Run(args: architectureArgs),
     ["bench", .. var benchArgs] => BenchRunner.Run(args: benchArgs),
+    ["canary", .. var canaryArgs] => CanaryCommand.Run(args: canaryArgs),
     ["citations", .. var citationsArgs] => CitationsCommand.Run(args: citationsArgs),
     ["declarations", .. var declarationsArgs] => DeclarationsCommand.Run(args: declarationsArgs),
     ["format", .. var formatArgs] => FormatCommand.Run(args: formatArgs),
@@ -47,6 +49,7 @@ static int Usage() {
             Verbs:
               architecture  project-layering report: the build-time gate's explain surface
               bench         the Puck.Maths micro-benchmark microscope (BenchmarkDotNet)
+              canary        run bounded positive-and-discriminating Puck.World proofs
               citations     cited verb tokens checked against vocabularies swept from the code
               declarations  declaration inventory read off the parsed syntax, no build
               format        source rewriters for conventions .editorconfig cannot express

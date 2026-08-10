@@ -29,3 +29,7 @@ world.wait 180
 player.where 1
 world.contacts
 wire.errors
+
+# The original script named grounded as an expected observation but queried only the collider census.
+# Keep that evidence intact above, then make the grounded claim executable through the body-specific form.
+world.contacts 1

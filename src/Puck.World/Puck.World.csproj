@@ -12,7 +12,8 @@
         through the shared SDF render assembly. Owned worlds persist as files under the state root and sync to a
         per-user cloud container through Puck.Storage (the storage.* verbs). Its authoritative simulation uses the Hosting/Launcher
         fixed-step easy path, per-tick command snapshots, and Puck.Maths fixed point. World-specific behavior has no
-        gate or validate flag and is verified by running; the engine battery that once gated the shared engine
+        build-only gate or validate flag and is verified by running the real executable; narrow deterministic
+        headless canaries may gate landing through that ordinary run contract. The engine battery that once gated the shared engine
         contracts was quarantined on 2026-08-02, so those are unverified too. It ships no shaders of its own; the SDF
         kernels come from Puck.SdfVm's content (copied transitively into this output).
     -->
