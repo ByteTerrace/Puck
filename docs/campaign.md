@@ -39,7 +39,7 @@ produced it, because a status sentence with no check behind it is how a reader e
 capability exists. This is the whole reason the old per-capability register was deleted and must not
 come back.
 
-**Verified 2026-08-10, at `features/box3d-port`:**
+**Verified 2026-08-10, at the `Four worlds meet at a corner you can walk across` landing:**
 
 | Claim | The check |
 |---|---|
