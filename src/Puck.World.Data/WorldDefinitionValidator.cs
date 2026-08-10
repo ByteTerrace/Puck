@@ -2291,6 +2291,8 @@ public static class WorldDefinitionValidator {
                     }
                 }
             }
+
+            ValidateBindingBar(authoring: overlay.BindingBar, path: $"{path}.bindingBar", errors: errors);
         }
 
         try {
@@ -2298,6 +2300,31 @@ public static class WorldDefinitionValidator {
         } catch (ArgumentException exception) {
             errors.Add(item: $"bindingOverlays do not compose into a valid mapping: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
+    }
+
+    private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, List<string> errors) {
+        if (authoring is null) {
+            return;
+        }
+
+        if (!float.IsFinite(f: authoring.HideAfterRestSeconds) || (authoring.HideAfterRestSeconds < 0f)) {
+            errors.Add(item: $"{path}.hideAfterRestSeconds {authoring.HideAfterRestSeconds} must be finite and non-negative.");
+        }
+
+        if (authoring.Layout is not { } layout) {
+            return;
+        }
+
+        RequirePositive(value: layout.ButtonSize, name: $"{path}.layout.buttonSize", errors: errors);
+        RequireNonNegative(value: layout.CenterGap, name: $"{path}.layout.centerGap", errors: errors);
+
+        if (!float.IsFinite(f: layout.AnchorOffsetY) || (layout.AnchorOffsetY < 0f) || (layout.AnchorOffsetY > 1f)) {
+            errors.Add(item: $"{path}.layout.anchorOffsetY {layout.AnchorOffsetY} is outside 0..1.");
+        }
+
+        RequireNonNegative(value: layout.GlyphOffsetRatio, name: $"{path}.layout.glyphOffsetRatio", errors: errors);
+        RequirePositive(value: layout.GlyphSizeRatio, name: $"{path}.layout.glyphSizeRatio", errors: errors);
+        RequirePositive(value: layout.Scale, name: $"{path}.layout.scale", errors: errors);
     }
 
     // The hud section: schema caps (MaxWorldPanels; MaxElementsPerPanel, or the tighter MaxElementsPerSeatPanel for

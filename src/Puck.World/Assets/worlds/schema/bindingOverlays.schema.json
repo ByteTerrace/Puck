@@ -370,6 +370,70 @@
           "chords"
         ],
         "additionalProperties": false
+      },
+      "bindingBar": {
+        "description": "The on-screen bar policy carried with this binding layer; null preserves the always-visible reference layout.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "enabled": {
+            "description": "Whether the bar is shown when no live override hides it.",
+            "type": "boolean",
+            "default": true
+          },
+          "hideAfterRestSeconds": {
+            "description": "The idle duration after which the bar hides; zero disables rest hiding.",
+            "type": "number",
+            "default": 0
+          },
+          "layout": {
+            "description": "The bar layout; null uses Default.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "buttonSize": {
+                "description": "The unscaled slot-plate size.",
+                "type": "number"
+              },
+              "centerGap": {
+                "description": "The unscaled extra half-gap between the mirrored clusters.",
+                "type": "number"
+              },
+              "anchorOffsetY": {
+                "description": "The anchor\u0027s lift above the viewport\u0027s bottom edge.",
+                "type": "number"
+              },
+              "glyphOffsetRatio": {
+                "description": "The gamepad glyph\u0027s corner offset as a fraction of ButtonSize.",
+                "type": "number"
+              },
+              "glyphSizeRatio": {
+                "description": "The gamepad glyph\u0027s size as a fraction of ButtonSize.",
+                "type": "number"
+              },
+              "scale": {
+                "description": "The uniform cluster scale.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "buttonSize",
+              "centerGap",
+              "anchorOffsetY",
+              "glyphOffsetRatio",
+              "glyphSizeRatio",
+              "scale"
+            ],
+            "additionalProperties": false,
+            "default": null
+          }
+        },
+        "additionalProperties": false,
+        "default": null
       }
     },
     "required": [

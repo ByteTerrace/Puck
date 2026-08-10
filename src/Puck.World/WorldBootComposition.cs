@@ -499,6 +499,10 @@ internal static class WorldBootComposition {
         // place-by-name twins.
         services.AddSingleton<ICommandModule, EditorCreationCommandModule>();
 
+        // The binding bar's per-seat authored policy resolver. Core so its read-back remains available headless;
+        // presentation only consumes the resolved layout and visibility when it builds a bar frame.
+        services.AddSingleton<WorldBindingBarControl>();
+
         // The overlay-UI verb surface — world.screenshot (presentation-only: refuses by name with no renderer) and
         // world.console (the on-screen mirror toggle, also a stock play-wheel sector every shipped world commits, so
         // it needs command-vocabulary parity the same way the editor group does). CORE-registered: both dependencies
@@ -761,6 +765,7 @@ internal static class WorldBootComposition {
 
         services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
             binder: sp.GetRequiredService<WorldScreenBinder>(),
+            bindingBar: sp.GetRequiredService<WorldBindingBarControl>(),
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
             client: sp.GetRequiredService<WorldClient>(),
             drag: sp.GetRequiredService<WorldEditorDrag>(),

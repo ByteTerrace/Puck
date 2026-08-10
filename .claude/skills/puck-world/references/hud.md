@@ -202,6 +202,9 @@ Current headroom: elements 179, text words 1431, panels 2 (the tightest),
 clips 12. Runtime overflow is per-channel and attributed (a channel clips at
 its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.
+Binding-bar visibility, layout, and scale do not change this arithmetic: the
+writer still emits at most the same twelve slots, eight modifiers, one label,
+and eight hint lines per seat.
 
 ## Bands — what `replace` replaces
 

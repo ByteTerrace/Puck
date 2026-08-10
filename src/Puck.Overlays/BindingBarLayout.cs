@@ -12,22 +12,15 @@ namespace Puck.Overlays;
 /// <param name="AnchorOffsetY">The anchor's lift above the bottom edge (220/600).</param>
 /// <param name="GlyphOffsetRatio">The gamepad glyph's corner offset, as a fraction of <paramref name="ButtonSize"/>.</param>
 /// <param name="GlyphSizeRatio">The gamepad glyph's size, as a fraction of <paramref name="ButtonSize"/> (24/45).</param>
+/// <param name="Scale">The uniform cluster scale.</param>
 public readonly record struct BindingBarLayoutOptions(
     float ButtonSize,
     float CenterGap,
     float AnchorOffsetY,
     float GlyphOffsetRatio,
-    float GlyphSizeRatio
-) {
-    /// <summary>Gets the reference layout.</summary>
-    public static BindingBarLayoutOptions Default => new(
-        AnchorOffsetY: (220f / 600f),
-        ButtonSize: (45f / 600f),
-        CenterGap: (60f / 600f),
-        GlyphOffsetRatio: 0.4375f,
-        GlyphSizeRatio: (24f / 45f)
-    );
-}
+    float GlyphSizeRatio,
+    float Scale
+);
 
 /// <summary>One placed slot, in region-height units: x in [0, aspect], y in [0, 1], origin top-left.</summary>
 /// <param name="Center">The plate center.</param>
@@ -89,11 +82,12 @@ public static class BindingBarLayout {
     /// <param name="aspect">The region aspect ratio (width / height).</param>
     /// <returns>The slot's placement in region-height units.</returns>
     public static BindingSlotPlacement Place(int index, in BindingBarLayoutOptions options, float aspect) {
+        var buttonSize = (options.ButtonSize * options.Scale);
         var slot = PadPictogramLayout.Resolve(
             index: index,
             options: new PadPictogramOptions(
-                ButtonSize: options.ButtonSize,
-                CenterGap: options.CenterGap,
+                ButtonSize: buttonSize,
+                CenterGap: (options.CenterGap * options.Scale),
                 GlyphOffsetRatio: options.GlyphOffsetRatio
             )
         );
@@ -103,8 +97,8 @@ public static class BindingBarLayout {
         return new BindingSlotPlacement(
             Center: center,
             GlyphCenter: new Vector2(x: (center.X + slot.GlyphX), y: (center.Y - slot.GlyphYUp)),
-            GlyphHalfSize: ((options.ButtonSize * options.GlyphSizeRatio) * 0.5f),
-            HalfSize: (options.ButtonSize * 0.5f)
+            GlyphHalfSize: ((buttonSize * options.GlyphSizeRatio) * 0.5f),
+            HalfSize: (buttonSize * 0.5f)
         );
     }
 }

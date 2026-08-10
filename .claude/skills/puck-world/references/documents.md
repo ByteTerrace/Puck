@@ -746,6 +746,16 @@ The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
 copied. Live surface: `player.bind`, `player.bindings`.
 
+Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
+for the on-screen mapping bar. Null resolves to `WorldBindingBarAuthoring.Default`
+(enabled, no rest timeout, reference layout), preserving the behavior of a row
+authored before the policy existed. The first world row supplies the world floor;
+the selected identity's own first row may replace it for that seat, matching the
+existing first-row binding-layer consumer in `WorldIdentity`. Durations are
+authored as `hideAfterRestSeconds` and compiled through the running world's
+simulation rate. `world.binding-bar [on|off|auto] [player]` reads the resolved
+policy and controls its live visibility override.
+
 **Context rows.** `puck.bindings.v1` carries an optional `contexts` section:
 `{family, state, group}` rows (`BindingContextDefinition`), merged across
 layers on `(family, state)` — a later layer overrides a re-declared key IN

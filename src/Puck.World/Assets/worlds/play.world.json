@@ -466,6 +466,18 @@
   "addons": [],
   "bindingOverlays": [
     {
+      "bindingBar": {
+        "enabled": true,
+        "hideAfterRestSeconds": 6,
+        "layout": {
+          "buttonSize": 0.075,
+          "centerGap": 0.1,
+          "anchorOffsetY": 0.14,
+          "glyphOffsetRatio": 0.4375,
+          "glyphSizeRatio": 0.53333336,
+          "scale": 0.72
+        }
+      },
       "id": "play-sprint",
       "document": {
         "version": "puck.bindings.v1",

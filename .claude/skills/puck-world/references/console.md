@@ -135,6 +135,11 @@ unsolicited edit echoes (`RecordEcho`, fed by `EchoTap`). The published
 frame's `Input` is always empty — no on-screen prompt, no keystroke path.
 `world.console [on|off]` toggles visibility.
 
+`world.binding-bar [on|off|auto] [player]` is the binding bar's parallel live
+control and read-back. `on`/`off` force a side, `auto` returns to the authored
+enabled/rest policy, and every form reports the resolved per-seat policy,
+current hidden state and reason, and layout values.
+
 ## Screenshots
 
 `world.screenshot <path.png>` (`WorldUiCommandModule`): Immediate; requests

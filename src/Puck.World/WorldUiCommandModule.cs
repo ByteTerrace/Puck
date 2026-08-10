@@ -5,7 +5,8 @@ namespace Puck.World;
 /// <summary>
 /// The overlay-UI verb surface: <c>world.screenshot</c> (arm a one-shot PNG capture of the next composed frame,
 /// through the outermost render decorator, so the readback shows exactly what the player sees — overlay included)
-/// and <c>world.console</c> (show/hide the on-screen console mirror panel). A separate module from
+/// <c>world.console</c> (show/hide the on-screen console mirror panel), and <c>world.binding-bar</c> (read or override
+/// a seat's authored binding-bar policy). A separate module from
 /// <see cref="WorldCommandModule"/> to keep every class under its analyzer ceilings. The drawn cursor's live
 /// read-back is <c>world.view.pointer</c> (<see cref="WorldViewCommandModule"/> — the <c>world.view.orbit</c>
 /// family, per-seat live presentation state).
@@ -29,10 +30,12 @@ namespace Puck.World;
 /// the default rather than throwing when <see cref="WorldBootComposition.AddWorldPresentation"/> never ran) and
 /// every handler refuses by name at use, never at registration or validation, when the dependency it needs is
 /// absent.</para></remarks>
-internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldConsoleMirror? consoleMirror = null) : ICommandModule {
+internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldConsoleMirror? consoleMirror = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
     /// <summary>The console-mirror toggle verb name — bound to the backtick key by
     /// <see cref="WorldDefaultBindings"/>.</summary>
     public const string ConsoleCommand = "world.console";
+    /// <summary>The binding-bar visibility and read-back verb.</summary>
+    public const string BindingBarCommand = "world.binding-bar";
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -105,5 +108,63 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
                 return new CommandResult(Output: $"[world.console: {(resolved ? "on" : "off")}]");
             }
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: BindingBarCommand,
+            description: "Reads or overrides one local seat's resolved on-screen binding bar: world.binding-bar [on|off|auto] [player], or world.binding-bar [player]. on/off force visibility; auto returns to authored enabled/rest behavior. The read-back reports the resolved world-or-identity policy, compiled rest ticks, current hidden state and reason, and every layout value. Player defaults to 1 (1..4).",
+            handler: (_, args) => BindingBarHandler(args: in args, bindingBarControl: bindingBarControl)
+        );
+    }
+
+    private static CommandResult BindingBarHandler(in WireArgs args, WorldBindingBarControl? bindingBarControl) {
+        if (bindingBarControl is null) {
+            return CommandResult.Error(output: "[world.binding-bar: policy resolver is unavailable]");
+        }
+        if (args.Count > 2) {
+            return CommandResult.Error(output: "[world.binding-bar: expected [on|off|auto] [player], or [player]]");
+        }
+
+        var player = 1;
+        var writesOverride = false;
+        bool? visibilityOverride = null;
+
+        if (args.Count > 0) {
+            if (args.Is(index: 0, value: "on")) {
+                writesOverride = true;
+                visibilityOverride = true;
+            } else if (args.Is(index: 0, value: "off")) {
+                writesOverride = true;
+                visibilityOverride = false;
+            } else if (args.Is(index: 0, value: "auto")) {
+                writesOverride = true;
+            } else if ((args.Count == 1) && args.TryInt(index: 0, value: out var parsedPlayer)) {
+                player = parsedPlayer;
+            } else {
+                return CommandResult.Error(output: $"[world.binding-bar: unknown state '{args[0].ToString()}' — on|off|auto, or a player index]");
+            }
+        }
+
+        if (writesOverride && (args.Count == 2)) {
+            if (!args.TryInt(index: 1, value: out player)) {
+                return CommandResult.Error(output: "[world.binding-bar: player must be an integer in 1..4]");
+            }
+        }
+        if ((player < 1) || (player > WorldPopulationLimits.LocalSeatCount)) {
+            return CommandResult.Error(output: $"[world.binding-bar: player {player} is outside 1..{WorldPopulationLimits.LocalSeatCount}]");
+        }
+
+        var slot = (player - 1);
+
+        if (writesOverride) {
+            bindingBarControl.SetOverride(slot: slot, visible: visibilityOverride);
+        }
+
+        var status = bindingBarControl.Status(slot: slot);
+        var authoring = status.Authoring;
+        var layout = authoring.ResolvedLayout;
+        var timeoutTicks = (status.HideAfterRestTicks.IsNever ? "never" : status.HideAfterRestTicks.Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+        var overrideWord = (status.Override is null ? "auto" : (status.Override.Value ? "on" : "off"));
+
+        return new CommandResult(Output: FormattableString.Invariant($"[world.binding-bar p{player}: source {status.Source} authored {(authoring.Enabled ? "on" : "off")} rest {authoring.HideAfterRestSeconds:0.###}s/{timeoutTicks}ticks override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} idleTicks {status.IdleTicks} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {layout.Scale:0.###}]"));
     }
 }
