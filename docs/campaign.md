@@ -80,7 +80,10 @@ ghost records**.
    a size and speed band**: an ANGULAR-speed bound, because the solver uses `ω × anchor` and linear
    speed alone cannot bound contact velocity; and a MINIMUM FEATURE SIZE or aspect-ratio bound,
    because one overall body-size band does not bound inertia for an arbitrarily thin box or capsule.
-   `FixedMassProperties` is why: with size and density both free, mass spans 43 bits and inertia 74.
+   `FixedMassProperties` is why: inertia scales as the fifth power of extent against mass's third, so
+   it exhausts its range first. A third input is a mass-ratio ceiling — a maximum speed cannot bound
+   how *slowly* a contact closes. **Size the bands analytically, never by sweeping the sample worlds**,
+   which describe today's content rather than what a world may declare.
    An interval proof must name the failed quantity, kernel, frame, and envelope corner. Shift-by-zero
    makes bit identity plausible by construction, but the argument alone protects neither evaluation
    order, defaulting, nor serialization — the canary still needs a state-sensitive observation, and
