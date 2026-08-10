@@ -1,3 +1,5 @@
+using Puck.Cli.Canary;
+
 namespace Puck.Cli.Landing;
 
 /// <summary>
@@ -90,9 +92,32 @@ internal static class LandingCommand {
         var againstBase = LandingDiff.DeletedLines(from: authoringBase, to: "HEAD");
         var unaccounted = LandingDiff.Subtract(left: againstTip, right: againstBase);
 
-        return ((unaccounted.Count == 0)
-            ? Accept(tip: tip, authoringBase: authoringBase, intended: againstBase)
-            : Refuse(tip: tip, authoringBase: authoringBase, unaccounted: unaccounted));
+        if (unaccounted.Count != 0) {
+            return Refuse(tip: tip, authoringBase: authoringBase, unaccounted: unaccounted);
+        }
+
+        ReportGitAccept(tip: tip, authoringBase: authoringBase, intended: againstBase);
+
+        // HEAD-BINDING HOLE, deliberately not solved here: this source integration cannot prove the invoked puck
+        // assembly was built from the checkout's HEAD. A stale published puck.exe can retain the old git-only
+        // landing command and never enter this code, so external enforcement must bind the executable to HEAD.
+        // Recording that limit is in scope; adding a second bootstrap/update mechanism is not.
+        var canaryExit = CanaryCommand.Run(args: []);
+        if (canaryExit == 0) {
+            Console.WriteLine(value: $"PASS: landing accepted — git-loss check and automatic canaries passed given base {authoringBase[..12]}.");
+            Console.WriteLine(value: "      The git component proves the landing only relative to what you say you built on.");
+
+            return 0;
+        }
+        if (canaryExit == 1) {
+            Console.Error.WriteLine(value: "FAIL: landing rejected by the automatic canary component after the git-loss check passed.");
+
+            return 1;
+        }
+
+        Console.Error.WriteLine(value: "ERROR: landing refused by the automatic canary component after the git-loss check passed.");
+
+        return 2;
     }
 
     // A base cannot be GUESSED. The obvious automatic answer — merge-base(tip, HEAD) — is worse than none: for the
@@ -118,7 +143,7 @@ internal static class LandingCommand {
         return 2;
     }
 
-    private static int Accept(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> intended) {
+    private static void ReportGitAccept(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> intended) {
         var files = 0;
         var lines = 0;
 
@@ -129,12 +154,7 @@ internal static class LandingCommand {
 
         Console.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
         Console.WriteLine(value: $"landing: {lines} deleted line(s) across {files} file(s) — every one accounted for by this landing's own change set.");
-        Console.WriteLine(value: $"PASS given base {authoringBase[..12]}: this landing drops nothing that arrived on the tip while you were working.");
-        // The conditionality is stated rather than implied. The verdict is only as good as the base, the tool cannot
-        // verify what you actually built on, and a reader who forgets that would take a PASS for more than it is.
-        Console.WriteLine(value: "      This proves the landing relative to what you say you built on.");
-
-        return 0;
+        Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
     }
 
     // The refusal names the COMMITS whose content is being dropped, not just the lines: "you deleted 306 lines" is a
@@ -245,7 +265,10 @@ internal static class LandingCommand {
                 to <tip>, or one HEAD does not descend from, is refused for the same reason: both would
                 report a PASS that measured nothing.
 
-                Exit codes: 0 clean, 1 unaccounted deletions, 2 usage error.
+                After every git check passes, runs the nonempty automatic canary set. There is no skip flag.
+
+                Exit codes: 0 both components passed, 1 unaccounted deletions or observed canary failure,
+                2 usage, manifest, build, or canary infrastructure refusal.
                 """);
 
         return 2;

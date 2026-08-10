@@ -94,13 +94,23 @@ ghost records**.
    (`MoveSpeedEnvelope`/`ThrustSpeedEnvelope`/`TopSpeedEnvelope`). The caveat is stated in
    `WorldDefinitionValidator.TryMarginDepthFloor`; it is a decision-grade comment and must survive
    any comment sweep.
-2. **The canary runner** — and it goes first, because track 1's own gate is a canary. A manifest
-   (world + stdin script + expected read-backs), a `puck canary` verb, and `puck landing` runs it.
-   The runner uses a fresh state directory per run, keeps stdout and stderr separate, enforces a
-   timeout and the exit code, and REFUSES a blank or missing binding declaration. Only deterministic
-   HEADLESS canaries run automatically under `puck landing`; a hardware or presentation canary needs
-   an explicit capability class or landing becomes machine-dependent. `puck landing` is the git-loss
-   check today, so compose it cheap-check-first, canaries second.
+2. **The canary runner** — and it goes first, because track 1's own gate is a canary. `puck canary`
+   strictly loads a central per-id manifest tree and runs each proof's positive and executable
+   discriminating legs against one exact Release build of the real `Puck.World`. Every non-comment
+   stdin command declares its accepted or intentionally refused outcome; observations select
+   stream, verb, occurrence and exact cardinality, with ordered sequences, named values and small
+   typed comparisons. The runner owns fresh state, separate stream drains, BOM-less closed stdin,
+   exact `--world` origin, process exit, per-leg timeout/tree kill and a whole-suite budget. It
+   REFUSES a blank binding declaration, but sensitivity comes from the required red leg, not prose.
+   Boot shape is separate from environmental requirements, and only headless proofs with no such
+   requirement form the nonempty automatic set. `puck landing` keeps every git-loss check first;
+   only a clean git component runs that automatic set, followed by one final component-naming
+   verdict and no skip path.
+
+   This envelope is intentionally not universal. The richer PowerShell batteries
+   `undo-all-or-nothing`, `strict-definition-parse`, `sdf-decode-sign-refusal`, `doc-links`,
+   `addon-mutation-seam`, and `four-world-boot-smoke` remain named, on-demand, and UNGATED; the
+   canary runner neither wraps nor weakens them.
 3. **The neighbour tape, then ghosts** — transport first, the ghost read-side riding the same
    records. Adopts track 5's address vocabulary rather than defining its own. The neighbour field is
    rebuilt lazily today when physics asks for it; hoisting that derivation to DELIVERY is the

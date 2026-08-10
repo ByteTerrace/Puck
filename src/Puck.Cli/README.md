@@ -1,10 +1,11 @@
 # Puck.Cli (`puck`)
 
 The consolidated Puck **developer CLI**. One console app, one assembly (`puck`),
-eight verbs:
+with hand-rolled first-positional verb dispatch:
 
 | Verb | What it is |
 |---|---|
+| [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet). |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
@@ -53,6 +54,44 @@ sibling) beside the executable. That is the out-of-process build host
 `contentFiles` copied to the output. Adding `ExcludeAssets` or
 `PrivateAssets=contentfiles` to either workspace package reference would silently
 remove it and break every `references` run.
+
+---
+
+## `puck canary` — real-World behavioral proofs
+
+`puck canary` is deliberately narrow: it runs deterministic stdin-driven
+behavioral proofs that fit a strict transcript vocabulary. Every manifest owns
+a positive leg and an executable discriminating leg; both start from fresh
+state, and the positive observation must turn red under the discriminator while
+the declared opposite observation holds. The runner builds `Puck.World` once,
+runs that exact artifact sequentially, keeps stdout and stderr separate, pins
+BOM-less UTF-8 stdin, closes the pipe, drains both streams, checks the absolute
+`--world` boot-origin line, enforces per-leg and whole-suite budgets, and kills
+the process tree on timeout.
+
+```
+puck canary                         run the automatic set (headless, no environmental requirements)
+puck canary <id> ...                explicitly run named proofs
+puck canary --all                   explicitly run every proof; does not change automatic eligibility
+puck canary --list                  strictly load and list manifests without building or running
+puck canary --capability <class>    filter automatic/headless/windowed or an environmental requirement
+```
+
+The selection forms are mutually exclusive and every execution selection must
+be nonempty. Manifest tokens are case-sensitive. Every non-comment script
+command declares `accepted` or intentionally expected `refused`, bound to its
+verb and occurrence. Assertions cover stream-specific exact/contained lines,
+verb/occurrence/exact-cardinality responses, ordered sequences, named response
+field extraction, equality/inequality, inclusive bounds, and minimum margins —
+no regex programs, loops, callbacks, conditionals, shell, or embedded scripts.
+Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
+usage, manifest, build, or infrastructure refusal.
+
+This is not a universal verification gate. The richer PowerShell batteries
+`undo-all-or-nothing`, `strict-definition-parse`,
+`sdf-decode-sign-refusal`, `doc-links`, `addon-mutation-seam`, and
+`four-world-boot-smoke` remain named, on-demand, and ungated. They are not
+wrapped, ported, or executed by `puck canary`.
 
 ---
 
