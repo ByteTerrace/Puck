@@ -1068,6 +1068,46 @@ or it silently outlives its own reason.
 | **Peer-minted claims** | a claim minted by its own subject attests only that they said so. Where a domain issues for its users the private half never leaves it, so a peer cannot mint one and gains nothing by wanting to |
 | **Carrying mutable balances signed** | a signature pins a value at a moment; balances stay owned by their issuer and change by write-back |
 
+## Federated transfer, ruled
+
+**Remote is the interface; colocation is an optimization underneath it, never a second path.** A
+transfer is implemented remote-first and short-circuits its transport when both instances happen to
+share a process. Building the local path first is what binds transfer authority to a host, which is the
+defect to avoid rather than the shape to extend.
+
+**Reserve then commit, on the primitive that already carries market escrow and exactly-once effect
+settlement** — one mechanism, three customers. The reservation is a **lease the destination is bound
+by**, not a hint the source may withdraw: "on failure the body stays at the source" holds only before
+commit, since a destination that commits with a lost acknowledgement would otherwise duplicate the body.
+The destination may not commit after the lease deadline and the source may not resurrect before it, so
+the deadline partitions every history into exactly-one-authority outcomes. The deadline is denominated
+in the source's own ticks and converted across rates by the exact 50400 bridge.
+
+**Policy is authorable; the guarantee is not.** Hold duration, queue-or-refuse, party all-or-nothing and
+per-border capacity are document fields. Atomicity is not: a field that could break "the body exists in
+exactly one authority at every instant" is a defect with a schema entry.
+
+**A reservation attests more than the destination's face existing** — reciprocal topology, envelope and
+frame compatibility, and the crossing record — so a lying destination cannot admit a traveller at the
+wrong size. It rides the trust tiers rather than adding a second trust list.
+
+**A vanished source needs no reaper at the destination.** The body is the source's until commit, so
+transfer durability is the source journal's durability, and a reservation held for a source that dies
+expires at its deadline with capacity released. What dies with a host is in-world body state only:
+identity and its attested facts — items, currency, achievements — live on the identity document, so a
+player loses position rather than possessions.
+
+**No unembodied session principal.** Admission assigns the connection's body index, so principal and
+body arrive together; during a transfer the source authority holds the lease, and the traveller's
+identity travels as attested data inside the reservation rather than as an actor at the destination.
+Spectating needs no new kind either — it is an `Observe` grant without `Drive` over an admitted body.
+*This ruling holds only while a spectator or a queued traveller may consume population capacity; wanting
+either to be free of a slot reopens it.*
+
+**Projection is the crossing record plus the tape's per-tick records**, and the two record kinds stay
+distinct: a definition revision is delivered once, and per-tick records name the revision they were
+produced against. Folding them ships the neighbour's geometry every tick.
+
 ## The open questions
 
 Each changes a design rather than a detail. Portal decisions are keyed to the two campaigns above so
@@ -1077,10 +1117,6 @@ they cannot be mistaken for optional polish.
 
 - **Pre-allocation embodiment subject.** Define the capability-shaped target policy that authorizes a
   future body while preserving `Drive/body` as the resulting concrete hold.
-- **Unembodied session authority.** Choose a session principal or session-scoped capability handle,
-  including codec, revocation and budget.
-- **Projection vocabulary.** Define the attenuation carried by a world/session `Observe` subject:
-  full simulation state, redacted state families, command stream or frames.
 - **Multi-world replay.** Define tape ownership and verification for target-issued generations and
   prepare/commit/abort across the participating local authorities.
 - **Ephemeral terminal policy.** Define how a target authors completion, abandonment,
