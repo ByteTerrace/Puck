@@ -8,7 +8,7 @@ namespace Puck.World;
 /// <c>world.console</c> (show/hide the on-screen console mirror panel), and <c>world.binding-bar</c> (read or override
 /// a seat's authored binding-bar policy). A separate module from
 /// <see cref="WorldCommandModule"/> to keep every class under its analyzer ceilings. The drawn cursor's live
-/// read-back is <c>world.view.pointer</c> (<see cref="WorldViewCommandModule"/> — the <c>world.view.orbit</c>
+/// read-back is <c>world.view.pointer</c> (<see cref="WorldViewCommandModule"/> — the <c>world.view.camera</c>
 /// family, per-seat live presentation state).
 /// </summary>
 /// <remarks><c>world.screenshot</c> arms work; it does not do it. The file appears when a frame composes, which is

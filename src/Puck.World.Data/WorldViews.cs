@@ -36,9 +36,23 @@ public sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<W
 /// <summary>The <c>views</c> document section — the seat framing every seat wakes on plus the authored named layouts. A
 /// REQUIRED section every document carries; an empty layout list falls the composer through to the built-in seat
 /// ladder.</summary>
+/// <summary>The authored structure of live seat-camera control.</summary>
+/// <param name="YawReference">What the camera yaw is relative to.</param>
+/// <param name="MinPitch">The minimum live pitch offset in radians.</param>
+/// <param name="MaxPitch">The maximum live pitch offset in radians.</param>
+public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch);
+
+/// <summary>What a seat camera's yaw is relative to.</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldSeatYawReference>))]
+public enum WorldSeatYawReference : byte {
+    World,
+    Body,
+}
+
 /// <param name="SeatRig">The chase framing every seat's view resolves through (the non-editing default).</param>
+/// <param name="SeatControl">The structural constraints/reference for live seat camera input.</param>
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
-public sealed record WorldViewDefaults(WorldCameraRig SeatRig, IReadOnlyList<WorldViewLayout> Layouts) {
+public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts) {
     /// <summary>The engine's default vertical field of view (55 degrees), mirroring
     /// <c>Puck.SdfVm.Views.OrbitRig.DefaultFieldOfViewRadians</c> — every concrete <c>ISdfCameraRig</c> shares this one
     /// value, so it is pinned here rather than read from Puck.SdfVm, which Puck.World.Data must not reference.</summary>
@@ -64,6 +78,7 @@ public sealed record WorldViewDefaults(WorldCameraRig SeatRig, IReadOnlyList<Wor
             Lens: new WorldCameraLens(FieldOfViewRadians: EngineDefaultFieldOfViewRadians),
             SmoothRate: 6f
         ),
+        SeatControl: new WorldSeatViewControl(YawReference: WorldSeatYawReference.World, MinPitch: -0.35f, MaxPitch: 1.2f),
         Layouts: []
     );
 }

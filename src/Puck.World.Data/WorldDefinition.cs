@@ -54,14 +54,14 @@ public abstract record WorldMotionModel {
     /// every other kit-channel name, by <see cref="FixedWorldKit.Compile"/> — an unresolvable name (validator-refused
     /// already) reads as "no sprint" rather than throwing.</param>
     /// <param name="MoveFrame">Which frame <c>MoveForward</c>/<c>MoveStrafe</c> resolve in.
-    /// <see cref="MotionMoveFrame.Heading"/> (the default, the world's historical tank controls) rotates the commanded
-    /// planar target by the body's own integrated heading. <see cref="MotionMoveFrame.World"/> takes the two channels as
+    /// <see cref="MotionMoveFrame.Heading"/> explicitly rotates the commanded planar target by the body's own
+    /// integrated heading. <see cref="MotionMoveFrame.World"/> (the default) takes the two channels as
     /// axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever
     /// reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).</param>
     /// <param name="FacingSnap">Under <see cref="MotionMoveFrame.World"/> only: whether the body's facing snaps to
     /// <c>Atan2</c> of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather
     /// than holding its heading. Ignored under <see cref="MotionMoveFrame.Heading"/>, where facing is the integrated
-    /// heading by construction. <see langword="false"/> is the default (tank facing).</param>
+    /// heading by construction. <see langword="true"/> is the default.</param>
     /// <param name="MoveSpeedEnvelope">The inclusive bound a seated player's live profile speed (and the profileless
     /// <paramref name="MoveSpeed"/> fallback) is clamped to at seat time, or <see langword="null"/> (the default) for
     /// no bound — a feel-pinned world authors this to keep a seat's speed inside its own kit's envelope regardless of
@@ -77,8 +77,8 @@ public abstract record WorldMotionModel {
         IReadOnlyList<MotionResponse> Response,
         float SprintMultiplier,
         string? SprintChannel = null,
-        MotionMoveFrame MoveFrame = MotionMoveFrame.Heading,
-        bool FacingSnap = false,
+        MotionMoveFrame MoveFrame = MotionMoveFrame.World,
+        bool FacingSnap = true,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? MoveSpeedEnvelope = null
     ) : WorldMotionModel;
 
@@ -224,8 +224,8 @@ public abstract record WorldMotionModel {
         float FloatDepth,
         float SprintMultiplier,
         string? SprintChannel = null,
-        MotionMoveFrame MoveFrame = MotionMoveFrame.Heading,
-        bool FacingSnap = false,
+        MotionMoveFrame MoveFrame = MotionMoveFrame.World,
+        bool FacingSnap = true,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MotionScalarEnvelope? ThrustSpeedEnvelope = null
     ) : WorldMotionModel;
 
@@ -429,10 +429,9 @@ public sealed record WorldIdentitySeed(WorldSafeName Id, string Name, string Col
 /// <param name="Color">The body color as <c>#RRGGBB</c>.</param>
 /// <param name="MoveSpeedState">The fixed state row supplying locomotion speed.</param>
 /// <param name="TurnSpeedState">The fixed state row supplying turn speed.</param>
-/// <param name="InvertLookState">The bool state row supplying look inversion.</param>
 /// <param name="Controllers">Machine/device state-slot references used for controller pre-selection.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityDefinition(WorldSafeName Id, string Name, string Color, WorldCellName MoveSpeedState, WorldCellName TurnSpeedState, WorldCellName InvertLookState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null);
+public sealed record WorldIdentityDefinition(WorldSafeName Id, string Name, string Color, WorldCellName MoveSpeedState, WorldCellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null);
 
 /// <summary>Two text state rows that identify one reconnect-stable controller.</summary>
 /// <param name="MachineState">The row containing the machine id.</param>

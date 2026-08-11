@@ -158,6 +158,10 @@ internal static class WorldBootComposition {
         // state either way.
         services.AddSingleton<WorldCompositionState>();
 
+        // The local seats' live orbit state is harmless headless data and must exist before WorldClient: camera-
+        // relative world-frame intent composition reads the same yaw the presentation camera renders. Pointer/stick
+        // consumers remain presentation-only and are registered later.
+
         // The client half: the snapshot-fed entity view + per-tick seat-intent submitter, bound to the loopback at
         // construction (the bind delivers a primer snapshot). Headless-safe BY DESIGN — see WorldClient's own doc
         // comment: a client composed without the presentation services simply drops accepted levers rather than
@@ -677,16 +681,15 @@ internal static class WorldBootComposition {
         // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFrameSource
         // composes onto the slot-0 chase camera anchor, and the pointer consumer that nudges it while the authored
         // arming button is held.
-        services.AddSingleton<WorldCameraOrbit>();
-        services.AddSingleton<WorldCameraOrbitDrag>();
-        services.AddSingleton<IWorldPointerConsumer>(implementationFactory: static sp => sp.GetRequiredService<WorldCameraOrbitDrag>());
+        services.AddSingleton<WorldSeatViewInput>();
+        services.AddSingleton<IWorldPointerConsumer>(implementationFactory: static sp => sp.GetRequiredService<WorldSeatViewInput>());
 
         services.AddSingleton<WorldPointerSink>();
         services.AddSingleton<IWindowInputObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldPointerSink>());
 
         // The drawn cursor: the per-seat viewport+camera publication the frame source fills each dressed frame, the
         // per-frame feed that reads the pointer store NON-destructively (position + held buttons; the drained
-        // motion/wheel accumulators stay WorldCameraOrbitDrag's), and the store the unified overlay's cursor writer
+        // motion/wheel accumulators stay WorldSeatViewInput's), and the store the unified overlay's cursor writer
         // renders. All presentation/session state — nothing here reaches a CommandSnapshot or the simulation.
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<CursorStore>();
@@ -694,7 +697,7 @@ internal static class WorldBootComposition {
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             client: sp.GetRequiredService<WorldClient>(),
-            seatFeel: sp.GetRequiredService<WorldSeatFeel>(),
+            viewInput: sp.GetRequiredService<WorldSeatViewInput>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>(),
             picker: sp.GetRequiredService<WorldEditorPicker>(),
             hud: sp.GetRequiredService<HudStore>(),
@@ -840,14 +843,11 @@ internal static class WorldBootComposition {
                 audio: sp.GetRequiredService<WorldAudioDirector>(),
                 gizmos: sp.GetRequiredService<EditorGizmoStore>(),
                 anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
-                cameraOrbit: sp.GetRequiredService<WorldCameraOrbit>(),
-                seatFeel: sp.GetRequiredService<WorldSeatFeel>(),
                 composition: sp.GetRequiredService<WorldCompositionState>(),
                 composer: sp.GetRequiredService<WorldViewComposer>(),
                 sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
                 viewports: sp.GetRequiredService<WorldSeatViewports>(),
                 seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>(),
-                instances: sp.GetRequiredService<WorldInstanceHost>(),
                 awaySeatViews: sp.GetRequiredService<WorldAwaySeatViews>(),
                 borderMargin: sp.GetRequiredService<IWorldBorderMarginSource>()
             );

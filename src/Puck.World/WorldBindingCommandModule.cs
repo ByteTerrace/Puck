@@ -402,7 +402,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     private void RefreshSeatsBoundTo(string profileId) {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if ((m_roster.ProfileAt(slot: slot) is { } profile) && string.Equals(a: profile.Id, b: profileId, comparisonType: StringComparison.Ordinal)) {
-                m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings, seatLook: profile.SeatLook);
+                m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings);
             }
         }
     }

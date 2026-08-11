@@ -1017,7 +1017,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
             },
             State = ParticipantState.Active,
         };
-        m_seatBindings.SetProfileLayers(slot: slot, bindings: profile?.Bindings, seatLook: profile?.SeatLook);
+        m_seatBindings.SetProfileLayers(slot: slot, bindings: profile?.Bindings);
         m_revision++;
 
         return true;
@@ -1108,7 +1108,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
             participant.Seat.Profile = profile;
             participant.State = ParticipantState.Active;
-            m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings, seatLook: profile.SeatLook);
+            m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings);
 
             m_revision++;
 
@@ -1567,7 +1567,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
             participant.Seat.Profile = finalProfile;
             participant.State = ParticipantState.Active;
-            m_seatBindings.SetProfileLayers(slot: slot, bindings: finalProfile.Bindings, seatLook: finalProfile.SeatLook);
+            m_seatBindings.SetProfileLayers(slot: slot, bindings: finalProfile.Bindings);
 
             if (device is { } confirmedBy) {
                 m_profiles.RememberPreferredController(profile: finalProfile, device: confirmedBy);
@@ -1630,7 +1630,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
             };
             // The seat resolves through its selected profile's binding layer (null = the engine default) — pushed once at
             // fill so the seat's composed mapping is right from its first tick.
-            m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings, seatLook: profile.SeatLook);
+            m_seatBindings.SetProfileLayers(slot: slot, bindings: profile.Bindings);
 
             accepted = true;
         });

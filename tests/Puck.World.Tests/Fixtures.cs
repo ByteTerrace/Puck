@@ -233,10 +233,8 @@ internal static class Fixtures {
                 PitchSensitivity: 0.001f,
                 InvertYaw: false,
                 InvertPitch: false,
-                MinPitch: -0.35f,
-                MaxPitch: 1.2f,
                 Arming: WorldSeatLookArming.RightButton,
-                WorldAxes: false
+                StickLookRate: 2.6f
             )
         );
 

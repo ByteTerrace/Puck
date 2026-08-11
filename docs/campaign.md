@@ -121,7 +121,11 @@ ghost records**.
    when accessed" must never become the input. Definition deliveries and per-tick entity records stay
    distinct, with per-tick records naming the installed revision. Ghosts are read-only and never
    authoritative.
-4. **Playability** — and it OPENS with the seat chase camera correction and the owner feel sitting,
+4. **Playability** — and it OPENS with one seat-lifetime view state: world-owned camera structure,
+   profile-owned input preference, standard dual-stick movement/look, and one logical basis shared by
+   intent composition, local rendering, traveler rendering, cursor capture, and read-back. No
+   slot-global orbit, binding-side feel cache, renderer-local orbit cache, or mixed schema survives. Then
+   the owner feel sitting,
    then the touch-triggered win slice; navigation and equip facets follow. Ordering matters here:
    put navigation first and "feel is the gate" becomes prose while navigation expands underneath it.
 5. **Ownership, membership, combat** — entity-addressable rules and elemental interactions, both

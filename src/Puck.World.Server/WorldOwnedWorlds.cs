@@ -13,7 +13,6 @@ namespace Puck.World.Server;
 public sealed class WorldOwnedWorlds {
     private static readonly WorldCellName MoveSpeedState = WorldCellName.Parse(candidate: "identity-move-speed");
     private static readonly WorldCellName TurnSpeedState = WorldCellName.Parse(candidate: "identity-turn-speed");
-    private static readonly WorldCellName InvertLookState = WorldCellName.Parse(candidate: "identity-invert-look-x");
     private readonly List<WorldIdentity> m_identities;
     private readonly string m_directory;
     private readonly WorldDefinition m_template;
@@ -386,11 +385,10 @@ public sealed class WorldOwnedWorlds {
     private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => WithoutBorderClaims(definition: template) with {
         DocumentId = seed.Id,
         Motion = motion,
-        Identity = new WorldIdentityDefinition(Id: seed.Id, Name: seed.Name, Color: seed.Color, MoveSpeedState: MoveSpeedState, TurnSpeedState: TurnSpeedState, InvertLookState: InvertLookState),
+        Identity = new WorldIdentityDefinition(Id: seed.Id, Name: seed.Name, Color: seed.Color, MoveSpeedState: MoveSpeedState, TurnSpeedState: TurnSpeedState),
         State = [
             new WorldStateRow(Name: MoveSpeedState, Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.MoveSpeed).Value)]),
             new WorldStateRow(Name: TurnSpeedState, Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value)]),
-            new WorldStateRow(Name: InvertLookState, Kind: CellKind.Bool, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
         ],
         BindingOverlays = [],
         Hud = WorldHudSection.Default,

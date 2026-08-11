@@ -5,12 +5,8 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// One seat's control feel — how its pointer and stick look orbit responds: sensitivity/rate, inversion, the pitch
-/// clamp, and what arms the pointer drag. Authored on <see cref="WorldPlayerDefaults.SeatLook"/> and read from whichever document owns the
-/// seat, so feel is per-seat rather than per-world: an unclaimed seat reads the world's, and a joined seat reads its
-/// own identity document's, arriving on the same seat-document recompose that carries that identity's bindings and
-/// HUD. A player's feel therefore travels with their profile across worlds and machines, and two people sharing a
-/// couch can want opposite things without one of them losing.
+/// One seat's input feel — pointer/right-stick sensitivity, inversion, and pointer arming. Camera structure does not
+/// travel with a profile: the framing world's <see cref="WorldSeatViewControl"/> owns pitch limits and yaw reference.
 /// </summary>
 /// <remarks>Presentation-only. Nothing here rides a <c>CommandSnapshot</c> or feeds the deterministic simulation —
 /// it shapes the local camera and nothing else, so a seat's feel can differ across two machines watching the same
@@ -22,24 +18,16 @@ namespace Puck.World;
 /// axis.</param>
 /// <param name="InvertYaw">Whether the yaw response is inverted.</param>
 /// <param name="InvertPitch">Whether the pitch response is inverted.</param>
-/// <param name="MinPitch">The pitch clamp floor in radians.</param>
-/// <param name="MaxPitch">The pitch clamp ceiling in radians.</param>
 /// <param name="Arming">What enables the orbit drag.</param>
-/// <param name="WorldAxes">Whether the live orbit composes onto world axes rather than the seat body's own facing
-/// (an absolute orbit versus one that rides the body's yaw).</param>
-/// <param name="StickLookRate">The look stick's camera-pitch rate in radians per second at full deflection. Zero is
-/// the unauthored default, preserving the pre-field behavior where the stick did not move camera pitch.</param>
+/// <param name="StickLookRate">The look stick's yaw/pitch rate in radians per second at full deflection.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSeatLook(
     float YawSensitivity,
     float PitchSensitivity,
     bool InvertYaw,
     bool InvertPitch,
-    float MinPitch,
-    float MaxPitch,
     WorldSeatLookArming Arming,
-    bool WorldAxes,
-    float StickLookRate = 0f
+    float StickLookRate
 );
 
 /// <summary>Identifies what arms a <see cref="WorldSeatLook"/> orbit drag.</summary>

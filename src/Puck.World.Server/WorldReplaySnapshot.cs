@@ -12,7 +12,7 @@ namespace Puck.World;
 /// run actually integrated with. The rates are pinned because they are simulation input — <c>WorldBody.Advance</c> reads
 /// them off the seated handle every frame — and they are pinned as the simulation's own <see cref="FixedQ4816"/> values,
 /// so a re-drive consumes the recorded number rather than one re-derived from a float. Nothing about the profile that
-/// only presentation reads is here: not the color, and not <c>InvertLookX</c>, which the client applies at intent
+/// only presentation reads is here: not the color or portable seat-look preference, which the client applies before intent
 /// production, upstream of the link, so a recorded intent already carries it.</summary>
 /// <param name="Name">The profile the seat was seated on.</param>
 /// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded).</param>

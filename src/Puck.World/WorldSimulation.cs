@@ -62,6 +62,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // what WorldServerStepShell.Step is about to report as the completed tick — never context.Tick + 1, the
         // pump's raw un-frozen cursor (see the bootContext remarks below).
         if (stepsBoot) {
+            m_client.AdvanceSeatViews(deltaSeconds: (float)EngineTicks.ToSeconds(ticks: context.StepTicks));
             m_client.SubmitSeatIntents(tick: (Tick + 1UL));
         }
 

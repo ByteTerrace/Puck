@@ -111,7 +111,7 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
                 if (!m_hasWheelConsumer) {
                     // A composition without a wheel consumer (none exists in the shipped one — WorldWheelFeed is
                     // always registered) still must not let the accumulator bank PAST one event: this sink drains
-                    // it itself at the point of arrival, mirroring WorldCameraOrbitDrag's drain-and-discard for
+                    // it itself at the point of arrival, mirroring WorldSeatViewInput's drain-and-discard for
                     // motion when its drag is not armed. DrainWheelUnconsumed (not the public TakeWheel, which
                     // refuses without a registered consumer — see its remarks) is this sink's own privileged
                     // access, never a stand-in for a real reader.

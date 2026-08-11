@@ -708,7 +708,7 @@ ids, case-insensitive unique names, hex color — `ValidatePlayerDefaults` in
 **`WorldIdentity`** (`Puck.World.Data/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-InvertLookState, Controllers)`): `MoveSpeed`/`TurnSpeed`/`InvertLookX` read
+Controllers)`): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see "Binding composition"

@@ -1826,6 +1826,11 @@
     "listen": null
   },
   "views": {
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
     "seatRig": {
       "motion": {
         "$type": "follow",
@@ -1913,8 +1918,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "minPitch": -0.35,
-      "maxPitch": 1.2,
       "arming": "RightButton",
       "worldAxes": false
     }

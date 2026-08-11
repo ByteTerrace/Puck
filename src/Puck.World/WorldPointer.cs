@@ -7,7 +7,7 @@ namespace Puck.World;
 /// <summary>
 /// Every local seat's live pointer state — where the cursor is, how far it moved, which buttons are down, and how
 /// far the wheel turned — one slot per <see cref="PlayerRoster.MaxSlots"/> entry. This is browsing state, the
-/// pointer's twin of <see cref="WorldCameraOrbit"/>: session-only, never persisted, never authored on a document,
+/// pointer input store: session-only, never persisted, never authored on a document,
 /// and never an input the deterministic simulation reads. A pointer act reaches the simulation only when a consumer
 /// of this state dispatches an ordinary console verb, through the same door a typed line uses.
 /// </summary>
@@ -15,7 +15,7 @@ namespace Puck.World;
 /// <para>Written by <see cref="WorldPointerSink"/> alone (the window-pump thread) and read by any number of
 /// consumers, so cross-thread safety is the only contract. Position and button state are plain
 /// <see cref="Volatile"/> reads/writes on independent per-slot scalars — no lock, exactly as
-/// <see cref="WorldCameraOrbit"/> reasons — while the two accumulators (motion and wheel) are interlocked, because
+/// seat-view reasons — while the two accumulators (motion and wheel) are interlocked, because
 /// each is a read-modify-write a concurrent producer could otherwise lose an increment from.</para>
 /// <para>Motion and wheel drain on read (<see cref="TakeMotion"/>, <see cref="TakeWheel"/>): they answer "what
 /// happened since you last asked", so two consumers of the same seat's motion would each see part of it. That is

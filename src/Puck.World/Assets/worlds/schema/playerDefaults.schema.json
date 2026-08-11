@@ -109,14 +109,6 @@
           "description": "Whether the pitch response is inverted.",
           "type": "boolean"
         },
-        "minPitch": {
-          "description": "The pitch clamp floor in radians.",
-          "type": "number"
-        },
-        "maxPitch": {
-          "description": "The pitch clamp ceiling in radians.",
-          "type": "number"
-        },
         "arming": {
           "description": "What enables the orbit drag.",
           "enum": [
@@ -127,14 +119,9 @@
             "MiddleButton"
           ]
         },
-        "worldAxes": {
-          "description": "Whether the live orbit composes onto world axes rather than the seat body\u0027s own facing (an absolute orbit versus one that rides the body\u0027s yaw).",
-          "type": "boolean"
-        },
         "stickLookRate": {
-          "description": "The look stick\u0027s camera-pitch rate in radians per second at full deflection. Zero is the unauthored default, preserving the pre-field behavior where the stick did not move camera pitch.",
-          "type": "number",
-          "default": 0
+          "description": "The look stick's yaw/pitch rate in radians per second at full deflection.",
+          "type": "number"
         }
       },
       "required": [
@@ -142,10 +129,8 @@
         "pitchSensitivity",
         "invertYaw",
         "invertPitch",
-        "minPitch",
-        "maxPitch",
         "arming",
-        "worldAxes"
+        "stickLookRate"
       ],
       "additionalProperties": false
     }

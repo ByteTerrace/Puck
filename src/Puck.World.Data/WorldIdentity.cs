@@ -28,7 +28,6 @@ public sealed class WorldIdentity {
         Color = ParseColor(hex: identity.Color, fallbackHex: defaults.NeutralColor);
         m_moveSpeed = ReadFixed(document.State, identity.MoveSpeedState, document.Motion.MoveSpeed);
         m_turnSpeed = ReadFixed(document.State, identity.TurnSpeedState, document.Motion.TurnSpeed);
-        InvertLookX = ReadBool(document.State, identity.InvertLookState);
         Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
         Hud = document.Hud.Panels.FirstOrDefault();
         // Control feel travels with the profile exactly as the two layers above do: read off this identity's OWN
@@ -71,8 +70,6 @@ public sealed class WorldIdentity {
     public float TurnSpeed { get => (float)(double)m_turnSpeed; set { m_turnSpeed = RequirePositiveRate(value: value, name: nameof(TurnSpeed)); WriteFixed(slot: Document?.Identity?.TurnSpeedState, value: m_turnSpeed); } }
     /// <summary>Gets the deterministic turn speed.</summary>
     public FixedQ4816 FixedTurnSpeed => m_turnSpeed;
-    /// <summary>Gets a value indicating whether look X is inverted.</summary>
-    public bool InvertLookX { get; set; }
     /// <summary>Gets the identity-owned binding layer.</summary>
     public BindingProfileDocument? Bindings { get; set; }
     /// <summary>Gets the identity-owned private HUD panel.</summary>
@@ -83,8 +80,8 @@ public sealed class WorldIdentity {
     /// <see cref="Document"/> to carry one. A pinned identity exists to re-drive a recorded tape offline, where there
     /// is no camera and nothing reads a feel, so the absence is a statement that this identity HAS no feel rather than
     /// a value left unset. Null resolves to the world document's own
-    /// <see cref="WorldPlayerDefaults.SeatLook"/> — see <c>WorldSeatFeel.Look</c>, which is the single place that
-    /// resolution happens. That is also the answer BEFORE a profile has been delivered for a seat, which is the same
+    /// <see cref="WorldPlayerDefaults.SeatLook"/> — the portable input preference selected by the occupied seat.
+    /// That is also the answer BEFORE a profile has been delivered for a seat, which is the same
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
     /// document can only be built locally.</remarks>
     public WorldSeatLook? SeatLook { get; set; }
@@ -221,10 +218,6 @@ public sealed class WorldIdentity {
         (WorldDefinitionRows.FindStateRow(rows: rows, name: name) is { Kind: CellKind.Fixed, IsSlot: true } row)
             ? FixedQ4816.FromRawBits(value: row.Cells![0].Value)
             : FixedQ4816.FromDouble(value: fallback);
-
-    private static bool ReadBool(IReadOnlyList<WorldStateRow> rows, string name) =>
-        (WorldDefinitionRows.FindStateRow(rows: rows, name: name) is { Kind: CellKind.Bool, IsSlot: true } row)
-            && (row.Cells![0].Value != 0);
 
     /// <summary>Parses a hex color with a fallback.</summary>
     /// <param name="hex">The <c>#RRGGBB</c> hex color to parse.</param>

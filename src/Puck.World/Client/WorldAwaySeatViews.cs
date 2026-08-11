@@ -67,7 +67,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
 
     private readonly WorldInstanceHost m_instances;
     private readonly WorldSeatInstanceRouter m_seatRouter;
-    private readonly WorldCameraOrbit m_cameraOrbit;
+    private readonly PlayerRoster m_roster;
     private readonly WorldCompositionState m_composition;
     private readonly Dictionary<int, Entry> m_entries = new();
     private readonly List<int> m_releaseScratch = new();
@@ -87,21 +87,19 @@ internal sealed class WorldAwaySeatViews : IDisposable {
     /// a mirror to.</param>
     /// <param name="seatRouter">The traveler-follow router — the source of truth <see cref="Reconcile"/> diffs
     /// against and <see cref="ResolveHandle"/> reads per seat.</param>
-    /// <param name="cameraOrbit">Every local seat's live camera-orbit accumulator — threaded into each tracked
-    /// entry's <see cref="AwaySeatSceneEmitter"/> so the tracked follower's own live drag keeps steering the away
-    /// view's native camera.</param>
+    /// <param name="roster">The seat table that owns each follower's view state.</param>
     /// <param name="composition">The live global layout/camera override store. Its camera selection is consumed by
     /// each followed instance's own emitter so the override survives a crossing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldAwaySeatViews(WorldInstanceHost instances, WorldSeatInstanceRouter seatRouter, WorldCameraOrbit cameraOrbit, WorldCompositionState composition) {
+    public WorldAwaySeatViews(WorldInstanceHost instances, WorldSeatInstanceRouter seatRouter, PlayerRoster roster, WorldCompositionState composition) {
         ArgumentNullException.ThrowIfNull(argument: instances);
         ArgumentNullException.ThrowIfNull(argument: seatRouter);
-        ArgumentNullException.ThrowIfNull(argument: cameraOrbit);
+        ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: composition);
 
         m_instances = instances;
         m_seatRouter = seatRouter;
-        m_cameraOrbit = cameraOrbit;
+        m_roster = roster;
         m_composition = composition;
 
         var sources = new Dictionary<int, Func<nint>>();
@@ -201,7 +199,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         var marginEmitter = (borderMargin is null ? null : new WorldBorderMarginSceneEmitter(mirror: mirror, source: borderMargin));
         var emitter = new AwaySeatSceneEmitter(
             mirror: mirror,
-            cameraOrbit: m_cameraOrbit,
+            viewState: () => m_roster.Seat(slot: entry.TrackedSlot)?.View,
             trackedTarget: () => new AwaySeatSceneEmitter.TrackedTarget(InstanceSlot: m_seatRouter.Location(slot: entry.TrackedSlot).InstanceSlot, LocalSlot: entry.TrackedSlot),
             layoutOverride: () => m_composition.ActiveLayout,
             cameraOverride: () => m_composition.SelectedCamera,

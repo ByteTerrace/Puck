@@ -43,7 +43,7 @@ internal readonly record struct WorldCursorStatus(
 /// The World-side feed behind the unified overlay's drawn-cursor source: once per produced frame (the node's
 /// <c>FeedTick</c>, after the frame's dress resolved each seat's viewport + camera) it reads the pointer store's
 /// NON-DESTRUCTIVE state (position, held buttons — never the drained motion/wheel accumulators, which belong to
-/// <see cref="WorldCameraOrbitDrag"/>), applies THE visibility rule (one place, below), hover-tests what the cursor
+/// <see cref="WorldSeatViewInput"/>), applies THE visibility rule (one place, below), hover-tests what the cursor
 /// rests on, and publishes one <see cref="OverlayCursorFrame"/>. Hover is two tests in draw order: the authored HUD
 /// panels' published rects first (they draw over the world), then the EXISTING editor pick program aimed down the
 /// cursor ray instead of the screen-center look ray — reused, never forked. Everything here is presentation/session
@@ -57,7 +57,7 @@ internal sealed class WorldCursorFeed {
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     // Per-seat control feel: the cursor's steering readout must agree with what THAT seat's drag actually does.
-    private readonly WorldSeatFeel m_seatFeel;
+    private readonly WorldSeatViewInput m_viewInput;
     private readonly OverlayCursorSeat[] m_seats = new OverlayCursorSeat[PlayerRoster.MaxSlots];
     private readonly CursorStore m_store;
     private readonly WorldSeatViewports m_viewports;
@@ -75,18 +75,17 @@ internal sealed class WorldCursorFeed {
     /// <param name="pointer">The live pointer store (read non-destructively: position and held buttons only).</param>
     /// <param name="roster">The roster the pointer's seat resolves against (the keyboard's seat).</param>
     /// <param name="client">The client view.</param>
-    /// <param name="seatFeel">Every local seat's live control feel — the per-seat arming policy this feed's steering
-    /// readout must agree with.</param>
+    /// <param name="viewInput">The shared pointer-to-view adapter and steering resolver.</param>
     /// <param name="viewports">The per-seat viewport + camera publication the frame source fills each dress.</param>
     /// <param name="picker">The editor's look-ray picking program, aimed down the cursor ray here.</param>
     /// <param name="hud">The authored HUD structure source (panel rects, the overlay-side hover targets).</param>
     /// <param name="store">The cursor store the overlay reads.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatFeel seatFeel, WorldSeatViewports viewports, WorldEditorPicker picker, IHudSource hud, CursorStore store) {
+    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, WorldEditorPicker picker, IHudSource hud, CursorStore store) {
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: seatFeel);
+        ArgumentNullException.ThrowIfNull(argument: viewInput);
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: picker);
         ArgumentNullException.ThrowIfNull(argument: hud);
@@ -97,7 +96,7 @@ internal sealed class WorldCursorFeed {
         m_picker = picker;
         m_pointer = pointer;
         m_roster = roster;
-        m_seatFeel = seatFeel;
+        m_viewInput = viewInput;
         m_store = store;
         m_viewports = viewports;
     }
@@ -223,12 +222,7 @@ internal sealed class WorldCursorFeed {
             return "outside-viewport";
         }
 
-        var seatLook = m_seatFeel.Look(slot: slot);
-        var steering = (seatLook.Arming switch {
-            WorldSeatLookArming.None => false,
-            WorldSeatLookArming.Always => true,
-            _ => ((WorldCameraOrbitDrag.ArmingButtonIndex(arming: seatLook.Arming) is { } button) && m_pointer.IsButtonDown(slot: slot, button: button)),
-        });
+        var steering = m_viewInput.IsSteering(slot: slot);
 
         return (steering ? "orbit-drag" : null);
     }

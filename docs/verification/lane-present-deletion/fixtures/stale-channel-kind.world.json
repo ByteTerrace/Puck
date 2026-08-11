@@ -990,6 +990,11 @@
   "genlock": null
  },
  "views": {
+  "seatControl": {
+    "yawReference": "World",
+    "minPitch": -0.35,
+    "maxPitch": 1.2
+  },
   "seatRig": {
    "$type": "chase",
    "eyeOffset": [

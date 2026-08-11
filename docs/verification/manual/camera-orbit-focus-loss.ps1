@@ -134,20 +134,20 @@ dotnet build (Join-Path $RepoRoot 'src\Puck.World\Puck.World.csproj') -c Release
 if ($LASTEXITCODE -ne 0) { Note 'FATAL: build failed.'; exit 2 }
 
 # --- stdin script ------------------------------------------------------------------------------------------
-# Five world.view.orbit reads fenced by 2400-tick (10s at 240Hz) waits: T0 boot, T1 post-drag, T2 post-refocus,
+# Five world.view.camera reads fenced by 2400-tick (10s at 240Hz) waits: T0 boot, T1 post-drag, T2 post-refocus,
 # T3 post-unarmed-motion, T4 post-REARMED-drag.
 $stdinPath = Join-Path $scratch 'stdin.txt'
 [System.IO.File]::WriteAllText($stdinPath, @"
 replay.status
-world.view.orbit
+world.view.camera
 world.wait 2400
-world.view.orbit
+world.view.camera
 world.wait 2400
-world.view.orbit
+world.view.camera
 world.wait 2400
-world.view.orbit
+world.view.camera
 world.wait 2400
-world.view.orbit
+world.view.camera
 "@.Replace("`r`n", "`n"), $utf8)
 
 # --- the inert focus-steal target --------------------------------------------------------------------------

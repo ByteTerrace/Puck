@@ -79,7 +79,7 @@ internal static class WorldPostBuildWiring {
         // WorldSeatInstanceRouter.Publish reports a seat's presenting INSTANCE actually
         // changed (a crossing in or out — see that event's own remarks), recompose that ONE seat's binding pages,
         // wheels, and channel vocabulary from its NEW route's own document (WorldInstanceHost.ResolveRoutedDefinition
-        // — the identical routed-definition lookup WorldCameraOrbitDrag already subscribes to this same event for,
+        // — the identical routed-definition lookup WorldSeatViewInput already subscribes to this same event for,
         // to reclamp the pitch instead). WorldSimulation's own per-tick SyncSeat loop (windowed only) would reach the
         // SAME state one poll later in the ordinary case — this is the explicit, shape-independent edge, not a
         // parallel mechanism.

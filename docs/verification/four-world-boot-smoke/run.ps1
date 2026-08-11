@@ -131,16 +131,16 @@ foreach ($id in $worlds) {
 # playerDefaults.seatLook failed to load would not refuse here, it would simply answer with someone else's numbers.
 # Seat 1 carries a profile (it joins at boot); seat 2 sits at the world's own floor. Both are read BEFORE the live
 # edit below so the pair can be compared against the pair after it.
-world.view.orbit 1
-world.view.orbit 2
+world.view.camera 1
+world.view.camera 2
 
 # The live per-seat discriminator: this replaces the WORLD's feel only. Seat 2 (at the floor) must move to
 # leftbutton/0.009; seat 1 (carrying its profile's feel) must NOT. Asserting only that something changed would pass
 # on a world-wide store that moved both.
-world.row.set playerDefaults.seatLook {"yawSensitivity":0.009,"pitchSensitivity":0.009,"invertYaw":true,"invertPitch":false,"minPitch":-0.35,"maxPitch":1.2,"arming":"LeftButton","worldAxes":false}
+world.row.set playerDefaults.seatLook {"yawSensitivity":0.009,"pitchSensitivity":0.009,"invertYaw":true,"invertPitch":false,"arming":"LeftButton","stickLookRate":2.6}
 world.wait 2
-world.view.orbit 1
-world.view.orbit 2
+world.view.camera 1
+world.view.camera 2
 
 # The document must still round-trip after the recompose.
 world.save $savedPath
@@ -199,8 +199,8 @@ world.save $savedPath
     # Ordered parse rather than four independent regexes: the four echoes differ only in their numbers, so matching
     # them positionally is what lets the before/after PAIR be compared. Fewer than four means the run did not get far
     # enough, which must fail rather than silently satisfy a subset.
-    $orbits = [regex]::Matches($stdout, '\[world\.view\.orbit: player=(\d) arming=(\w+) worldAxes=\w+ yawSensitivity=([-0-9.]+)')
-    Test-Assertion -Name "$id (stdout): four world.view.orbit echoes (seat 1 and 2, before and after the live edit)" `
+    $orbits = [regex]::Matches($stdout, '\[world\.view\.camera: player=(\d) arming=(\w+) yawReference=\w+ yawSensitivity=([-0-9.]+)')
+    Test-Assertion -Name "$id (stdout): four world.view.camera echoes (seat 1 and 2, before and after the live edit)" `
         -Matched ($orbits.Count -eq 4) -Require $true
 
     if ($orbits.Count -eq 4) {

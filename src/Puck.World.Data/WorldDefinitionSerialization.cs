@@ -51,6 +51,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldCameraAim))]
 // The seat rig's input-policy sibling; this entry exposes the typed accessor world.view.look deserializes through.
 [JsonSerializable(typeof(WorldSeatLook))]
+[JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]

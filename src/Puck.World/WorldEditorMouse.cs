@@ -46,7 +46,7 @@ namespace Puck.World;
 /// </remarks>
 internal sealed class WorldEditorMouse {
     // The pointer store's left-button index (0=left, 1=right, 2=middle — WindowInputEvent.PointerButton's own
-    // convention, mirrored by WorldCameraOrbitDrag.ArmingButtonIndex).
+    // convention, mirrored by WorldSeatViewInput.ArmingButtonIndex).
     private const int LeftButton = 0;
 
     private readonly TextCommandSource m_console;

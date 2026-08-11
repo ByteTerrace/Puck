@@ -51,7 +51,7 @@ internal sealed class WorldSeatInstanceRouter {
     /// <summary>Raised by <see cref="Publish"/> the instant a seat's presenting instance actually changes — a
     /// crossing in or out, never a same-instance seat-index correction. Lets presentation state keyed by "which
     /// world currently frames this seat" react at the transition itself rather than waiting for its own next
-    /// unrelated tick; <see cref="WorldCameraOrbitDrag"/> reclamps a carried live orbit pitch here. Presentation-only,
+    /// unrelated tick; <see cref="WorldSeatViewInput"/> reclamps a carried live orbit pitch here. Presentation-only,
     /// like the rest of this table — never subscribed to by simulation code.</summary>
     public event Action<int>? LocationChanged;
 

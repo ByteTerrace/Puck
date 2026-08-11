@@ -33,10 +33,9 @@ internal sealed class SeatController {
     private FixedQ4816 m_analogMoveY;
     private FixedQ4816 m_analogLookX;
     private FixedQ4816 m_analogLookY;
-    // The frame-visible camera-pitch sample: promoted from m_analogLookY immediately before the tick staging is
+    // The frame-visible camera-look sample: promoted from the tick-local right stick immediately before staging is
     // cleared, then held stable until the next tick. The render clock integrates this presentation-only latch;
-    // HeldIntent still reads only m_analogLookX, so no float or camera state enters the authoritative intent.
-    private FixedQ4816 m_cameraLookY;
+    // whether X ALSO enters authoritative Turn is selected by HeldIntent's authored camera-yaw policy.
     // The client copy of the seat's intent source: device edges and the held-intent submission run only under Live,
     // mirroring the server body's merge rule.
     private IntentSource m_source = IntentSource.Live;
@@ -49,6 +48,9 @@ internal sealed class SeatController {
     /// <summary>The profile this seat selects — the client-side identity (color and look-invert). The server body holds
     /// its own reference for speeds, assigned over the session wire.</summary>
     public WorldIdentity? Profile { get; set; }
+
+    /// <summary>The seat-lifetime logical view state shared by input, movement, every renderer, and read-back.</summary>
+    public WorldSeatViewState View { get; } = new();
 
     /// <summary>The world's declared channel table — resolves each composition ordinal's shape for
     /// <see cref="HeldChannels"/>'s end clamp. Set once by the roster from the same table the server compiled
@@ -128,10 +130,9 @@ internal sealed class SeatController {
     /// <summary>This frame's look-stick sample (right stick); see <see cref="AnalogMove"/> for the freshness caveat
     /// and the float-echo site.</summary>
     public FixedVector2 AnalogLook => new(X: m_analogLookX, Y: m_analogLookY);
-    /// <summary>The look stick's frame-visible Y sample, promoted by <see cref="ClearAnalog"/> before the tick-local
-    /// staging is wiped. Presentation reads this stable latch between simulation ticks; it never enters
-    /// <see cref="HeldIntent"/>.</summary>
-    public FixedQ4816 CameraLookY => m_cameraLookY;
+    /// <summary>The look stick's frame-visible sample, promoted by <see cref="ClearAnalog"/> before the tick-local
+    /// staging is wiped. Presentation reads this stable latch between simulation ticks; it never feeds simulation
+    /// through this property.</summary>
 
     /// <summary>Asserts a channel contribution as held, keyed by the CONTROL holding it — never by (ordinal, scale)
     /// alone, so a second physical control sharing this ordinal (even at the identical scale) holds independently of
@@ -164,20 +165,18 @@ internal sealed class SeatController {
         m_analogMoveX = move.X;
         m_analogMoveY = move.Y;
     }
-    /// <summary>Feeds this frame's look (right) stick sample: +X turns right through the authoritative intent's Turn
-    /// role, while +Y looks up through the presentation camera-pitch latch promoted by <see cref="ClearAnalog"/>.
-    /// Same consume-then-clear contract and already-quantized-at-the-door contract as
-    /// <see cref="SetAnalogMove"/>.</summary>
-    /// <param name="look">The already-quantized look stick sample (+X turns right, +Y looks up).</param>
+    /// <summary>Feeds this frame's look (right) stick sample: +X looks right and +Y looks up. A heading-frame seat
+    /// may additionally route X to authoritative Turn; an absolute-orbit seat consumes it only in presentation.
+    /// Same consume-then-clear contract and already-quantized-at-the-door contract as <see cref="SetAnalogMove"/>.</summary>
+    /// <param name="look">The already-quantized look stick sample (+X looks right, +Y looks up).</param>
     public void SetAnalogLook(FixedVector2 look) {
         m_analogLookX = look.X;
         m_analogLookY = look.Y;
     }
-    /// <summary>Promotes look Y to the presentation latch, then wipes both tick-local analog samples to zero. Called
+    /// <summary>Promotes the look stick to the presentation latch, then wipes both tick-local analog samples to zero. Called
     /// once per tick AFTER submission has consumed them: a centered stick dispatches nothing, so the next promotion
     /// replaces the latch with zero rather than leaving a stale deflection behind.</summary>
     public void ClearAnalog() {
-        m_cameraLookY = m_analogLookY;
         m_analogMoveX = FixedQ4816.Zero;
         m_analogMoveY = FixedQ4816.Zero;
         m_analogLookX = FixedQ4816.Zero;
@@ -205,25 +204,21 @@ internal sealed class SeatController {
     }
     /// <summary>Folds the live producers — the held-control set and the analog sticks — into the tick's submitted
     /// intent: peers summed then clamped, so opposing inputs cancel and a key plus a full stick never exceeds full
-    /// deflection. Stick up (+Y) is forward; look-stick right (+X) turns right, i.e. the negative Turn direction
-    /// (matching the turn-right key). Look Y is deliberately absent here: it drives only the presentation camera
-    /// through <see cref="CameraLookY"/>. An absolute-orbit (<c>worldAxes: true</c>) world may eventually want look X
-    /// on orbit yaw too, but X remains on body Turn for the current chase-camera contract. All six role channels fold identically (MoveUp/Pitch/Roll alongside the
+    /// deflection. Stick up (+Y) is forward. In heading-camera mode, look-stick right (+X) also turns the body in the
+    /// presentation camera. The right stick never writes authoritative Turn. All
+    /// six role channels fold identically (MoveUp/Pitch/Roll alongside the
     /// original three) — a <see cref="Puck.World.Server.WorldBody"/> running a grounded body motion program
     /// simply never reads the extra three, exactly like an unbound composition channel; a document declaring them
     /// (required for a free-attitude body motion program, see <c>WorldDefinitionValidator</c>) is the only way they drive
     /// anything, so wiring them through here never changes Grounded behavior.</summary>
     public PlayerIntent HeldIntent() {
-        // The look-stick's turn contribution, its X sign flipped when the seated profile asks to invert look-X.
-        var lookX = ((Profile?.InvertLookX == true) ? -m_analogLookX : m_analogLookX);
-
         // No controls held (the common case — an idle seat): skip the held-set walk and fold the analog sample
         // straight through.
         if (m_heldControls.Count == 0) {
             return m_channels.RoleOrdinals.Intent(
                 moveForward: FixedQ4816.Clamp(value: m_analogMoveY, minimum: s_negativeOne, maximum: FixedQ4816.One),
                 moveStrafe: FixedQ4816.Clamp(value: m_analogMoveX, minimum: s_negativeOne, maximum: FixedQ4816.One),
-                turn: FixedQ4816.Clamp(value: -lookX, minimum: s_negativeOne, maximum: FixedQ4816.One)
+                turn: FixedQ4816.Zero
             );
         }
 
@@ -243,10 +238,6 @@ internal sealed class SeatController {
         if (roles.MoveStrafe >= 0) {
             raw[roles.MoveStrafe] = m_analogMoveX.Value;
         }
-        if (roles.Turn >= 0) {
-            raw[roles.Turn] = (-lookX).Value;
-        }
-
         foreach (var (ordinal, scale) in m_heldControls.Values) {
             if (!m_channels.IsRole(ordinal: ordinal)) {
                 continue;

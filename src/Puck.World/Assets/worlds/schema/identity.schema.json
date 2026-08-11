@@ -25,10 +25,6 @@
       "description": "The fixed state row supplying turn speed.",
       "type": "string"
     },
-    "invertLookState": {
-      "description": "The bool state row supplying look inversion.",
-      "type": "string"
-    },
     "controllers": {
       "description": "Machine/device state-slot references used for controller pre-selection.",
       "type": [
@@ -65,8 +61,7 @@
     "name",
     "color",
     "moveSpeedState",
-    "turnSpeedState",
-    "invertLookState"
+    "turnSpeedState"
   ],
   "additionalProperties": false,
   "default": null

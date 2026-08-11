@@ -4,7 +4,7 @@
     "rateHz": 60
   },
   "motion": {
-    "moveSpeed": 6,
+    "moveSpeed": 8,
     "turnSpeed": 2.5,
     "maxSmoothError": 3
   },
@@ -369,38 +369,38 @@
       "bodyMotionProgram": "grounded",
       "motion": {
         "$type": "grounded",
-        "moveSpeed": 6,
+        "moveSpeed": 8,
         "moveSpeedEnvelope": {
-          "min": 6,
-          "max": 6
+          "min": 8,
+          "max": 8
         },
         "turnSpeed": 2.5,
-        "riseGravity": 20,
-        "fallGravity": 34,
-        "maxFallSpeed": 24,
+        "riseGravity": 28,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
         "response": [
           {
             "gate": {
               "$type": "now",
               "fact": "Rising"
             },
-            "engageRate": 12,
-            "releaseRate": 2
+            "engageRate": 60,
+            "releaseRate": 35
           },
           {
             "gate": {
               "$type": "now",
               "fact": "Falling"
             },
-            "engageRate": 12,
-            "releaseRate": 2
+            "engageRate": 60,
+            "releaseRate": 35
           },
           {
-            "engageRate": 50,
-            "releaseRate": 60
+            "engageRate": 90,
+            "releaseRate": 110
           }
         ],
-        "sprintMultiplier": 1.5,
+        "sprintMultiplier": 1.6,
         "sprintChannel": "run",
         "moveFrame": "World",
         "facingSnap": true
@@ -462,7 +462,7 @@
             "effects": [
               {
                 "$type": "setVerticalVelocity",
-                "velocity": 9
+                "velocity": 11
               },
               {
                 "$type": "addState",
@@ -480,7 +480,7 @@
             "effects": [
               {
                 "$type": "scaleVerticalVelocity",
-                "factor": 0.4
+                "factor": 0.45
               }
             ]
           }
@@ -650,9 +650,9 @@
         "palette": [
           {
             "albedo": {
-              "x": 0.33,
-              "y": 0.52,
-              "z": 0.24
+              "x": 0.2,
+              "y": 0.45,
+              "z": 0.85
             },
             "emissive": 0,
             "specular": 0,
@@ -697,7 +697,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+      "hash": "49f2868fafd441bd6b38575653e6007005e561d7b79372f47edb542c4b6a7b79"
     },
     {
       "id": "wall",
@@ -898,8 +898,7 @@
           "portal": {
             "destination": "ne",
             "arrival": "mapped",
-            "counterpart": "door-to-nw/screen",
-            "marginDepth": 1.2
+            "counterpart": "door-to-nw/screen"
           }
         }
       ]
@@ -926,8 +925,7 @@
           "portal": {
             "destination": "sw",
             "arrival": "mapped",
-            "counterpart": "door-to-nw/screen",
-            "marginDepth": 1.2
+            "counterpart": "door-to-nw/screen"
           }
         }
       ]
@@ -997,6 +995,11 @@
     "authority": null
   },
   "views": {
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
     "seatRig": {
       "motion": {
         "$type": "orbit",
@@ -1091,10 +1094,7 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "minPitch": -0.35,
-      "maxPitch": 1.2,
       "arming": "RightButton",
-      "worldAxes": false,
       "stickLookRate": 2.6
     }
   },

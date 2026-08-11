@@ -17,7 +17,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.Verb(bindability: CommandBindability.Unbindable, name: "identity.list", description: "Lists owned identity worlds and their paths.", valueKind: CommandValueKind.Digital, handler: _ => new CommandResult(Output: Describe()));
         yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "identity.create", description: "Creates an owned identity world: identity.create <id> [#RRGGBB].", handler: Create);
         yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "identity.show", description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as requested and as actually applied: identity.show [player]. move= is the profile's own requested rate; moveEffective= is what the sim integrates under, arm-aware — under a grounded OR SWIM kit, the profile's rate after the kit's own speed envelope (grounded's moveSpeedEnvelope, or swim's thrustSpeedEnvelope, which compiles into the SAME shared slot) clamps it, equal unless the kit pins/bounds that rate narrower than the profile's request; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.", handler: Show);
-        yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "identity.motion", description: "Sets identity-owned motion slots: identity.motion <speed|turn-speed|invert-look> <value> [player].", handler: SetMotion, routing: CommandRouting.Simulation);
+        yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "identity.motion", description: "Sets identity-owned motion slots: identity.motion <speed|turn-speed> <value> [player]. Camera preferences are authored as playerDefaults.seatLook on the identity document.", handler: SetMotion, routing: CommandRouting.Simulation);
         yield return CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: "identity.hud", description: "Replaces the identity-owned PRIVATE seat panel: identity.hud <panel-json> [player] — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat:<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.", handler: SetHud, routing: CommandRouting.Simulation);
         yield return CommandDefinition.Verb(bindability: CommandBindability.Unbindable, name: "identity.writebacks", description: "Shows the latest owner-side cross-document durable-state verdict (numeric value= or text= depending on the submission's operand).", valueKind: CommandValueKind.Digital, handler: _ => new CommandResult(Output: DescribeWriteback()));
         yield return CommandDefinition.WithWireArgs(
@@ -66,26 +66,18 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             ? (float)(double)body.EffectiveMoveSpeed
             : identity!.MoveSpeed);
 
-        return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={identity.MoveSpeed:0.####} moveEffective={effectiveMoveSpeed:0.####} turn={identity.TurnSpeed:0.####} invert={identity.InvertLookX.ToString().ToLowerInvariant()} hud={hud} path={m_worlds.FilePath}]"));
+        return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={identity.MoveSpeed:0.####} moveEffective={effectiveMoveSpeed:0.####} turn={identity.TurnSpeed:0.####} hud={hud} path={m_worlds.FilePath}]"));
     }
     private CommandResult SetMotion(CommandContext context, WireArgs args) {
         if ((args.Count < 2) || (args.Count > 3)) {
-            return CommandResult.Error(output: "[identity.motion: expected <speed|turn-speed|invert-look> <value> [player]]");
+            return CommandResult.Error(output: "[identity.motion: expected <speed|turn-speed> <value> [player]]");
         }
         if (!TryPlayer(args: in args, optionalAt: 2, player: out var player, identity: out var identity, error: out var error)) {
             return CommandResult.Error(output: error);
         }
         var key = args[0].ToString();
 
-        if (string.Equals(a: key, b: "invert-look", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            if (!TryBool(token: args[1], value: out var value)) {
-                return CommandResult.Error(output: "[identity.motion: invert-look value must be on or off]");
-            }
-            identity!.InvertLookX = value;
-            if (identity.Document?.Identity is { } definition) {
-                identity.WriteState(row: new WorldStateRow(Name: definition.InvertLookState, Kind: CellKind.Bool, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: (value ? 1 : 0))]));
-            }
-        } else if (!args.TryFloat(index: 1, value: out var value) || !float.IsFinite(f: value) || (value <= 0f)) {
+        if (!args.TryFloat(index: 1, value: out var value) || !float.IsFinite(f: value) || (value <= 0f)) {
             return CommandResult.Error(output: "[identity.motion: numeric value must be finite and positive]");
         } else if (string.Equals(a: key, b: "speed", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             identity!.MoveSpeed = value;

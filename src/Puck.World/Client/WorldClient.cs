@@ -24,6 +24,9 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // location through it: boot-bound (the ordinary default) or away, in a running WorldInstanceHost instance.
     // Presentation-side only, same as WorldPerceptionAnchor's own anchor table.
     private readonly WorldSeatInstanceRouter m_seatRouter;
+    // The shared per-seat live orbit. Camera-relative movement reads only its already-integrated yaw while composing
+    // a world-frame intent; the deterministic simulation still receives ordinary fixed-point role channels and has
+    // no camera dependency of its own.
     // De-dups the away-claimed-seat stderr narration (see SubmitAwaySeatIntents) so a seat that stays claimed while
     // away does not spam one line per tick — cleared the moment that seat is no longer both claimed and away.
     private readonly bool[] m_awayClaimWarned = new bool[PlayerRoster.MaxSlots];
@@ -298,7 +301,13 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
             }
 
             var seat = m_roster.Seat(slot: slot)!;
-            var intent = ComposeMoveFrame(bodyIndex: targets[slot], intent: seat.HeldIntent());
+            var definition = m_definition;
+            var intent = ComposeMoveFrame(
+                slot: slot,
+                bodyIndex: targets[slot],
+                definition: definition,
+                intent: seat.HeldIntent()
+            );
             var heldChannels = seat.HeldChannels;
 
             if (!m_roster.IsClaimed(slot: slot)
@@ -321,19 +330,19 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>Submits every seat <see cref="WorldSeatInstanceRouter"/> currently routes to
     /// <paramref name="instanceName"/> — <see cref="WorldInstanceHost.StepInstancesBesideBoot"/>'s own door, called
     /// immediately before that instance's <c>Server.Step</c>, at that instance's own next-tick coordinate. Mirrors
-    /// <see cref="SubmitSeatIntents"/>'s boot-bound path with two deliberate stage-1 narrowings: the entity index is
+    /// <see cref="SubmitSeatIntents"/>'s boot-bound path with one deliberate stage-1 narrowing: the entity index is
     /// always the router's own <see cref="SeatLocation.InstanceSlot"/> (never a claim-resolved target — a claimed
     /// seat away from boot is refused below, since claim resolution reads boot's own grant table, which a
-    /// cross-instance claim has no way to honor yet), and the submitted intent is the seat's raw held intent (never
-    /// <see cref="ComposeMoveFrame"/>'s camera-relative rotation, which reads this client's own boot-scoped render
-    /// arrays — an away body's pose lives in the destination's own mirror instead, a widening left to the render
-    /// follow-on that actually reads it). Every world kit that stays on the default heading frame (tank controls) is
-    /// unaffected either way.</summary>
+    /// cross-instance claim has no way to honor yet). Absolute-orbit world-frame movement composes from the routed
+    /// definition and the seat's shared live orbit, so it remains camera-relative across a crossing without reading
+    /// boot-scoped body poses. Every kit that stays on the default heading frame is unaffected.</summary>
     /// <param name="instanceName">The instance about to step.</param>
     /// <param name="tick">The tick the submissions are for — that instance's own next tick.</param>
     /// <param name="link">That instance's own transport (<see cref="WorldInstanceHost.TryGetLink"/>).</param>
-    public void SubmitAwaySeatIntents(string instanceName, ulong tick, IServerLink link) {
+    /// <param name="definition">That instance's current definition.</param>
+    public void SubmitAwaySeatIntents(string instanceName, ulong tick, IServerLink link, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: link);
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
@@ -362,10 +371,28 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
             m_awayClaimWarned[slot] = false;
 
+            var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+            var look = seat.AnalogLook;
+            seat.View.Nudge(
+                input: new Vector2(x: (float)(double)look.X, y: (float)(double)look.Y),
+                yawScale: preference.StickLookRate / Math.Max(1, definition.SimulationRateHz),
+                pitchScale: preference.StickLookRate / Math.Max(1, definition.SimulationRateHz),
+                preference: preference,
+                control: definition.Views.SeatControl
+            );
+
+            var intent = ComposeMoveFrame(
+                slot: slot,
+                bodyIndex: location.InstanceSlot,
+                definition: definition,
+                intent: seat.HeldIntent(),
+                permitBodyRelative: false
+            );
+
             link.SubmitIntent(submission: new IntentSubmission(
                 Tick: tick,
                 EntityIndex: location.InstanceSlot,
-                Intent: seat.HeldIntent(),
+                Intent: intent,
                 Principal: m_roster.PrincipalOf(slot: slot),
                 HeldChannels: seat.HeldChannels
             ));
@@ -376,43 +403,47 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <c>MoveFrame</c> remarks (both arms) promise: when the world's seat kit (<see cref="WorldDefinition.DefaultSeatKit"/>) opts into
     /// <see cref="MotionMoveFrame.World"/>, rotates the raw analog <c>MoveForward</c>/<c>MoveStrafe</c> pair by the
     /// seat's currently rendered camera yaw before it ever reaches the wire — the sim itself only ever reads an
-    /// already-world-frame vector, never a camera pose. The camera yaw used is <paramref name="bodyIndex"/>'s own
-    /// last-resolved render facing: the default seat rig (<c>WorldViewDefaults.SeatRig</c>) has no independent
-    /// player-driven orbit, so "the camera's yaw" and "the body's own yaw" are the same one-tick-behind quantity a
-    /// chase camera always reads (this tick's press can only be reflected in next tick's facing/camera, exactly like
-    /// any chase cam lagging its subject by one frame). A no-op for every kit that stays on the default
+    /// already-world-frame vector, never a camera pose. An absolute-orbit seat composes authored orbit yaw plus its
+    /// live right-stick/pointer yaw; an explicitly body-relative seat includes rendered body yaw. A no-op for
+    /// every kit that stays on the default
     /// <see cref="MotionMoveFrame.Heading"/> frame (tank controls) — every world that never opts in submits the raw
     /// pair unchanged, byte-identical to before this composition existed.</summary>
+    /// <param name="slot">The 0-based local seat whose camera frames the movement.</param>
     /// <param name="bodyIndex">The 0-based entity index this submission will drive.</param>
+    /// <param name="definition">The definition of the instance receiving the intent.</param>
     /// <param name="intent">The seat's raw held intent.</param>
+    /// <param name="permitBodyRelative">Whether this caller can resolve <paramref name="bodyIndex"/>'s rendered
+    /// orientation. Away-instance submissions set this false; absolute-orbit composition needs no body pose.</param>
     /// <returns><paramref name="intent"/> with <c>MoveForward</c>/<c>MoveStrafe</c> rotated into world axes, or
     /// <paramref name="intent"/> unchanged when the seat kit is not camera-relative, the body is inactive, or the
     /// commanded vector is already zero (rotating zero is zero — skipped purely to avoid the trig).</returns>
-    private PlayerIntent ComposeMoveFrame(int bodyIndex, PlayerIntent intent) {
-        var roles = m_channels.RoleOrdinals;
+    private PlayerIntent ComposeMoveFrame(int slot, int bodyIndex, WorldDefinition definition, PlayerIntent intent, bool permitBodyRelative = true) {
+        var channels = (ReferenceEquals(objA: definition, objB: m_definition)
+            ? m_channels
+            : WorldChannelTable.Compile(channels: definition.Channels));
+        var roles = channels.RoleOrdinals;
         var rawForwardValue = roles.Read(intent: in intent, role: ChannelRole.MoveForward);
         var rawStrafeValue = roles.Read(intent: in intent, role: ChannelRole.MoveStrafe);
 
         if (((rawForwardValue == FixedQ4816.Zero) && (rawStrafeValue == FixedQ4816.Zero))
-            || !IsActive(index: bodyIndex)
-            || (ResolveSeatKit() is not { } kit)
+            || (ResolveSeatKit(definition: definition) is not { } kit)
             || (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)) {
             return intent;
         }
 
-        // facing = (-sin yaw, -cos yaw) — the SAME convention WorldBody/WorldPopulation derive a yaw from a
-        // direction with (see WorldPopulation.StageAttend's identical Atan2(-dx, -dz) and WorldBody's own
-        // FacingSnap). Deriving sin/cos straight from the rendered facing vector (rather than round-tripping through
-        // Atan2 and back) is exact and cheaper.
-        var facing = Vector3.Transform(value: -Vector3.UnitZ, rotation: Orientation(index: bodyIndex));
-        var length = MathF.Sqrt(x: ((facing.X * facing.X) + (facing.Z * facing.Z)));
-
-        if (length < 1e-6f) {
+        if ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body)
+            && (!permitBodyRelative || !IsActive(index: bodyIndex))) {
             return intent;
         }
 
-        var sin = (-facing.X / length);
-        var cos = (-facing.Z / length);
+        var orientation = ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body)
+            ? Orientation(index: bodyIndex)
+            : Quaternion.Identity);
+        var yaw = (m_roster.Seat(slot: slot)?.View.LogicalYaw(views: definition.Views, bodyOrientation: orientation) ?? 0f);
+        var sin = MathF.Sin(x: yaw);
+        var cos = MathF.Cos(x: yaw);
+        var facing = new Vector3(x: -sin, y: 0f, z: -cos);
+        var length = 1f;
         var rawForward = (float)(double)rawForwardValue;
         var rawStrafe = (float)(double)rawStrafeValue;
 
@@ -448,11 +479,40 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // Resolves the world's designated seat kit row (every local seat shares this one kit) — a small linear scan over
     // the document's own (small) kit list, cheap enough to repeat per live seat per tick rather than caching a
     // pointer that would need its own revision-tracked invalidation.
-    private WorldKit? ResolveSeatKit() {
-        var kits = m_definition.Kits;
+    /// <summary>Consumes each seat's right-stick sample into its seat-owned view state exactly once this tick.</summary>
+    public void AdvanceSeatViews(float deltaSeconds) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_roster.Seat(slot: slot) is not { } seat) {
+                continue;
+            }
+
+            var definition = ((string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName,
+                b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal))
+                ? m_definition
+                : null);
+            // The instance host owns away definitions; callers already integrate at the host tick. A routed away
+            // seat is advanced by its emitter/pointer path until the host exposes that definition here.
+            if (definition is null) {
+                continue;
+            }
+
+            var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+            var look = seat.AnalogLook;
+            seat.View.Nudge(
+                input: new Vector2(x: (float)(double)look.X, y: (float)(double)look.Y),
+                yawScale: preference.StickLookRate * deltaSeconds,
+                pitchScale: preference.StickLookRate * deltaSeconds,
+                preference: preference,
+                control: definition.Views.SeatControl
+            );
+        }
+    }
+
+    private static WorldKit? ResolveSeatKit(WorldDefinition definition) {
+        var kits = definition.Kits;
 
         for (var index = 0; (index < kits.Count); index++) {
-            if (string.Equals(a: kits[index].Name, b: m_definition.DefaultSeatKit, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: kits[index].Name, b: definition.DefaultSeatKit, comparisonType: StringComparison.Ordinal)) {
                 return kits[index];
             }
         }

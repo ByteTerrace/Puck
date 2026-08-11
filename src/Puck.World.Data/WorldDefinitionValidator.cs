@@ -4002,6 +4002,10 @@ public static class WorldDefinitionValidator {
         }
 
         ValidateRig(rig: views.SeatRig, path: "views.seatRig", errors: errors);
+        ValidateSeatControl(control: views.SeatControl, path: "views.seatControl", errors: errors);
+        if (views.SeatRig?.Motion is not WorldCameraMotion.Orbit) {
+            errors.Add(item: "views.seatRig.motion must be orbit because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var layouts = views.Layouts;
@@ -4074,15 +4078,24 @@ public static class WorldDefinitionValidator {
             errors.Add(item: $"{path}.stickLookRate must be finite and non-negative.");
         }
 
-        if (!float.IsFinite(f: seatLook.MinPitch) || !float.IsFinite(f: seatLook.MaxPitch) ||
-            (seatLook.MinPitch < (-MathF.PI / 2f)) || (seatLook.MaxPitch > (MathF.PI / 2f))) {
-            errors.Add(item: $"{path}.minPitch and {path}.maxPitch must be finite and within [-pi/2, pi/2].");
-        } else if (seatLook.MinPitch >= seatLook.MaxPitch) {
-            errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
-        }
-
         if (!Enum.IsDefined(value: seatLook.Arming)) {
             errors.Add(item: $"{path}.arming is an unknown seat-look arming mode.");
+        }
+    }
+
+    private static void ValidateSeatControl(WorldSeatViewControl control, string path, List<string> errors) {
+        if (control is null) {
+            errors.Add(item: $"{path} is required.");
+            return;
+        }
+        if (!Enum.IsDefined(value: control.YawReference)) {
+            errors.Add(item: $"{path}.yawReference is unknown.");
+        }
+        if (!float.IsFinite(f: control.MinPitch) || !float.IsFinite(f: control.MaxPitch) ||
+            (control.MinPitch < (-MathF.PI / 2f)) || (control.MaxPitch > (MathF.PI / 2f))) {
+            errors.Add(item: $"{path}.minPitch and {path}.maxPitch must be finite and within [-pi/2, pi/2].");
+        } else if (control.MinPitch >= control.MaxPitch) {
+            errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
         }
     }
 

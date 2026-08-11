@@ -54,12 +54,13 @@ public sealed class QuiltBorderMarginIntegrationTests {
     // and BelowDerivedFloor_RealNeighbour_RefusesByName_QuotingTheFloor, which both prove this number rather than
     // assert it blindly): reach raw 22938 (Capsule radius 0.35, nearest-quantized — Sphere/Capsule stay
     // nearest-rounded; only the operations flagged by the adversarial review round up) + closingSpeed raw 3145728
-    // (48.0 exact, 24+24, SpeedCeiling summed both sides) x tapeLatency raw 1093 (FixedDirectedRounding.
+    // (80.0 exact, 40+40, SpeedCeiling summed both sides) x tapeLatency raw 1093 (FixedDirectedRounding.
     // TryCeilingQuotient's ceiling of 1/60 — 1092.2667 rounded UP to 1093, not truncated to 1092) + reach, the
-    // whole product-plus-sum rounded up ONCE via TryCeilingProductSum = raw 75402 exactly (no remainder) =
-    // 1.150543212890625, printed to 5 places. The naive real-arithmetic formula (0.35 + 48/60 = 1.15 exactly) sits
+    // whole product-plus-sum rounded up ONCE via TryCeilingProductSum, printed to 5 places. The naive
+    // real-arithmetic formula (0.35 + 80/60 = 1.683333...) sits
     // BELOW this, as it must for a floor that rounds up rather than nearest.
-    private const string ExpectedFloorText = "1.15054";
+    private const string ExpectedFloorText = "1.68423";
+    private const float ExplicitValidMargin = 1.7f;
 
     private static string RepoRoot() {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -201,19 +202,19 @@ public sealed class QuiltBorderMarginIntegrationTests {
 
         var ceiling = WorldFacePortalPolicy.SpeedCeiling(definition: nw);
 
-        Assert.Equal(expected: 24.0, actual: (double)ceiling, precision: 6);
+        Assert.Equal(expected: 40.0, actual: (double)ceiling, precision: 6);
         Assert.Equal(expected: RateHz, actual: nw.SimulationRateHz);
         Assert.Equal(expected: ColliderRadius, actual: ((WorldCollider.Capsule)nw.Kits[0].Collider!).Radius, precision: 5);
 
-        // The naive real-arithmetic check: reach 0.35 + closingSpeed 48 (24 + 24) x tapeLatency (1/60) = 0.35 + 0.8
-        // = 1.15 world units — sane for a vaulter whose own capsule radius is a third of that. The validator's own
-        // Q48.16 computation, which rounds every step UP rather than nearest, lands a hair ABOVE this (1.15054 —
+        // The naive real-arithmetic check: reach 0.35 + closingSpeed 80 (40 + 40) x tapeLatency (1/60)
+        // = 1.683333... world units. The validator's own Q48.16 computation, which rounds every step UP rather
+        // than nearest, lands a hair ABOVE this (1.68423 —
         // see ExpectedFloorText's own remarks) because a true safety floor must never understate the exact value;
         // BelowDerivedFloor_RealNeighbour_RefusesByName_QuotingTheFloor proves the EXACT value against the live
         // refusal text rather than this naive approximation.
         var expectedFloor = (ColliderRadius + ((double)ceiling * 2 * (1.0 / RateHz)));
 
-        Assert.Equal(expected: 1.15, actual: expectedFloor, precision: 6);
+        Assert.Equal(expected: 1.6833333333333333, actual: expectedFloor, precision: 6);
     }
 
     [Fact]
@@ -230,7 +231,7 @@ public sealed class QuiltBorderMarginIntegrationTests {
     }
 
     [Fact]
-    public void BelowDerivedFloor_RealNeighbour_RefusesByName_ControlAtTheAuthoredDepthValidates() {
+    public void BelowDerivedFloor_RealNeighbour_RefusesByName_ControlAtTheDerivedDepthValidates() {
         Laws.RefusalWithControl(
             lawId: "quilt.below-floor",
             deniedOutcome: () => {
@@ -256,12 +257,13 @@ public sealed class QuiltBorderMarginIntegrationTests {
     public void MismatchedNeighbourDepth_RealNeighbour_RefusesByName() {
         var store = new InMemoryObjectBlobStore();
 
-        store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: 1.5f));
+        store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: 1.8f));
         store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-        Assert.False(condition: TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out var reason));
-        Assert.Contains(expectedSubstring: "authors 1.2", actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "authors 1.5", actualString: reason, comparisonType: StringComparison.Ordinal);
+        var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+        Assert.False(condition: TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out var reason));
+        Assert.Contains(expectedSubstring: "authors 1.7", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "authors 1.8", actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "must be bit-identical", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
 
@@ -272,18 +274,20 @@ public sealed class QuiltBorderMarginIntegrationTests {
             deniedOutcome: () => {
                 var store = new InMemoryObjectBlobStore();
 
-                store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: 1.5f));
+                store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: 1.8f));
                 store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-                return TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out _);
+                var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+                return TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out _);
             },
             controlOutcome: () => {
                 var store = new InMemoryObjectBlobStore();
 
-                store.Seed(fileName: Ne, bytes: ReadQuiltBytes(fileName: Ne));
+                store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: ExplicitValidMargin));
                 store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-                return TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out _);
+                var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+                return TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out _);
             });
     }
 
@@ -295,7 +299,8 @@ public sealed class QuiltBorderMarginIntegrationTests {
         // Unavailable by fiat.
         store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-        Assert.False(condition: TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out var reason));
+        var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+        Assert.False(condition: TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out var reason));
         Assert.Contains(expectedSubstring: "could not be reached", actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "no cloud copy", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
@@ -309,15 +314,17 @@ public sealed class QuiltBorderMarginIntegrationTests {
 
                 store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-                return TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out _);
+                var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+                return TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out _);
             },
             controlOutcome: () => {
                 var store = new InMemoryObjectBlobStore();
 
-                store.Seed(fileName: Ne, bytes: ReadQuiltBytes(fileName: Ne));
+                store.Seed(fileName: Ne, bytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Ne), placementId: "door-to-nw", face: "screen", marginDepth: ExplicitValidMargin));
                 store.Seed(fileName: Sw, bytes: ReadQuiltBytes(fileName: Sw));
 
-                return TryValidateBytes(bytes: WithBindingOverlaysNeutralized(originalBytes: ReadQuiltBytes(fileName: Nw)), neighbours: BuildResolver(store: store), reason: out _);
+                var local = WithBindingOverlaysNeutralized(originalBytes: WithMutatedMarginDepth(originalBytes: ReadQuiltBytes(fileName: Nw), placementId: "door-to-ne", face: "screen", marginDepth: ExplicitValidMargin));
+                return TryValidateBytes(bytes: local, neighbours: BuildResolver(store: store), reason: out _);
             });
     }
 

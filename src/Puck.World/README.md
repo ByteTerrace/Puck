@@ -28,7 +28,7 @@ Boot prints one line naming the world-definition file it loaded (an explicit
 `--world <path>` or the shipped `Assets/worlds/play.world.json`), one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
 flag surface (backend, size, world, recording, user id, present mode, listen,
-connect) is declared in `Program.cs`; the graphics API is the boot-time
+connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host.
 
@@ -49,6 +49,15 @@ freshly minted, unregistered key so the door's refusal path is exercisable
 without a pre-arranged identity. `world.peers` echoes each connection's
 verified identity and mapped principal; `world.admission` echoes the
 document's own authored entries.
+
+Authority-to-authority projection and transfer additionally require
+`--federation-key-file <path>` on both processes. The file contains exactly 32
+raw secret bytes or 64 hexadecimal characters. A fresh challenge authenticates
+and binds every connection to its claimed source-authority namespace before any
+observe, reserve, commit, status, intent, or submission operation is accepted;
+omitting the key disables federation by name while leaving ordinary admitted
+peer listening available. `puck canary` creates a run-scoped key for every
+runner-owned authority pair.
 
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device — the
@@ -80,6 +89,16 @@ attempts a real device open (or, for `qr`, a real encode) and reports the
 honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
 in EVERY shape, `AddWorldPresentation` only when a window is composed.
+
+## Seat controls and camera authoring
+
+Play seats use standard dual-stick semantics: left stick moves in the logical
+camera plane and right stick changes yaw/pitch; right stick never doubles as
+body turn. `views.seatRig` authors framing, `views.seatControl` authors the
+world's `World|Body` yaw reference and pitch envelope, and
+`playerDefaults.seatLook` authors portable sensitivity/inversion/arming/rate.
+`world.view.camera [player]` reads the same seat-owned state movement and both
+local/travel renderers use. The old mixed seat-look shape is not accepted.
 
 ## The console
 

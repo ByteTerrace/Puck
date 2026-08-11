@@ -35,10 +35,6 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     private readonly PagedInputBindings[] m_seats;
     private readonly BindingProfileDocument?[] m_profileBindings;
     private readonly BindingProfileDocument?[] m_sessionRebinds;
-    // A seat's control feel travels with the same profile its bindings do, so the two are delivered together through
-    // SetProfileLayers and this type owns the push. It does not own the STATE — WorldSeatFeel is the shared store the
-    // orbit, the frame source, and world.view.orbit all read.
-    private readonly WorldSeatFeel m_seatFeel;
     // Per seat: [family index] → the family's current published state; the composed document's context rows; and the
     // seat's REQUESTED group (the mode pointer — what context rows override).
     private readonly string[][] m_contextStates;
@@ -46,7 +42,7 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     private readonly string?[] m_requestedGroups;
     // Per-seat: a seat's binding vocabulary composes from whichever document currently frames it
     // (WorldInstanceHost.ResolveRoutedDefinition's own routed lookup — the same per-seat source
-    // WorldCameraOrbitDrag already reads for the pitch clamp), never one world shared by every seat. Every seat
+    // WorldSeatViewInput already reads for the pitch clamp), never one world shared by every seat. Every seat
     // starts seeded from the boot definition; SyncSeat re-points one seat's own entries the instant its resolved
     // definition changes reference.
     private readonly IReadOnlyList<WorldBindingOverlay>[] m_overlays;
@@ -70,14 +66,10 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     /// <param name="engineDefault">The engine-default binding document (layer 0).</param>
     /// <param name="definition">The boot world definition, supplying both the binding overlays (layer 1..) and the
     /// channel table those overlays name.</param>
-    /// <param name="seatFeel">The shared per-seat control-feel store this type pushes a selected profile's feel into.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSeatBindings(BindingProfileDocument engineDefault, WorldDefinition definition, WorldSeatFeel seatFeel) {
+    public WorldSeatBindings(BindingProfileDocument engineDefault, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: engineDefault);
         ArgumentNullException.ThrowIfNull(argument: definition);
-        ArgumentNullException.ThrowIfNull(argument: seatFeel);
-
-        m_seatFeel = seatFeel;
         m_engineDefault = engineDefault;
         m_profileBindings = new BindingProfileDocument?[SeatCount];
         m_sessionRebinds = new BindingProfileDocument?[SeatCount];
@@ -156,14 +148,12 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     /// layer added later cannot be delivered at some call sites and forgotten at others.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="bindings">The profile's binding section, or <see langword="null"/> for the engine default.</param>
-    /// <param name="seatLook">The profile's control feel, or <see langword="null"/> to keep the world's own.</param>
-    public void SetProfileLayers(int slot, BindingProfileDocument? bindings, WorldSeatLook? seatLook) {
+    public void SetProfileLayers(int slot, BindingProfileDocument? bindings) {
         if ((uint)slot >= SeatCount) {
             return;
         }
 
         m_profileBindings[slot] = bindings;
-        m_seatFeel.SetProfileLook(slot: slot, look: seatLook);
         RecomposeSeat(slot: slot);
     }
 
@@ -372,13 +362,12 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     public void SyncDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        m_seatFeel.SetWorldLook(worldLook: definition.PlayerDefaults.SeatLook);
     }
 
     /// <summary>Reflects seat <paramref name="slot"/>'s currently routed definition: a seat's binding pages, wheels,
     /// and channel vocabulary compose from whichever world its <see cref="WorldSeatInstanceRouter"/> route currently
     /// frames it from, never a single world every seat shares. The caller resolves that document once (see
-    /// <see cref="WorldInstanceHost.ResolveRoutedDefinition"/>, the same source <see cref="WorldCameraOrbitDrag"/>
+    /// <see cref="WorldInstanceHost.ResolveRoutedDefinition"/>, the same source <see cref="WorldSeatViewInput"/>
     /// already reads for the pitch clamp) and hands it here — this type carries no instance-registry reference of its
     /// own. A definition whose overlay list and channel list are both reference-equal to the ones this seat last
     /// synced against (the common per-tick case, and the case for every other seat on a tick where only one seat
