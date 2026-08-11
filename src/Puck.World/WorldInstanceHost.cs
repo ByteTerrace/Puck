@@ -75,6 +75,7 @@ internal sealed class WorldInstanceHost : IDisposable {
     // Path containment is decided the way the platform decides it: case-insensitively where file names are.
     private static readonly StringComparison PathComparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
     // Every instance shares the machine's own persisted id — it identifies the MACHINE, not a world, so minting a
     // fresh one per instance would both misreport the machine and put a Guid.NewGuid() on a boot path.
     private readonly Guid m_machineId;
@@ -192,7 +193,11 @@ internal sealed class WorldInstanceHost : IDisposable {
             return m_client.Definition;
         }
 
-        return ((m_instances.TryGetValue(key: location.InstanceName, value: out var instance) && (instance is not null))
+        if (m_remoteAuthorities.TryGetValue(key: location.InstanceName, value: out var remote)) {
+            return remote.Definition;
+        }
+
+        return (m_instances.TryGetValue(key: location.InstanceName, value: out var instance) && (instance is not null)
             ? instance.Server.Definition
             : m_client.Definition);
     }
@@ -340,9 +345,14 @@ internal sealed class WorldInstanceHost : IDisposable {
     /// <param name="link">The instance's transport, when found.</param>
     /// <returns>Whether an instance is running under <paramref name="name"/>.</returns>
     public bool TryGetLink(string name, out IServerLink? link) {
+        if (m_remoteAuthorities.TryGetValue(key: name, value: out var authority)) {
+            link = authority.Link;
+
+            return true;
+        }
+
         if (m_instances.TryGetValue(key: name, value: out var instance)) {
             link = instance.Link;
-
             return true;
         }
 
@@ -815,12 +825,13 @@ internal sealed class WorldInstanceHost : IDisposable {
     /// transfer's whole member set shares that one resolution, so a <see cref="TransferLifetime.Fresh"/> destination
     /// mints its name once for the whole party, never once per body).</summary>
     internal readonly record struct TransferDestination {
-        private TransferDestination(TransferLifetime lifetime, string? name, string? documentPath, string? site, bool retain) {
+        private TransferDestination(TransferLifetime lifetime, string? name, string? documentPath, string? site, bool retain, string? authority) {
             Lifetime = lifetime;
             Name = name;
             DocumentPath = documentPath;
             Site = site;
             Retain = retain;
+            Authority = authority;
         }
 
         /// <summary>How this destination resolves.</summary>
@@ -845,22 +856,28 @@ internal sealed class WorldInstanceHost : IDisposable {
         /// their own fixed retention rule.</summary>
         public bool Retain { get; }
 
+        /// <summary>An operator-selected remote authority for this run, overriding the document endpoint.</summary>
+        public string? Authority { get; }
+
         /// <summary>An already-running instance named <paramref name="name"/> — refused at resolve time if none
         /// answers to it.</summary>
-        public static TransferDestination Existing(string name) => new(lifetime: TransferLifetime.Existing, name: name, documentPath: null, site: null, retain: false);
+        public static TransferDestination Existing(string name) => new(lifetime: TransferLifetime.Existing, name: name, documentPath: null, site: null, retain: false, authority: null);
 
         /// <summary>A brand-new instance, deterministically named from <paramref name="site"/>'s draw counter and
         /// started from <paramref name="documentPath"/>.</summary>
-        public static TransferDestination Fresh(string site, string documentPath) => new(lifetime: TransferLifetime.Fresh, name: null, documentPath: documentPath, site: site, retain: false);
+        public static TransferDestination Fresh(string site, string documentPath) => new(lifetime: TransferLifetime.Fresh, name: null, documentPath: documentPath, site: site, retain: false, authority: null);
 
         /// <summary>A stable instance named <paramref name="name"/> — reused if already running, else started from
         /// <paramref name="documentPath"/>.</summary>
-        public static TransferDestination Persistent(string name, string documentPath) => new(lifetime: TransferLifetime.Persistent, name: name, documentPath: documentPath, site: null, retain: false);
+        public static TransferDestination Persistent(string name, string documentPath) => new(lifetime: TransferLifetime.Persistent, name: name, documentPath: documentPath, site: null, retain: false, authority: null);
 
         /// <summary>A name already computed by <see cref="WorldSessionResolver.TryResolve"/> — reused if already
         /// running, else started from <paramref name="documentPath"/>; retained through an occupancy dip to zero
         /// only when <paramref name="retain"/> (the resolved destination's own durability being Persisted).</summary>
-        public static TransferDestination Resolved(string name, string documentPath, bool retain) => new(lifetime: TransferLifetime.Resolved, name: name, documentPath: documentPath, site: null, retain: retain);
+        public static TransferDestination Resolved(string name, string documentPath, bool retain) => new(lifetime: TransferLifetime.Resolved, name: name, documentPath: documentPath, site: null, retain: retain, authority: null);
+
+        /// <summary>The normal boot composition routed through a remote authority selected for this run.</summary>
+        public static TransferDestination Remote(string name, string documentPath, string authority) => new(lifetime: TransferLifetime.Resolved, name: name, documentPath: documentPath, site: null, retain: true, authority: authority);
     }
 
     /// <summary>Which of a source instance's local seats a queued transfer moves — see
@@ -940,6 +957,11 @@ internal sealed class WorldInstanceHost : IDisposable {
     /// fallback for a cohort member with no entry — a <c>party</c>-travel passenger swept along without personally
     /// crossing the aperture. <see langword="null"/> for a non-resolver transfer (console <c>world.transfer</c>,
     /// which carries no per-hit data at all) or <c>Spawn</c>.</param>
+    /// <param name="HoldSeconds">The authored binding lease duration.</param>
+    /// <param name="FullPolicy">The authored full-border retry policy.</param>
+    /// <param name="PartyAllOrNothing">Whether the cohort binds as one transaction.</param>
+    /// <param name="BorderCapacity">The optional authored capacity for this border.</param>
+    /// <param name="Border">The stable source border identity used by destination admission.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -958,7 +980,12 @@ internal sealed class WorldInstanceHost : IDisposable {
         FixedQ4816 SourceFaceYawRadians,
         FixedQ4816 SourceFaceSeamU,
         FixedQ4816 SourceFaceSeamV,
-        IReadOnlyDictionary<int, MemberSeam>? MemberSeams
+        IReadOnlyDictionary<int, MemberSeam>? MemberSeams,
+        double HoldSeconds,
+        WorldTransferFullPolicy FullPolicy,
+        bool PartyAllOrNothing,
+        int? BorderCapacity,
+        string Border
     );
 
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
@@ -1033,13 +1060,18 @@ internal sealed class WorldInstanceHost : IDisposable {
     /// <c>Up</c> — see <see cref="PendingTransfer.SourceFaceSeamV"/>. Omit for the ordinary spawn arrival.</param>
     /// <param name="memberSeams">Per-member seam overrides — see <see cref="PendingTransfer.MemberSeams"/>. Omit for
     /// a non-resolver transfer or the ordinary spawn arrival.</param>
+    /// <param name="holdSeconds">The binding lease duration authored by the source world.</param>
+    /// <param name="fullPolicy">Whether a full refusal remains retryable.</param>
+    /// <param name="partyAllOrNothing">Whether the cohort binds as one transaction.</param>
+    /// <param name="borderCapacity">The optional capacity authored on the crossed border.</param>
+    /// <param name="border">The stable border identity used for destination admission accounting.</param>
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, FixedVector3 sourceSeamPosition = default, FixedQ4816 sourceFaceYawRadians = default, FixedQ4816 sourceFaceSeamU = default, FixedQ4816 sourceFaceSeamV = default, IReadOnlyDictionary<int, MemberSeam>? memberSeams = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, FixedVector3 sourceSeamPosition = default, FixedQ4816 sourceFaceYawRadians = default, FixedQ4816 sourceFaceSeamU = default, FixedQ4816 sourceFaceSeamV = default, IReadOnlyDictionary<int, MemberSeam>? memberSeams = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
         var transferId = (explicitTransferId ?? MintTransferId());
 
-        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, SourceSeamPosition: sourceSeamPosition, SourceFaceYawRadians: sourceFaceYawRadians, SourceFaceSeamU: sourceFaceSeamU, SourceFaceSeamV: sourceFaceSeamV, MemberSeams: memberSeams));
+        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, SourceSeamPosition: sourceSeamPosition, SourceFaceYawRadians: sourceFaceYawRadians, SourceFaceSeamU: sourceFaceSeamU, SourceFaceSeamV: sourceFaceSeamV, MemberSeams: memberSeams, HoldSeconds: holdSeconds, FullPolicy: fullPolicy, PartyAllOrNothing: partyAllOrNothing, BorderCapacity: borderCapacity, Border: (border ?? "transfer")));
 
         return transferId;
     }
@@ -1219,6 +1251,11 @@ internal sealed class WorldInstanceHost : IDisposable {
         public required WorldDestination Destination { get; init; }
         public required string ReferenceDocument { get; init; }
         public required WorldPortalTravel Travel { get; init; }
+        public required double HoldSeconds { get; init; }
+        public required WorldTransferFullPolicy FullPolicy { get; init; }
+        public required bool PartyAllOrNothing { get; init; }
+        public required int? BorderCapacity { get; init; }
+        public required string Border { get; init; }
         public TransferScope Scope { get; set; }
         // The frame is captured when the source face is scanned, so later document mutation cannot move it. A member
         // with a hit uses MemberSeams; the shared seam is only the fallback for a party passenger without its own hit.
@@ -1260,6 +1297,7 @@ internal sealed class WorldInstanceHost : IDisposable {
             var defaultTravel = (instance.Server.Definition.Portals?.PortalDefaults.Travel ?? WorldPortalTravel.Body);
             var travel = (hit.Portal.Travel ?? defaultTravel);
             var scope = ((travel == WorldPortalTravel.Party) ? TransferScope.Party : TransferScope.Body);
+            var portalDefaults = (instance.Server.Definition.Portals?.PortalDefaults ?? new WorldPortalDefaults(Travel: WorldPortalTravel.Body));
 
             // This hit's own candidate cohort — the source instance's whole active local-seat set for a
             // `party` door, or just the entering seat for `body`. Read live, not cached.
@@ -1280,6 +1318,11 @@ internal sealed class WorldInstanceHost : IDisposable {
                     Destination = destination,
                     ReferenceDocument = reference.Document,
                     Travel = travel,
+                    HoldSeconds = portalDefaults.HoldSeconds,
+                    FullPolicy = portalDefaults.Full,
+                    PartyAllOrNothing = portalDefaults.PartyAllOrNothing,
+                    BorderCapacity = hit.Portal.Capacity,
+                    Border = $"{hit.Placement.Id}/{hit.Face.Face}",
                     Scope = scope,
                     Arrival = hit.Portal.Arrival,
                     Counterpart = hit.Portal.Counterpart,
@@ -1373,7 +1416,7 @@ internal sealed class WorldInstanceHost : IDisposable {
         // MemberTravelPrincipal already re-derives every other member's own Seat principal independently, so
         // whichever seat is named here only affects itself.
         var actingPrincipal = WorldPrincipal.Seat(slot: cohortSlots[0]);
-        var transferId = EnqueueTransfer(sourceInstance: instance.Name, scope: group.Scope, sourceSlot: cohortSlots[0], destination: transferDestination, actingPrincipal: actingPrincipal, resolvedDestinationRow: group.Destination, frozenCohortSlots: cohortSlots, frozenScopeKey: resolvedSession.ScopeKey, frozenGenerationId: resolvedSession.GenerationId, arrival: group.Arrival, counterpart: group.Counterpart, sourceSeamPosition: group.SourceSeamPosition, sourceFaceYawRadians: group.SourceFaceYawRadians, sourceFaceSeamU: group.SourceFaceSeamU, sourceFaceSeamV: group.SourceFaceSeamV, memberSeams: group.MemberSeams);
+        var transferId = EnqueueTransfer(sourceInstance: instance.Name, scope: group.Scope, sourceSlot: cohortSlots[0], destination: transferDestination, actingPrincipal: actingPrincipal, resolvedDestinationRow: group.Destination, frozenCohortSlots: cohortSlots, frozenScopeKey: resolvedSession.ScopeKey, frozenGenerationId: resolvedSession.GenerationId, arrival: group.Arrival, counterpart: group.Counterpart, sourceSeamPosition: group.SourceSeamPosition, sourceFaceYawRadians: group.SourceFaceYawRadians, sourceFaceSeamU: group.SourceFaceSeamU, sourceFaceSeamV: group.SourceFaceSeamV, memberSeams: group.MemberSeams, holdSeconds: group.HoldSeconds, fullPolicy: group.FullPolicy, partyAllOrNothing: group.PartyAllOrNothing, borderCapacity: group.BorderCapacity, border: group.Border);
 
         Console.Out.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(separator: ", ", values: group.Descriptions)} entered -> queued transfer={transferId} to '{group.Destination.Name}' (durability={WorldDestinationTokens.DurabilityToken(durability: group.Destination.Durability)} scope={WorldDestinationTokens.ScopeToken(scope: group.Destination.Scope)} travel={WorldDestinationTokens.TravelToken(travel: group.Travel)} arrival={WorldDestinationTokens.ArrivalToken(arrival: group.Arrival)} generation={resolvedSession.GenerationId}{(resolvedSession.IsNewGeneration ? " (new)" : "")} instance={resolvedSession.InstanceName} cohort=[{string.Join(separator: ",", values: cohortSlots.Select(selector: static slot => (slot + 1)))}])]");
     }
@@ -1592,6 +1635,172 @@ internal sealed class WorldInstanceHost : IDisposable {
     // their own separate capture.
     private readonly record struct LandedMember(int SourceSlot, int TargetSlot, WorldIdentity? Profile, FixedVector3 Position, FixedQ4816 Yaw, WorldBody.TransferState DynamicState, int[] Designations);
 
+    // The transfer contract is authority-shaped. A local row invokes the same server escrow directly; a remote row
+    // serializes that contract over TCP. No transfer logic branches on colocation below this adapter.
+    private readonly record struct TransferAuthority(WorldInstance? Local, WorldRemoteAuthority? Remote) {
+        public bool IsRemote => (Remote is not null);
+        public WorldDefinition Definition => (Local?.Server.Definition ?? Remote!.Definition);
+        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) =>
+            (Local is not null ? Local.Server.ReserveTransfer(request: request) : Remote!.Reserve(request: request with { RemoteAdmission = true }));
+        public bool Commit(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
+            (Local is not null ? Local.Server.CommitTransfer(transferId: transferId, members: members, reason: out reason) : Remote!.Commit(transferId: transferId, members: members, reason: out reason));
+        public void Abort(ulong transferId) {
+            if (Local is not null) {
+                Local.Server.AbortTransfer(transferId: transferId);
+            } else {
+                Remote!.Abort(transferId: transferId);
+            }
+        }
+    }
+
+    private bool TryResolveTransferAuthority(in PendingTransfer transfer, WorldInstance source, out TransferAuthority authority, out string resolvedName, out bool spawned, out string reason) {
+        if ((transfer.Destination.DocumentPath is { } documentPath) && TryResolveDocumentPath(path: documentPath, resolved: out var resolvedPath)) {
+            var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory);
+
+            if (WorldDefinitionLoader.TryLoadFile(path: resolvedPath, definition: out var definition, reason: out var loadReason, instanceIdentity: (transfer.Destination.Name ?? transfer.Destination.Site ?? "remote"), neighbours: neighbours) &&
+                (definition is not null) &&
+                ((transfer.Destination.Authority ?? definition.Host.Authority) is { Length: > 0 } endpoint)) {
+                resolvedName = (transfer.Destination.Name ?? transfer.Destination.Site ?? endpoint);
+
+                try {
+                    if (!m_remoteAuthorities.TryGetValue(key: resolvedName, value: out var remote) || !string.Equals(a: remote.Endpoint, b: endpoint, comparisonType: StringComparison.Ordinal)) {
+                        remote?.Dispose();
+                        remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: definition);
+                        m_remoteAuthorities[resolvedName] = remote;
+                    }
+
+                    authority = new TransferAuthority(Local: null, Remote: remote);
+                    spawned = false;
+                    reason = string.Empty;
+                    return true;
+                } catch (FormatException exception) {
+                    authority = default;
+                    spawned = false;
+                    reason = exception.Message;
+                    return false;
+                }
+            } else if (definition is null && loadReason.Length > 0) {
+                authority = default;
+                resolvedName = string.Empty;
+                spawned = false;
+                reason = loadReason;
+                return false;
+            }
+        }
+
+        // A windowed source may already hold a colocated projection cache for a portal screen. That cache is not
+        // transfer authority: an authored remote endpoint still wins above, and only a document with no remote
+        // authority may short-circuit through an existing colocated instance here.
+        if ((transfer.Destination.Name is { } existingName) && m_instances.TryGetValue(key: existingName, value: out var existing)) {
+            authority = new TransferAuthority(Local: existing, Remote: null);
+            resolvedName = existingName;
+            spawned = false;
+            reason = string.Empty;
+            return true;
+        }
+
+        if (TryResolveDestination(transfer: in transfer, source: source, resolved: out var local, resolvedName: out resolvedName, spawned: out spawned, reason: out reason)) {
+            authority = new TransferAuthority(Local: local!, Remote: null);
+            return true;
+        }
+
+        authority = default;
+        return false;
+    }
+
+    /// <summary>Returns the authority/body currently followed by one local roster slot.</summary>
+    public SeatLocation SeatLocation(int slot) => m_seatRouter.Location(slot: slot);
+
+    /// <summary>Remote-capable form of <see cref="TryResolveObservedDestination"/>. It resolves the same global
+    /// session but returns its projection contract instead of requiring a local <see cref="WorldInstance"/>.</summary>
+    public bool TryResolveObservedProjection(WorldInstance source, string destinationName, out string instanceName, out ulong generationId, out WorldDefinition? definition, out Func<IClientSink, IDisposable>? attach, out string reason) {
+        instanceName = string.Empty;
+        generationId = 0;
+        definition = null;
+        attach = null;
+
+        if (WorldDefinitionRows.FindDestination(destinations: source.Server.Definition.Destinations, name: destinationName) is not { } destination ||
+            destination.Scope != WorldDestinationScope.Global ||
+            WorldDefinitionRows.FindReference(references: source.Server.Definition.References, name: destination.Reference) is not { } reference) {
+            reason = $"destination '{destinationName}' is absent, non-global, or names no reference";
+            return false;
+        }
+
+        var cohort = new[] { new WorldSessionResolver.CohortMember(Principal: WorldPrincipal.Seat(slot: 0), IdentityId: null) };
+        var referencedDocument = ResolveReferenceDocument(source: source, documentPath: reference.Document);
+        var canonicalDocument = CanonicalDocumentIdentity(documentPath: referencedDocument);
+
+        if (!m_resolver.TryResolve(sourceDefinition: source.Server.Definition, destination: destination, referencedDocument: canonicalDocument, cohort: cohort, resolved: out var resolved, reason: out reason)) {
+            return false;
+        }
+
+        instanceName = resolved.InstanceName;
+        generationId = resolved.GenerationId;
+
+        if (TryGetProjection(name: instanceName, definition: out definition, attach: out attach, envelope: out _, borderMargin: out _)) {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (!TryResolveDocumentPath(path: referencedDocument, resolved: out var resolvedPath)) {
+            reason = $"no referenced world document at '{referencedDocument}'";
+            return false;
+        }
+
+        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory);
+        if (!WorldDefinitionLoader.TryLoadFile(path: resolvedPath, definition: out var loaded, reason: out reason, instanceIdentity: instanceName, neighbours: neighbours) || loaded is null) {
+            return false;
+        }
+
+        if (loaded.Host.Authority is { Length: > 0 } endpoint) {
+            try {
+                var remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: loaded);
+                m_remoteAuthorities[instanceName] = remote;
+                definition = loaded;
+                attach = remote.AttachSink;
+                reason = string.Empty;
+                return true;
+            } catch (FormatException exception) {
+                reason = exception.Message;
+                return false;
+            }
+        }
+
+        if (ResolveByStableName(name: instanceName, documentPath: referencedDocument, retain: (destination.Durability == WorldDestinationDurability.Persisted), resolved: out var local, resolvedName: out _, spawned: out _, reason: out reason) && local is not null) {
+            definition = local.Server.Definition;
+            attach = local.Server.AttachSink;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Resolves the continuous projection channel for a local or remote authority already named by the
+    /// session router. Definition and per-tick records cross the same observer contract.</summary>
+    public bool TryGetProjection(string name, out WorldDefinition? definition, out Func<IClientSink, IDisposable>? attach, out WorldRenderEnvelope? envelope, out IWorldBorderMarginSource? borderMargin) {
+        if (m_remoteAuthorities.TryGetValue(key: name, value: out var remote)) {
+            definition = remote.Definition;
+            attach = remote.AttachSink;
+            envelope = null;
+            borderMargin = null;
+            return true;
+        }
+
+        if (m_instances.TryGetValue(key: name, value: out var instance)) {
+            definition = instance.Server.Definition;
+            attach = instance.Server.AttachSink;
+            envelope = instance.Server.Envelope;
+            borderMargin = instance.Server.BorderMargin;
+            return true;
+        }
+
+        definition = null;
+        attach = null;
+        envelope = null;
+        borderMargin = null;
+        return false;
+    }
+
     // Applies one queued transfer as one transaction: resolve the frozen cohort -> reserve the destination's
     // exact target slots (capacity and destination Drive standing, both pre-checked before any member
     // detaches) -> detach every member with its pose captured -> commit every join into its reserved slot ->
@@ -1682,7 +1891,7 @@ internal sealed class WorldInstanceHost : IDisposable {
             return;
         }
 
-        if (!TryResolveDestination(transfer: in transfer, source: source, resolved: out var target, resolvedName: out var targetName, spawned: out var spawned, reason: out var destinationReason)) {
+        if (!TryResolveTransferAuthority(transfer: in transfer, source: source, authority: out var targetAuthority, resolvedName: out var targetName, spawned: out var spawned, reason: out var destinationReason)) {
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({destinationReason})]");
 
             // A resolve minted this generation's cache entry before this drain ever attempted to start or
@@ -1701,12 +1910,56 @@ internal sealed class WorldInstanceHost : IDisposable {
             return;
         }
 
-        // Every member's exact target slot, proven free and authorized (destination Drive standing) before
-        // any member detaches — making a capacity/slot/destination-authority refusal impossible-by-
-        // construction once detachment begins. See TryReserveDestinationSeats; this is the local half of
-        // the admission hold — a capability-shaped remote version (reserving across an untrusted wire) is
-        // not this one's concern.
-        if (!TryReserveDestinationSeats(target: target!, targetName: targetName, source: source, members: members, transfer: in transfer, reservedSlots: out var reservedSlots, reason: out var reserveReason)) {
+        // Reserve through the destination authority's escrow even when both authorities happen to be colocated.
+        // Loopback is only a transport optimization beneath this contract; it is not a second transfer path.
+        var sourceTick = (source.Server.NextInputTick - 1UL);
+        var sourceRate = source.Server.Definition.SimulationRateHz;
+
+        if ((sourceRate <= 0) || !FixedTickConversion.TryDurationEngineTicksExact(seconds: (decimal)transfer.HoldSeconds, ticks: out var holdEngineTicks)) {
+            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (source lease cannot be expressed exactly across the {FixedTickConversion.TicksPerSecond} engine-tick bridge)]");
+
+            if (spawned) {
+                ReapIfEmpty(name: targetName);
+            }
+
+            return;
+        }
+
+        var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)sourceRate));
+        var holdSourceSteps = Math.Max(1UL, checked((holdEngineTicks + sourceStepTicks - 1UL) / sourceStepTicks));
+        var reservationMembers = new WorldTransferReservationMember[members.Length];
+
+        for (var reservationIndex = 0; (reservationIndex < members.Length); reservationIndex++) {
+            var sourceSlot = members[reservationIndex];
+            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: source.Server.Population.EntryBody(index: sourceSlot)?.Profile);
+        }
+
+        var reservationRequest = new WorldTransferReservationRequest(
+            TransferId: transfer.TransferId,
+            SourceAuthority: transfer.SourceInstance,
+            SourceRateHz: sourceRate,
+            SourceTick: sourceTick,
+            DeadlineSourceTick: checked(sourceTick + holdSourceSteps),
+            Border: transfer.Border,
+            BorderCapacity: transfer.BorderCapacity,
+            PartyAllOrNothing: transfer.PartyAllOrNothing,
+            RemoteAdmission: false,
+            Members: reservationMembers
+        );
+        WorldTransferReservationReply reservation;
+
+        try {
+            reservation = targetAuthority.Reserve(request: reservationRequest);
+        } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+            reservation = WorldTransferReservationReply.Refused(reason: $"authority transport failed before reserve: {exception.Message}");
+        }
+
+        if (!reservation.Accepted) {
+            var capacityRefusal = reservation.Reason.Contains(value: " is full ", comparisonType: StringComparison.Ordinal)
+                || reservation.Reason.Contains(value: "no free body index", comparisonType: StringComparison.Ordinal);
+            var willRetry = (capacityRefusal && (transfer.FullPolicy == WorldTransferFullPolicy.Retry));
+            var retryText = (willRetry ? "client will retry; no destination queue was created" : "terminal refusal; no queue was created");
+            var reserveReason = $"'{targetName}' refused reservation ({reservation.Reason}; {retryText})";
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]");
 
             if (spawned) {
@@ -1715,8 +1968,15 @@ internal sealed class WorldInstanceHost : IDisposable {
 
             NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: targetName, outcome: $"refused-reservation:{reserveReason}");
 
+            if (willRetry) {
+                _ = m_appliedTransferIds.Remove(item: transfer.TransferId);
+                m_pendingTransfers.Enqueue(item: transfer);
+            }
+
             return;
         }
+
+        var reservedSlots = reservation.BodyIndices.ToArray();
 
         // Whole-transfer ALL-OR-NOTHING across SOURCE-side authorization too (destination standing was just proven
         // by the reservation above): pre-check every member's own LEAVE standing — Drive over its own body under
@@ -1727,6 +1987,7 @@ internal sealed class WorldInstanceHost : IDisposable {
             var standingPrincipal = MemberTravelPrincipal(transfer: in transfer, slot: slot);
 
             if (source.Server.Grants.Allows(principal: standingPrincipal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)) is { IsAllowed: false } standing) {
+                targetAuthority.Abort(transferId: transfer.TransferId);
                 Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({standingPrincipal.Describe()} cannot leave '{transfer.SourceInstance}' seat {(slot + 1)} — {standing.DescribeDenial()}); the whole transfer is held]");
 
                 if (spawned) {
@@ -1764,8 +2025,8 @@ internal sealed class WorldInstanceHost : IDisposable {
         string? abortReason = null;
 
         if (transfer.Arrival == WorldPortalArrival.Mapped) {
-            if (WorldPortalCounterpart.TryResolve(definition: target!.Server.Definition, counterpart: transfer.Counterpart, placement: out var counterpartPlacement, face: out var counterpartFace, reason: out var counterpartReason)) {
-                if (WorldFaceCatalog.For(definition: target.Server.Definition).TryFind(placementId: counterpartPlacement!.Id, faceName: counterpartFace!.Face, out var counterpartRow)) {
+            if (WorldPortalCounterpart.TryResolve(definition: targetAuthority.Definition, counterpart: transfer.Counterpart, placement: out var counterpartPlacement, face: out var counterpartFace, reason: out var counterpartReason)) {
+                if (WorldFaceCatalog.For(definition: targetAuthority.Definition).TryFind(placementId: counterpartPlacement!.Id, faceName: counterpartFace!.Face, out var counterpartRow)) {
                     counterpartFrame = counterpartRow.Frame;
                     destinationFacePosition = WorldPortalArrivalMath.CounterpartSeam(destinationFrame: counterpartRow.Frame, seamU: transfer.SourceFaceSeamU, seamV: transfer.SourceFaceSeamV);
                     destinationFaceYawRadians = counterpartRow.Frame.PlanarYawRadians;
@@ -1777,14 +2038,10 @@ internal sealed class WorldInstanceHost : IDisposable {
             }
         }
 
-        // Detach + commit, one member at a time, into each member's own pre-reserved slot (never re-picked
-        // live — the reservation above already proved it free and authorized). Any join refusal here is a
-        // refusal class reservation could not pre-check (see TryReserveDestinationSeats), or the test-only
-        // TestForceJoinRefusalOrdinal hook, which exists because that refusal class is otherwise unreachable
-        // once capacity and destination Drive standing are both closed by construction. Either way it
-        // triggers a full abort: every member landed so far in this transfer returns to its exact captured
-        // source pose.
+        // Detach every source member first, then send one cohort commit to the destination escrow. The source
+        // remains the lease authority until that commit is acknowledged; a refused commit restores every body.
         var landed = new List<LandedMember>(capacity: members.Length);
+        var commitMembers = new List<WorldTransferCommitMember>(capacity: members.Length);
 
         for (var index = 0; ((abortReason is null) && (index < members.Length)); index++) {
             var sourceSlot = members[index];
@@ -1792,28 +2049,15 @@ internal sealed class WorldInstanceHost : IDisposable {
             var memberPrincipal = MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot);
 
             if (!TryDetachAndCaptureMember(source: source, sourceSlot: sourceSlot, sourceName: transfer.SourceInstance, actingPrincipal: memberPrincipal, profile: out var profile, position: out var position, yaw: out var yaw, dynamicState: out var dynamicState, designations: out var designations)) {
-                // Named refusal already printed inside — this member simply never departed, not an abort
-                // trigger by itself. The cohort re-verification above already refuses the whole transfer up
-                // front for a resolver-driven cohort missing a member, so this branch is reachable only for
-                // a non-resolver party transfer's own live-read race, which single-threaded sequential
-                // draining makes unreachable in practice — kept as defense in depth.
-                continue;
-            }
-
-            var forced = (transfer.TestForceJoinRefusalOrdinal == (index + 1));
-            var reply = (forced ? default : target!.Server.ApplySession(request: new SessionRequest.Join(Principal: memberPrincipal, Slot: reservedSlot, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)));
-            var accepted = (!forced && reply.Accepted);
-
-            if (!accepted) {
-                var refusalText = (forced ? "TEST-ONLY forced refusal (world.transfer ... forcejoinrefusal:<n>)" : reply.Reason);
-
-                abortReason = $"'{targetName}' seat {(reservedSlot + 1)} refused {memberPrincipal.Describe()}'s join ({refusalText})";
-                source.Server.Population.RestoreDetachedSeat(slot: sourceSlot, profile: profile, position: position, yawRadians: yaw, dynamicState: dynamicState, designations: designations);
-
+                abortReason = $"source member seat {(sourceSlot + 1)} could not detach after reservation";
                 break;
             }
 
             landed.Add(item: new LandedMember(SourceSlot: sourceSlot, TargetSlot: reservedSlot, Profile: profile, Position: position, Yaw: yaw, DynamicState: dynamicState, Designations: designations));
+            var arrivalPosition = position;
+            var arrivalYaw = yaw;
+            var arrivalPlanarVelocity = dynamicState.PlanarVelocity;
+            var arrivalVerticalVelocity = dynamicState.VerticalVelocity;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
             // (WorldPortalArrivalMath.ComputeArrival), then rotates the captured velocity the same way —
@@ -1846,17 +2090,38 @@ internal sealed class WorldInstanceHost : IDisposable {
                     destinationYawRadians: destinationFaceYawRadians
                 );
 
-                target!.Server.Population.ApplyMappedArrival(slot: reservedSlot, position: mapped.Position, yawRadians: mapped.YawRadians, planarVelocity: mapped.PlanarVelocity, verticalVelocity: mapped.VerticalVelocity);
+                arrivalPosition = mapped.Position;
+                arrivalYaw = mapped.YawRadians;
+                arrivalPlanarVelocity = mapped.PlanarVelocity;
+                arrivalVerticalVelocity = mapped.VerticalVelocity;
+            }
+
+            commitMembers.Add(item: new WorldTransferCommitMember(Profile: profile, HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped), Position: arrivalPosition, YawRadians: arrivalYaw, PlanarVelocity: arrivalPlanarVelocity, VerticalVelocity: arrivalVerticalVelocity));
+        }
+
+        if ((abortReason is null) && (transfer.TestForceJoinRefusalOrdinal is { } forcedOrdinal)) {
+            abortReason = $"TEST-ONLY forced refusal before escrow commit at member {forcedOrdinal} (world.transfer ... forcejoinrefusal:<n>)";
+        }
+
+        if (abortReason is null) {
+            try {
+                if (!targetAuthority.Commit(transferId: transfer.TransferId, members: commitMembers, reason: out var commitReason)) {
+                    abortReason = $"'{targetName}' refused reserved commit ({commitReason})";
+                }
+            } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+                // A sent commit with a lost acknowledgement remains destination-authority territory until the
+                // source-stated lease deadline. Never resurrect here; that would duplicate a body that committed.
+                abortReason = $"'{targetName}' commit acknowledgement was lost ({exception.Message}); source bodies remain detached until lease resolution";
+                landed.Clear();
             }
         }
 
         if (abortReason is not null) {
-            // ABORT: unwind every member THIS transfer already landed, in the destination, back to its exact
-            // captured source pose — no roster/router bookkeeping was ever applied for them (see the commit loop
-            // below; that bookkeeping only ever runs AFTER the whole transfer is known to have committed), so the
-            // only state to undo is the simulation-level detach/join pair itself.
+            if (landed.Count > 0) {
+                targetAuthority.Abort(transferId: transfer.TransferId);
+            }
+
             foreach (var member in landed) {
-                target!.Server.Population.TryDetachSeatForTransfer(slot: member.TargetSlot, profile: out _);
                 source.Server.Population.RestoreDetachedSeat(slot: member.SourceSlot, profile: member.Profile, position: member.Position, yawRadians: member.Yaw, dynamicState: member.DynamicState, designations: member.Designations);
             }
 
@@ -1878,7 +2143,9 @@ internal sealed class WorldInstanceHost : IDisposable {
         // bodies, not latches, so a per-member seed would outlive its own member. Commit-time seeding needs
         // no inverse operation to keep in sync with rollback.
         foreach (var member in landed) {
-            SeedArrivalOccupancy(instance: target!, seat: member.TargetSlot);
+            if (targetAuthority.Local is { } target) {
+                SeedArrivalOccupancy(instance: target, seat: member.TargetSlot);
+            }
         }
 
         // COMMIT: the whole cohort's join is certain, so the CLIENT-side state that mirrors and ROUTES a seat catches
@@ -1923,10 +2190,6 @@ internal sealed class WorldInstanceHost : IDisposable {
                 _ = m_roster.VacateSeat(slot: member.SourceSlot);
             }
 
-            if (member.Profile is not null) {
-                target!.Server.Population.SetSeatProfile(slot: member.TargetSlot, profile: member.Profile);
-            }
-
             // The mirror fact, for a traveler landing in the instance the client mirrors.
             if (!followed && string.Equals(a: targetName, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
                 _ = m_roster.OccupySeat(slot: member.TargetSlot, profile: member.Profile);
@@ -1936,7 +2199,9 @@ internal sealed class WorldInstanceHost : IDisposable {
             // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere is 1-based,
             // hence TargetSlot + 1) — so a caller reads the outcome here rather than inferring it from a later
             // world.instance.seats.
-            var arrival = target!.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (member.TargetSlot + 1)));
+            var arrival = (targetAuthority.Local is { } localTarget
+                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (member.TargetSlot + 1)))
+                : new QueryAnswer(Text: $"remote authority {targetAuthority.Remote!.Endpoint} body:{member.TargetSlot}"));
 
             Console.Out.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} '{transfer.SourceInstance}' seat {(member.SourceSlot + 1)} departed -> '{targetName}' seat {(member.TargetSlot + 1)} arrived{((member.Profile is not null) ? $" as {member.Profile.Id}" : " (anonymous)")} — {arrival.Text}]");
         }
@@ -1959,80 +2224,6 @@ internal sealed class WorldInstanceHost : IDisposable {
             : []);
 
         NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: targetName, outcome: $"committed:{landed.Count}/{members.Length}", departedBootSlots: departedBootSlots);
-    }
-
-    // Simulates assigning each member its own target slot — prefer the traveler's own slot number, else
-    // lowest free — run against a local `consumed` mask so no two members of this same transfer can ever be
-    // assigned the same slot, and pre-checks that member's destination Drive standing against the slot it
-    // would land on, all before any member detaches. A failure at either step refuses the whole transfer
-    // with nothing yet touched — no partial reservation to release, since nothing outside this method's own
-    // local `consumed` array was ever written. The capability-shaped version that reserves across an
-    // untrusted remote wire is not reproduced here.
-    private static bool TryReserveDestinationSeats(WorldInstance target, string targetName, WorldInstance source, int[] members, in PendingTransfer transfer, out int[] reservedSlots, out string reason) {
-        reservedSlots = new int[members.Length];
-
-        var consumed = new bool[WorldPopulation.LocalSeatCount];
-
-        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
-            consumed[slot] = target.Server.Population.IsActive(index: slot);
-        }
-
-        for (var index = 0; (index < members.Length); index++) {
-            var sourceSlot = members[index];
-
-            if (!source.Server.Population.IsActive(index: sourceSlot)) {
-                // A member no longer active contributes no reservation — it will be skipped individually at detach
-                // time (see ApplyTransfer's own defense-in-depth remarks); reserving a slot for a body that will
-                // never actually join would only waste destination capacity another member genuinely needs.
-                reservedSlots[index] = -1;
-
-                continue;
-            }
-
-            var principal = MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot);
-            var reservedSlot = PreferredOrLowestFreeSlot(consumed: consumed, principal: principal);
-
-            if (reservedSlot < 0) {
-                reason = $"'{targetName}' has no free local seat left to reserve for {principal.Describe()} ({index} of {members.Length} already reserved) — the whole transfer is held, no reservation leaked";
-
-                return false;
-            }
-
-            if (target.Server.Grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: reservedSlot)) is { IsAllowed: false } verdict) {
-                reason = $"{principal.Describe()} cannot join '{targetName}' seat {(reservedSlot + 1)} — {verdict.DescribeDenial()}";
-
-                return false;
-            }
-
-            consumed[reservedSlot] = true;
-            reservedSlots[index] = reservedSlot;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
-    // The destination slot a transfer lands on, computed against a local `consumed` mask (never live
-    // population state directly — see TryReserveDestinationSeats) rather than mutating anything. A
-    // Seat-kind acting principal is bound to its own slot number everywhere — WorldServer.ApplySession's
-    // Join case reads a seat's own Drive/body:slot grant as "this principal legitimately is this seat", so
-    // a Seat(3) principal can never join slot 0 under its own claim no matter how empty the destination is.
-    // A same-process transfer therefore prefers the traveler's own slot number when it is free there before
-    // falling back to the lowest free slot, which remains the right rule for a Console-kind principal, whose
-    // Drive/all wildcard carries no fixed slot identity to prefer.
-    private static int PreferredOrLowestFreeSlot(bool[] consumed, WorldPrincipal principal) {
-        if ((principal.Kind == PrincipalKind.Seat) && ((uint)principal.Index < WorldPopulation.LocalSeatCount) && !consumed[principal.Index]) {
-            return principal.Index;
-        }
-
-        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
-            if (!consumed[slot]) {
-                return slot;
-            }
-        }
-
-        return -1;
     }
 
     // The source's active local seats (0..LocalSeatCount-1), in slot order — a non-resolver `party` transfer's
@@ -2140,7 +2331,12 @@ internal sealed class WorldInstanceHost : IDisposable {
             instance.Dispose();
         }
 
+        foreach (var authority in m_remoteAuthorities.Values) {
+            authority.Dispose();
+        }
+
         m_instances.Clear();
+        m_remoteAuthorities.Clear();
     }
 
     // The directory every non-boot instance's store hangs under, separator-terminated so a prefix test is a containment

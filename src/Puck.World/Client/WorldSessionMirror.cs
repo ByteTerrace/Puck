@@ -10,7 +10,8 @@ namespace Puck.World.Client;
 /// "Observation and display" names, attached to a destination instance's <c>WorldServer</c> under an
 /// <see cref="Server.WorldServer.AttachSink"/> lease exactly like any other client. It is deliberately not
 /// <see cref="WorldClient"/>: that type also carries a <c>PlayerRoster</c>/seat table this observation-only mirror
-/// has no use for (nobody is seated in a destination through this seam), grants/machine/action state it never
+/// has no use for (the destination owns any arrived bodies; this observer owns no local seat table),
+/// grants/machine/action state it never
 /// decodes, and a correction-error easer this mirror does not reproduce — so it keeps only what a session screen's
 /// projection graph actually renders: the destination's live document (its static authored geometry) plus a bounded
 /// per-entity render-pose table (position, attitude, body color, and look index) for every active body the
@@ -32,11 +33,10 @@ namespace Puck.World.Client;
 /// destination's own fixed-step thread, and <see cref="WorldSnapshot.Entries"/> wraps a reused server-owned array
 /// (see <c>Server.WorldOutputHub</c>'s own remarks) that the destination's NEXT tick overwrites — every field this
 /// method keeps is copied into this mirror's own arrays before the call returns, never retained by reference.</para>
-/// <para>Single-threaded like every other <see cref="IClientSink"/>: the destination's own fixed-step thread is the
-/// only caller of <see cref="DeliverDefinition"/>/<see cref="DeliverSnapshot"/>, and the render thread that reads
-/// <see cref="Definition"/>/<see cref="DefinitionRevision"/> is the same thread that later calls
-/// <see cref="WorldSessionSceneEmitter.Emit"/>/<see cref="WorldSessionSceneEmitter.PackDynamicTransforms"/> against
-/// it inside one produced host frame — exactly the invariant <see cref="WorldClient"/> already relies on.</para>
+/// <para><b>Publication.</b> An embedded destination delivers on its fixed-step thread; a federated observer delivers
+/// on its socket task while the presentation thread reads this mirror. Definition and scalar clock/revision fields
+/// therefore publish through <see cref="Volatile"/>/<see cref="Interlocked"/>. Each entity record is copied before
+/// its active flag's release write; readers acquire that flag before consuming the copied pose fields.</para>
 /// </remarks>
 internal sealed class WorldSessionMirror : IClientSink {
     // The bounded per-entity table width — tied directly to the avatar catalog this mirror's poses are stamped
@@ -56,10 +56,13 @@ internal sealed class WorldSessionMirror : IClientSink {
 
     private WorldDefinition m_definition;
     private int m_definitionRevision;
+    private long m_tickBits;
+    private long m_stepTicksBits;
+    private int m_snapshotRevision;
     // The destination's own step duration in seconds, derived from the latest snapshot's StepTicks — the
     // presentation clock WorldSessionSceneEmitter normalizes real elapsed time against (see its own remarks on why
     // it cannot read a host alpha/delta for a session view).
-    private float m_stepSeconds;
+    private int m_stepSecondsBits;
     // A real (wall-clock) timestamp — Stopwatch.GetTimestamp() — captured the instant the CURRENT snapshot's poses
     // were copied in. Presentation-only, exactly like WorldClient's own render-pose interpolation is presentation
     // floats never fed back into simulation state (rule 4's carve-out): the destination's tick thread and the render
@@ -84,41 +87,41 @@ internal sealed class WorldSessionMirror : IClientSink {
 
     /// <summary>The destination's live world definition — the boot/attach definition until a later mutation batch or
     /// swap delivers a new one.</summary>
-    public WorldDefinition Definition => m_definition;
+    public WorldDefinition Definition => Volatile.Read(ref m_definition);
 
     /// <summary>The monotonic definition-delivery counter — bumped each time the destination delivers a new
     /// definition, the rebuild-watch component <see cref="WorldSessionSceneEmitter"/> reads.</summary>
-    public int DefinitionRevision => m_definitionRevision;
+    public int DefinitionRevision => Volatile.Read(ref m_definitionRevision);
 
     /// <summary>The destination's latest completed simulation tick — read-back (<c>world.faces</c>'s session echo)
     /// AND the presentation clock <see cref="WorldSessionSceneEmitter"/> resolves its render alpha against (via
     /// <see cref="StepSeconds"/>/<see cref="SnapshotArrivalTimestamp"/>).</summary>
-    public ulong Tick { get; private set; }
+    public ulong Tick => unchecked((ulong)Interlocked.Read(ref m_tickBits));
 
     /// <summary>The destination's own step width (engine ticks per its authored simulation step) at the latest
     /// delivered snapshot — the destination presentation clock docs/world-model.md's "Observation and display"
     /// names.</summary>
-    public ulong StepTicks { get; private set; }
+    public ulong StepTicks => unchecked((ulong)Interlocked.Read(ref m_stepTicksBits));
 
     /// <summary><see cref="StepTicks"/> converted to seconds — the denominator
     /// <see cref="WorldSessionSceneEmitter"/>'s self-derived render alpha divides real elapsed time by.</summary>
-    public float StepSeconds => m_stepSeconds;
+    public float StepSeconds => BitConverter.Int32BitsToSingle(Volatile.Read(ref m_stepSecondsBits));
 
     /// <summary>The wall-clock timestamp (<see cref="Stopwatch.GetTimestamp"/> units) the current snapshot's poses
     /// were copied in at — the "render call's arrival" baseline <see cref="WorldSessionSceneEmitter"/> measures
     /// elapsed real time against, since a session view supplies neither a host delta nor a host alpha (see that
     /// type's own remarks).</summary>
-    public long SnapshotArrivalTimestamp => m_snapshotArrivalTimestamp;
+    public long SnapshotArrivalTimestamp => Interlocked.Read(ref m_snapshotArrivalTimestamp);
 
     /// <summary>The declared-set/palette revision from the latest snapshot — a separate rebuild-watch component from
     /// <see cref="DefinitionRevision"/> (never summed with it: this one is assigned from the wire and can move down,
     /// exactly like <see cref="WorldClient.WriteRevision"/>'s own server-revision component, for the identical
     /// reason).</summary>
-    public int SnapshotRevision { get; private set; }
+    public int SnapshotRevision => Volatile.Read(ref m_snapshotRevision);
 
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public bool IsActive(int index) => m_active[index];
+    public bool IsActive(int index) => Volatile.Read(ref m_active[index]);
 
     /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -163,8 +166,8 @@ internal sealed class WorldSessionMirror : IClientSink {
     public void DeliverDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        m_definition = definition;
-        m_definitionRevision++;
+        Volatile.Write(ref m_definition, definition);
+        _ = Interlocked.Increment(ref m_definitionRevision);
     }
 
     /// <inheritdoc/>
@@ -188,7 +191,7 @@ internal sealed class WorldSessionMirror : IClientSink {
             m_bodyColor[index] = entry.BodyColor;
             m_look[index] = entry.Look;
 
-            if (!m_active[index] || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
+            if (!Volatile.Read(ref m_active[index]) || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
                 m_previousPosition[index] = entry.Position;
                 m_previousOrientation[index] = entry.Orientation;
             } else {
@@ -198,20 +201,23 @@ internal sealed class WorldSessionMirror : IClientSink {
 
             m_currentPosition[index] = entry.Position;
             m_currentOrientation[index] = entry.Orientation;
-            m_active[index] = true;
+            // The release write is the publication edge for every pose/color/look field above. A local instance
+            // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
+            // IsActive's acquire read makes the completed record visible before an emitter consumes it.
+            Volatile.Write(ref m_active[index], value: entry.Active);
         }
 
         for (var index = 0; (index < EntityCapacity); index++) {
             if (!m_seen[index]) {
-                m_active[index] = false;
+                Volatile.Write(ref m_active[index], value: false);
             }
         }
 
-        Tick = snapshot.Tick;
-        StepTicks = snapshot.StepTicks;
-        SnapshotRevision = snapshot.Revision;
-        m_stepSeconds = (float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks);
-        m_snapshotArrivalTimestamp = Stopwatch.GetTimestamp();
+        _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)snapshot.Tick));
+        _ = Interlocked.Exchange(location1: ref m_stepTicksBits, value: unchecked((long)snapshot.StepTicks));
+        Volatile.Write(location: ref m_snapshotRevision, value: snapshot.Revision);
+        Volatile.Write(location: ref m_stepSecondsBits, value: BitConverter.SingleToInt32Bits((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)));
+        _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
     }
 
     /// <inheritdoc/>

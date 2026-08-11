@@ -34,10 +34,10 @@ because changing APIs rebuilds the whole render host.
 
 **Networking.** `--listen <ip:port>` (or the document's `host.listen`) binds
 the P7 socket door (`Server/WorldTcpHost`) so a remote peer can join the same
-ordered domain a local script drives; `--connect <ip:port>` skips the whole
-normal composition in favor of a minimal stdin/socket client
-(`WorldRemoteClient.cs`) — the two are never combined in one process. Both are
-zero by default (loopback-only, no socket ever opens). A connection now
+ordered domain a local script drives; `--connect <ip:port>` keeps the normal
+world/presentation composition while its local seats are authorized and driven
+by that remote authority. Listening and connecting remain separate boot modes.
+Both are zero by default (no socket ever opens). A connection
 crosses TWO doors before either side sees a submission: `WorldHelloDoor`
 (protocol-version compatibility) and, once that passes, `WorldAdmissionDoor`
 (`Puck.World.Data`'s `Protocol/WorldAdmissionDoor.cs`) — a challenge-response

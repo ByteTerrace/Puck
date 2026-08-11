@@ -993,7 +993,8 @@
     "rayQuery": true,
     "timing": false,
     "genlock": null,
-    "listen": null
+    "listen": null,
+    "authority": null
   },
   "views": {
     "seatRig": {
@@ -1022,23 +1023,7 @@
       },
       "smoothRate": 6
     },
-    "layouts": [
-      {
-        "name": "verify-seam",
-        "seatCount": 0,
-        "transitionSeconds": 0.05,
-        "transitionRenderScale": 1,
-        "slots": [
-          {
-            "x": 0,
-            "y": 0,
-            "width": 1,
-            "height": 1,
-            "camera": "verify-seam-ne"
-          }
-        ]
-      }
-    ]
+    "layouts": []
   },
   "looks": [],
   "lookAssignment": {
@@ -1125,7 +1110,10 @@
   ],
   "portals": {
     "portalDefaults": {
-      "travel": "party"
+      "travel": "party",
+      "holdSeconds": 2,
+      "full": "retry",
+      "partyAllOrNothing": true
     }
   },
   "destinations": [

@@ -1,0 +1,8 @@
+world.console off
+world.wait 15
+world.screenshot {run}/before.png
+world.wait 30
+world.wait 30
+world.screenshot {run}/after.png
+world.wait 30
+wire.errors

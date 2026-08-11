@@ -3461,6 +3461,9 @@ public enum WorldHostPresentation : byte {
 /// unification contract — the <c>--listen</c> CLI flag reflects it for a single run without editing the document.
 /// Shape-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldTcpHost</c> is what actually
 /// parses and binds it.</param>
+/// <param name="Authority">The TCP endpoint at which this world's authority is reached when another world resolves
+/// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
+/// short-circuits the authority transport; it does not select a separate transfer path.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend,
@@ -3475,6 +3478,7 @@ public sealed record WorldHostDefaults(
     bool Timing,
     string? Genlock,
     string? Listen,
+    string? Authority = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (WorldPopulationDefaults.CapacityDraw's site cannot do this — see its own remarks.)
@@ -3496,7 +3500,8 @@ public sealed record WorldHostDefaults(
         RayQuery: true,
         Timing: false,
         Genlock: null,
-        Listen: null
+        Listen: null,
+        Authority: null
     );
 }
 

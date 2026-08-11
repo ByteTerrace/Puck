@@ -1369,7 +1369,8 @@
     "rayQuery": true,
     "timing": false,
     "genlock": null,
-    "listen": null
+    "listen": null,
+    "authority": null
   },
   "views": {
     "seatRig": {
@@ -1475,7 +1476,10 @@
   ],
   "portals": {
     "portalDefaults": {
-      "travel": "party"
+      "travel": "party",
+      "holdSeconds": 2,
+      "full": "retry",
+      "partyAllOrNothing": true
     }
   },
   "simulation": {

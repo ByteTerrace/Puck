@@ -50,9 +50,10 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
         ((($"backend={((host.BackendDraw is not null) ? "<draw>" : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} " +
         $"surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
-        $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)}");
+        $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");
     private static string Bool(bool value) => (value ? "true" : "false");
     private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);
     private static string Genlock(string? value) => (value ?? "(none)");
+    private static string Endpoint(string? value) => (value ?? "(local)");
     private static string PresentModeToken(PresentMode mode) => mode.ToString().ToLowerInvariant();
 }

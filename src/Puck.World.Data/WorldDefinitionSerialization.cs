@@ -1129,10 +1129,13 @@ public static class WorldDefinitionSerialization {
 
             definition = WorldDefinitionMigrations.Apply(definition: definition);
 
-            // No neighbour resolver: a rehydrated replay/embedded document is re-validated against ITSELF only — the
-            // tape already carries whatever cross-document proof its own boot established, and this path has no
-            // storage context to reach a neighbour with even if it wanted to.
-            WorldDefinitionValidator.Validate(definition: definition, neighbours: null);
+            // An embedded document already crossed a boundary that proved its cross-document claims (a boot load,
+            // replay recording, identity issue, or authority projection). This storage-free rehydration cannot
+            // reproduce that proof, so it validates every fact owned by the document while retaining the authored
+            // claim. Live file loads remain the boundary that must resolve and prove the neighbour.
+            if (!WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason)) {
+                throw new InvalidOperationException(message: reason);
+            }
 
             return definition;
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {

@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
+using Puck.SdfVm.Queries;
 using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
@@ -10,13 +11,14 @@ namespace Puck.World.Client;
 /// <summary>
 /// Traveler-follow stage 1's away-render content: <see cref="WorldSessionSceneEmitter"/>'s composition (static
 /// placement geometry + mirrored avatars, over the identical <see cref="WorldSessionMirror"/> shape) with one
-/// difference — the camera resolves through the destination's own native seat-camera path
-/// (<see cref="WorldSeatCameraResolver"/>) against the tracked entity's interpolated pose, instead of a named/
-/// default camera row, so the image frames the destination exactly as one of its own local seats would.
+/// difference — its seat view follows the arrived body's interpolated destination pose. Authored named-camera and
+/// layout overrides compose exactly as they do at a direct boot; an ordinary seat slot resolves through the
+/// destination's native <see cref="WorldSeatCameraResolver"/> path.
 /// </summary>
 /// <remarks>
 /// <para><b>The camera.</b> Resolves the destination's own authored <c>views.seatRig</c> (<see cref="WorldCameraRig"/>)
-/// and <c>playerDefaults.seatLook</c> (<see cref="WorldSeatLook"/>) via <see cref="WorldSeatCameraResolver"/> — the
+/// and <c>playerDefaults.seatLook</c> (<see cref="WorldSeatLook"/>) via <see cref="WorldSeatCameraResolver"/> for an
+/// ordinary seat view — the
 /// same shared path <c>WorldFrameSource.ResolveCamera</c> uses for a local boot seat, and the same rig-structure
 /// half <see cref="WorldSeatCameraResolver.ResolveSeatLook"/> names — composing the tracked
 /// follower's own live orbit-drag offset (<see cref="WorldCameraOrbit"/>, keyed by that follower's local seat slot,
@@ -39,16 +41,23 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
     private readonly WorldSessionMirror m_mirror;
     private readonly WorldCameraOrbit m_cameraOrbit;
     private readonly Func<TrackedTarget> m_trackedTarget;
+    private readonly Func<string?> m_layoutOverride;
     private readonly Func<string?> m_cameraOverride;
+    private readonly WorldBorderMarginSceneEmitter? m_borderMargin;
+    private readonly WorldViewComposer m_composer = new();
+    private readonly List<SdfViewSnapshot> m_views = new();
     private readonly WorldSeatCameraResolver.LiveOrbitCache m_orbitCache = new();
     private readonly WorldSeatCameraResolver.SmoothingState m_smoothState = new();
     private ISdfCameraRig? m_chaseRig;
     private int m_chaseRigDefinitionRevision = int.MinValue;
+    private SdfFieldEvaluator? m_cameraClearanceField;
+    private int m_cameraClearanceDefinitionRevision = int.MinValue;
     private float m_elapsedSeconds;
     private SdfProgram? m_lastProgram;
     private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldAvatarCatalog.Capacity];
+    private bool m_missingTrackedTargetNarrated;
 
     /// <summary>Initializes the emitter over a resolved away-instance mirror, the shared live-orbit accumulator, and
     /// a live tracked-entity resolver.</summary>
@@ -60,18 +69,24 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
     /// <param name="trackedTarget">Resolves this call's tracked entity — a delegate, not a fixed value, because
     /// <see cref="WorldAwaySeatViews"/> may re-point a shared tracked instance to a different follower's own slot as
     /// seats arrive/depart it.</param>
-    /// <param name="cameraOverride">Resolves the live composition camera override. An away view consumes the same
-    /// override as the boot frame so crossing cannot freeze the visible camera on the native chase rig.</param>
-    public AwaySeatSceneEmitter(WorldSessionMirror mirror, WorldCameraOrbit cameraOrbit, Func<TrackedTarget> trackedTarget, Func<string?> cameraOverride) {
+    /// <param name="layoutOverride">Resolves the live composition layout override.</param>
+    /// <param name="cameraOverride">Resolves the live composition camera override. Away composition consumes the
+    /// same overrides as a direct boot in the destination.</param>
+    /// <param name="borderMargin">The destination's live stitched-border renderer, when it has one, so camera
+    /// clearance evaluates the same neighbour geometry the offscreen composition shows.</param>
+    public AwaySeatSceneEmitter(WorldSessionMirror mirror, WorldCameraOrbit cameraOrbit, Func<TrackedTarget> trackedTarget, Func<string?> layoutOverride, Func<string?> cameraOverride, WorldBorderMarginSceneEmitter? borderMargin = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: cameraOrbit);
         ArgumentNullException.ThrowIfNull(argument: trackedTarget);
+        ArgumentNullException.ThrowIfNull(argument: layoutOverride);
         ArgumentNullException.ThrowIfNull(argument: cameraOverride);
 
         m_mirror = mirror;
         m_cameraOrbit = cameraOrbit;
         m_trackedTarget = trackedTarget;
+        m_layoutOverride = layoutOverride;
         m_cameraOverride = cameraOverride;
+        m_borderMargin = borderMargin;
     }
 
     /// <inheritdoc/>
@@ -209,14 +224,64 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
         var programChanged = !ReferenceEquals(objA: program, objB: m_lastProgram);
 
         m_lastProgram = program;
+        if (programChanged) {
+            // A margin-neighbour revision rebuilds the composed program without changing the destination definition.
+            m_cameraClearanceDefinitionRevision = int.MinValue;
+        }
         m_elapsedSeconds += deltaSeconds;
 
-        var camera = (ResolveOverrideCamera(width: width, height: height) ?? ResolveChaseCamera(width: width, height: height, deltaSeconds: deltaSeconds));
+        var definition = m_mirror.Definition;
+
+        m_composer.Compose(
+            joinedCount: 1,
+            soleEditorIndex: -1,
+            workbenchFraction: definition.Authoring.WorkbenchFraction,
+            views: definition.Views,
+            layoutOverride: m_layoutOverride(),
+            cameraOverride: m_cameraOverride(),
+            elapsedSeconds: m_elapsedSeconds
+        );
+
+        m_views.Clear();
+
+        foreach (var composed in m_composer.Slots) {
+            var region = composed.Region;
+
+            if (composed.Camera is { } cameraName) {
+                if (TryResolveComposedCamera(name: cameraName, region: region, width: width, height: height, camera: out var camera)) {
+                    m_views.Add(item: new SdfViewSnapshot(Camera: camera, Region: region) {
+                        RenderScale = m_composer.CurrentRenderScale,
+                    });
+                }
+
+                continue;
+            }
+
+            if (composed.SeatOrder == 0) {
+                m_views.Add(item: new SdfViewSnapshot(
+                    Camera: ResolveChaseCamera(
+                        width: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
+                        height: Math.Max(val1: 1u, val2: (uint)(region.Height * height)),
+                        deltaSeconds: deltaSeconds
+                    ),
+                    Region: region
+                ) {
+                    RenderScale = m_composer.CurrentRenderScale,
+                });
+            }
+        }
+
+        if (m_views.Count == 0) {
+            m_views.Add(item: new SdfViewSnapshot(
+                Camera: ResolveChaseCamera(width: width, height: height, deltaSeconds: deltaSeconds),
+                Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f)
+            ));
+        }
 
         return new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
-            Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f))],
+            Views: m_views,
             Time: 0f,
             WarpAmount: 0f
         ) {
@@ -229,53 +294,53 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
         };
     }
 
-    // The global view.override camera lane, resolved against the FOLLOWED instance's own live definition. Before
-    // this seam the command state kept changing after a crossing while the pixels came from this emitter's chase
-    // camera forever. A name absent from this destination falls back to the ordinary chase rather than freezing a
-    // stale row from the previous world.
-    private CameraSnapshot? ResolveOverrideCamera(uint width, uint height) {
-        if (m_cameraOverride() is not { } wanted) {
-            return null;
-        }
-
+    private bool TryResolveComposedCamera(string name, NormalizedRect region, uint width, uint height, out CameraSnapshot camera) {
+        camera = default;
         var definition = m_mirror.Definition;
         WorldCamera? found = null;
 
-        foreach (var camera in definition.Cameras) {
-            if (string.Equals(a: camera.Name, b: wanted, comparisonType: StringComparison.Ordinal)) {
-                found = camera;
+        foreach (var row in definition.Cameras) {
+            if (string.Equals(a: row.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                found = row;
 
                 break;
             }
         }
 
-        if (found is not { } row) {
-            return null;
+        if (found is not { } cameraRow) {
+            return false;
         }
 
-        var (position, orientation) = ResolveOverrideAnchor(definition: definition, anchor: row.Anchor);
-        var rig = WorldCameraRigCompiler.Compile(rig: row.Rig);
+        var (position, orientation) = ResolveComposedAnchor(definition: definition, anchor: cameraRow.Anchor);
+        var rig = WorldCameraRigCompiler.Compile(rig: cameraRow.Rig);
         var anchor = new SdfAnchor(Position: position, Orientation: orientation);
         var clock = new SdfCameraClock(PresentationSeconds: m_elapsedSeconds, AuthoritativeTick: m_mirror.Tick);
         var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, clock: in clock);
-
-        return CameraSnapshot.LookAt(
+        camera = CameraSnapshot.LookAt(
             position: eye,
             target: target,
             fieldOfViewRadians: fieldOfView,
-            viewportWidth: Math.Max(val1: 1u, val2: width),
-            viewportHeight: Math.Max(val1: 1u, val2: height)
+            viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
+            viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
+
+        return true;
     }
 
-    private (Vector3 Position, Quaternion Orientation) ResolveOverrideAnchor(WorldDefinition definition, WorldAnchor? anchor) {
+    private (Vector3 Position, Quaternion Orientation) ResolveComposedAnchor(WorldDefinition definition, WorldAnchor? anchor) {
         switch (anchor) {
-            case WorldAnchor.Entity entity when ((uint)entity.Index < WorldAvatarCatalog.Capacity) && m_mirror.IsActive(index: entity.Index): {
+            case WorldAnchor.Entity: {
+                    var tracked = m_trackedTarget();
+
+                    if (((uint)tracked.InstanceSlot >= WorldAvatarCatalog.Capacity) || !m_mirror.IsActive(index: tracked.InstanceSlot)) {
+                        return (Vector3.Zero, Quaternion.Identity);
+                    }
+
                     var alpha = ResolveInterpolationAlpha();
 
                     return (
-                        Vector3.Lerp(value1: m_mirror.PreviousPosition(index: entity.Index), value2: m_mirror.CurrentPosition(index: entity.Index), amount: alpha),
-                        Quaternion.Lerp(quaternion1: m_mirror.PreviousOrientation(index: entity.Index), quaternion2: m_mirror.CurrentOrientation(index: entity.Index), amount: alpha)
+                        Vector3.Lerp(value1: m_mirror.PreviousPosition(index: tracked.InstanceSlot), value2: m_mirror.CurrentPosition(index: tracked.InstanceSlot), amount: alpha),
+                        Quaternion.Lerp(quaternion1: m_mirror.PreviousOrientation(index: tracked.InstanceSlot), quaternion2: m_mirror.CurrentOrientation(index: tracked.InstanceSlot), amount: alpha)
                     );
                 }
             case WorldAnchor.Placement placement:
@@ -304,8 +369,14 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
         var tracked = m_trackedTarget();
 
         if (((uint)tracked.InstanceSlot >= WorldAvatarCatalog.Capacity) || !m_mirror.IsActive(index: tracked.InstanceSlot)) {
+            if (!m_missingTrackedTargetNarrated) {
+                m_missingTrackedTargetNarrated = true;
+                Console.Error.WriteLine(value: $"[world.projection: tracked body {tracked.InstanceSlot} for local seat {(tracked.LocalSlot + 1)} is absent from snapshot tick {m_mirror.Tick}; using overview until it arrives]");
+            }
             return ResolveOverviewCamera(width: width, height: height);
         }
+
+        m_missingTrackedTargetNarrated = false;
 
         var alpha = ResolveInterpolationAlpha();
         var position = Vector3.Lerp(value1: m_mirror.PreviousPosition(index: tracked.InstanceSlot), value2: m_mirror.CurrentPosition(index: tracked.InstanceSlot), amount: alpha);
@@ -333,6 +404,8 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
         var (eye, target, fieldOfView) = chase.Resolve(anchor: in anchor, clock: in clock);
 
         WorldSeatCameraResolver.Smooth(state: m_smoothState, smoothRate: authoredRig.SmoothRate, isPlainChase: true, deltaSeconds: deltaSeconds, eye: ref eye, target: ref target);
+        EnsureCameraClearanceField();
+        eye = WorldCameraClearance.Resolve(field: m_cameraClearanceField, desiredEye: eye, target: target);
 
         return CameraSnapshot.LookAt(
             position: eye,
@@ -341,6 +414,30 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
             viewportWidth: Math.Max(val1: 1u, val2: width),
             viewportHeight: Math.Max(val1: 1u, val2: height)
         );
+    }
+
+    private void EnsureCameraClearanceField() {
+        var revision = m_mirror.DefinitionRevision;
+
+        if (revision == m_cameraClearanceDefinitionRevision) {
+            return;
+        }
+
+        m_cameraClearanceDefinitionRevision = revision;
+        m_cameraClearanceField = null;
+
+        try {
+            var definition = m_mirror.Definition;
+            var builder = new SdfProgramBuilder();
+
+            WorldPlacementStamper.EmitStatic(builder: builder, creations: definition.Creations, placements: definition.Placements);
+            EmitScreens(builder: builder, definition: definition);
+            m_borderMargin?.EmitCurrent(builder: builder);
+            m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        } catch (ArgumentException) {
+            // Some authored render-only operations intentionally sit outside the deterministic query evaluator. Such
+            // a world keeps its exact authored eye; supported worlds still receive the clearance correction above.
+        }
     }
 
     // The spawn-centroid overview — the same construction WorldSessionSceneEmitter.ResolveOverviewCamera uses.

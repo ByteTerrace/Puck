@@ -24,9 +24,11 @@ namespace Puck.World.Client;
 /// camera would need a dynamic-transform slot, per-seat aspect-matched resizing, and careful capacity accounting
 /// for a payoff (a wall-mounted TV) this stage does not need: since nothing else ever points a camera at these
 /// four reserved quads (an ordinary seat's chase camera never wanders into the parked band below), a fixed
-/// quad-and-camera pair, oversized so the quad fills frame at any aspect with wide margin, is exact for this
-/// purpose and needs no per-frame geometry update at all — pure static content, exactly like <c>HiddenAvatar</c>'s
-/// own parking convention.</para>
+/// quad-and-camera pair is exact for this purpose and needs no per-frame geometry update at all — pure static
+/// content, exactly like <c>HiddenAvatar</c>'s own parking convention. The periscope deliberately uses a square
+/// camera frustum fitted to the square slab. The source image is mapped across that square and the destination
+/// viewport raster then stretches the square back to its own aspect, preserving the source image's composition
+/// without cropping it.</para>
 /// </remarks>
 internal static class WorldAwaySeatQuad {
     /// <summary>The first reserved screen index — the top <see cref="Count"/> of <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>.
@@ -42,9 +44,8 @@ internal static class WorldAwaySeatQuad {
     // instance grid / far-bound tuning assume ordinary scene scale), unlike a parked AVATAR instance, which only
     // needs to be unseen, never itself the origin of a march. A modest offset from the play area's own origin (well
     // past any seat's ordinary wander radius, but still inside normal scale) keeps the periscope's own march sane.
-    private const float ParkY = 2f;
+    private const float ParkY = 24f;
     private const float ParkBase = 200f;
-    private const float CameraDistance = 3f;
     private const float HalfExtent = 8f;
     private const float FieldOfViewRadians = (MathF.PI * (70f / 180f));
 
@@ -82,19 +83,20 @@ internal static class WorldAwaySeatQuad {
             .ResetPoint();
     }
 
-    /// <summary>The fixed camera pose that frames seat <paramref name="slot"/>'s own reserved quad edge-to-edge —
-    /// close and wide enough that the oversized quad fills the frame at any viewport aspect this stage's layouts
-    /// produce, with no per-frame repositioning.</summary>
+    /// <summary>The fixed camera pose that frames seat <paramref name="slot"/>'s own reserved quad edge-to-edge.
+    /// Its square aspect is intentional: the screen source is first mapped over the square slab, then the actual
+    /// output viewport restores the source texture's aspect while rasterizing the composed view.</summary>
     internal static CameraSnapshot PeriscopeCamera(int slot, uint width, uint height) {
         var origin = Origin(slot: slot);
-        var eye = (origin + (Normal * CameraDistance));
+        var distance = (HalfExtent / MathF.Tan(FieldOfViewRadians * 0.5f));
+        var eye = (origin + (Normal * distance));
 
         return CameraSnapshot.LookAt(
             position: eye,
             target: origin,
             fieldOfViewRadians: FieldOfViewRadians,
-            viewportWidth: Math.Max(val1: 1u, val2: width),
-            viewportHeight: Math.Max(val1: 1u, val2: height)
+            viewportWidth: 1u,
+            viewportHeight: 1u
         );
     }
 }

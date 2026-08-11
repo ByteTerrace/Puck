@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The remote socket's raw byte grammar — shared by <see cref="WorldTcpHost"/> (the server door) and the <c>--connect</c>
-/// client harness (<c>Puck.World.WorldRemoteClient</c>), so both sides frame bytes identically without a second
+/// peer clients, so both sides frame bytes identically without a second
 /// definition drifting from the first. Two directions:
 /// <list type="bullet">
 /// <item><description><b>Upstream</b> (client → server, after Hello): the existing <see cref="WorldFrameCodec"/>

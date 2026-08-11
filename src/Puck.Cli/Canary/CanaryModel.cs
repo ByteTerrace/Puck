@@ -47,6 +47,8 @@ internal sealed record CanaryManifest(
 
 internal sealed record CanaryLeg(
     IReadOnlyList<CanaryAssertion> Assertions,
+    string? AuthorityWorldPath,
+    bool Connect,
     IReadOnlyList<CanaryCommandClaim> Commands,
     string Name,
     string ScriptPath,
@@ -88,6 +90,13 @@ internal sealed record CanaryRelationAssertion(
     string Name,
     CanaryRelationOperator Operator,
     CanaryOperand? Right
+) : CanaryAssertion(Name: Name);
+
+internal sealed record CanaryFileDifferenceAssertion(
+    string After,
+    string Before,
+    bool Different,
+    string Name
 ) : CanaryAssertion(Name: Name);
 
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);

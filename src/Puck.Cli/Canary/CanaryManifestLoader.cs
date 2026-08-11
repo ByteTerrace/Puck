@@ -170,16 +170,36 @@ internal static class CanaryManifestLoader {
     private static CanaryLeg ReadLeg(JsonElement element, string id, string name, string repositoryRoot, string canaryDirectory) {
         var context = $"canary '{id}' {name} leg";
 
-        RequireOnlyMembers(element: element, context: context, "commands", "expect", "script", "world");
+        RequireOnlyMembers(element: element, context: context, "authorityWorld", "commands", "connect", "expect", "script", "world");
 
         var worldText = ReadRequiredString(element: element, member: "world", context: context);
         var scriptText = ReadRequiredString(element: element, member: "script", context: context);
         var worldPath = ResolveFile(rawPath: worldText, basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{context} world");
         var scriptPath = ResolveFile(rawPath: scriptText, basePath: canaryDirectory, containmentRoot: repositoryRoot, context: $"{context} script");
+        string? authorityWorldPath = null;
+        var connect = false;
+
+        if (element.TryGetProperty(propertyName: "authorityWorld", value: out var authorityElement)) {
+            if ((authorityElement.ValueKind != JsonValueKind.String) || string.IsNullOrWhiteSpace(value: authorityElement.GetString())) {
+                throw new CanaryManifestRefusal(message: $"{context} authorityWorld must be a non-empty path string.");
+            }
+
+            authorityWorldPath = ResolveFile(rawPath: authorityElement.GetString()!, basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{context} authorityWorld");
+        }
+        if (element.TryGetProperty(propertyName: "connect", value: out var connectElement)) {
+            connect = connectElement.ValueKind switch {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new CanaryManifestRefusal(message: $"{context} connect must be true or false."),
+            };
+        }
+        if (connect && (authorityWorldPath is null)) {
+            throw new CanaryManifestRefusal(message: $"{context} connect requires authorityWorld so the runner owns the endpoint it dials.");
+        }
         var commands = ReadCommands(element: element, context: context, scriptPath: scriptPath);
         var assertions = ReadAssertions(element: element, context: context);
 
-        return new CanaryLeg(Assertions: assertions, Commands: commands, Name: name, ScriptPath: scriptPath, WorldPath: worldPath);
+        return new CanaryLeg(Assertions: assertions, AuthorityWorldPath: authorityWorldPath, Connect: connect, Commands: commands, Name: name, ScriptPath: scriptPath, WorldPath: worldPath);
     }
 
     private static IReadOnlyList<CanaryCommandClaim> ReadCommands(JsonElement element, string context, string scriptPath) {
@@ -285,7 +305,8 @@ internal static class CanaryManifestLoader {
                 "response" => ReadResponseAssertion(element: row, context: $"{context} expect[{index}]", values: values),
                 "sequence" => ReadSequenceAssertion(element: row, context: $"{context} expect[{index}]"),
                 "relation" => ReadRelationAssertion(element: row, context: $"{context} expect[{index}]", values: values),
-                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', or 'relation' (casing is significant)."),
+                "filesDiffer" => ReadFileDifferenceAssertion(element: row, context: $"{context} expect[{index}]"),
+                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', 'relation', or 'filesDiffer' (casing is significant)."),
             };
 
             if (!names.Add(item: assertion.Name)) {
@@ -308,6 +329,39 @@ internal static class CanaryManifestLoader {
         }
 
         return assertions;
+    }
+
+    private static CanaryFileDifferenceAssertion ReadFileDifferenceAssertion(JsonElement element, string context) {
+        RequireOnlyMembers(element: element, context: context, "after", "before", "different", "name", "type");
+
+        var name = ReadRequiredString(element: element, member: "name", context: context);
+        var before = ReadRunRelativePath(element: element, member: "before", context: context);
+        var after = ReadRunRelativePath(element: element, member: "after", context: context);
+        var different = true;
+
+        if (element.TryGetProperty(propertyName: "different", value: out var differentElement)) {
+            different = differentElement.ValueKind switch {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new CanaryManifestRefusal(message: $"{context} different must be true or false."),
+            };
+        }
+
+        if (string.Equals(a: before, b: after, comparisonType: StringComparison.Ordinal)) {
+            throw new CanaryManifestRefusal(message: $"{context} before and after must name two distinct files.");
+        }
+
+        return new CanaryFileDifferenceAssertion(After: after, Before: before, Different: different, Name: name);
+    }
+
+    private static string ReadRunRelativePath(JsonElement element, string member, string context) {
+        var value = ReadRequiredString(element: element, member: member, context: context);
+
+        if (Path.IsPathRooted(path: value) || ContainsParentSegment(path: value) || value.Contains(value: '{') || value.Contains(value: '}')) {
+            throw new CanaryManifestRefusal(message: $"{context} {member} '{value}' must be a run-directory-relative path without parent segments or tokens.");
+        }
+
+        return value;
     }
 
     private static CanaryLineAssertion ReadLineAssertion(JsonElement element, string context) {

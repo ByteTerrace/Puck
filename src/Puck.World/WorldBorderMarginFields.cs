@@ -54,11 +54,11 @@ internal sealed class WorldBorderMarginFields : IWorldBorderMarginSource, IDispo
         var key = (placementId, faceName);
         var depth = FixedQ4816.FromDouble(value: authoredDepth);
 
-        if (!m_instances.TryResolveObservedDestination(source: source, destinationName: portal.Destination, target: out var target, resolved: out var resolved, reason: out _) || (target is null)) {
+        if (!m_instances.TryResolveObservedProjection(source: source, destinationName: portal.Destination, instanceName: out var observedInstanceName, generationId: out var observedGenerationId, definition: out var observedDefinition, attach: out var attach, reason: out _) || (observedDefinition is null) || (attach is null)) {
             return false;
         }
 
-        var identity = new HandleIdentity(Destination: portal.Destination, InstanceName: resolved.InstanceName, GenerationId: resolved.GenerationId, Counterpart: portal.Counterpart, Depth: depth);
+        var identity = new HandleIdentity(Destination: portal.Destination, InstanceName: observedInstanceName, GenerationId: observedGenerationId, Counterpart: portal.Counterpart, Depth: depth);
 
         if (m_handles.TryGetValue(key: key, value: out var handle) && (handle.Identity != identity)) {
             handle.Dispose();
@@ -68,8 +68,8 @@ internal sealed class WorldBorderMarginFields : IWorldBorderMarginSource, IDispo
 
         if (handle is null) {
 
-            var mirror = new WorldSessionMirror(placeholder: target.Server.Definition);
-            var lease = target.Server.AttachSink(sink: mirror);
+            var mirror = new WorldSessionMirror(placeholder: observedDefinition);
+            var lease = attach(mirror);
 
             handle = new Handle(identity: identity, mirror: mirror, lease: lease, sourceDescription: $"{m_sourceInstanceName}/{placementId}/{faceName}");
             m_handles[key] = handle;

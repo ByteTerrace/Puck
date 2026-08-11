@@ -348,6 +348,17 @@ public sealed class MarginStripValidationLawTests {
     }
 
     [Fact]
+    public void ProvenMarginDocument_RoundTripsThroughEmbeddedWireWithoutStorageResolver() {
+        var definition = BuildBorderDocument(marginDepth: 2f);
+        var resolver = new StubNeighbourResolver(resolve: static _ => WorldNeighbourResolution.Resolved(definition: BuildBorderDocument(marginDepth: 2f)));
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, reason: out var reason, neighbours: resolver), userMessage: reason);
+
+        var roundTripped = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
+
+        Assert.Equal(expected: 2f, actual: roundTripped.Placements[0].FaceSources![0].Portal!.MarginDepth);
+    }
+
+    [Fact]
     public void RebuildProvesTheNeighbourBeforeEnqueue_AndDoesNotReadItFromStep() {
         using var fixture = Fixtures.FreshServer(definition: BuildBorderDocument(marginDepth: null));
         var resolver = new StubNeighbourResolver(resolve: static _ => WorldNeighbourResolution.Resolved(definition: BuildBorderDocument(marginDepth: 2f)));

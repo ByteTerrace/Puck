@@ -107,6 +107,14 @@ internal sealed class WorldBorderMarginSceneEmitter : ISdfSceneEmitter {
             return;
         }
 
+        EmitCurrent(builder: builder);
+    }
+
+    /// <summary>Emits the currently reachable live margin geometry without the capacity-probe branch. Camera
+    /// clearance uses this to evaluate the same static strip the renderer composes.</summary>
+    internal void EmitCurrent(SdfProgramBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
         var definition = m_definition();
 
         foreach (var band in WorldBorderMarginBands.CollectFrom(definition: definition)) {
