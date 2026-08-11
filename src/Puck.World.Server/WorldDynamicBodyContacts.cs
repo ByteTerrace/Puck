@@ -6,6 +6,22 @@ namespace Puck.World.Server;
 internal static class WorldDynamicBodyContacts {
     private static readonly FixedQ4816 s_two = FixedQ4816.FromInteger(value: 2L);
 
+    /// <summary>A rotation-independent sphere enclosing every volume in a compiled collider. The local solver uses
+    /// it only to reject impossible pairs before narrow phase; conservative excess work is safe, a false negative is
+    /// not.</summary>
+    public static FixedQ4816 BroadphaseRadius(in FixedWorldCollider collider) {
+        var radius = FixedQ4816.Zero;
+        foreach (ref readonly var volume in collider.Volumes.AsSpan()) {
+            var extent = volume.Kind switch {
+                FixedBodyColliderKind.Sphere => (volume.Center.Length + volume.Radius),
+                FixedBodyColliderKind.Capsule => (FixedQ4816.Max(x: volume.Center.Length, y: volume.Endpoint.Length) + volume.Radius),
+                _ => (volume.Center.Length + volume.HalfExtents.Length),
+            };
+            radius = FixedQ4816.Max(x: radius, y: extent);
+        }
+        return radius;
+    }
+
     public static bool TryCorrection(
         FixedVector3 leftPosition,
         FixedQuaternion leftOrientation,

@@ -71,6 +71,7 @@ internal sealed class WorldSessionMirror : IClientSink {
 
     private WorldDefinition m_definition;
     private FixedWorldCollider?[] m_kitColliders;
+    private WorldBodyContactMode[] m_kitBodyContacts;
     private string m_authority = string.Empty;
     private int m_definitionRevision;
     private long m_tickBits;
@@ -100,6 +101,7 @@ internal sealed class WorldSessionMirror : IClientSink {
 
         m_definition = placeholder;
         m_kitColliders = CompileColliders(definition: placeholder);
+        m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -204,6 +206,12 @@ internal sealed class WorldSessionMirror : IClientSink {
         return ((kit < colliders.Length) ? colliders[kit] : null);
     }
 
+    public WorldBodyContactMode BodyContact(int index) {
+        var contacts = Volatile.Read(ref m_kitBodyContacts);
+        var kit = m_kit[index];
+        return ((kit < contacts.Length) ? contacts[kit] : WorldBodyContactMode.Overlap);
+    }
+
     /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
     /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
     /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
@@ -242,6 +250,7 @@ internal sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         Volatile.Write(ref m_kitColliders, CompileColliders(definition: definition));
+        Volatile.Write(ref m_kitBodyContacts, CompileBodyContacts(definition: definition));
         Volatile.Write(ref m_definition, definition);
         _ = Interlocked.Increment(ref m_definitionRevision);
     }
@@ -341,6 +350,7 @@ internal sealed class WorldSessionMirror : IClientSink {
         WorldLook[] looks,
         byte[] catalogRigs,
         FixedWorldCollider?[] colliders,
+        WorldBodyContactMode[] bodyContacts,
         out ulong tick,
         out int revision,
         out float stepSeconds,
@@ -364,6 +374,7 @@ internal sealed class WorldSessionMirror : IClientSink {
                 looks[index] = Look(index: index);
                 catalogRigs[index] = CatalogRig(index: index);
                 colliders[index] = Collider(index: index);
+                bodyContacts[index] = BodyContact(index: index);
             }
 
             tick = Tick;
@@ -392,6 +403,9 @@ internal sealed class WorldSessionMirror : IClientSink {
         }
         return colliders;
     }
+
+    private static WorldBodyContactMode[] CompileBodyContacts(WorldDefinition definition) =>
+        definition.Kits.Select(selector: static kit => kit.BodyContact).ToArray();
 
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) {

@@ -1433,6 +1433,8 @@ public sealed class WorldServer : IWorldServerHost {
             WorldQuery.Rules => new QueryAnswer(Text: DescribeRules()),
             WorldQuery.PlayerTargets targets when (Body(index: (targets.Index - 1)) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: (targets.Index - 1))),
             WorldQuery.PlayerTargets targets => new QueryAnswer(Text: $"[player.targets: player {targets.Index} is not an active population entry — see world.population]", Refused: true),
+            WorldQuery.Contacts contacts when (Body(index: (contacts.Index - 1)) is { } body) => new QueryAnswer(Text: DescribeContacts(index: contacts.Index, body: body)),
+            WorldQuery.Contacts contacts => new QueryAnswer(Text: $"[world.contacts: body {contacts.Index} is inactive — see world.population]", Refused: true),
             WorldQuery.Properties properties => new QueryAnswer(Text: DescribeProperties(bodyIndex: properties.BodyIndex)),
             WorldQuery.Interactions => new QueryAnswer(Text: DescribeInteractions()),
             _ => new QueryAnswer(Text: string.Empty),
@@ -1583,6 +1585,15 @@ public sealed class WorldServer : IWorldServerHost {
         lock (m_authorityGate) {
             StepCore(context: in context);
         }
+    }
+
+    private static string DescribeContacts(int index, WorldBody body) {
+        var normal = body.LastObstructionNormal;
+        var obstruction = ((normal == FixedVector3.Zero)
+            ? "none"
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"({(double)normal.X:0.###},{(double)normal.Y:0.###},{(double)normal.Z:0.###})"));
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} submerged={(body.Submerged ? "true" : "false")} atSurface={(body.AtSurface ? "true" : "false")} obstruction={obstruction}]");
     }
 
     private void StepCore(in FixedStepContext context) {

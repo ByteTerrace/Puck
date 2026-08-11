@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.Maths;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -16,7 +17,7 @@ namespace Puck.World;
 /// hand-authoring it. A SEPARATE module from <see cref="WorldMutationCommandModule"/> to keep every class under its
 /// analyzer ceilings.
 /// </summary>
-internal sealed class WorldCollisionCommandModule(WorldServer server) : ICommandModule {
+internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -36,16 +37,19 @@ internal sealed class WorldCollisionCommandModule(WorldServer server) : ICommand
                     return CommandResult.Error(output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{server.Population.Capacity}]");
                 }
 
-                if (server.Population.EntryBody(index: (index - 1)) is not { } body) {
-                    return CommandResult.Error(output: $"[world.contacts: body {index} is inactive — see world.population]");
+                var result = default(CommandResult);
+                var submissions = link;
+                var authorityIndex = index;
+                if (index <= WorldPopulation.LocalSeatCount) {
+                    var route = seatRouter.Route(slot: (index - 1));
+                    submissions = route.Endpoint.Submissions;
+                    authorityIndex = (route.EntityIndex + 1);
                 }
 
-                var normal = body.LastObstructionNormal;
-                var obstruction = ((normal == FixedVector3.Zero)
-                    ? "none"
-                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"({(double)normal.X:0.###},{(double)normal.Y:0.###},{(double)normal.Z:0.###})"));
-
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.contacts: p{index} grounded={(body.Grounded ? "true" : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} submerged={(body.Submerged ? "true" : "false")} atSurface={(body.AtSurface ? "true" : "false")} obstruction={obstruction}]"));
+                submissions.Query(query: new WorldQuery.Contacts(Index: authorityIndex), completion: answer => {
+                    result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
+                });
+                return result;
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -138,7 +142,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server) : ICommand
     private CommandResult Census() {
         var census = server.Population.ContactCensus;
 
-        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}]");
+        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
     }
     private static CommandResult Usage(string verb, string form) {
         return CommandResult.Error(output: $"[{verb}: expected {form}]");

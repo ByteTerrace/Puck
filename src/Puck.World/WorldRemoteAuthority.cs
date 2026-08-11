@@ -79,7 +79,12 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
 
             for (var ordinal = 0; ordinal < reply.BodyIndices.Count; ordinal++) {
-                m_credentials[reply.BodyIndices[ordinal]] = (request.SourceAuthority, request.TransferId, ordinal);
+                var bodyIndex = reply.BodyIndices[ordinal];
+                if (m_credentials.TryGetValue(key: bodyIndex, value: out var previous) &&
+                    m_intentPumps.TryGetValue(key: previous.SourceAuthority, value: out var previousPump)) {
+                    previousPump.Retire(transferId: previous.TransferId, ordinal: previous.Ordinal);
+                }
+                m_credentials[bodyIndex] = (request.SourceAuthority, request.TransferId, ordinal);
             }
         }
         return reply;
@@ -372,15 +377,25 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
         m_endpoint = routedEndpoint;
         m_observedRoute = route;
-        foreach (var pump in m_intentPumps.Values) {
-            pump.InvalidateAcknowledgements();
-        }
+        InvalidateAcknowledgement(bodyIndex: m_submissionBodyIndex);
         Volatile.Write(ref m_definition, route.Definition);
         Volatile.Write(ref m_authority, route.Entity.Authority);
         _ = Interlocked.Exchange(location1: ref m_lastObservedTickBits, value: unchecked((long)route.Tick));
         _ = Interlocked.Increment(ref m_routeRevision);
         m_routeChanged?.Invoke(obj: route);
         return true;
+    }
+
+    private void InvalidateAcknowledgement(int bodyIndex) {
+        if (m_submissionAuthority is { } upstream) {
+            upstream.InvalidateAcknowledgement(bodyIndex: m_submissionBodyIndex);
+            return;
+        }
+
+        if (TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal) &&
+            m_intentPumps.TryGetValue(key: sourceAuthority, value: out var pump)) {
+            pump.InvalidateAcknowledgement(transferId: transferId, ordinal: ordinal);
+        }
     }
 
     private static string DecodeRefusal((WorldFederationWireFormat.ResponseKind Kind, byte[] Body) frame) =>
@@ -439,12 +454,18 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
         }
 
-        public void InvalidateAcknowledgements() {
-            foreach (var pair in m_acknowledged.ToArray()) {
-                m_pending[pair.Key] = pair.Value.Submission;
+        public void InvalidateAcknowledgement(ulong transferId, int ordinal) {
+            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+            if (m_acknowledged.TryRemove(key: key, value: out var acknowledged)) {
+                m_pending[key] = acknowledged.Submission;
             }
-            m_acknowledged.Clear();
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
+        }
+
+        public void Retire(ulong transferId, int ordinal) {
+            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+            _ = m_pending.TryRemove(key: key, value: out _);
+            _ = m_acknowledged.TryRemove(key: key, value: out _);
         }
 
         public void Dispose() {
@@ -456,12 +477,20 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
         private async Task RunAsync(CancellationToken ct) {
             while (!ct.IsCancellationRequested) {
+                string? attemptedEndpoint = null;
                 try {
                     await m_signal.WaitAsync(cancellationToken: ct).ConfigureAwait(false);
+                    attemptedEndpoint = m_owner.Endpoint;
                     await RunConnectionAsync(ct: ct).ConfigureAwait(false);
                     _ = Interlocked.Exchange(location1: ref m_unavailable, value: 0);
                 } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                     return;
+                } catch (Exception exception) when ((attemptedEndpoint is not null) && (exception is IOException or SocketException or OperationCanceledException) &&
+                    !string.Equals(a: attemptedEndpoint, b: m_owner.Endpoint, comparisonType: StringComparison.Ordinal)) {
+                    // The committed route moved while the old socket was in flight. The old authority is allowed to
+                    // close that lane before our explicit handoff frame arrives; reconnect immediately to the new
+                    // endpoint without misreporting a healthy authority change as an outage.
+                    try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
                 } catch (Exception exception) when (exception is IOException or SocketException or OperationCanceledException) {
                     if (ct.IsCancellationRequested) {
                         return;

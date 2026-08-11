@@ -87,9 +87,9 @@ public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegr
 /// <param name="Counterpart">The reciprocal adjacency row in the destination document.</param>
 /// <param name="Boundary">The invisible source-side ownership boundary.</param>
 /// <param name="Unavailable">The authored failure treatment.</param>
-/// <param name="OnUnavailable">Optional declared channel pressed once on the body when the neighbouring authority
-/// cannot accept the crossing. The engine still applies <paramref name="Unavailable"/> first, so authoring can add
-/// feedback or gameplay without being responsible for keeping the body owned.</param>
+/// <param name="OnUnavailable">Optional declared channel pressed once on the body after the engine applies the
+/// failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback;
+/// ownership safety never depends on the binding.</param>
 public sealed record WorldAdjacency(
     WorldSafeName Name,
     string Destination,

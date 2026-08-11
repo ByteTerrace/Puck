@@ -17,18 +17,50 @@ public sealed class DynamicBodyContactLawTests {
             userMessage: $"capsule pair remained overlapped at {first.Left} / {first.Right}");
     }
 
+    [Fact]
+    public void OverlapIsTheDefaultAndDoesNotIntroduceCrowdShoving() {
+        using var fixture = TwoBodies(mode: WorldBodyContactMode.Overlap);
+        var coincident = new Vector3(x: 10f, y: 5f, z: 10f);
+        fixture.Server.Body(index: 0)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Body(index: 1)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Step();
+
+        Assert.Equal(expected: fixture.Server.Body(index: 0)!.Position, actual: fixture.Server.Body(index: 1)!.Position);
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactPotentialPairs);
+    }
+
+    [Fact]
+    public void SolidBodiesUseTheSpatialBroadphaseBeforeNarrowPhase() {
+        using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);
+        fixture.Server.Body(index: 0)!.Pose(x: -20f, y: 5f, z: 10f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Body(index: 1)!.Pose(x: 20f, y: 5f, z: 10f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Step();
+
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.DynamicContactPotentialPairs);
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactNarrowPairs);
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactResolvedPairs);
+    }
+
     private static (Vector3 Left, Vector3 Right) ResolveCoincidentPair() {
-        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: false));
+        using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);
+        var coincident = new Vector3(x: 10f, y: 5f, z: 10f);
+        fixture.Server.Body(index: 0)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Body(index: 1)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Step();
+        return (fixture.Server.Body(index: 0)!.Position, fixture.Server.Body(index: 1)!.Position);
+    }
+
+    private static WorldFixture TwoBodies(WorldBodyContactMode mode) {
+        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+        var definition = source with { Kits = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
+        var fixture = Fixtures.FreshServer(definition: definition);
         var left = WorldPrincipal.Seat(slot: 0);
         var right = WorldPrincipal.Seat(slot: 1);
         Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(right, right.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-
-        var coincident = new Vector3(x: 10f, y: 5f, z: 10f);
-        fixture.Server.Body(index: left.Index)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        fixture.Server.Body(index: right.Index)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-
-        fixture.Step();
-        return (fixture.Server.Body(index: left.Index)!.Position, fixture.Server.Body(index: right.Index)!.Position);
+        return fixture;
     }
 }

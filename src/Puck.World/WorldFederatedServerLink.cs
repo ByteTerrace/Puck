@@ -46,7 +46,11 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(completion);
-        var bodyIndex = query switch { WorldQuery.PlayerWhere where => (where.Index - 1), _ => -1 };
+        var bodyIndex = query switch {
+            WorldQuery.PlayerWhere where => (where.Index - 1),
+            WorldQuery.Contacts contacts => (contacts.Index - 1),
+            _ => -1,
+        };
         var reply = Submit(bodyIndex: bodyIndex, payload: new WorldSubmissionPayload.Query(query));
 
         if (reply?.Kind != WorldTcpWireFormat.DownstreamKind.Query) {

@@ -5,21 +5,29 @@
   "requirements": [],
   "seconds": 8,
   "timeoutSeconds": 25,
-  "binding": "Both legs boot the same Four Corners shard and read the same adjacency. Only the positive leg crosses east, so only it can emit a handoff and expose a generation-addressed NE entity through NW's delivered neighbour image.",
+  "binding": "Both legs boot the same Four Corners shard, prove authored ground reaches the invisible seam, measure the 0.05 resting height, and require grounded contacts with zero wire errors. Only the positive leg crosses east, so its post-crossing contacts must follow the seat authority and only it can emit a handoff and expose a generation-addressed NE entity through NW's delivered neighbour image.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
+      { "type": "response", "name": "ground reaches the invisible seam", "stream": "stdout", "verb": "world.collision.probe", "occurrence": 1, "count": 1, "extract": [{ "name": "seamGroundDistance", "field": "distance" }] },
+      { "type": "relation", "name": "seam point is within contact skin of ground", "left": { "value": "seamGroundDistance" }, "operator": "atMost", "maximum": 0.02 },
+      { "type": "response", "name": "arrived body has a resting height", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
+      { "type": "relation", "name": "arrived body rests on the authored floor", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.049, "maximum": 0.051 },
+      { "type": "response", "name": "contacts follows the seat authority", "stream": "stdout", "verb": "world.contacts", "occurrence": 1, "count": 1, "extract": [{ "name": "grounded", "field": "grounded" }] },
+      { "type": "relation", "name": "arrived body remains grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },
       { "type": "line", "name": "automatic adjacency handoff fired", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": true },
       { "type": "line", "name": "remote entity carries authority slot and generation", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
@@ -30,13 +38,21 @@
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.collision.probe", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.contacts", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
+      { "type": "response", "name": "control ground reaches the invisible seam", "stream": "stdout", "verb": "world.collision.probe", "occurrence": 1, "count": 1, "extract": [{ "name": "seamGroundDistance", "field": "distance" }] },
+      { "type": "relation", "name": "control seam point is within contact skin of ground", "left": { "value": "seamGroundDistance" }, "operator": "atMost", "maximum": 0.02 },
+      { "type": "response", "name": "control body has a resting height", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 1, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
+      { "type": "relation", "name": "control body rests on the authored floor", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.049, "maximum": 0.051 },
+      { "type": "response", "name": "control contacts answers", "stream": "stdout", "verb": "world.contacts", "occurrence": 1, "count": 1, "extract": [{ "name": "grounded", "field": "grounded" }] },
+      { "type": "relation", "name": "control body remains grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },
       { "type": "response", "name": "adjacency read-back answered", "stream": "stdout", "verb": "world.adjacencies", "occurrence": 1, "count": 1, "extract": [] },
       { "type": "line", "name": "no automatic handoff without a crossing", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": false },
       { "type": "line", "name": "no remote entity without a crossing", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": false },

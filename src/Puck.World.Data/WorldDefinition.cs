@@ -993,14 +993,28 @@ public static class WorldTargetSelection {
 /// entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal.</param>
 /// <param name="Collider">The kit's body volume solved against the world contact field, or
 /// <see langword="null"/> for a kit with no volume (never solved against the field). Omitted from the wire when null.</param>
+/// <param name="BodyContact">Whether bodies wearing this kit overlap one another or participate in physical
+/// depenetration. World geometry still uses <paramref name="Collider"/> in either mode.</param>
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
     WorldMotionModel Motion,
     IReadOnlyDictionary<string, BodyProgramParameters> Producers,
     IReadOnlyDictionary<string, ActionSpec> Actions,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
+    WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
 );
+
+/// <summary>Declares how a kit responds to other dynamic bodies. Interactions and targeting remain available in
+/// both modes; only <see cref="Solid"/> authorizes physical depenetration.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldBodyContactMode>))]
+public enum WorldBodyContactMode : byte {
+    /// <summary>Bodies may overlap. This is the default; the engine never introduces crowd shoving implicitly.</summary>
+    Overlap,
+
+    /// <summary>Two bodies physically depenetrate only when both of their kits select this mode.</summary>
+    Solid,
+}
 
 /// <summary>Identifies a body motion program instruction from the closed domain-operation vocabulary.</summary>
 [JsonConverter(typeof(StrictEnumConverter<BodyMotionOp>))]
@@ -1706,6 +1720,7 @@ public readonly record struct CompiledFactTrigger(ActionFact Fact, CompiledPredi
 /// exists) — the held-image composition (<c>Puck.World.Server.WorldBody.NextIntent</c>) needs a composition
 /// ordinal's shape whether or not this kit binds an action to it.</param>
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
+/// <param name="BodyContact">The authored dynamic-body contact mode.</param>
 /// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> (or the
 /// vehicle arm's <see cref="WorldMotionModel.Vehicle.BoostChannel"/> — the same held-multiplier seam) resolved to,
 /// or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
@@ -1721,6 +1736,7 @@ public readonly record struct FixedWorldKit(
     FixedQ4816[] ActionThresholds,
     ChannelShape[] ActionShapes,
     FixedWorldCollider? Collider,
+    WorldBodyContactMode BodyContact,
     int SprintChannelOrdinal,
     int DriftChannelOrdinal,
     RoleChannelOrdinals RoleOrdinals,
@@ -1800,6 +1816,7 @@ public readonly record struct FixedWorldKit(
             ActionThresholds: thresholds,
             ActionShapes: shapes,
             Collider: FixedWorldCollider.Compile(collider: kit.Collider, creations: creations),
+            BodyContact: kit.BodyContact,
             SprintChannelOrdinal: sprintOrdinal,
             DriftChannelOrdinal: driftOrdinal,
             RoleOrdinals: roleOrdinals,
@@ -3092,7 +3109,7 @@ public abstract record WorldLookSource {
     /// <summary>The procedural humanoid catalog (<c>WorldAvatarCatalog</c>) — one look source among others.</summary>
     /// <param name="Index">The procedural renderer catalog rig to pin, or
     /// <see langword="null"/> for the occupant-owned pick. A fresh occupant seeds that pick from its first local
-    /// slot; authority transfer carries it thereafter, so admission into another slot does not restyle the body.</param>
+    /// slot and carries it across authority transfers, so ordinary admission does not restyle it.</param>
     public sealed record Catalog(int? Index) : WorldLookSource {
         /// <summary>The procedural renderer's fixed rig count.</summary>
         public const int RigCount = 128;

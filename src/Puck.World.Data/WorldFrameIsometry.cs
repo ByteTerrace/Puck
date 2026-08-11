@@ -10,6 +10,8 @@ public static class WorldFrameIsometry {
     private static readonly FixedQ4816 s_halfTurn = FixedQ4816.FromDouble(value: Math.PI);
     private static readonly FixedQ4816 s_fullTurn = (s_halfTurn + s_halfTurn);
 
+    /// <summary>Returns the composed boundary-facing rotation. The unwrapped representative is intentional because
+    /// mapped-arrival yaw is authoritative state; <see cref="Rotate"/>'s full-turn periodicity is pinned by law.</summary>
     public static FixedQ4816 RotationDelta(FixedQ4816 sourceYaw, FixedQ4816 destinationYaw) =>
         ((destinationYaw - sourceYaw) + s_halfTurn);
 

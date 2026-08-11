@@ -216,8 +216,11 @@ resolution even when they do not share presentation or transfer.
   seqlock copy. Collision and rendering read that pinned record even if a newer socket delivery lands
   mid-step. Rendering interpolates each neighbour against that neighbour's own authored step and delivery clock;
   avatar gait advances from interpolated distance under the ordinary authored look amplitude, so crossing does
-  not switch a traveler to raw snapshot motion or a permanently zero animation phase. Cross-authority body contact
-  uses durable `WorldEntityAddress` pairs: a stable pair hash
+  not switch a traveler to raw snapshot motion or a permanently zero animation phase. Dynamic-body solidity is an
+  authored kit choice, `bodyContact: "Overlap" | "Solid"`, defaulting to `Overlap`; depenetration occurs only when
+  both bodies opt into `Solid`, while observation, targeting, and interactions remain independent of that choice.
+  The local solver uses a deterministic sweep-and-prune broadphase and publishes potential, narrowphase, and resolved
+  pair counts through `world.contacts`. Cross-authority body contact uses durable `WorldEntityAddress` pairs: a stable pair hash
   chooses exactly one owner as responder for the lifetime of those generations, preventing both
   double-yield and host-scheduling bias while preserving the one-writer rule.
 - TCP carries authenticated requests, submissions, definitions, and snapshot observation. Its hello

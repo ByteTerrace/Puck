@@ -147,6 +147,49 @@ public sealed class FederationTransferLawTests {
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FederatedIntentStream_RejectsAuthorityRebindingAndUnknownTransferCredentials(bool rebindAuthority) {
+        const string sourceAuthority = "player-world/source";
+        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        var request = Reservation(sourceAuthority: sourceAuthority, transferId: 23, border: "east") with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live, BodyColor: default, CatalogRig: 4)],
+        };
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: sourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);
+
+        var secret = Enumerable.Range(start: 1, count: WorldFederationSecurity.SecretBytes).Select(selector: value => checked((byte)value)).ToArray();
+        var security = new WorldFederationSecurity(secret: secret);
+        using var host = new WorldTcpHost(server: fixture.Server, federationSecurity: security);
+        host.Start(listen: "127.0.0.1:0");
+        var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
+        using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+        using var client = new TcpClient();
+        await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
+        var stream = client.GetStream();
+        await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: timeout.Token);
+        var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
+        var proof = security.Prove(sourceAuthority: sourceAuthority, challenge: challenge.Body);
+        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Authenticate, body: WorldFederationWireFormat.EncodeAuthentication(sourceAuthority: sourceAuthority, proof: proof), ct: timeout.Token);
+        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
+        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.IntentStream, body: [], ct: timeout.Token);
+        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
+
+        var submission = new IntentSubmission(Tick: 1, EntityIndex: 0, Intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One), Principal: WorldPrincipal.Console);
+        var carriedAuthority = (rebindAuthority ? "forged-world/source" : sourceAuthority);
+        var transferId = (rebindAuthority ? request.TransferId : 999UL);
+        var body = WorldFederationWireFormat.EncodeIntent(sourceAuthority: carriedAuthority, transferId: transferId, ordinal: 0, submission: in submission);
+        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Intent, body: body, ct: timeout.Token);
+
+        var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
+        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Refusal, actual: refusal.Kind);
+        Assert.Contains(expectedSubstring: "names no committed transfer body", actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CommitStatus_SurvivesALostAcknowledgement_AndOnlyExactCommitReplays() {
         using var fixture = Fixtures.FreshServer();

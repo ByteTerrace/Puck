@@ -275,7 +275,12 @@ Solid creation placements use the renderer's canonical shape emission under
 both contact providers. `world.contacts` reports the analytic collider census
 and its placement-derived share; `world.collision.status` also reports the
 compact field placement-shape count and the analytic placement-collider
-ceiling.
+ceiling. Each kit independently authors `bodyContact: "Overlap" | "Solid"`
+(default `Overlap`). Two dynamic bodies depenetrate only when both choose
+`Solid`; collision geometry, observation, targeting, and interactions do not
+silently change with that choice. The deterministic sweep-and-prune
+broadphase's potential, narrowphase, and resolved pair counts are included in
+`world.contacts` so crowd cost and behaviour are observable on the real path.
 
 ## The diegetic screens
 

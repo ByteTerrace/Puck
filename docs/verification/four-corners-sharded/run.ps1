@@ -229,6 +229,7 @@ wire.errors
         Require (-not $combined.Contains('[world.continuum: committed transfer=')) "$id could not seed a committed authority epoch before publishing its route"
         Require (-not $combined.Contains('has not delivered body:')) "$id exposed an inactive presentation interval between committed authority writers"
         Require (-not $combined.Contains('intent stream to') -and -not $combined.Contains('intent stream update names no')) "$id lost or refused its persistent federated input lane"
+        Require (-not $combined.Contains('[world.authority unavailable:')) "$id exposed a transient authority outage on the committed route"
         Require (-not [regex]::IsMatch($combined, 'Unhandled exception|ABORTED| refused \(')) "$id emitted an exception, abort, or refusal"
 
         foreach ($neighbour in $row.Neighbours) {

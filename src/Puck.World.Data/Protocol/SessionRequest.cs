@@ -67,6 +67,7 @@ public abstract record WorldQuery {
         PlayerChannels channels => GrantSubject.Body(index: (channels.Index - 1)),
         PlayerState state => GrantSubject.Body(index: (state.Index - 1)),
         PlayerTargets targets => GrantSubject.Body(index: (targets.Index - 1)),
+        Contacts contacts => GrantSubject.Body(index: (contacts.Index - 1)),
         ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
         _ => GrantSubject.All,
@@ -103,6 +104,10 @@ public abstract record WorldQuery {
     /// <summary>Every authored target register and the latest designation refusal for one entity.</summary>
     /// <param name="Index">The 1-based player display index.</param>
     public sealed record PlayerTargets(int Index) : WorldQuery;
+
+    /// <summary>The grounded/contact witnesses for one generation-routed entity.</summary>
+    /// <param name="Index">The authority-local, 1-based entity display index.</param>
+    public sealed record Contacts(int Index) : WorldQuery;
 
     /// <summary>The declared property registry, or — with <see cref="BodyIndex"/> — one carrier's live property set.
     /// </summary>

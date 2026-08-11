@@ -19,6 +19,11 @@ namespace Puck.World.Server;
 /// adjacency at all — an overlap is consulted only when the body is not already grounded and its position
 /// falls inside one, so a world whose own geometry already reaches the border pays nothing extra and behaves
 /// identically to a world with no adjacency at all.</para>
+/// <para><b>Replay boundary.</b> Neighbour poses presently arrive as presentation-float snapshot fields and are
+/// converted to fixed point below at delivery timing. Ground and dynamic-contact correction are therefore not yet
+/// replay-deterministic across network schedules. Track 3 replaces this input with tick-addressed taped neighbour
+/// records; until that transport exists, this conversion is the named nondeterministic boundary rather than an
+/// implied simulation guarantee.</para>
 /// </remarks>
 internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private static readonly FixedVector3 s_upAxis = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
@@ -95,8 +100,10 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
             var dynamicObstruction = FixedVector3.Zero;
             var localAddress = ((entityIndex >= 0) ? m_source.LocalEntityAddress(index: entityIndex) : default);
-            for (var entity = 0; entity < neighbour.EntityCapacity; entity++) {
+            var localIsSolid = ((entityIndex >= 0) && (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
+            for (var entity = 0; localIsSolid && (entity < neighbour.EntityCapacity); entity++) {
                 if (!neighbour.IsEntityActive(index: entity) || (neighbour.Collider(index: entity) is not { } neighbourCollider) ||
+                    (neighbour.BodyContact(index: entity) != WorldBodyContactMode.Solid) ||
                     (entityIndex < 0) || !WorldCrossAuthoritySettlement.LocalResponds(local: in localAddress, remote: neighbour.EntityAddress(index: entity), interaction: "physical-contact")) {
                     continue;
                 }

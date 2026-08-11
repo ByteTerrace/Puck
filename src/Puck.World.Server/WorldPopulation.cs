@@ -737,6 +737,19 @@ public sealed class WorldPopulation {
     /// <returns>The slot's assigned kit row index.</returns>
     public byte KitIndex(int index) => m_entries[index].KitIndex;
 
+    /// <summary>The dynamic-body contact mode authored by the kit currently governing an entity.</summary>
+    public WorldBodyContactMode BodyContact(int index) =>
+        (((uint)index < Capacity) ? m_kits[ResolveKitIndex(index: index)].BodyContact : WorldBodyContactMode.Overlap);
+
+    /// <summary>Number of solid-body pairs before broadphase pruning in the most recently completed solve.</summary>
+    public int DynamicContactPotentialPairs { get; private set; }
+
+    /// <summary>Number of pairs admitted to narrow phase by the most recently completed broadphase.</summary>
+    public int DynamicContactNarrowPairs { get; private set; }
+
+    /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve.</summary>
+    public int DynamicContactResolvedPairs { get; private set; }
+
     // The kit row a population index actually runs: a local seat (0..LocalSeatCount) always reads the resolved seat
     // kit (m_seatKit), never its entry's own KitIndex — the seat kit can differ from a seat entry's assigned row on a
     // multi-kit world. Every seat-vs-peer kit read (recompile, producer-support checks, kit-replace safety, and the
@@ -1565,15 +1578,68 @@ public sealed class WorldPopulation {
     /// </summary>
     public void ResolveDynamicContacts() {
         var two = FixedQ4816.FromInteger(value: 2L);
-        for (var leftIndex = 0; leftIndex < Capacity; leftIndex++) {
-            if (!m_entries[leftIndex].Active || (m_entries[leftIndex].Body is not { Collider: { } leftCollider } left)) {
+        Span<int> indices = stackalloc int[WorldPopulationLimits.CapacityCeiling];
+        Span<FixedQ4816> minimumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
+        Span<FixedQ4816> maximumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
+        Span<FixedQ4816> radii = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
+        var count = 0;
+
+        for (var index = 0; index < Capacity; index++) {
+            if (!m_entries[index].Active || (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
+                (m_entries[index].Body is not { Collider: { } collider } body)) {
                 continue;
             }
 
-            for (var rightIndex = (leftIndex + 1); rightIndex < Capacity; rightIndex++) {
-                if (!m_entries[rightIndex].Active || (m_entries[rightIndex].Body is not { Collider: { } rightCollider } right)) {
+            var radius = WorldDynamicBodyContacts.BroadphaseRadius(collider: in collider);
+            indices[count] = index;
+            minimumX[count] = (body.FixedPosition.X - radius);
+            maximumX[count] = (body.FixedPosition.X + radius);
+            radii[count] = radius;
+            count++;
+        }
+
+        // Stable insertion sort: the table is tiny (<=128), already nearly ordered between ticks, and this avoids a
+        // per-tick allocation. Population index is the complete tie-breaker, so replay cannot depend on sort quirks.
+        for (var index = 1; index < count; index++) {
+            var bodyIndex = indices[index];
+            var min = minimumX[index];
+            var max = maximumX[index];
+            var radius = radii[index];
+            var destination = index;
+            while ((destination > 0) && ((minimumX[destination - 1] > min) ||
+                ((minimumX[destination - 1] == min) && (indices[destination - 1] > bodyIndex)))) {
+                indices[destination] = indices[destination - 1];
+                minimumX[destination] = minimumX[destination - 1];
+                maximumX[destination] = maximumX[destination - 1];
+                radii[destination] = radii[destination - 1];
+                destination--;
+            }
+            indices[destination] = bodyIndex;
+            minimumX[destination] = min;
+            maximumX[destination] = max;
+            radii[destination] = radius;
+        }
+
+        DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
+        DynamicContactNarrowPairs = 0;
+        DynamicContactResolvedPairs = 0;
+
+        for (var leftOrdinal = 0; leftOrdinal < count; leftOrdinal++) {
+            var leftIndex = indices[leftOrdinal];
+            var left = m_entries[leftIndex].Body!;
+            var leftCollider = left.Collider!.Value;
+
+            for (var rightOrdinal = (leftOrdinal + 1); (rightOrdinal < count) && (minimumX[rightOrdinal] <= maximumX[leftOrdinal]); rightOrdinal++) {
+                var rightIndex = indices[rightOrdinal];
+                var right = m_entries[rightIndex].Body!;
+                var rightCollider = right.Collider!.Value;
+                var radius = (radii[leftOrdinal] + radii[rightOrdinal]);
+                var delta = (left.FixedPosition - right.FixedPosition);
+                if ((FixedQ4816.Abs(value: delta.Y) > radius) || (FixedQ4816.Abs(value: delta.Z) > radius)) {
                     continue;
                 }
+
+                DynamicContactNarrowPairs++;
 
                 if (WorldDynamicBodyContacts.TryCorrection(
                     leftPosition: left.FixedPosition,
@@ -1587,6 +1653,7 @@ public sealed class WorldPopulation {
                     var shared = (correction / two);
                     left.ApplyDynamicContact(correction: shared);
                     right.ApplyDynamicContact(correction: -shared);
+                    DynamicContactResolvedPairs++;
                 }
             }
         }

@@ -14,8 +14,9 @@ Primary code:
 - `Puck.World/Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, live rig cache, and smoothing.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.
-- `Puck.World/Client/WorldFrameSource.cs` and `AwaySeatSceneEmitter.cs` — local
-  and traveler render callers of the same seat state.
+- `Puck.World/Client/WorldFrameSource.cs`, `WorldAdjacencySceneEmitter.cs`, and
+  `WorldContinuum.cs` — local and neighbouring-authority render callers of the
+  same seat state and generation-addressed continuum.
 - `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs.
 
 ## Document shape

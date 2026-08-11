@@ -246,6 +246,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(new WorldQuery.PlayerChannels(Index: (bodyIndex + 1))),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(new WorldQuery.PlayerState(Index: (bodyIndex + 1))),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(new WorldQuery.PlayerTargets(Index: (bodyIndex + 1))),
+        WorldSubmissionPayload.Query { Value: WorldQuery.Contacts } => new WorldSubmissionPayload.Query(new WorldQuery.Contacts(Index: (bodyIndex + 1))),
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when properties.BodyIndex is not null => new WorldSubmissionPayload.Query(properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
@@ -1376,22 +1377,18 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 .ToArray();
             var choice = (eligible.Length == 1)
                 ? 0
-                : (int)(StableJunctionSeed(authority: instance.Server.AuthorityIdentity, entity: seat, generation: population.Generation(index: seat)) % (uint)eligible.Length);
+                : (int)(StableJunctionSeed(authority: instance.Server.AuthorityIdentity, entity: seat, generation: population.Generation(index: seat)) % (ulong)eligible.Length);
             var winner = eligible[choice];
             EnqueueAdjacencyTransfer(instance: instance, hit: in winner);
         }
     }
 
-    private static uint StableJunctionSeed(string authority, int entity, int generation) {
-        const uint offset = 2166136261u;
-        const uint prime = 16777619u;
-        var hash = offset;
-        foreach (var character in authority) {
-            hash = ((hash ^ character) * prime);
-        }
-        hash = ((hash ^ unchecked((uint)entity)) * prime);
-        hash = ((hash ^ unchecked((uint)generation)) * prime);
-        return hash;
+    private static ulong StableJunctionSeed(string authority, int entity, int generation) {
+        var hash = Puck.Maths.Fnv1aHash.Create();
+        WorldDeterministicHash.AddUtf8(hash: ref hash, value: authority);
+        hash.Add(value: unchecked((uint)entity));
+        hash.Add(value: unchecked((uint)generation));
+        return hash.Value;
     }
 
     private void EnqueueAdjacencyTransfer(WorldInstance instance, in AdjacencyEdgeHit hit) {

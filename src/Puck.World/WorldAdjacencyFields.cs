@@ -45,6 +45,15 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
     }
 
     /// <inheritdoc/>
+    public WorldBodyContactMode LocalBodyContact(int index) {
+        if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
+            return WorldBodyContactMode.Overlap;
+        }
+
+        return source.Server.Population.BodyContact(index: index);
+    }
+
+    /// <inheritdoc/>
     public void BeginTick(ulong tick) {
         if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
             return;
@@ -198,6 +207,7 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
         private readonly WorldLook[] m_looks = new WorldLook[WorldAvatarCatalog.Capacity];
         private readonly byte[] m_catalogRigs = new byte[WorldAvatarCatalog.Capacity];
         private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldAvatarCatalog.Capacity];
+        private readonly WorldBodyContactMode[] m_bodyContacts = new WorldBodyContactMode[WorldAvatarCatalog.Capacity];
         private int m_builtRevision = -1;
         private WorldFaceFrame m_frame;
         private bool m_frameResolved;
@@ -253,6 +263,8 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
 
         public FixedWorldCollider? Collider(int index) => (m_hasPin ? m_colliders[index] : mirror.Collider(index: index));
 
+        public WorldBodyContactMode BodyContact(int index) => (m_hasPin ? m_bodyContacts[index] : mirror.BodyContact(index: index));
+
         public void Pin(ulong sourceTick) {
             Refresh();
             if (!m_frameResolved) {
@@ -271,6 +283,7 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                 looks: m_looks,
                 catalogRigs: m_catalogRigs,
                 colliders: m_colliders,
+                bodyContacts: m_bodyContacts,
                 tick: out m_pinnedSnapshotTick,
                 revision: out m_pinnedSnapshotRevision,
                 stepSeconds: out m_pinnedStepSeconds,

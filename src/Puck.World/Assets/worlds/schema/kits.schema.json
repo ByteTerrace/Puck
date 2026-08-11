@@ -762,6 +762,14 @@
           }
         ],
         "default": null
+      },
+      "bodyContact": {
+        "description": "Whether bodies wearing this kit overlap one another or participate in physical depenetration. World geometry still uses Collider in either mode.",
+        "enum": [
+          "Overlap",
+          "Solid"
+        ],
+        "default": "Overlap"
       }
     },
     "required": [

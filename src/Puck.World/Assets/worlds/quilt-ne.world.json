@@ -517,7 +517,8 @@
           0
         ],
         "radius": 0.35
-      }
+      },
+      "bodyContact": "Solid"
     }
   ],
   "defaultSeatKit": "vaulter",
@@ -721,7 +722,7 @@
             "type": "Box",
             "position": {
               "x": 0,
-              "y": -0.1,
+              "y": 0,
               "z": 0
             },
             "rotation": {
@@ -732,9 +733,9 @@
               "w": 1
             },
             "scale": {
-              "x": 12,
+              "x": 24,
               "y": 0.1,
-              "z": 12
+              "z": 24
             },
             "material": 0,
             "blend": "Union",
@@ -752,7 +753,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "7968d64dc34ef2fee5ae62720e35a3c057a8d82d3bdbc963c097227caeb0c75d"
+      "hash": "491fd3dece91d47f9d23b4ca08ac33e7dc50af2493f6d4d83d342d387dfa2ac8"
     },
     {
       "id": "wall",

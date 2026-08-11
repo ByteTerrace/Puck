@@ -21,6 +21,9 @@ public interface IWorldAdjacencySource {
     /// this identity—not process placement or transport arrival order—to settle a single responder.</summary>
     WorldEntityAddress LocalEntityAddress(int index);
 
+    /// <summary>The authored dynamic-body contact mode of one locally authoritative entity.</summary>
+    WorldBodyContactMode LocalBodyContact(int index);
+
     /// <summary>Freezes the delivered neighbour records that simulation may read during one authority tick. A
     /// transport may continue delivering newer records concurrently, but they become eligible only at the next
     /// call. Rendering observes the same most-recent frozen record.</summary>
@@ -96,6 +99,9 @@ public interface IWorldAdjacencyNeighbour {
 
     /// <summary>The authored collider currently worn by the delivered entity, or null for a volumeless kit.</summary>
     FixedWorldCollider? Collider(int index);
+
+    /// <summary>The authored dynamic-body contact mode worn by the delivered entity.</summary>
+    WorldBodyContactMode BodyContact(int index);
 
     /// <summary>Attempts to resolve a solid contact field compiled over <see cref="Definition"/> — the SAME
     /// derivation (<see cref="WorldSolidField.TryBuild"/>) the neighbour's own authority would compile for itself,

@@ -502,13 +502,13 @@ public static class WorldSubmissionCodec {
     private static byte QueryKind(WorldQuery value) => value switch {
         WorldQuery.PlayerWhere => 0, WorldQuery.PlayerChannels => 1, WorldQuery.WorldPlayers => 2,
         WorldQuery.ScreenState => 3, WorldQuery.InputHolds => 4, WorldQuery.PlayerState => 5, WorldQuery.PlayerTargets => 7, WorldQuery.Rules => 8,
-        WorldQuery.Properties => 9, WorldQuery.Interactions => 10, _ => throw UnknownLeaf(value),
+        WorldQuery.Properties => 9, WorldQuery.Interactions => 10, WorldQuery.Contacts => 11, _ => throw UnknownLeaf(value),
     };
 
     private static Type? QueryType(byte kind) => kind switch {
         0 => typeof(WorldQuery.PlayerWhere), 1 => typeof(WorldQuery.PlayerChannels), 2 => typeof(WorldQuery.WorldPlayers),
         3 => typeof(WorldQuery.ScreenState), 4 => typeof(WorldQuery.InputHolds), 5 => typeof(WorldQuery.PlayerState), 7 => typeof(WorldQuery.PlayerTargets), 8 => typeof(WorldQuery.Rules),
-        9 => typeof(WorldQuery.Properties), 10 => typeof(WorldQuery.Interactions), _ => null,
+        9 => typeof(WorldQuery.Properties), 10 => typeof(WorldQuery.Interactions), 11 => typeof(WorldQuery.Contacts), _ => null,
     };
 
     private static Type? MutationType(byte kind) {

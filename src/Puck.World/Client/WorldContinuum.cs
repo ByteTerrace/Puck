@@ -71,7 +71,8 @@ internal sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRoute
                     return true;
                 }
                 foreach (var projection in projections) {
-                    if (!string.Equals(a: projection.Neighbour.Authority, b: authority, comparisonType: StringComparison.Ordinal)) {
+                    if (!string.Equals(a: projection.Neighbour.Authority, b: authority, comparisonType: StringComparison.Ordinal) ||
+                        !string.Equals(a: projection.Neighbour.Definition.DocumentId, b: route.Endpoint.Definition.DocumentId, comparisonType: StringComparison.Ordinal)) {
                         continue;
                     }
 
