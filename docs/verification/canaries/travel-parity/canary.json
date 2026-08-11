@@ -16,7 +16,7 @@
       { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.view.orbit", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
@@ -42,7 +42,7 @@
         "type": "response",
         "name": "destination rig answered after crossing",
         "stream": "stdout",
-        "verb": "world.view.orbit",
+        "verb": "world.view.camera",
         "occurrence": 1,
         "count": 1,
         "extract": []
@@ -81,7 +81,7 @@
       { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.view.orbit", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],

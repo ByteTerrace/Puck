@@ -75,9 +75,14 @@ var connectOption = new Option<string?>(name: "--connect") {
     DefaultValueFactory = static _ => null,
     Description = "Boot into a remote authority (an \"ip:port\" pair) through the normal window/headless composition. --world supplies the initial definition until the authority's definition revision arrives.",
 };
+var federationKeyFileOption = new Option<string?>(name: "--federation-key-file") {
+    DefaultValueFactory = static _ => null,
+    Description = "A deployment-secret file shared by authorities allowed to federate. Accepts exactly 32 raw bytes or 64 hexadecimal characters; absent disables federation while leaving ordinary admitted-peer listening available.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
+    federationKeyFileOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -104,6 +109,30 @@ if (parseResult.Errors.Count > 0) {
 }
 
 var connectTarget = parseResult.GetValue(option: connectOption);
+var federationSecurity = new Puck.World.Server.WorldFederationSecurity(secret: null);
+if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
+    try {
+        var raw = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
+        byte[] key;
+
+        if (raw.Length == Puck.World.Server.WorldFederationSecurity.SecretBytes) {
+            key = raw;
+        } else {
+            var text = System.Text.Encoding.UTF8.GetString(bytes: raw).Trim();
+            key = ((text.Length == (Puck.World.Server.WorldFederationSecurity.SecretBytes * 2)) ? Convert.FromHexString(s: text) : []);
+        }
+
+        if (key.Length != Puck.World.Server.WorldFederationSecurity.SecretBytes) {
+            Console.Error.WriteLine(value: $"--federation-key-file must contain exactly {Puck.World.Server.WorldFederationSecurity.SecretBytes} raw bytes or {Puck.World.Server.WorldFederationSecurity.SecretBytes * 2} hexadecimal characters.");
+            return 1;
+        }
+
+        federationSecurity = new Puck.World.Server.WorldFederationSecurity(secret: key);
+    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException) {
+        Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
+        return 1;
+    }
+}
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
 }
@@ -189,6 +218,7 @@ var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
+services.AddSingleton(implementationInstance: federationSecurity);
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
 // Registered before the launcher terminal block (AddWorldGpuHost/AddWorldHeadlessHost → AddLauncherTerminal/
@@ -232,9 +262,7 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
 // post-step overlay sync push the per-seat and overlay layers in as they change.
 // The per-seat control-feel store is built here too, seeded from the boot document's own authored feel — the
 // resolution every seat sits at until a profile is delivered for it, from wherever that profile arrives.
-var seatFeel = new WorldSeatFeel(worldLook: worldSource.Definition.PlayerDefaults.SeatLook);
-var seatBindings = new WorldSeatBindings(engineDefault: WorldDefaultBindings.BuildDocument(), definition: worldSource.Definition, seatFeel: seatFeel);
-services.AddSingleton(implementationInstance: seatFeel);
+var seatBindings = new WorldSeatBindings(engineDefault: WorldDefaultBindings.BuildDocument(), definition: worldSource.Definition);
 services.AddSingleton(implementationInstance: seatBindings);
 
 // Boot shape resolves before registration: the authoritative core registers in every shape; the GPU host, render

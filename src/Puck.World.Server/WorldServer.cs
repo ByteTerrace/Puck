@@ -297,20 +297,26 @@ public sealed class WorldServer : IWorldServerHost {
 
     /// <summary>Commits detached bodies into a live reservation. A repeated committed id is idempotently accepted;
     /// an expired or absent reservation is refused.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
     /// <param name="members">The travelers in reservation order.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns>Whether the commit is authoritative at this destination.</returns>
-    public bool CommitTransfer(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
-        m_transferEscrow.Commit(transferId: transferId, members: members, reason: out reason);
+    public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
+        m_transferEscrow.Commit(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out reason);
 
     /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
-    public void AbortTransfer(ulong transferId) => m_transferEscrow.Abort(transferId: transferId);
+    public void AbortTransfer(string sourceAuthority, ulong transferId) => m_transferEscrow.Abort(sourceAuthority: sourceAuthority, transferId: transferId);
 
     /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
-    public bool TryTransferredPrincipal(ulong transferId, int ordinal, out WorldPrincipal principal) =>
-        m_transferEscrow.TryCommittedPrincipal(transferId: transferId, ordinal: ordinal, principal: out principal);
+    public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) =>
+        m_transferEscrow.TryCommittedPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out principal);
+
+    /// <summary>Returns the destination's idempotent view of a source-scoped transfer.</summary>
+    public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
+        m_transferEscrow.Status(sourceAuthority: sourceAuthority, transferId: transferId);
 
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
     /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver

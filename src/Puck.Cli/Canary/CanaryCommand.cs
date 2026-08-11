@@ -158,9 +158,14 @@ internal static class CanaryCommand {
         var input = File.ReadAllText(path: leg.ScriptPath).Replace(oldValue: "{run}", newValue: runDirectory.Replace(oldChar: '\\', newChar: '/'), comparisonType: StringComparison.Ordinal);
         var executionWorld = leg.WorldPath;
         var authorityExecutionWorld = leg.AuthorityWorldPath;
+        string? federationKeyPath = null;
 
         if (leg.AuthorityWorldPath is not null) {
             (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(leg: leg, runDirectory: runDirectory);
+            federationKeyPath = Path.Combine(path1: runDirectory, path2: "federation.key");
+            var federationKey = new byte[32];
+            System.Security.Cryptography.RandomNumberGenerator.Fill(data: federationKey);
+            File.WriteAllBytes(path: federationKeyPath, bytes: federationKey);
         }
 
         if (!input.EndsWith(value: '\n')) {
@@ -181,7 +186,7 @@ internal static class CanaryCommand {
         AuthorityCompanion? authority = null;
         try {
             if (authorityExecutionWorld is { } authorityWorld) {
-                authority = AuthorityCompanion.Start(artifact: artifact, world: authorityWorld, stateDirectory: Path.Combine(path1: runDirectory, path2: "authority-state"), seconds: (manifest.Seconds + 2));
+                authority = AuthorityCompanion.Start(artifact: artifact, world: authorityWorld, stateDirectory: Path.Combine(path1: runDirectory, path2: "authority-state"), seconds: (manifest.Seconds + 2), federationKeyPath: federationKeyPath!);
                 if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(5))) {
                     authority.Dispose();
                     return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: "companion authority did not report a bound listener within 5 seconds");
@@ -194,6 +199,7 @@ internal static class CanaryCommand {
                     artifact,
                     "--world", executionWorld,
                     .. (leg.Connect ? new[] { "--connect", "127.0.0.1:38473" } : []),
+                    .. (federationKeyPath is null ? [] : new[] { "--federation-key-file", federationKeyPath }),
                     "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", stateDirectory,
                     "--headless", ((manifest.BootShape == CanaryBootShape.Headless) ? "true" : "false"),
@@ -290,7 +296,7 @@ internal static class CanaryCommand {
         public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
         public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
 
-        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, int seconds) {
+        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, int seconds, string federationKeyPath) {
             var startInfo = new ProcessStartInfo {
                 CreateNoWindow = true,
                 FileName = "dotnet",
@@ -299,7 +305,7 @@ internal static class CanaryCommand {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
             };
-            foreach (var argument in new[] { artifact, "--world", world, "--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", stateDirectory, "--headless", "true" }) {
+            foreach (var argument in new[] { artifact, "--world", world, "--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", stateDirectory, "--headless", "true", "--federation-key-file", federationKeyPath }) {
                 startInfo.ArgumentList.Add(item: argument);
             }
             return new AuthorityCompanion(process: Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException("failed to start companion authority"));

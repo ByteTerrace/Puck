@@ -24,10 +24,17 @@ public sealed record WorldTransferReservationRequest(
     IReadOnlyList<WorldTransferReservationMember> Members
 );
 
+/// <summary>A transfer's destination-wide identity. SourceAuthority is the authenticated source namespace; the
+/// numeric id is only required to be unique inside that namespace.</summary>
+public readonly record struct WorldTransferKey(string SourceAuthority, ulong TransferId);
+
+/// <summary>The destination's idempotent answer for an ambiguous commit.</summary>
+public enum WorldTransferStatus : byte { Missing = 0, Reserved = 1, Committed = 2 }
+
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
-public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices) {
+public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
     /// <summary>Creates a named refusal.</summary>
-    public static WorldTransferReservationReply Refused(string reason) => new(Accepted: false, Reason: reason, DeadlineDestinationTick: 0, BodyIndices: []);
+    public static WorldTransferReservationReply Refused(string reason) => new(Accepted: false, Reason: reason, DeadlineDestinationTick: 0, BodyIndices: [], DestinationDefinition: null);
 }
 
 /// <summary>One detached source body carried into a previously reserved destination index.</summary>
@@ -43,12 +50,13 @@ public sealed record WorldTransferCommitMember(
 /// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
 internal sealed class WorldTransferEscrow {
-    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots);
+    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition);
 
     private readonly WorldServer m_server;
-    private readonly Dictionary<ulong, Lease> m_leases = new();
-    private readonly HashSet<ulong> m_committed = new();
-    private readonly Dictionary<ulong, WorldPrincipal[]> m_committedPrincipals = new();
+    private readonly Dictionary<WorldTransferKey, Lease> m_leases = new();
+    private readonly HashSet<WorldTransferKey> m_committed = new();
+    private readonly Dictionary<WorldTransferKey, WorldTransferCommitMember[]> m_committedMembers = new();
+    private readonly Dictionary<WorldTransferKey, WorldPrincipal[]> m_committedPrincipals = new();
     // A committed body continues to consume its authored border capacity until it leaves that body index.
     // The population remains the source of truth: stale rows are pruned before every capacity decision.
     private readonly Dictionary<int, string> m_borderAdmissions = new();
@@ -57,13 +65,18 @@ internal sealed class WorldTransferEscrow {
 
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
+        var key = new WorldTransferKey(SourceAuthority: request.SourceAuthority, TransferId: request.TransferId);
 
-        if (m_committed.Contains(item: request.TransferId)) {
+        if (m_committed.Contains(item: key)) {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} already committed");
         }
 
-        if (m_leases.TryGetValue(key: request.TransferId, value: out var existing)) {
-            return new WorldTransferReservationReply(Accepted: true, Reason: string.Empty, DeadlineDestinationTick: existing.DeadlineTick, BodyIndices: existing.Slots);
+        if (m_leases.TryGetValue(key: key, value: out var existing)) {
+            if (!ReservationMatches(left: existing.Request, right: request)) {
+                return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} reuses an existing source-scoped id with a different reservation");
+            }
+
+            return new WorldTransferReservationReply(Accepted: true, Reason: string.Empty, DeadlineDestinationTick: existing.DeadlineTick, BodyIndices: existing.Slots, DestinationDefinition: existing.DestinationDefinition);
         }
 
         if (request.Members.Count == 0) {
@@ -137,19 +150,27 @@ internal sealed class WorldTransferEscrow {
             slots[index] = slot;
         }
 
-        m_leases.Add(key: request.TransferId, value: new Lease(Request: request, DeadlineTick: deadline, Slots: slots));
+        var destinationDefinition = m_server.Definition;
 
-        return new WorldTransferReservationReply(Accepted: true, Reason: string.Empty, DeadlineDestinationTick: deadline, BodyIndices: slots);
+        m_leases.Add(key: key, value: new Lease(Request: request, DeadlineTick: deadline, Slots: slots, DestinationDefinition: destinationDefinition));
+
+        return new WorldTransferReservationReply(Accepted: true, Reason: string.Empty, DeadlineDestinationTick: deadline, BodyIndices: slots, DestinationDefinition: destinationDefinition);
     }
 
-    public bool Commit(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
-        if (m_committed.Contains(item: transferId)) {
-            reason = string.Empty;
+    public bool Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var key = new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId);
 
-            return true;
+        if (m_committed.Contains(item: key)) {
+            if (m_committedMembers.TryGetValue(key: key, value: out var committedMembers) && CommitMatches(left: committedMembers, right: members)) {
+                reason = string.Empty;
+                return true;
+            }
+
+            reason = $"transfer {transferId} reuses a committed source-scoped id with a different commit";
+            return false;
         }
 
-        if (!m_leases.Remove(key: transferId, value: out var lease)) {
+        if (!m_leases.Remove(key: key, value: out var lease)) {
             reason = $"transfer {transferId} has no live reservation";
 
             return false;
@@ -157,6 +178,12 @@ internal sealed class WorldTransferEscrow {
 
         if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
+
+            return false;
+        }
+
+        if (!ReferenceEquals(objA: m_server.Definition, objB: lease.DestinationDefinition)) {
+            reason = $"transfer {transferId} destination definition moved after reservation; reserve again against the current revision";
 
             return false;
         }
@@ -184,6 +211,7 @@ internal sealed class WorldTransferEscrow {
             if (!reply.Accepted) {
                 foreach (var landedSlot in landed) {
                     _ = m_server.Population.TryDetachSeatForTransfer(slot: landedSlot, profile: out _);
+                    _ = m_borderAdmissions.Remove(key: landedSlot);
                 }
 
                 reason = $"body:{slot} refused reserved commit — {reply.Reason}";
@@ -207,23 +235,30 @@ internal sealed class WorldTransferEscrow {
             m_borderAdmissions[slot] = lease.Request.Border;
         }
 
-        m_committed.Add(item: transferId);
-        m_committedPrincipals[transferId] = lease.Slots.Select(selector: slot => lease.Request.RemoteAdmission ? m_server.Population.PeerPrincipal(index: slot) : lease.Request.Members[Array.IndexOf(array: lease.Slots, value: slot)].Principal).ToArray();
+        m_committed.Add(item: key);
+        m_committedMembers[key] = [.. members];
+        m_committedPrincipals[key] = lease.Slots.Select(selector: slot => lease.Request.RemoteAdmission ? m_server.Population.PeerPrincipal(index: slot) : lease.Request.Members[Array.IndexOf(array: lease.Slots, value: slot)].Principal).ToArray();
         reason = string.Empty;
 
         return true;
     }
 
-    public void Abort(ulong transferId) => _ = m_leases.Remove(key: transferId);
+    public void Abort(string sourceAuthority, ulong transferId) => _ = m_leases.Remove(key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId));
 
-    public bool TryCommittedPrincipal(ulong transferId, int ordinal, out WorldPrincipal principal) {
-        if (m_committedPrincipals.TryGetValue(key: transferId, value: out var principals) && ((uint)ordinal < (uint)principals.Length)) {
+    public bool TryCommittedPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
+        if (m_committedPrincipals.TryGetValue(key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId), value: out var principals) && ((uint)ordinal < (uint)principals.Length)) {
             principal = principals[ordinal];
             return true;
         }
 
         principal = default;
         return false;
+    }
+
+    public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
+        var key = new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId);
+
+        return (m_committed.Contains(item: key) ? WorldTransferStatus.Committed : (m_leases.ContainsKey(key: key) ? WorldTransferStatus.Reserved : WorldTransferStatus.Missing));
     }
 
     public void ReclaimExpired(ulong tick) {
@@ -252,5 +287,72 @@ internal sealed class WorldTransferEscrow {
         }
 
         return -1;
+    }
+
+    private static bool ReservationMatches(WorldTransferReservationRequest left, WorldTransferReservationRequest right) {
+        if ((left.TransferId != right.TransferId)
+            || !string.Equals(a: left.SourceAuthority, b: right.SourceAuthority, comparisonType: StringComparison.Ordinal)
+            || (left.SourceRateHz != right.SourceRateHz)
+            || (left.SourceTick != right.SourceTick)
+            || (left.DeadlineSourceTick != right.DeadlineSourceTick)
+            || !string.Equals(a: left.Border, b: right.Border, comparisonType: StringComparison.Ordinal)
+            || (left.BorderCapacity != right.BorderCapacity)
+            || (left.PartyAllOrNothing != right.PartyAllOrNothing)
+            || (left.RemoteAdmission != right.RemoteAdmission)
+            || (left.Members.Count != right.Members.Count)) {
+            return false;
+        }
+
+        for (var index = 0; index < left.Members.Count; index++) {
+            var a = left.Members[index];
+            var b = right.Members[index];
+
+            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IdentityMatches(WorldIdentity? left, WorldIdentity? right) {
+        if (ReferenceEquals(objA: left, objB: right)) {
+            return true;
+        }
+
+        if ((left is null) || (right is null)) {
+            return false;
+        }
+
+        if ((left.Document is not { } leftDocument) || (right.Document is not { } rightDocument)) {
+            return (left.Document is null) && (right.Document is null);
+        }
+
+        var leftBytes = WorldDefinitionSerialization.Serialize(definition: leftDocument);
+        var rightBytes = WorldDefinitionSerialization.Serialize(definition: rightDocument);
+
+        return leftBytes.AsSpan().SequenceEqual(other: rightBytes);
+    }
+
+    private static bool CommitMatches(IReadOnlyList<WorldTransferCommitMember> left, IReadOnlyList<WorldTransferCommitMember> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++) {
+            var a = left[index];
+            var b = right[index];
+
+            if (!IdentityMatches(left: a.Profile, right: b.Profile)
+                || (a.HasMappedArrival != b.HasMappedArrival)
+                || (a.Position != b.Position)
+                || (a.YawRadians != b.YawRadians)
+                || (a.PlanarVelocity != b.PlanarVelocity)
+                || (a.VerticalVelocity != b.VerticalVelocity)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

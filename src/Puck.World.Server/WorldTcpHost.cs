@@ -61,6 +61,7 @@ public sealed class WorldTcpHost : IDisposable {
     private const int MaxConcurrentHandshakes = 64;
 
     private readonly WorldServer m_server;
+    private readonly WorldFederationSecurity m_federationSecurity;
     private readonly ConcurrentQueue<Action> m_pending = new();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
@@ -73,11 +74,18 @@ public sealed class WorldTcpHost : IDisposable {
 
     /// <summary>Initializes a new instance of the <see cref="WorldTcpHost"/> class over the server it admits into.</summary>
     /// <param name="server">The authoritative server.</param>
+    public WorldTcpHost(WorldServer server) : this(server: server, federationSecurity: new WorldFederationSecurity(secret: null)) { }
+
+    /// <summary>Initializes a host with an explicit federation authentication policy.</summary>
+    /// <param name="server">The authoritative server.</param>
+    /// <param name="federationSecurity">The process-scoped federation authenticator; an unconfigured instance denies federation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public WorldTcpHost(WorldServer server) {
+    public WorldTcpHost(WorldServer server, WorldFederationSecurity federationSecurity) {
         ArgumentNullException.ThrowIfNull(argument: server);
+        ArgumentNullException.ThrowIfNull(argument: federationSecurity);
 
         m_server = server;
+        m_federationSecurity = federationSecurity;
     }
 
     /// <summary>Gets a value indicating whether the listener is currently bound.</summary>
@@ -188,9 +196,27 @@ public sealed class WorldTcpHost : IDisposable {
             var offeredKey = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(source: helloBuffer);
 
             if (offeredKey == WorldFederationWireFormat.WireKey) {
+                if (!m_federationSecurity.IsConfigured) {
+                    await WriteFederationRefusal(stream: stream, reason: "federation authentication is not configured on this authority", ct: handshakeCt).ConfigureAwait(false);
+                    return;
+                }
+
+                var federationChallenge = m_federationSecurity.NewChallenge();
+                await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Challenge, body: federationChallenge, ct: handshakeCt).ConfigureAwait(false);
+                var authentication = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: handshakeCt).ConfigureAwait(false);
+
+                if ((authentication is null)
+                    || (authentication.Value.Kind != (byte)WorldFederationWireFormat.RequestKind.Authenticate)
+                    || !WorldFederationWireFormat.TryDecodeAuthentication(body: authentication.Value.Body, sourceAuthority: out var federationAuthority, proof: out var federationProof)
+                    || !m_federationSecurity.Verify(sourceAuthority: federationAuthority, challenge: federationChallenge, proof: federationProof)) {
+                    await WriteFederationRefusal(stream: stream, reason: "federation authentication failed", ct: handshakeCt).ConfigureAwait(false);
+                    return;
+                }
+
+                await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: handshakeCt).ConfigureAwait(false);
                 handshakeSlotHeld = false;
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
-                await HandleFederationAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                await HandleFederationAsync(stream: stream, sourceAuthority: federationAuthority, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
                 return;
             }
 
@@ -320,7 +346,7 @@ public sealed class WorldTcpHost : IDisposable {
 
     // One authority operation per connection, except Observe which remains attached and streams the definition
     // revision once plus independent per-tick projection records until the observer disconnects.
-    private async Task HandleFederationAsync(NetworkStream stream, CancellationToken ct) {
+    private async Task HandleFederationAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
         var frame = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
 
         if (frame is null || !Enum.IsDefined(value: (WorldFederationWireFormat.RequestKind)frame.Value.Kind)) {
@@ -334,6 +360,10 @@ public sealed class WorldTcpHost : IDisposable {
                         await WriteFederationRefusal(stream: stream, reason: $"reservation refused: {reason}", ct: ct).ConfigureAwait(false);
                         return;
                     }
+                    if (!string.Equals(a: request.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                        await WriteFederationRefusal(stream: stream, reason: "reservation source authority does not match the authenticated session", ct: ct).ConfigureAwait(false);
+                        return;
+                    }
 
                     var reply = await RunOnTickThreadAsync(work: () => m_server.ReserveTransfer(request: request), ct: ct).ConfigureAwait(false);
                     await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Reservation, body: WorldFederationWireFormat.EncodeReservationReply(reply: reply), ct: ct).ConfigureAwait(false);
@@ -341,21 +371,25 @@ public sealed class WorldTcpHost : IDisposable {
                 }
 
             case WorldFederationWireFormat.RequestKind.Commit: {
-                    if (!WorldFederationWireFormat.TryDecodeCommit(body: frame.Value.Body, transferId: out var transferId, members: out var members, reason: out var reason)) {
+                    if (!WorldFederationWireFormat.TryDecodeCommit(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, members: out var members, reason: out var reason)) {
                         await WriteFederationRefusal(stream: stream, reason: $"commit refused: {reason}", ct: ct).ConfigureAwait(false);
                         return;
                     }
+                    if (!string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                        await WriteFederationRefusal(stream: stream, reason: "commit source authority does not match the authenticated session", ct: ct).ConfigureAwait(false);
+                        return;
+                    }
 
-                    var outcome = await RunOnTickThreadAsync(work: () => m_server.CommitTransfer(transferId: transferId, members: members, reason: out var commitReason) ? (true, string.Empty) : (false, commitReason), ct: ct).ConfigureAwait(false);
+                    var outcome = await RunOnTickThreadAsync(work: () => m_server.CommitTransfer(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out var commitReason) ? (true, string.Empty) : (false, commitReason), ct: ct).ConfigureAwait(false);
                     using var output = new MemoryStream(); using var writer = new BinaryWriter(output); writer.Write(outcome.Item1); writer.Write(outcome.Item2);
                     await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Commit, body: output.ToArray(), ct: ct).ConfigureAwait(false);
                     return;
                 }
 
             case WorldFederationWireFormat.RequestKind.Abort: {
-                    if (frame.Value.Body.Length != sizeof(ulong)) { await WriteFederationRefusal(stream, "abort carries no exact transfer id", ct).ConfigureAwait(false); return; }
-                    var transferId = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(frame.Value.Body);
-                    _ = await RunOnTickThreadAsync(work: () => { m_server.AbortTransfer(transferId: transferId); return true; }, ct: ct).ConfigureAwait(false);
+                    if (!WorldFederationWireFormat.TryDecodeTransferKey(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId)
+                        || !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) { await WriteFederationRefusal(stream, "abort source does not match the authenticated transfer namespace", ct).ConfigureAwait(false); return; }
+                    _ = await RunOnTickThreadAsync(work: () => { m_server.AbortTransfer(sourceAuthority: sourceAuthority, transferId: transferId); return true; }, ct: ct).ConfigureAwait(false);
                     await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: ct).ConfigureAwait(false);
                     return;
                 }
@@ -365,8 +399,9 @@ public sealed class WorldTcpHost : IDisposable {
                 return;
 
             case WorldFederationWireFormat.RequestKind.Intent: {
-                    if (!WorldFederationWireFormat.TryDecodeIntent(body: frame.Value.Body, transferId: out var transferId, ordinal: out var ordinal, submission: out var submission) ||
-                        !m_server.TryTransferredPrincipal(transferId: transferId, ordinal: ordinal, principal: out var principal)) {
+                    if (!WorldFederationWireFormat.TryDecodeIntent(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, ordinal: out var ordinal, submission: out var submission) ||
+                        !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal) ||
+                        !m_server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out var principal)) {
                         await WriteFederationRefusal(stream: stream, reason: "intent names no committed transfer body", ct: ct).ConfigureAwait(false);
                         return;
                     }
@@ -378,18 +413,17 @@ public sealed class WorldTcpHost : IDisposable {
                 }
 
             case WorldFederationWireFormat.RequestKind.Submission: {
-                    if (frame.Value.Body.Length < (sizeof(ulong) + sizeof(int) + WorldFrameCodec.PrefixBytes)) {
+                    if (!WorldFederationWireFormat.TryDecodeSubmission(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, ordinal: out var ordinal, frame: out var submittedFrame)
+                        || !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
                         await WriteFederationRefusal(stream: stream, reason: "submission credential/frame is truncated", ct: ct).ConfigureAwait(false);
                         return;
                     }
 
-                    var transferId = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(frame.Value.Body);
-                    var ordinal = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(frame.Value.Body.AsSpan(start: sizeof(ulong)));
-                    if (!m_server.TryTransferredPrincipal(transferId: transferId, ordinal: ordinal, principal: out var principal)) {
+                    if (!m_server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out var principal)) {
                         await WriteFederationRefusal(stream: stream, reason: "submission credential names no committed transfer body", ct: ct).ConfigureAwait(false);
                         return;
                     }
-                    if (!WorldFrameCodec.TryDecode(frame: frame.Value.Body.AsSpan(start: (sizeof(ulong) + sizeof(int))), payload: out var payload, failure: out var failure) || payload is null) {
+                    if (!WorldFrameCodec.TryDecode(frame: submittedFrame, payload: out var payload, failure: out var failure) || payload is null) {
                         await WriteFederationRefusal(stream: stream, reason: $"submission codec refused: {failure.Detail}", ct: ct).ConfigureAwait(false);
                         return;
                     }
@@ -409,6 +443,18 @@ public sealed class WorldTcpHost : IDisposable {
                     using var completion = new MemoryStream();
                     await WorldTcpWireFormat.WriteResultAsync(stream: completion, result: result, ct: ct).ConfigureAwait(false);
                     await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Completion, body: completion.ToArray(), ct: ct).ConfigureAwait(false);
+                    return;
+                }
+
+            case WorldFederationWireFormat.RequestKind.Status: {
+                    if (!WorldFederationWireFormat.TryDecodeTransferKey(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId)
+                        || !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                        await WriteFederationRefusal(stream: stream, reason: "status source does not match the authenticated transfer namespace", ct: ct).ConfigureAwait(false);
+                        return;
+                    }
+
+                    var status = await RunOnTickThreadAsync(work: () => m_server.TransferStatus(sourceAuthority: sourceAuthority, transferId: transferId), ct: ct).ConfigureAwait(false);
+                    await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Status, body: [(byte)status], ct: ct).ConfigureAwait(false);
                     return;
                 }
 
@@ -437,13 +483,18 @@ public sealed class WorldTcpHost : IDisposable {
     }
 
     private sealed class FederationProjectionSink : IClientSink {
-        private readonly Channel<(WorldFederationWireFormat.ResponseKind Kind, byte[] Body)> m_frames = Channel.CreateUnbounded<(WorldFederationWireFormat.ResponseKind, byte[])>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+        private readonly Channel<(WorldFederationWireFormat.ResponseKind Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationWireFormat.ResponseKind, byte[])>(new BoundedChannelOptions(capacity: 8) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
         public ChannelReader<(WorldFederationWireFormat.ResponseKind Kind, byte[] Body)> Frames => m_frames.Reader;
-        public void DeliverSnapshot(in WorldSnapshot snapshot) => m_frames.Writer.TryWrite((WorldFederationWireFormat.ResponseKind.Snapshot, WorldFederationWireFormat.EncodeSnapshot(snapshot: in snapshot)));
-        public void DeliverDefinition(WorldDefinition definition) => m_frames.Writer.TryWrite((WorldFederationWireFormat.ResponseKind.Definition, WorldFederationWireFormat.EncodeDefinition(definition: definition)));
+        public void DeliverSnapshot(in WorldSnapshot snapshot) => Write(kind: WorldFederationWireFormat.ResponseKind.Snapshot, body: WorldFederationWireFormat.EncodeSnapshot(snapshot: in snapshot));
+        public void DeliverDefinition(WorldDefinition definition) => Write(kind: WorldFederationWireFormat.ResponseKind.Definition, body: WorldFederationWireFormat.EncodeDefinition(definition: definition));
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
+        private void Write(WorldFederationWireFormat.ResponseKind kind, byte[] body) {
+            if (!m_frames.Writer.TryWrite(item: (kind, body))) {
+                _ = m_frames.Writer.TryComplete(error: new IOException("federation observer exceeded its bounded projection backlog"));
+            }
+        }
     }
 
     private async Task FrameLoopAsync(Connection connection, CancellationToken ct) {

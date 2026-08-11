@@ -10,17 +10,21 @@ namespace Puck.World;
 internal sealed class WorldRemoteAuthority : IDisposable {
     private readonly IPEndPoint m_endpoint;
     private readonly CancellationTokenSource m_lifetime = new();
-    private readonly Dictionary<int, (ulong TransferId, int Ordinal)> m_credentials = new();
+    private readonly Dictionary<int, (string SourceAuthority, ulong TransferId, int Ordinal)> m_credentials = new();
     private readonly WorldFederatedServerLink m_link;
+    private readonly WorldFederationSecurity m_security;
+    private readonly string m_observerAuthority;
     private WorldDefinition m_definition;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority) {
         if (!IPEndPoint.TryParse(endpoint, out var parsed)) {
             throw new FormatException($"host.authority '{endpoint}' is not a parseable IP endpoint");
         }
 
         m_endpoint = parsed;
         m_definition = placeholder;
+        m_security = security ?? throw new ArgumentNullException(paramName: nameof(security));
+        m_observerAuthority = observerAuthority;
         Endpoint = endpoint;
         m_link = new WorldFederatedServerLink(authority: this);
     }
@@ -30,22 +34,33 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     public IServerLink Link => m_link;
 
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
-        var frame = RoundTrip(kind: WorldFederationWireFormat.RequestKind.Reserve, body: WorldFederationWireFormat.EncodeReservation(request: request));
+        var frame = RoundTrip(sourceAuthority: request.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Reserve, body: WorldFederationWireFormat.EncodeReservation(request: request));
         if (frame.Kind != WorldFederationWireFormat.ResponseKind.Reservation) {
             return WorldTransferReservationReply.Refused(reason: DecodeRefusal(frame));
         }
 
         var reply = WorldFederationWireFormat.DecodeReservationReply(body: frame.Body);
         if (reply.Accepted) {
+            if ((reply.BodyIndices.Count != request.Members.Count) || (reply.DestinationDefinition is null)) {
+                try {
+                    Abort(sourceAuthority: request.SourceAuthority, transferId: request.TransferId);
+                } catch (Exception exception) when (exception is IOException or SocketException or OperationCanceledException) {
+                    // The malformed acceptance is already a terminal refusal locally; a failed best-effort abort
+                    // expires under the destination lease rather than being treated as a valid binding.
+                }
+
+                return WorldTransferReservationReply.Refused(reason: "remote authority returned a malformed accepted reservation (body count or destination definition missing)");
+            }
+
             for (var ordinal = 0; ordinal < reply.BodyIndices.Count; ordinal++) {
-                m_credentials[reply.BodyIndices[ordinal]] = (request.TransferId, ordinal);
+                m_credentials[reply.BodyIndices[ordinal]] = (request.SourceAuthority, request.TransferId, ordinal);
             }
         }
         return reply;
     }
 
-    public bool Commit(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
-        var frame = RoundTrip(kind: WorldFederationWireFormat.RequestKind.Commit, body: WorldFederationWireFormat.EncodeCommit(transferId: transferId, members: members));
+    public bool Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var frame = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Commit, body: WorldFederationWireFormat.EncodeCommit(sourceAuthority: sourceAuthority, transferId: transferId, members: members));
 
         if (frame.Kind != WorldFederationWireFormat.ResponseKind.Commit) {
             reason = DecodeRefusal(frame);
@@ -59,10 +74,18 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         return accepted;
     }
 
-    public void Abort(ulong transferId) {
-        var body = new byte[sizeof(ulong)];
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(body, transferId);
-        _ = RoundTrip(kind: WorldFederationWireFormat.RequestKind.Abort, body: body);
+    public void Abort(string sourceAuthority, ulong transferId) {
+        _ = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Abort, body: WorldFederationWireFormat.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId));
+    }
+
+    public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
+        var frame = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Status, body: WorldFederationWireFormat.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId));
+
+        if ((frame.Kind != WorldFederationWireFormat.ResponseKind.Status) || (frame.Body.Length != 1) || !Enum.IsDefined(value: (WorldTransferStatus)frame.Body[0])) {
+            throw new IOException(DecodeRefusal(frame));
+        }
+
+        return (WorldTransferStatus)frame.Body[0];
     }
 
     public IDisposable AttachSink(IClientSink sink) {
@@ -74,22 +97,24 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     public void Dispose() => m_lifetime.Cancel();
 
-    internal bool TryCredential(int bodyIndex, out ulong transferId, out int ordinal) {
+    internal bool TryCredential(int bodyIndex, out string sourceAuthority, out ulong transferId, out int ordinal) {
         if ((bodyIndex < 0) && (m_credentials.Count > 0)) {
             var first = m_credentials.OrderBy(pair => pair.Key).First().Value;
+            sourceAuthority = first.SourceAuthority;
             transferId = first.TransferId;
             ordinal = first.Ordinal;
             return true;
         }
         if (m_credentials.TryGetValue(key: bodyIndex, value: out var credential)) {
+            sourceAuthority = credential.SourceAuthority;
             transferId = credential.TransferId;
             ordinal = credential.Ordinal;
             return true;
         }
-        transferId = 0; ordinal = -1; return false;
+        sourceAuthority = string.Empty; transferId = 0; ordinal = -1; return false;
     }
 
-    internal (WorldFederationWireFormat.ResponseKind Kind, byte[] Body) RoundTrip(WorldFederationWireFormat.RequestKind kind, byte[] body) {
+    internal (WorldFederationWireFormat.ResponseKind Kind, byte[] Body) RoundTrip(string sourceAuthority, WorldFederationWireFormat.RequestKind kind, byte[] body) {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(m_lifetime.Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         using var client = new TcpClient();
@@ -97,6 +122,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         client.ConnectAsync(remoteEP: m_endpoint, cancellationToken: timeout.Token).AsTask().GetAwaiter().GetResult();
         using var stream = client.GetStream();
         WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: timeout.Token).GetAwaiter().GetResult();
+        AuthenticateAsync(stream: stream, sourceAuthority: sourceAuthority, ct: timeout.Token).GetAwaiter().GetResult();
         WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: kind, body: body, ct: timeout.Token).GetAwaiter().GetResult();
         var frame = WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: timeout.Token).GetAwaiter().GetResult() ?? throw new IOException("remote authority closed without a verdict");
         return ((WorldFederationWireFormat.ResponseKind)frame.Kind, frame.Body);
@@ -109,6 +135,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             await client.ConnectAsync(remoteEP: m_endpoint, cancellationToken: ct).ConfigureAwait(false);
             using var stream = client.GetStream();
             await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: ct).ConfigureAwait(false);
+            await AuthenticateAsync(stream: stream, sourceAuthority: m_observerAuthority, ct: ct).ConfigureAwait(false);
             await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Observe, body: [], ct: ct).ConfigureAwait(false);
 
             while (!ct.IsCancellationRequested) {
@@ -138,4 +165,20 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     private static string DecodeRefusal((WorldFederationWireFormat.ResponseKind Kind, byte[] Body) frame) =>
         ((frame.Kind == WorldFederationWireFormat.ResponseKind.Refusal) ? Encoding.UTF8.GetString(frame.Body) : $"unexpected federation response {frame.Kind}");
+
+    private async Task AuthenticateAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
+        var challenge = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+
+        if ((challenge is null) || (challenge.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Challenge) || (challenge.Value.Body.Length != WorldFederationSecurity.ChallengeBytes)) {
+            throw new IOException(challenge is null ? "remote authority closed before federation challenge" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)challenge.Value.Kind, challenge.Value.Body)));
+        }
+
+        var proof = m_security.Prove(sourceAuthority: sourceAuthority, challenge: challenge.Value.Body);
+        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Authenticate, body: WorldFederationWireFormat.EncodeAuthentication(sourceAuthority: sourceAuthority, proof: proof), ct: ct).ConfigureAwait(false);
+        var verdict = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+
+        if ((verdict is null) || (verdict.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
+            throw new IOException(verdict is null ? "remote authority closed during federation authentication" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)verdict.Value.Kind, verdict.Value.Body)));
+        }
+    }
 }

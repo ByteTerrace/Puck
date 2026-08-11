@@ -9,10 +9,10 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     private readonly WorldRemoteAuthority m_authority = authority;
 
     public void SubmitIntent(in IntentSubmission submission) {
-        if (!m_authority.TryCredential(bodyIndex: submission.EntityIndex, transferId: out var transferId, ordinal: out var ordinal)) {
+        if (!m_authority.TryCredential(bodyIndex: submission.EntityIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
             return;
         }
-        _ = m_authority.RoundTrip(kind: WorldFederationWireFormat.RequestKind.Intent, body: WorldFederationWireFormat.EncodeIntent(transferId: transferId, ordinal: ordinal, submission: in submission));
+        _ = m_authority.RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Intent, body: WorldFederationWireFormat.EncodeIntent(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, submission: in submission));
     }
 
     public void SubmitCommand(WorldCommand command) => _ = Submit(bodyIndex: command.EntityIndex, payload: new WorldSubmissionPayload.Command(command));
@@ -60,16 +60,13 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(bodyIndex: -1, payload: payload);
 
     private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
-        if (!m_authority.TryCredential(bodyIndex: bodyIndex, transferId: out var transferId, ordinal: out var ordinal) ||
+        if (!m_authority.TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal) ||
             !WorldFrameCodec.TryEncode(payload: payload, frame: out var canonical, failure: out _)) {
             return null;
         }
 
-        var body = new byte[sizeof(ulong) + sizeof(int) + canonical.Length];
-        BinaryPrimitives.WriteUInt64LittleEndian(body, transferId);
-        BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(start: sizeof(ulong)), ordinal);
-        canonical.CopyTo(body, sizeof(ulong) + sizeof(int));
-        var response = m_authority.RoundTrip(kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
+        var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, frame: canonical);
+        var response = m_authority.RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
         if (response.Kind != WorldFederationWireFormat.ResponseKind.Completion) {
             return (WorldTcpWireFormat.DownstreamKind.Refusal, response.Body);
         }

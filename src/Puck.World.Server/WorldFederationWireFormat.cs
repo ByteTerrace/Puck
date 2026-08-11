@@ -14,15 +14,34 @@ public static class WorldFederationWireFormat {
     public const int MaxFrameBytes = (32 * 1024 * 1024);
 
     /// <summary>Federation request kinds.</summary>
-    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6 }
+    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8 }
     /// <summary>Federation response/event kinds.</summary>
-    public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7 }
+    public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7, Challenge = 8, Status = 9 }
 
     /// <summary>Writes the federation discriminator.</summary>
     public static async Task WriteHelloAsync(Stream stream, CancellationToken ct) {
         var bytes = new byte[sizeof(ulong)];
         BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes, value: WireKey);
         await stream.WriteAsync(buffer: bytes, cancellationToken: ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Encodes the source identity and challenge proof sent before every federation operation.</summary>
+    public static byte[] EncodeAuthentication(string sourceAuthority, byte[] proof) {
+        using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
+        writer.Write(sourceAuthority); writer.Write(proof.Length); writer.Write(proof);
+        return output.ToArray();
+    }
+
+    public static bool TryDecodeAuthentication(ReadOnlySpan<byte> body, out string sourceAuthority, out byte[] proof) {
+        try {
+            using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
+            sourceAuthority = reader.ReadString(); var length = reader.ReadInt32();
+            if (string.IsNullOrWhiteSpace(value: sourceAuthority) || (length != WorldFederationSecurity.ProofBytes)) { throw new FormatException(); }
+            proof = reader.ReadBytes(length);
+            return (proof.Length == length) && (input.Position == input.Length);
+        } catch (Exception exception) when (exception is IOException or FormatException) {
+            sourceAuthority = string.Empty; proof = []; return false;
+        }
     }
 
     /// <summary>Writes one framed request.</summary>
@@ -138,6 +157,9 @@ public static class WorldFederationWireFormat {
         foreach (var slot in reply.BodyIndices) {
             writer.Write(slot);
         }
+        var definition = (reply.DestinationDefinition is null ? [] : WorldDefinitionSerialization.Serialize(definition: reply.DestinationDefinition));
+        writer.Write(definition.Length);
+        writer.Write(definition);
         return output.ToArray();
     }
 
@@ -145,17 +167,32 @@ public static class WorldFederationWireFormat {
     public static WorldTransferReservationReply DecodeReservationReply(ReadOnlySpan<byte> body) {
         using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
         var accepted = reader.ReadBoolean(); var reason = reader.ReadString(); var deadline = reader.ReadUInt64(); var count = reader.ReadInt32();
+        if ((count < 0) || (count > WorldPopulationLimits.CapacityCeiling)) {
+            throw new FormatException($"reservation reply body count {count} is invalid");
+        }
         var slots = new int[count];
         for (var i = 0; i < count; i++) {
             slots[i] = reader.ReadInt32();
         }
-        return new WorldTransferReservationReply(accepted, reason, deadline, slots);
+        var definitionLength = reader.ReadInt32();
+        if ((definitionLength < 0) || (definitionLength > (16 * 1024 * 1024))) {
+            throw new FormatException($"reservation reply definition length {definitionLength} is invalid");
+        }
+        var definitionBytes = reader.ReadBytes(definitionLength);
+        if (definitionBytes.Length != definitionLength) {
+            throw new EndOfStreamException();
+        }
+        var definition = ((definitionLength == 0) ? null : WorldDefinitionSerialization.Deserialize(utf8Json: definitionBytes));
+        if (input.Position != input.Length) {
+            throw new FormatException("reservation reply carries trailing bytes");
+        }
+        return new WorldTransferReservationReply(accepted, reason, deadline, slots, definition);
     }
 
     /// <summary>Encodes a cohort commit.</summary>
-    public static byte[] EncodeCommit(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members) {
+    public static byte[] EncodeCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(transferId); writer.Write(members.Count);
+        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(members.Count);
         foreach (var member in members) {
             writer.Write(member.HasMappedArrival);
             WriteFixedVector(writer, member.Position); writer.Write(member.YawRadians.Value);
@@ -165,10 +202,11 @@ public static class WorldFederationWireFormat {
     }
 
     /// <summary>Decodes a cohort commit.</summary>
-    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, out ulong transferId, out WorldTransferCommitMember[] members, out string reason) {
+    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out string reason) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            transferId = reader.ReadUInt64(); var count = reader.ReadInt32();
+            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); var count = reader.ReadInt32();
+            if (string.IsNullOrWhiteSpace(value: sourceAuthority)) { throw new FormatException("commit carries no source authority"); }
             if ((count < 1) || (count > WorldPopulationLimits.CapacityCeiling)) {
                 throw new FormatException($"commit count {count} is invalid");
             }
@@ -181,7 +219,7 @@ public static class WorldFederationWireFormat {
             }
             reason = string.Empty; return true;
         } catch (Exception exception) when (exception is IOException or FormatException) {
-            transferId = 0; members = []; reason = exception.Message.ReplaceLineEndings(" "); return false;
+            sourceAuthority = string.Empty; transferId = 0; members = []; reason = exception.Message.ReplaceLineEndings(" "); return false;
         }
     }
 
@@ -216,9 +254,9 @@ public static class WorldFederationWireFormat {
     }
 
     /// <summary>Encodes a transferred body's per-tick intent with its lease credential.</summary>
-    public static byte[] EncodeIntent(ulong transferId, int ordinal, in IntentSubmission submission) {
+    public static byte[] EncodeIntent(string sourceAuthority, ulong transferId, int ordinal, in IntentSubmission submission) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(transferId); writer.Write(ordinal); writer.Write(submission.Tick); writer.Write(submission.MeasuredHoldTicks);
+        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal); writer.Write(submission.Tick); writer.Write(submission.MeasuredHoldTicks);
         for (var channel = 0; channel < ChannelLimits.MaxChannels; channel++) {
             writer.Write(submission.Intent[channel].Value);
         }
@@ -229,10 +267,11 @@ public static class WorldFederationWireFormat {
     }
 
     /// <summary>Decodes a transferred body's per-tick intent.</summary>
-    public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out ulong transferId, out int ordinal, out IntentSubmission submission) {
+    public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal, out IntentSubmission submission) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32(); var tick = reader.ReadUInt64(); var measured = reader.ReadInt32();
+            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32(); var tick = reader.ReadUInt64(); var measured = reader.ReadInt32();
+            if (string.IsNullOrWhiteSpace(value: sourceAuthority)) { throw new FormatException(); }
             var intent = default(PlayerIntent); var held = default(PlayerIntent);
             for (var channel = 0; channel < ChannelLimits.MaxChannels; channel++) {
                 intent = intent.WithChannel(channel, new FixedQ4816(reader.ReadInt64()));
@@ -242,8 +281,39 @@ public static class WorldFederationWireFormat {
             }
             submission = new IntentSubmission(tick, -1, intent, WorldPrincipal.Console, held, measured);
             return (input.Position == input.Length);
-        } catch (IOException) {
-            transferId = 0; ordinal = -1; submission = default; return false;
+        } catch (Exception exception) when (exception is IOException or FormatException) {
+            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; submission = default; return false;
+        }
+    }
+
+    public static byte[] EncodeTransferKey(string sourceAuthority, ulong transferId) {
+        using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
+        writer.Write(sourceAuthority); writer.Write(transferId); return output.ToArray();
+    }
+
+    public static bool TryDecodeTransferKey(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId) {
+        try {
+            using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
+            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64();
+            return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (input.Position == input.Length);
+        } catch (Exception exception) when (exception is IOException or FormatException or ArgumentException) {
+            sourceAuthority = string.Empty; transferId = 0; return false;
+        }
+    }
+
+    public static byte[] EncodeSubmission(string sourceAuthority, ulong transferId, int ordinal, byte[] frame) {
+        using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
+        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal); writer.Write(frame);
+        return output.ToArray();
+    }
+
+    public static bool TryDecodeSubmission(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal, out byte[] frame) {
+        try {
+            using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
+            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32(); frame = reader.ReadBytes(checked((int)(input.Length - input.Position)));
+            return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (frame.Length >= WorldFrameCodec.PrefixBytes);
+        } catch (Exception exception) when (exception is IOException or FormatException or ArgumentException or OverflowException) {
+            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; frame = []; return false;
         }
     }
 
