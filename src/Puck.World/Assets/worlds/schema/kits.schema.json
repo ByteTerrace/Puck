@@ -69,17 +69,17 @@
                 "default": null
               },
               "moveFrame": {
-                "description": "Which frame MoveForward/MoveStrafe resolve in. Heading (the default, the world\u0027s historical tank controls) rotates the commanded planar target by the body\u0027s own integrated heading. World takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
+                "description": "Which frame MoveForward/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
                 "enum": [
                   "Heading",
                   "World"
                 ],
-                "default": "Heading"
+                "default": "World"
               },
               "facingSnap": {
-                "description": "Under World only: whether the body\u0027s facing snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather than holding its heading. Ignored under Heading, where facing is the integrated heading by construction. false is the default (tank facing).",
+                "description": "Under World only: whether the body\u0027s facing snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather than holding its heading. Ignored under Heading, where facing is the integrated heading by construction. true is the default.",
                 "type": "boolean",
-                "default": false
+                "default": true
               },
               "moveSpeedEnvelope": {
                 "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
@@ -321,12 +321,12 @@
                   "Heading",
                   "World"
                 ],
-                "default": "Heading"
+                "default": "World"
               },
               "facingSnap": {
                 "description": "Under World only: snap facing to the commanded planar direction each tick carrying input, as FacingSnap documents.",
                 "type": "boolean",
-                "default": false
+                "default": true
               },
               "thrustSpeedEnvelope": {
                 "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",

@@ -1,13 +1,16 @@
+using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 /// <summary>One prospective traveler in a destination reservation.</summary>
-/// <param name="Principal">The source-stamped acting principal for a colocated local-seat transfer.</param>
+/// <param name="Principal">The source-stamped acting principal for a colocated transfer.</param>
 /// <param name="PreferredSlot">The body index the traveler prefers to retain.</param>
 /// <param name="Identity">The attested owned-world identity carried by a federated traveler.</param>
-public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity = null);
+/// <param name="Source">The traveler's authored intent source, preserved across the authority boundary.</param>
+/// <param name="BodyColor">The source body's exact rendered material color, preserved across ownership.</param>
+public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity = null, IntentSource Source = default, Vector3 BodyColor = default);
 
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
@@ -20,7 +23,7 @@ public sealed record WorldTransferReservationRequest(
     string Border,
     int? BorderCapacity,
     bool PartyAllOrNothing,
-    bool RemoteAdmission,
+    bool PeerAdmission,
     IReadOnlyList<WorldTransferReservationMember> Members
 );
 
@@ -108,8 +111,8 @@ internal sealed class WorldTransferEscrow {
         var destinationSteps = checked((remainingEngineTicks + destinationStepTicks - 1UL) / destinationStepTicks);
         var deadline = checked((m_server.NextInputTick - 1UL) + destinationSteps);
         PruneDepartedAdmissions();
-        var firstSlot = (request.RemoteAdmission ? WorldPopulation.LocalSeatCount : 0);
-        var consumed = new bool[(request.RemoteAdmission ? m_server.Population.Capacity : WorldPopulation.LocalSeatCount)];
+        var firstSlot = (request.PeerAdmission ? WorldPopulation.LocalSeatCount : 0);
+        var consumed = new bool[(request.PeerAdmission ? m_server.Population.Capacity : WorldPopulation.LocalSeatCount)];
 
         for (var slot = 0; (slot < consumed.Length); slot++) {
             consumed[slot] = m_server.Population.IsActive(index: slot);
@@ -142,8 +145,11 @@ internal sealed class WorldTransferEscrow {
                 return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for traveler {index + 1}; no queue was created");
             }
 
-            if (!request.RemoteAdmission && m_server.Grants.Allows(principal: member.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)) is { IsAllowed: false } standing) {
+            if (!request.PeerAdmission && m_server.Grants.Allows(principal: member.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)) is { IsAllowed: false } standing) {
                 return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
+            }
+            if (request.PeerAdmission && !member.Source.IsLive && !m_server.Population.SupportsSource(index: slot, source: member.Source, refusal: out var sourceRefusal)) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} cannot enter body:{slot} — {sourceRefusal}");
             }
 
             consumed[slot] = true;
@@ -202,15 +208,21 @@ internal sealed class WorldTransferEscrow {
             var principal = reservationMember.Principal;
             SessionReply reply;
 
-            if (lease.Request.RemoteAdmission) {
-                reply = m_server.AdmitTransferredPeer(slot: slot, identity: reservationMember.Identity);
+            if (lease.Request.PeerAdmission) {
+                reply = reservationMember.Source.IsLive
+                    ? m_server.AdmitTransferredPeer(slot: slot, identity: reservationMember.Identity)
+                    : m_server.AdmitTransferredEntity(slot: slot, source: reservationMember.Source, identity: reservationMember.Identity);
             } else {
                 reply = m_server.ApplySession(request: new SessionRequest.Join(Principal: principal, Slot: slot, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
             }
 
             if (!reply.Accepted) {
                 foreach (var landedSlot in landed) {
-                    _ = m_server.Population.TryDetachSeatForTransfer(slot: landedSlot, profile: out _);
+                    if (lease.Request.PeerAdmission) {
+                        m_server.RollbackTransferredEntity(slot: landedSlot);
+                    } else {
+                        _ = m_server.Population.TryDetachSeatForTransfer(slot: landedSlot, profile: out _);
+                    }
                     _ = m_borderAdmissions.Remove(key: landedSlot);
                 }
 
@@ -226,6 +238,7 @@ internal sealed class WorldTransferEscrow {
             if (profile is not null) {
                 m_server.Population.SetSeatProfile(slot: slot, profile: profile);
             }
+            m_server.Population.SetBodyColor(slot: slot, color: reservationMember.BodyColor);
 
             if (member.HasMappedArrival) {
                 m_server.Population.ApplyMappedArrival(slot: slot, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity);
@@ -237,7 +250,7 @@ internal sealed class WorldTransferEscrow {
 
         m_committed.Add(item: key);
         m_committedMembers[key] = [.. members];
-        m_committedPrincipals[key] = lease.Slots.Select(selector: slot => lease.Request.RemoteAdmission ? m_server.Population.PeerPrincipal(index: slot) : lease.Request.Members[Array.IndexOf(array: lease.Slots, value: slot)].Principal).ToArray();
+        m_committedPrincipals[key] = lease.Slots.Select(selector: slot => lease.Request.PeerAdmission ? m_server.Population.PeerPrincipal(index: slot) : lease.Request.Members[Array.IndexOf(array: lease.Slots, value: slot)].Principal).ToArray();
         reason = string.Empty;
 
         return true;
@@ -298,7 +311,7 @@ internal sealed class WorldTransferEscrow {
             || !string.Equals(a: left.Border, b: right.Border, comparisonType: StringComparison.Ordinal)
             || (left.BorderCapacity != right.BorderCapacity)
             || (left.PartyAllOrNothing != right.PartyAllOrNothing)
-            || (left.RemoteAdmission != right.RemoteAdmission)
+            || (left.PeerAdmission != right.PeerAdmission)
             || (left.Members.Count != right.Members.Count)) {
             return false;
         }
@@ -307,7 +320,7 @@ internal sealed class WorldTransferEscrow {
             var a = left.Members[index];
             var b = right.Members[index];
 
-            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
+            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || (a.Source != b.Source) || (a.BodyColor != b.BodyColor) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
                 return false;
             }
         }

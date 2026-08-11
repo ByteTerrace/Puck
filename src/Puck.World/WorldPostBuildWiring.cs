@@ -94,14 +94,14 @@ internal static class WorldPostBuildWiring {
         // unregistered wheel/page commit fails the BOOT here (both shapes alike) rather than only a later crossing.
         var worldSource = services.GetRequiredService<WorldDefinitionSource>();
 
-        // The border-margin proof's neighbour resolver, composed from every transport this boot can reach: a
+        // The adjacency proof's neighbour resolver, composed from every transport this boot can reach: a
         // file-backed read beside the currently-loaded document (WorldFileNeighbourResolver — the ONLY resolver a
         // local-only boot, no --storage-uri, ever has, which is exactly the quilt worlds' shape) tried first, then
         // the cloud-backed WorldStorageNeighbourResolver when cloud storage is wired. The file resolver reads
         // worldSource.SourcePath fresh on every call rather than capturing the boot directory once, so it keeps
         // resolving correctly across a live world.load/reload that moves the tracked origin (see
         // WorldDefinitionSource.SourcePath's own remarks). WorldCompositeNeighbourResolver.Compose returns null only
-        // when NEITHER transport is present, in which case an authored WorldPlacementPortal.MarginDepth refuses by
+        // when NEITHER transport is present, in which case an authored adjacency refuses by
         // name rather than passing unproven — unreachable, not this method's own choice.
         var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory);
         var storageNeighbours = services.GetRequiredService<WorldStorageSyncHandle>().Neighbours;
@@ -123,11 +123,11 @@ internal static class WorldPostBuildWiring {
             storageNeighbours
         );
 
-        // The BOOT authority's runtime border-margin resolver — unlike Neighbours (a load-time proof), this is
-        // consulted every tick a body stands inside a mapped portal facet's authored margin. Spawned authorities get
+        // The boot authority's runtime adjacency source — unlike Neighbours (a load-time proof), this is
+        // consulted every tick a body stands inside a derived overlap. Spawned authorities get
         // their own instance-bound sibling in WorldInstanceHost.TryStart. CORE (both boot shapes): contact resolution
         // needs it regardless of whether a window exists.
-        server.BorderMargin = services.GetRequiredService<IWorldBorderMarginSource>();
+        server.Adjacencies = services.GetRequiredService<IWorldAdjacencySource>();
 
         // Seed the seats' context-family states off the boot census once, so a read-back that runs before the first
         // simulation tick reports the joined boot seats truthfully rather than the resolver's cold defaults (the

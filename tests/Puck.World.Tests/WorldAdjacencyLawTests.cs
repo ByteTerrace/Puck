@@ -1,0 +1,174 @@
+using System.Numerics;
+using Puck.Maths;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>Laws for invisible reciprocal ownership boundaries: exact cardinal frames, outward swept handoff,
+/// compiler-owned symmetric overlap, and cross-document reciprocal proof.</summary>
+public sealed class WorldAdjacencyLawTests {
+    [Fact]
+    public void CardinalFramesKeepExactAxes() {
+        var east = Boundary(yaw: 90f).CompileFrame();
+        var west = Boundary(yaw: -90f).CompileFrame();
+
+        Assert.Equal(new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero), east.Normal);
+        Assert.Equal(new FixedVector3(-FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero), west.Normal);
+        Assert.Equal(-east.Right, west.Right);
+    }
+
+    [Fact]
+    public void SweepOnlyHandsOffOutwardThroughRectangle() {
+        var frame = Boundary(yaw: 90f).CompileFrame();
+        var outward = WorldAdjacencyRegion.Sweep(frame, Fixed(x: -1, y: 0, z: 0), Fixed(x: 1, y: 0, z: 0));
+        var inward = WorldAdjacencyRegion.Sweep(frame, Fixed(x: 1, y: 0, z: 0), Fixed(x: -1, y: 0, z: 0));
+        var above = WorldAdjacencyRegion.Sweep(frame, Fixed(x: -1, y: 20, z: 0), Fixed(x: 1, y: 20, z: 0));
+
+        Assert.True(outward.Crossed);
+        Assert.Equal(FixedQ4816.FromDouble(0.5), outward.Parameter);
+        Assert.False(inward.Crossed);
+        Assert.False(above.Crossed);
+    }
+
+    [Fact]
+    public void OverlapIsSymmetricAndPositive() {
+        var first = Fixtures.BuildDocument();
+        var second = Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 30) };
+
+        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(first, second, out var forward, out var forwardReason), forwardReason);
+        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(second, first, out var reverse, out var reverseReason), reverseReason);
+        Assert.Equal(forward, reverse);
+        Assert.True(forward > FixedQ4816.Zero);
+    }
+
+    [Fact]
+    public void ValidatorProvesReciprocalBoundaryAndRefusesDrift() {
+        var (west, east) = Pair();
+        var resolver = new Resolver(new Dictionary<string, WorldDefinition> { ["east.world.json"] = east, ["west.world.json"] = west });
+
+        Assert.True(WorldDefinitionValidator.TryValidate(west, out var accepted, resolver), accepted);
+
+        var drifted = east with {
+            Adjacencies = [east.Adjacencies![0] with { Boundary = Boundary(yaw: -90f) with { Width = 7f } }],
+        };
+        var driftResolver = new Resolver(new Dictionary<string, WorldDefinition> { ["east.world.json"] = drifted, ["west.world.json"] = west });
+
+        Assert.False(WorldDefinitionValidator.TryValidate(west, out var refused, driftResolver));
+        Assert.Contains("but neighbour", refused, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidatorRequiresTheDirectRouteForADerivedCornerPeer() {
+        var (source, left, right, corner) = Corner();
+        var resolver = new Resolver(new Dictionary<string, WorldDefinition> {
+            ["left.world.json"] = left,
+            ["right.world.json"] = right,
+            ["corner.world.json"] = corner,
+        });
+
+        Assert.True(WorldDefinitionValidator.TryValidate(source, out var accepted, resolver), accepted);
+
+        var missingRoute = source with {
+            Destinations = source.Destinations!.Where(row => !string.Equals(row?.Name.Value, "corner", StringComparison.Ordinal)).ToArray(),
+        };
+
+        Assert.False(WorldDefinitionValidator.TryValidate(missingRoute, out var refused, resolver));
+        Assert.Contains("derives corner neighbour 'corner.world.json'", refused, StringComparison.Ordinal);
+        Assert.Contains("no global persisted destination/reference", refused, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FederatedEntityAddressesUseTheDeclaredAuthorityNamespace() {
+        const string endpoint = "127.0.0.1:38601";
+        var definition = Fixtures.BuildDocument() with { Host = Fixtures.BuildDocument().Host with { Authority = endpoint } };
+        using var fixture = Fixtures.FreshServer(definition);
+
+        Assert.Equal(endpoint, fixture.Server.AuthorityIdentity);
+    }
+
+    private static (WorldDefinition West, WorldDefinition East) Pair() {
+        var west = Fixtures.BuildDocument() with {
+            References = [new WorldReference(WorldSafeName.Parse("east-ref"), "east.world.json")],
+            Destinations = [new WorldDestination(WorldSafeName.Parse("east"), "east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse("east-edge"), "east", "west-edge", Boundary(yaw: 90f))],
+        };
+        var east = Fixtures.BuildDocument() with {
+            References = [new WorldReference(WorldSafeName.Parse("west-ref"), "west.world.json")],
+            Destinations = [new WorldDestination(WorldSafeName.Parse("west"), "west-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse("west-edge"), "west", "east-edge", Boundary(yaw: -90f))],
+        };
+        return (west, east);
+    }
+
+    private static (WorldDefinition Source, WorldDefinition Left, WorldDefinition Right, WorldDefinition Corner) Corner() {
+        var source = Fixtures.BuildDocument() with {
+            References = [
+                new WorldReference(WorldSafeName.Parse("left-ref"), "left.world.json"),
+                new WorldReference(WorldSafeName.Parse("right-ref"), "right.world.json"),
+                new WorldReference(WorldSafeName.Parse("corner-ref"), "corner.world.json"),
+            ],
+            Destinations = [
+                new WorldDestination(WorldSafeName.Parse("left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse("right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+            ],
+            Adjacencies = [
+                new WorldAdjacency(WorldSafeName.Parse("left-edge"), "left", "source-edge", Boundary(yaw: 90f)),
+                new WorldAdjacency(WorldSafeName.Parse("right-edge"), "right", "source-edge", Boundary(yaw: 0f)),
+            ],
+        };
+        var left = Fixtures.BuildDocument() with {
+            References = [
+                new WorldReference(WorldSafeName.Parse("source-ref"), "source.world.json"),
+                new WorldReference(WorldSafeName.Parse("corner-ref"), "corner.world.json"),
+            ],
+            Destinations = [
+                new WorldDestination(WorldSafeName.Parse("source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+            ],
+            Adjacencies = [
+                new WorldAdjacency(WorldSafeName.Parse("source-edge"), "source", "left-edge", Boundary(yaw: -90f)),
+                new WorldAdjacency(WorldSafeName.Parse("corner-edge"), "corner", "left-edge", Boundary(yaw: 0f)),
+            ],
+        };
+        var right = Fixtures.BuildDocument() with {
+            References = [
+                new WorldReference(WorldSafeName.Parse("source-ref"), "source.world.json"),
+                new WorldReference(WorldSafeName.Parse("corner-ref"), "corner.world.json"),
+            ],
+            Destinations = [
+                new WorldDestination(WorldSafeName.Parse("source"), "source-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse("corner"), "corner-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+            ],
+            Adjacencies = [
+                new WorldAdjacency(WorldSafeName.Parse("source-edge"), "source", "right-edge", Boundary(yaw: 180f)),
+                new WorldAdjacency(WorldSafeName.Parse("corner-edge"), "corner", "right-edge", Boundary(yaw: 90f)),
+            ],
+        };
+        var corner = Fixtures.BuildDocument() with {
+            References = [
+                new WorldReference(WorldSafeName.Parse("left-ref"), "left.world.json"),
+                new WorldReference(WorldSafeName.Parse("right-ref"), "right.world.json"),
+            ],
+            Destinations = [
+                new WorldDestination(WorldSafeName.Parse("left"), "left-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse("right"), "right-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+            ],
+            Adjacencies = [
+                new WorldAdjacency(WorldSafeName.Parse("left-edge"), "left", "corner-edge", Boundary(yaw: 180f)),
+                new WorldAdjacency(WorldSafeName.Parse("right-edge"), "right", "corner-edge", Boundary(yaw: -90f)),
+            ],
+        };
+        return (source, left, right, corner);
+    }
+
+    private static WorldAdjacencyBoundary Boundary(float yaw) => new(Center: Vector3.Zero, OutwardYawDegrees: yaw, Width: 8f, Height: 8f);
+
+    private static FixedVector3 Fixed(double x, double y, double z) => new(FixedQ4816.FromDouble(x), FixedQ4816.FromDouble(y), FixedQ4816.FromDouble(z));
+
+    private sealed class Resolver(IReadOnlyDictionary<string, WorldDefinition> definitions) : IWorldNeighbourResolver {
+        public WorldNeighbourResolution Resolve(string document) => definitions.TryGetValue(document, out var definition)
+            ? WorldNeighbourResolution.Resolved(definition)
+            : WorldNeighbourResolution.Unavailable($"no '{document}'");
+    }
+}

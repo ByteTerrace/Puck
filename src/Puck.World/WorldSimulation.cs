@@ -105,7 +105,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             );
 
             stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in bootContext, tcpHost: m_tcpHost);
-            m_instances.ScanBootPortalTriggers();
+            m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step: ElapsedTicks/Tick report the AUTHORITATIVE
             // simulation's own completed engine time, so a paused/stopped boot's read-back must show exactly the
             // value it held the instant it stopped, never the host's own master-timeline advance it declined to

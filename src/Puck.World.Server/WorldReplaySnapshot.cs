@@ -239,7 +239,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4258u; // "PKBX" — puck replay tape.
+    private const uint Magic = 0x504B_4259u; // "PKBY" — puck replay tape; re-keyed for authority-transfer peer facts.
 
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
@@ -1322,6 +1322,11 @@ public sealed class WorldReplaySnapshot {
             WritePrincipal(writer: writer, principal: entry.Identity);
             writer.Write(value: entry.IdentityDomain);
             writer.Write(value: entry.IdentitySubject);
+            writer.Write(value: entry.AuthorityTransferred);
+            writer.Write(value: entry.PlacementId is not null);
+            if (entry.PlacementId is { } placementId) {
+                writer.Write(value: placementId);
+            }
         }
 
         writer.Write(value: grants.Count);
@@ -1342,12 +1347,14 @@ public sealed class WorldReplaySnapshot {
             var identity = ReadPrincipal(reader: reader);
             var identityDomain = reader.ReadString();
             var identitySubject = reader.ReadString();
+            var authorityTransferred = reader.ReadBoolean();
+            var placementId = (reader.ReadBoolean() ? reader.ReadString() : null);
 
             if ((identity.Kind != PrincipalKind.Peer) || (identity.Index != bodyIndex) || (identity.Generation != generation)) {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: identity {identity.Describe()} does not match body {bodyIndex}, generation {generation}.");
             }
 
-            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity, IdentityDomain: identityDomain, IdentitySubject: identitySubject));
+            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity, IdentityDomain: identityDomain, IdentitySubject: identitySubject, AuthorityTransferred: authorityTransferred, PlacementId: placementId));
         }
 
         var grantCount = ReadCount(reader: reader, minimumBytesEach: 5, what: "peer event grant");

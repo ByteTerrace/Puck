@@ -2,20 +2,6 @@
   "description": "The window-composition defaults \u2014 the seat framing every seat wakes on plus the authored named layouts (see WorldViewDefaults). An empty layout list falls the composer through to the built-in seat ladder.",
   "type": "object",
   "properties": {
-    "seatControl": {
-      "description": "The world-owned structural policy for live seat camera control.",
-      "type": "object",
-      "properties": {
-        "yawReference": {
-          "description": "Whether seat yaw is absolute in the world or relative to the controlled body's heading.",
-          "enum": ["World", "Body"]
-        },
-        "minPitch": { "description": "The minimum live pitch offset in radians.", "type": "number" },
-        "maxPitch": { "description": "The maximum live pitch offset in radians.", "type": "number" }
-      },
-      "required": ["yawReference", "minPitch", "maxPitch"],
-      "additionalProperties": false
-    },
     "seatRig": {
       "description": "The chase framing every seat\u0027s view resolves through (the non-editing default).",
       "type": "object",
@@ -39,6 +25,33 @@
         "motion",
         "aim",
         "lens"
+      ],
+      "additionalProperties": false
+    },
+    "seatControl": {
+      "description": "The structural constraints/reference for live seat camera input.",
+      "type": "object",
+      "properties": {
+        "yawReference": {
+          "description": "What the camera yaw is relative to.",
+          "enum": [
+            "World",
+            "Body"
+          ]
+        },
+        "minPitch": {
+          "description": "The minimum live pitch offset in radians.",
+          "type": "number"
+        },
+        "maxPitch": {
+          "description": "The maximum live pitch offset in radians.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "yawReference",
+        "minPitch",
+        "maxPitch"
       ],
       "additionalProperties": false
     },
@@ -115,8 +128,8 @@
     }
   },
   "required": [
-    "seatControl",
     "seatRig",
+    "seatControl",
     "layouts"
   ],
   "additionalProperties": false

@@ -9,14 +9,48 @@ namespace Puck.World.Server;
 /// server methods directly; this codec is only the transport underneath that contract.</summary>
 public static class WorldFederationWireFormat {
     /// <summary>A protocol discriminator distinct from the interactive peer wire key.</summary>
-    public const ulong WireKey = 0x31444546554B4350UL; // "PCUKFED1", little endian on the wire.
+    public const ulong WireKey = 0x33444546554B4350UL; // "PCKUFED3", little endian on the wire.
     /// <summary>The maximum framed federation payload.</summary>
     public const int MaxFrameBytes = (32 * 1024 * 1024);
 
     /// <summary>Federation request kinds.</summary>
-    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8 }
+    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8, Route = 9 }
     /// <summary>Federation response/event kinds.</summary>
-    public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7, Challenge = 8, Status = 9 }
+    public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7, Challenge = 8, Status = 9, Route = 10 }
+
+    /// <summary>Encodes a committed-transfer credential without a gameplay payload.</summary>
+    public static byte[] EncodeRouteCredential(string sourceAuthority, ulong transferId, int ordinal) {
+        using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
+        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal);
+        return output.ToArray();
+    }
+
+    public static bool TryDecodeRouteCredential(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal) {
+        try {
+            using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
+            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32();
+            return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (ordinal >= 0) && (input.Position == input.Length);
+        } catch (Exception exception) when (exception is IOException or FormatException) {
+            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; return false;
+        }
+    }
+
+    /// <summary>Encodes the final observable authority route for one traveler.</summary>
+    public static byte[] EncodeRoute(string endpoint, int bodyIndex) {
+        using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
+        writer.Write(endpoint); writer.Write(bodyIndex);
+        return output.ToArray();
+    }
+
+    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out string endpoint, out int bodyIndex) {
+        try {
+            using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
+            endpoint = reader.ReadString(); bodyIndex = reader.ReadInt32();
+            return !string.IsNullOrWhiteSpace(value: endpoint) && (bodyIndex >= 0) && (input.Position == input.Length);
+        } catch (Exception exception) when (exception is IOException or FormatException) {
+            endpoint = string.Empty; bodyIndex = -1; return false;
+        }
+    }
 
     /// <summary>Writes the federation discriminator.</summary>
     public static async Task WriteHelloAsync(Stream stream, CancellationToken ct) {
@@ -87,11 +121,13 @@ public static class WorldFederationWireFormat {
             writer.Write(capacity);
         }
         writer.Write(request.PartyAllOrNothing);
-        writer.Write(true); // A wire reservation always requests peer admission.
+        writer.Write(true); // A wire reservation always requests entity-table peer admission.
         writer.Write(request.Members.Count);
 
         foreach (var member in request.Members) {
             writer.Write(member.PreferredSlot);
+            WriteIntentSource(writer: writer, source: member.Source);
+            WriteVector(writer: writer, value: member.BodyColor);
             var document = member.Identity?.Document;
             var identityBytes = (document is null ? [] : WorldDefinitionSerialization.Serialize(definition: document));
             writer.Write(identityBytes.Length);
@@ -124,17 +160,25 @@ public static class WorldFederationWireFormat {
             var members = new WorldTransferReservationMember[count];
             for (var index = 0; index < count; index++) {
                 var preferred = reader.ReadInt32();
+                var source = ReadIntentSource(reader: reader);
+                var bodyColor = ReadVector(reader: reader);
+                if (!float.IsFinite(bodyColor.X) || !float.IsFinite(bodyColor.Y) || !float.IsFinite(bodyColor.Z)) {
+                    throw new FormatException($"traveler {index + 1} body color is not finite");
+                }
                 var byteCount = reader.ReadInt32();
-                if ((byteCount <= 0) || (byteCount > (16 * 1024 * 1024))) {
+                if ((byteCount < 0) || (byteCount > (16 * 1024 * 1024))) {
                     throw new FormatException($"traveler {index + 1} identity document length {byteCount} is invalid");
                 }
                 var bytes = reader.ReadBytes(byteCount);
                 if (bytes.Length != byteCount) {
                     throw new EndOfStreamException();
                 }
-                var definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
-                var identity = new WorldIdentity(document: definition, defaults: defaults);
-                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity);
+                WorldIdentity? identity = null;
+                if (byteCount > 0) {
+                    var definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+                    identity = new WorldIdentity(document: definition, defaults: defaults);
+                }
+                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor);
             }
 
             if (input.Position != input.Length) {
@@ -231,10 +275,10 @@ public static class WorldFederationWireFormat {
     /// <summary>Copies and encodes one per-tick projection record.</summary>
     public static byte[] EncodeSnapshot(in WorldSnapshot snapshot) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(snapshot.Tick); writer.Write(snapshot.Revision); writer.Write(snapshot.StepTicks); writer.Write(snapshot.Entries.Length);
+        writer.Write(snapshot.Tick); writer.Write(snapshot.Revision); writer.Write(snapshot.StepTicks); writer.Write(snapshot.Authority); writer.Write(snapshot.Entries.Length);
         foreach (var entry in snapshot.Entries.Span) {
             writer.Write(entry.Index); WriteVector(writer, entry.Position); WriteQuaternion(writer, entry.Orientation); WriteVector(writer, entry.BodyColor);
-            writer.Write(entry.Active); writer.Write(entry.Kit); writer.Write(entry.Look); writer.Write((byte)entry.Continuity.Kind); writer.Write(entry.Continuity.Seconds);
+            writer.Write(entry.Active); writer.Write(entry.Kit); writer.Write(entry.Look); writer.Write((byte)entry.Continuity.Kind); writer.Write(entry.Continuity.Seconds); writer.Write(entry.Generation);
             writer.Write(entry.PlacementId is not null);
             if (entry.PlacementId is { } placementId) {
                 writer.Write(placementId);
@@ -246,11 +290,11 @@ public static class WorldFederationWireFormat {
     /// <summary>Decodes one per-tick projection record.</summary>
     public static WorldSnapshot DecodeSnapshot(ReadOnlySpan<byte> body) {
         using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-        var tick = reader.ReadUInt64(); var revision = reader.ReadInt32(); var stepTicks = reader.ReadUInt64(); var count = reader.ReadInt32(); var entries = new EntitySnapshot[count];
+        var tick = reader.ReadUInt64(); var revision = reader.ReadInt32(); var stepTicks = reader.ReadUInt64(); var authority = reader.ReadString(); var count = reader.ReadInt32(); var entries = new EntitySnapshot[count];
         for (var i = 0; i < count; i++) {
-            entries[i] = new EntitySnapshot(reader.ReadInt32(), ReadVector(reader), ReadQuaternion(reader), ReadVector(reader), reader.ReadBoolean(), reader.ReadByte(), reader.ReadByte(), new EntityContinuity((EntityContinuityKind)reader.ReadByte(), reader.ReadSingle()), reader.ReadBoolean() ? reader.ReadString() : null);
+            entries[i] = new EntitySnapshot(reader.ReadInt32(), ReadVector(reader), ReadQuaternion(reader), ReadVector(reader), reader.ReadBoolean(), reader.ReadByte(), reader.ReadByte(), new EntityContinuity((EntityContinuityKind)reader.ReadByte(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadBoolean() ? reader.ReadString() : null);
         }
-        return new WorldSnapshot(tick, revision, stepTicks, entries);
+        return new WorldSnapshot(tick, revision, stepTicks, entries, authority);
     }
 
     /// <summary>Encodes a transferred body's per-tick intent with its lease credential.</summary>
@@ -285,6 +329,26 @@ public static class WorldFederationWireFormat {
             sourceAuthority = string.Empty; transferId = 0; ordinal = -1; submission = default; return false;
         }
     }
+
+    private static void WriteIntentSource(BinaryWriter writer, IntentSource source) {
+        if (source.IsLive) {
+            writer.Write((byte)0);
+        } else if (source.IsIdle) {
+            writer.Write((byte)1);
+        } else if (source.IsProducer && (source.ProducerName is { } producerName)) {
+            writer.Write((byte)2);
+            writer.Write(producerName);
+        } else {
+            throw new InvalidOperationException($"intent source '{source}' is not defined");
+        }
+    }
+
+    private static IntentSource ReadIntentSource(BinaryReader reader) => reader.ReadByte() switch {
+        0 => IntentSource.Live,
+        1 => IntentSource.Idle,
+        2 => IntentSource.Producer(name: reader.ReadString()),
+        var kind => throw new FormatException($"intent source tag {kind} is not defined"),
+    };
 
     public static byte[] EncodeTransferKey(string sourceAuthority, ulong transferId) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);

@@ -10,7 +10,11 @@ namespace Puck.World.Protocol;
 /// document-authored/simulated peer. Replay needs this independently of <paramref name="Identity"/>, which is the
 /// generated runtime <c>peer:index:generation</c> principal rather than the identity that admission verified.</param>
 /// <param name="IdentitySubject">The verified admission subject, or empty when no remote identity was admitted.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject);
+/// <param name="AuthorityTransferred">Whether this occupant arrived from another authority and must therefore be
+/// excluded from destination-authored census reconciliation.</param>
+/// <param name="PlacementId">The source-local inhabited placement claim, carried only so an aborted detach can restore
+/// the exact admission row; a committed destination admission starts without it.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred = false, string? PlacementId = null);
 
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>

@@ -42,7 +42,7 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
     private readonly Func<TrackedTarget> m_trackedTarget;
     private readonly Func<string?> m_layoutOverride;
     private readonly Func<string?> m_cameraOverride;
-    private readonly WorldBorderMarginSceneEmitter? m_borderMargin;
+    private readonly WorldAdjacencySceneEmitter? m_adjacencies;
     private readonly WorldViewComposer m_composer = new();
     private readonly List<SdfViewSnapshot> m_views = new();
     private readonly Dictionary<string, GroupAnchorState> m_groupAnchors = new(comparer: StringComparer.Ordinal);
@@ -73,9 +73,9 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
     /// <param name="layoutOverride">Resolves the live composition layout override.</param>
     /// <param name="cameraOverride">Resolves the live composition camera override. Away composition consumes the
     /// same overrides as a direct boot in the destination.</param>
-    /// <param name="borderMargin">The destination's live stitched-border renderer, when it has one, so camera
+    /// <param name="adjacencies">The destination's live adjacency renderer, when it has one, so camera
     /// clearance evaluates the same neighbour geometry the offscreen composition shows.</param>
-    public AwaySeatSceneEmitter(WorldSessionMirror mirror, Func<WorldSeatViewState?> viewState, Func<TrackedTarget> trackedTarget, Func<string?> layoutOverride, Func<string?> cameraOverride, WorldBorderMarginSceneEmitter? borderMargin = null) {
+    public AwaySeatSceneEmitter(WorldSessionMirror mirror, Func<WorldSeatViewState?> viewState, Func<TrackedTarget> trackedTarget, Func<string?> layoutOverride, Func<string?> cameraOverride, WorldAdjacencySceneEmitter? adjacencies = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: viewState);
         ArgumentNullException.ThrowIfNull(argument: trackedTarget);
@@ -87,7 +87,7 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
         m_trackedTarget = trackedTarget;
         m_layoutOverride = layoutOverride;
         m_cameraOverride = cameraOverride;
-        m_borderMargin = borderMargin;
+        m_adjacencies = adjacencies;
     }
 
     /// <inheritdoc/>
@@ -108,7 +108,7 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
 
     /// <summary>Measures a proposed destination definition against this view's frozen render envelope.</summary>
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
-        WorldSessionRenderEnvelope.MeasureCandidate(candidate: candidate, bodyColor: m_mirror.BodyColor, includeScreens: true, includeBorderMargins: true);
+        WorldSessionRenderEnvelope.MeasureCandidate(candidate: candidate, bodyColor: m_mirror.BodyColor, includeScreens: true, includeAdjacencies: true);
 
     private static void EmitScreens(SdfProgramBuilder builder, WorldDefinition definition) {
         var facets = WorldCreationFacets.Derive(
@@ -227,7 +227,7 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
 
         m_lastProgram = program;
         if (programChanged) {
-            // A margin-neighbour revision rebuilds the composed program without changing the destination definition.
+            // An adjacency-neighbour revision rebuilds the composed program without changing the destination definition.
             m_cameraClearanceDefinitionRevision = int.MinValue;
         }
         m_elapsedSeconds += deltaSeconds;
@@ -491,7 +491,7 @@ internal sealed class AwaySeatSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser 
 
             WorldPlacementStamper.EmitStatic(builder: builder, creations: definition.Creations, placements: definition.Placements);
             EmitScreens(builder: builder, definition: definition);
-            m_borderMargin?.EmitCurrent(builder: builder);
+            m_adjacencies?.EmitCurrent(builder: builder);
             m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
         } catch (ArgumentException) {
             // Some authored render-only operations intentionally sit outside the deterministic query evaluator. Such

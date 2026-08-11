@@ -8,7 +8,7 @@
         keyboard, gamepads, and console-scripted alike (every player is a networked player; a local device is just one
         at zero latency) — each with a persisted profile (color + speeds + look-invert), a chased over-the-shoulder
         camera, its own colored avatar, and its own viewport on the layout ladder (fullscreen → side-by-side →
-        big-top/two-bottom → 2×2 quad as players join). Authored creations, placements, and legacy scene rows render
+        big-top/two-bottom → 2×2 quad as players join). Authored creations and placements render
         through the shared SDF render assembly. Owned worlds persist as files under the state root and sync to a
         per-user cloud container through Puck.Storage (the storage.* verbs). Its authoritative simulation uses the Hosting/Launcher
         fixed-step easy path, per-tick command snapshots, and Puck.Maths fixed point. World-specific behavior has no

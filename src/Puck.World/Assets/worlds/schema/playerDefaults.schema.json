@@ -120,7 +120,7 @@
           ]
         },
         "stickLookRate": {
-          "description": "The look stick's yaw/pitch rate in radians per second at full deflection.",
+          "description": "The look stick\u0027s yaw/pitch rate in radians per second at full deflection.",
           "type": "number"
         }
       },

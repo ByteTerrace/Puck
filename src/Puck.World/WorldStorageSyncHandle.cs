@@ -9,7 +9,7 @@ namespace Puck.World;
 /// and a resolved user identity (the container the platform provisioned for the user). Either absence leaves the
 /// catalog local-only, and <see cref="Disposition"/> says which one declined — <c>storage.status</c> echoes it either
 /// way. Also carries <see cref="Neighbours"/> — a second, read-only capability riding the same resolved target and
-/// container: whatever wires push/pull also wires whether a border-margin cross-document proof can reach a
+/// container: whatever wires push/pull also wires whether an adjacency cross-document proof can reach a
 /// neighbour, since both need the identical (target, containerId) pair and neither exists without it.
 /// </summary>
 /// <remarks>
@@ -80,7 +80,7 @@ internal sealed class WorldStorageSyncHandle {
 
     /// <summary>The sync engine, or <see langword="null"/> when the cloud is unwired.</summary>
     public WorldOwnedWorldSync? Engine { get; }
-    /// <summary>The cloud-backed neighbour resolver a mapped portal facet's border-margin proof reads, or
+    /// <summary>The cloud-backed neighbour resolver an adjacency proof reads, or
     /// <see langword="null"/> when the cloud is unwired — the same condition <see cref="Engine"/> is null under, read
     /// only at document-load moments (see <c>WorldServer.Neighbours</c>' own remarks), never on a live per-mutation
     /// path.</summary>

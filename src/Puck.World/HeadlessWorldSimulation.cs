@@ -57,7 +57,7 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
             );
 
             stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in bootContext, tcpHost: m_tcpHost);
-            m_instances.ScanBootPortalTriggers();
+            m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step; see WorldSimulation.Step's identical remark.
             // Written HERE, from bootContext's own values, never from the raw pump context.
             ElapsedTicks = bootContext.ElapsedTicks;

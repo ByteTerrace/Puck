@@ -50,19 +50,19 @@ public static class WorldDefinitionValidator {
     // from declaring thousands of budgeted offscreen engines (ViewStack.MaxRegisteredViews is the runtime floor).
     private const int MaxCameras = 64;
 
-    /// <summary>Validates a candidate definition, including its cross-document margin claims, without throwing. On
+    /// <summary>Validates a candidate definition, including its cross-document adjacency claims, without throwing. On
     /// failure, <paramref name="reason"/> carries the collapsed one-line error list.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="reason">The collapsed failure reason, or empty on success.</param>
-    /// <param name="neighbours">The injected neighbour resolver a cross-document border-margin check reads (see
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads (see
     /// <see cref="Validate"/>). Required — not defaulted — so every call site states whether it can resolve a
     /// neighbour rather than silently opting out; <see langword="null"/> remains a legitimate, explicit answer for a
     /// call site that must refuse an unprovable claim. It is consulted only when a document authors a
-    /// <see cref="WorldPlacementPortal.MarginDepth"/>.</param>
+    /// <see cref="WorldDefinition.Adjacencies"/>.</param>
     /// <returns><see langword="true"/> when the candidate is valid.</returns>
     public static bool TryValidate(WorldDefinition definition, out string reason, IWorldNeighbourResolver? neighbours) {
         try {
-            ValidateCore(definition: definition, neighbours: neighbours, validateMarginClaims: true);
+            ValidateCore(definition: definition, neighbours: neighbours, validateAdjacencyClaims: true);
             reason = string.Empty;
 
             return true;
@@ -74,14 +74,14 @@ public static class WorldDefinitionValidator {
     }
 
     /// <summary>Validates every fact owned by one document without re-reading neighbour documents. This is the
-    /// apply-time gate for a candidate whose cross-document margin claims were already proved at its load boundary;
+    /// apply-time gate for a candidate whose cross-document adjacency claims were already proved at its load boundary;
     /// callers must separately refuse edits that change an existing claim or any input to its derived floor.</summary>
     /// <param name="definition">The candidate definition.</param>
     /// <param name="reason">The collapsed failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the document-local facts are valid.</returns>
     public static bool TryValidateLocally(WorldDefinition definition, out string reason) {
         try {
-            ValidateCore(definition: definition, neighbours: null, validateMarginClaims: false);
+            ValidateCore(definition: definition, neighbours: null, validateAdjacencyClaims: false);
             reason = string.Empty;
 
             return true;
@@ -95,19 +95,18 @@ public static class WorldDefinitionValidator {
     /// <summary>Validates a candidate definition, throwing <see cref="InvalidOperationException"/> naming every
     /// collected failure when it is not sound.</summary>
     /// <param name="definition">The candidate definition.</param>
-    /// <param name="neighbours">The injected seam a mapped portal facet's <see cref="WorldPlacementPortal.MarginDepth"/>
-    /// resolves its counterpart document through. The implementation must obtain an authority-delivered document,
+    /// <param name="neighbours">The injected seam an adjacency uses to resolve its counterpart document. The
+    /// implementation must obtain an authority-delivered document,
     /// not assume that the neighbour shares a host, process, or filesystem (see <see cref="IWorldNeighbourResolver"/>).
     /// Required — not defaulted — so a caller states its answer rather than silently declining to decide; pass
     /// <see langword="null"/> explicitly for a call site with no reachable resolver (see <see cref="TryValidate"/>).
-    /// A document authoring no <see cref="WorldPlacementPortal.MarginDepth"/> is unaffected either way. A document
-    /// that does author one, validated with a null (or an unreachable) resolver, is refused by name — a
-    /// border-margin claim this pass cannot verify is never silently accepted.</param>
+    /// A document authoring no adjacency is unaffected either way. A document that does author one, validated with
+    /// a null (or unreachable) resolver, is refused by name.</param>
     public static void Validate(WorldDefinition definition, IWorldNeighbourResolver? neighbours) {
-        ValidateCore(definition: definition, neighbours: neighbours, validateMarginClaims: true);
+        ValidateCore(definition: definition, neighbours: neighbours, validateAdjacencyClaims: true);
     }
 
-    private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateMarginClaims) {
+    private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
         ArgumentNullException.ThrowIfNull(definition);
 
         RequireSections(definition: definition);
@@ -262,6 +261,8 @@ public static class WorldDefinitionValidator {
         // row's selector resolves against groupIds (see the move above).
         var destinationNames = ValidateDestinations(destinations: definition.Destinations, references: definition.References, referenceNames: referenceNames, groupIds: groupIds, errors: errors);
 
+        ValidateAdjacencies(definition: definition, destinationNames: destinationNames, neighbours: (validateAdjacencyClaims ? neighbours : null), proveNeighbours: validateAdjacencyClaims, errors: errors);
+
         var authoring = definition.Authoring;
 
         ValidateAuthoring(authoring: authoring, errors: errors);
@@ -280,14 +281,6 @@ public static class WorldDefinitionValidator {
         ValidateLookAssignment(assignment: definition.LookAssignment, lookNames: lookNames, errors: errors);
 
         var placementIds = ValidatePlacements(placements: definition.Placements, definition: definition, creationIds: creationIds, lookNames: lookNames, kitNames: kitNames, authoring: authoring, patchIds: patchIds, requiresField: WorldContactSelection.RequiresField(collision: collision), destinationNames: destinationNames, errors: errors);
-
-        // The border-margin strip: an independent pass over the same placement rows ValidatePlacements just walked,
-        // rather than another parameter threaded through its per-face loop — the check is cross-document (it needs
-        // the neighbour's own declared data) where every other placement/face rule is single-document, so keeping it
-        // separate keeps a document-only reviewer from needing to reason about resolver plumbing at all.
-        if (validateMarginClaims) {
-            ValidateMarginStrips(definition: definition, neighbours: neighbours, errors: errors);
-        }
 
         // Document-wide, independent of any single placement's own row checks above — see its own remarks.
         ValidateSessionWindowBudget(placements: definition.Placements, errors: errors);
@@ -3510,18 +3503,6 @@ public static class WorldDefinitionValidator {
             errors.Add(item: $"{path}.counterpart '{portal.Counterpart}' is authored but {path}.arrival is not 'mapped' — a counterpart names a mapped arrival's destination frame only.");
         }
 
-        // marginDepth's own SHAPE (mapped-only, finite, positive) is a single-document fact this pass already owns;
-        // whether it clears the DERIVED floor and matches what the neighbour authors is a cross-document fact only
-        // ValidateMarginStrips can check (it needs the counterpart document, which this pass never resolves — see
-        // Counterpart's own remarks above).
-        if (portal.MarginDepth is { } marginDepth) {
-            if (portal.Arrival != WorldPortalArrival.Mapped) {
-                errors.Add(item: $"{path}.marginDepth {marginDepth} is authored but {path}.arrival is not 'mapped' — a margin strip shares ground with a mapped arrival's counterpart face only.");
-            } else if (!float.IsFinite(f: marginDepth) || (marginDepth <= 0f)) {
-                errors.Add(item: $"{path}.marginDepth {marginDepth} must be finite and positive.");
-            }
-        }
-
         if (portal.Capacity is { } capacity) {
             RequireIntRange(value: capacity, min: 1, max: WorldPopulationLimits.CapacityCeiling, name: $"{path}.capacity", errors: errors);
         }
@@ -3549,273 +3530,171 @@ public static class WorldDefinitionValidator {
         }
     }
 
-    // The border-margin strip: walks every mapped portal facet that authors a marginDepth and proves it against the
-    // NEIGHBOUR document (through the injected resolver) rather than this one alone. A facet authoring no
-    // marginDepth needs no proof and costs this pass nothing beyond the walk. Memoizes one resolution per distinct
-    // WorldReference.Document so a quilt of several borders naming the same neighbour fetches it once.
-    private static void ValidateMarginStrips(WorldDefinition definition, IWorldNeighbourResolver? neighbours, List<string> errors) {
-        var placements = definition.Placements;
+    private static void ValidateAdjacencies(WorldDefinition definition, HashSet<string> destinationNames, IWorldNeighbourResolver? neighbours, bool proveNeighbours, List<string> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var resolutions = new Dictionary<string, WorldNeighbourResolution>(comparer: StringComparer.Ordinal);
 
-        if (placements is not { Count: > 0 }) {
+        foreach (var adjacency in (definition.Adjacencies ?? [])) {
+            if (adjacency is null) {
+                errors.Add(item: "adjacencies contains a null row.");
+                continue;
+            }
+
+            var path = $"adjacencies[{adjacency.Name}]";
+            if (!names.Add(item: adjacency.Name.Value)) {
+                errors.Add(item: $"{path}.name is duplicated.");
+            }
+            if (!destinationNames.Contains(item: adjacency.Destination) || WorldDefinitionRows.FindDestination(destinations: definition.Destinations, name: adjacency.Destination) is not { } destination) {
+                errors.Add(item: $"{path}.destination '{adjacency.Destination}' names no destinations row.");
+                continue;
+            }
+            if ((destination.Scope != WorldDestinationScope.Global) || (destination.Durability != WorldDestinationDurability.Persisted)) {
+                errors.Add(item: $"{path}.destination '{destination.Name}' must be global and persisted — adjacency names one stable neighbouring authority.");
+            }
+            if (!WorldSafeName.TryParse(candidate: adjacency.Counterpart, name: out _, reason: out var counterpartReason)) {
+                errors.Add(item: $"{path}.counterpart '{adjacency.Counterpart}' is invalid — {counterpartReason}.");
+            }
+            if ((adjacency.Boundary is not { } boundary) || !IsFinite(value: boundary.Center) ||
+                !float.IsFinite(f: boundary.OutwardYawDegrees) ||
+                !float.IsFinite(f: boundary.Width) || (boundary.Width <= 0f) ||
+                !float.IsFinite(f: boundary.Height) || (boundary.Height <= 0f)) {
+                errors.Add(item: $"{path}.boundary must have a finite center/yaw and positive finite width/height.");
+                continue;
+            }
+            if (!Enum.IsDefined(value: adjacency.Unavailable)) {
+                errors.Add(item: $"{path}.unavailable '{adjacency.Unavailable}' is not defined.");
+            }
+            if (!proveNeighbours) {
+                continue;
+            }
+            if (WorldDefinitionRows.FindReference(references: definition.References, name: destination.Reference) is not { } reference) {
+                continue;
+            }
+            if (neighbours is null) {
+                errors.Add(item: $"{path} cannot be proven because no neighbour resolver was supplied.");
+                continue;
+            }
+            if (!resolutions.TryGetValue(key: reference.Document, value: out var resolution)) {
+                resolution = neighbours.Resolve(document: reference.Document);
+                resolutions[reference.Document] = resolution;
+            }
+            if (resolution.Kind != WorldNeighbourResolutionKind.Resolved) {
+                errors.Add(item: $"{path} cannot reach neighbour '{reference.Document}' — {resolution.Reason}.");
+                continue;
+            }
+
+            if (resolution.Definition is not { } neighbour) {
+                errors.Add(item: $"{path} resolver returned no neighbour document for '{reference.Document}'.");
+                continue;
+            }
+            if (WorldDefinitionRows.FindAdjacency(adjacencies: neighbour.Adjacencies, name: adjacency.Counterpart) is not { } counterpart) {
+                errors.Add(item: $"{path}.counterpart '{adjacency.Counterpart}' names no adjacency in neighbour '{reference.Document}'.");
+                continue;
+            }
+            if (!string.Equals(a: counterpart.Counterpart, b: adjacency.Name.Value, comparisonType: StringComparison.Ordinal)) {
+                errors.Add(item: $"{path} is not reciprocal — neighbour '{reference.Document}'/'{counterpart.Name}' points to '{counterpart.Counterpart}', not '{adjacency.Name}'.");
+            }
+
+            var localFrame = boundary.CompileFrame();
+            if (counterpart.Boundary is not { } counterpartBoundary) {
+                errors.Add(item: $"{path}.counterpart '{adjacency.Counterpart}' has no boundary.");
+                continue;
+            }
+            var neighbourFrame = counterpartBoundary.CompileFrame();
+            if ((localFrame.HalfWidth != neighbourFrame.HalfWidth) || (localFrame.HalfHeight != neighbourFrame.HalfHeight)) {
+                errors.Add(item: $"{path}.boundary is {(double)localFrame.HalfWidth * 2:0.#####}x{(double)localFrame.HalfHeight * 2:0.#####}, but neighbour '{reference.Document}'/'{counterpart.Name}' is {(double)neighbourFrame.HalfWidth * 2:0.#####}x{(double)neighbourFrame.HalfHeight * 2:0.#####}.");
+            }
+            if (!WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour, depth: out _, reason: out var overlapReason)) {
+                errors.Add(item: $"{path} overlap cannot be derived — {overlapReason}.");
+            }
+        }
+
+        if (proveNeighbours && (neighbours is not null)) {
+            ValidateDerivedAdjacencyCorners(definition: definition, neighbours: neighbours, resolutions: resolutions, errors: errors);
+        }
+    }
+
+    private static void ValidateDerivedAdjacencyCorners(
+        WorldDefinition definition,
+        IWorldNeighbourResolver neighbours,
+        Dictionary<string, WorldNeighbourResolution> resolutions,
+        List<string> errors
+    ) {
+        var rows = (definition.Adjacencies ?? []).Where(predicate: static row => row is not null).ToArray();
+        for (var leftIndex = 0; leftIndex < rows.Length; leftIndex++) {
+            var left = rows[leftIndex]!;
+            if (WorldAdjacencyPolicy.DestinationDocument(definition: definition, destinationName: left.Destination) is not { } leftDocument ||
+                !TryResolved(document: leftDocument, neighbours: neighbours, resolutions: resolutions, definition: out var leftDefinition)) {
+                continue;
+            }
+
+            for (var rightIndex = (leftIndex + 1); rightIndex < rows.Length; rightIndex++) {
+                var right = rows[rightIndex]!;
+                if (WorldAdjacencyPolicy.DestinationDocument(definition: definition, destinationName: right.Destination) is not { } rightDocument ||
+                    !TryResolved(document: rightDocument, neighbours: neighbours, resolutions: resolutions, definition: out var rightDefinition) ||
+                    !WorldAdjacencyPolicy.TrySharedCorner(
+                        left: leftDefinition!,
+                        leftBack: left.Counterpart,
+                        right: rightDefinition!,
+                        rightBack: right.Counterpart,
+                        document: out var cornerDocument,
+                        leftEdge: out var leftEdge,
+                        rightEdge: out var rightEdge)) {
+                    continue;
+                }
+
+                var path = $"adjacencies[{left.Name}]+adjacencies[{right.Name}]";
+                if (WorldAdjacencyPolicy.GlobalDestinationForDocument(definition: definition, document: cornerDocument) is null) {
+                    errors.Add(item: $"{path} derives corner neighbour '{cornerDocument}', but this document declares no global persisted destination/reference for that authority.");
+                    continue;
+                }
+
+                if (!TryResolved(document: cornerDocument, neighbours: neighbours, resolutions: resolutions, definition: out var cornerDefinition)) {
+                    var resolution = resolutions[cornerDocument];
+                    errors.Add(item: $"{path} cannot reach derived corner neighbour '{cornerDocument}' — {resolution.Reason}.");
+                    continue;
+                }
+
+                ValidateCornerPath(path: path, viaDocument: leftDocument, via: leftDefinition!, viaEdge: leftEdge!, cornerDocument: cornerDocument, corner: cornerDefinition!, errors: errors);
+                ValidateCornerPath(path: path, viaDocument: rightDocument, via: rightDefinition!, viaEdge: rightEdge!, cornerDocument: cornerDocument, corner: cornerDefinition!, errors: errors);
+            }
+        }
+    }
+
+    private static bool TryResolved(
+        string document,
+        IWorldNeighbourResolver neighbours,
+        Dictionary<string, WorldNeighbourResolution> resolutions,
+        out WorldDefinition? definition
+    ) {
+        if (!resolutions.TryGetValue(key: document, value: out var resolution)) {
+            resolution = neighbours.Resolve(document: document);
+            resolutions[document] = resolution;
+        }
+
+        definition = resolution.Definition;
+        return ((resolution.Kind == WorldNeighbourResolutionKind.Resolved) && (definition is not null));
+    }
+
+    private static void ValidateCornerPath(string path, string viaDocument, WorldDefinition via, WorldAdjacency viaEdge, string cornerDocument, WorldDefinition corner, List<string> errors) {
+        if (WorldDefinitionRows.FindAdjacency(adjacencies: corner.Adjacencies, name: viaEdge.Counterpart) is not { } counterpart) {
+            errors.Add(item: $"{path} reaches '{cornerDocument}' through '{viaDocument}'/'{viaEdge.Name}', but corner counterpart '{viaEdge.Counterpart}' does not exist.");
             return;
         }
 
-        var destinationsByName = new Dictionary<string, WorldDestination>(comparer: StringComparer.Ordinal);
-        foreach (var destination in (definition.Destinations ?? [])) {
-            if (destination is not null) {
-                destinationsByName[destination.Name.Value] = destination;
-            }
+        if (!string.Equals(a: counterpart.Counterpart, b: viaEdge.Name.Value, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"{path} reaches '{cornerDocument}' through '{viaDocument}'/'{viaEdge.Name}', but corner '{counterpart.Name}' points to '{counterpart.Counterpart}', not '{viaEdge.Name}'.");
         }
 
-        var referencesByName = new Dictionary<string, WorldReference>(comparer: StringComparer.Ordinal);
-        foreach (var reference in (definition.References ?? [])) {
-            if (reference is not null) {
-                referencesByName[reference.Name.Value] = reference;
-            }
+        var viaFrame = viaEdge.Boundary.CompileFrame();
+        var cornerFrame = counterpart.Boundary.CompileFrame();
+        if ((viaFrame.HalfWidth != cornerFrame.HalfWidth) || (viaFrame.HalfHeight != cornerFrame.HalfHeight)) {
+            errors.Add(item: $"{path} reaches '{cornerDocument}' through '{viaDocument}'/'{viaEdge.Name}', whose boundary dimensions do not match corner '{counterpart.Name}'.");
         }
 
-        var resolutions = new Dictionary<string, WorldNeighbourResolution>(comparer: StringComparer.Ordinal);
-
-        foreach (var placement in placements) {
-            if ((placement?.FaceSources) is not { Count: > 0 } faceSources) {
-                continue;
-            }
-
-            foreach (var face in faceSources) {
-                if ((face?.Portal) is not { Arrival: WorldPortalArrival.Mapped, MarginDepth: { } authoredDepth } portal) {
-                    continue;
-                }
-
-                // Malformed/unparseable/undeclared shapes already carry their own named refusal from ValidatePortal
-                // and ValidateDestinations/ValidateReferences — this pass adds nothing for a fact another pass has
-                // already named, and a malformed counterpart has no neighbour to resolve against anyway.
-                if (!float.IsFinite(f: authoredDepth) || (authoredDepth <= 0f) ||
-                    !WorldPortalCounterpart.TryParse(counterpart: portal.Counterpart, placementId: out _, face: out _) ||
-                    !destinationsByName.TryGetValue(key: portal.Destination, value: out var destination) ||
-                    !referencesByName.TryGetValue(key: destination.Reference, value: out var reference)) {
-                    continue;
-                }
-
-                var path = $"placements[{placement.Id}].faceSources[{face.Face}].portal.marginDepth";
-
-                if (destination.Scope != WorldDestinationScope.Global) {
-                    errors.Add(item: $"{path} is authored for {WorldDestinationTokens.ScopeToken(scope: destination.Scope)}-scoped destination '{destination.Name}', but one shared authority-side contact field cannot select a viewer-specific neighbour — omit marginDepth until per-body scoped stitching exists.");
-
-                    continue;
-                }
-
-                if (neighbours is null) {
-                    errors.Add(item: $"{path} {authoredDepth} is authored, but no neighbour resolver was supplied — a shared strip cannot be proven identical against an unreachable document, so it is refused rather than silently accepted.");
-
-                    continue;
-                }
-
-                if (!resolutions.TryGetValue(key: reference.Document, out var resolution)) {
-                    resolution = neighbours.Resolve(document: reference.Document);
-                    resolutions[reference.Document] = resolution;
-                }
-
-                if (resolution.Kind != WorldNeighbourResolutionKind.Resolved) {
-                    errors.Add(item: $"{path} {authoredDepth} is authored, but neighbour '{reference.Document}' could not be reached — {resolution.Reason}.");
-
-                    continue;
-                }
-
-                var neighbourDefinition = resolution.Definition!;
-
-                if (!WorldPortalCounterpart.TryResolve(definition: neighbourDefinition, counterpart: portal.Counterpart, placement: out var counterpartPlacement, face: out var counterpartFace, reason: out var counterpartReason)) {
-                    errors.Add(item: $"{path} {authoredDepth} cannot be proven identical — {counterpartReason}.");
-
-                    continue;
-                }
-
-                // A shared strip is a PAIR of faces, not merely two same-sized rectangles that happen to author the
-                // same number. Prove that the destination face names this exact source face as its own counterpart;
-                // otherwise A/B and B/C can accidentally borrow one another's geometry under a one-way chain.
-                var expectedReturn = $"{placement.Id}/{face.Face}";
-
-                if (counterpartFace!.Portal is not { Arrival: WorldPortalArrival.Mapped, Counterpart: { } returnCounterpart } ||
-                    !string.Equals(a: returnCounterpart, b: expectedReturn, comparisonType: StringComparison.Ordinal)) {
-                    errors.Add(item: $"{path} cannot be proven reciprocal — neighbour '{reference.Document}''s counterpart '{portal.Counterpart}' must map back to '{expectedReturn}'.");
-
-                    continue;
-                }
-
-                // Dimension parity. Arrival applies (-SeamU, SeamV) onto the counterpart's own
-                // frame — a border whose two faces carry different half-extents lands a traveler off the door (or
-                // off any strip) on whichever side is narrower. A shared strip's whole claim is that both faces
-                // occupy the SAME rectangle, so that claim is refused by name here rather than assumed, reading the
-                // SAME derived frames WorldFaceCatalog already computes for arrival/render (never re-derived).
-                if (!WorldFaceCatalog.For(definition: definition).TryFind(placementId: placement.Id, faceName: face.Face, out var localRow)) {
-                    errors.Add(item: $"{path} names a face this document's own face catalog cannot resolve.");
-
-                    continue;
-                }
-
-                if (!WorldFaceCatalog.For(definition: neighbourDefinition).TryFind(placementId: counterpartPlacement!.Id, faceName: counterpartFace!.Face, out var neighbourRow)) {
-                    errors.Add(item: $"{path} cannot be proven identical — neighbour '{reference.Document}''s counterpart '{portal.Counterpart}' names a face its own face catalog cannot resolve.");
-
-                    continue;
-                }
-
-                if ((localRow.Frame.HalfWidth != neighbourRow.Frame.HalfWidth) || (localRow.Frame.HalfHeight != neighbourRow.Frame.HalfHeight)) {
-                    errors.Add(item: $"{path} is authored, but this face is {(double)localRow.Frame.HalfWidth:0.#####}x{(double)localRow.Frame.HalfHeight:0.#####} while neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' is {(double)neighbourRow.Frame.HalfWidth:0.#####}x{(double)neighbourRow.Frame.HalfHeight:0.#####} — a shared strip needs matching door dimensions on both sides, or the arrival isometry lands off one of them.");
-
-                    continue;
-                }
-
-                if (!TryMarginDepthFloor(local: definition, neighbour: neighbourDefinition, floor: out var floor, unreadableReason: out var unreadableReason)) {
-                    errors.Add(item: $"{path} {authoredDepth} cannot be proven — {unreadableReason} — a derived floor this validator cannot compute from declared data is refused rather than treated as zero.");
-
-                    continue;
-                }
-
-                var authoredFixed = FixedQ4816.FromDouble(value: authoredDepth);
-
-                if (authoredFixed < floor) {
-                    errors.Add(item: $"{path} {authoredDepth} is below the derived floor {(double)floor:0.#####} world units (interaction reach + max closing speed x tape latency, read from this document and neighbour '{reference.Document}') — raise it, or drop it to take the floor.");
-
-                    continue;
-                }
-
-                if (counterpartFace.Portal.MarginDepth is not { } neighbourDepth) {
-                    errors.Add(item: $"{path} authors {authoredDepth}, but neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' authors no marginDepth of its own — a shared strip must be authored on BOTH sides.");
-
-                    continue;
-                }
-
-                var neighbourFixed = FixedQ4816.FromDouble(value: neighbourDepth);
-
-                if (authoredFixed != neighbourFixed) {
-                    errors.Add(item: $"{path} authors {authoredDepth}, but neighbour '{reference.Document}''s counterpart face '{portal.Counterpart}' authors {neighbourDepth} — a shared strip must be bit-identical on both sides.");
-                }
-            }
+        if (!WorldAdjacencyPolicy.TryDeriveOverlap(local: via, neighbour: corner, depth: out _, reason: out var overlapReason)) {
+            errors.Add(item: $"{path} derived corner overlap cannot be compiled — {overlapReason}.");
         }
-    }
-
-    // The derived margin floor: how deep a shared strip must be so a body already touching one side's face still
-    // has real ground under it by the time the slower side has heard about it.
-    //   floor = reach + (closingSpeed * tapeLatency)
-    // reach is the larger of either side's own declared collider extent (TryColliderReach). closingSpeed is the sum
-    // of both sides' declared speed ceilings (WorldFacePortalPolicy.SpeedCeiling), worst-cased as two bodies closing
-    // from opposite sides. tapeLatency is one full tick period of the slower of the two documents' simulation rates.
-    // The terms are symmetric in (local, neighbour), so both documents derive the same floor independently.
-    //
-    // Rounds up end to end, never nearest: a safety floor must be a true lower bound, and a nearest-rounded term
-    // could understate it while an authored marginDepth sitting at the understated floor would still validate while
-    // unsafe. Every step goes through Puck.Maths.FixedDirectedRounding's ceiling family, and the whole
-    // speed*latency+reach combination rounds up exactly once (TryCeilingProductSum) rather than as separately
-    // rounded steps.
-    //
-    // CAVEAT: WorldFacePortalPolicy.SpeedCeiling is SAMPLING-only — a live seated player's profile speed can exceed
-    // an unenveloped kit's own declared ceiling. This floor consumes SpeedCeiling as a soundness term, so "a
-    // straddling body always has ground under it" can still fail for a profile-boosted body until every kit's speed
-    // is bound by an authored envelope (MoveSpeedEnvelope/ThrustSpeedEnvelope/TopSpeedEnvelope).
-    private static bool TryMarginDepthFloor(WorldDefinition local, WorldDefinition neighbour, out FixedQ4816 floor, out string? unreadableReason) {
-        floor = FixedQ4816.Zero;
-        unreadableReason = null;
-
-        if (!TryColliderReach(definition: local, reach: out var localReach, unreadableKitName: out var localUnreadableKit)) {
-            unreadableReason = $"kit '{localUnreadableKit}' declares a collider this floor cannot measure";
-
-            return false;
-        }
-
-        if (!TryColliderReach(definition: neighbour, reach: out var neighbourReach, unreadableKitName: out var neighbourUnreadableKit)) {
-            unreadableReason = $"neighbour kit '{neighbourUnreadableKit}' declares a collider this floor cannot measure";
-
-            return false;
-        }
-
-        var reach = FixedQ4816.Max(x: localReach, y: neighbourReach);
-        // SpeedCeiling values are already exact FixedQ4816 sums of exact terms (see WorldFacePortalPolicy's own
-        // remarks) — an ordinary addition of two already-fixed values is itself exact, so it needs no ceiling
-        // treatment; only the multiply-by-latency-and-add-reach step below can lose precision.
-        var closingSpeed = (WorldFacePortalPolicy.SpeedCeiling(definition: local) + WorldFacePortalPolicy.SpeedCeiling(definition: neighbour));
-
-        // Tape latency (1 / slowest rate), ceiling-rounded: a floor-rounded (truncated) latency would understate how
-        // long the slower side may go without hearing about the other. A rate <= 0 (a resident, non-stepping world;
-        // see WorldFacePortalPolicy.CrossingFloor) never advances anybody on that side, so it is floored at 1 Hz
-        // rather than dividing by zero or a negative rate.
-        //
-        // This term assumes phase-aligned observation and zero transport delay beyond the one tick period —
-        // optimistic by up to 2x, and false for a genuinely remote neighbour. The honest shape is a declared
-        // border-latency budget once a tape substrate exists; deferred rather than inventing a document field for a
-        // transport this engine does not carry yet.
-        var slowest = Math.Min(val1: Math.Max(val1: local.SimulationRateHz, val2: 1), val2: Math.Max(val1: neighbour.SimulationRateHz, val2: 1));
-
-        if (!FixedDirectedRounding.TryCeilingQuotient(numerator: FixedQ4816.One.Value, fractionBitsNumerator: FixedQ4816.FractionBitCount, denominator: slowest, fractionBitsDenominator: 0, fractionBitsOut: FixedQ4816.FractionBitCount, result: out var tapeLatencyRaw)) {
-            unreadableReason = "the tape-latency term overflowed the fixed-point range";
-
-            return false;
-        }
-
-        if (!FixedDirectedRounding.TryCeilingProductSum(a: closingSpeed.Value, fractionBitsA: FixedQ4816.FractionBitCount, b: tapeLatencyRaw, fractionBitsB: FixedQ4816.FractionBitCount, addend: reach.Value, fractionBitsAddend: FixedQ4816.FractionBitCount, fractionBitsOut: FixedQ4816.FractionBitCount, result: out var floorRaw)) {
-            unreadableReason = "the derived floor overflowed the fixed-point range";
-
-            return false;
-        }
-
-        floor = new FixedQ4816(Value: floorRaw);
-
-        return true;
-    }
-
-    // The declared collider reach: the largest extent any kit's collider can present at a border, in world units —
-    // the analytic counterpart to WorldFacePortalPolicy.SpeedCeiling, dispatching over the same closed WorldCollider
-    // union every kit's own collider uses. Returns false, naming the offending kit, when a collider this walk cannot
-    // measure statically appears (e.g. FromCreation, whose compound geometry resolves from a different document) —
-    // silently folding an unreadable arm to zero would under-derive a safety floor while still claiming to be
-    // derived from declared data.
-    private static bool TryColliderReach(WorldDefinition definition, out FixedQ4816 reach, out string? unreadableKitName) {
-        reach = FixedQ4816.Zero;
-        unreadableKitName = null;
-
-        foreach (var kit in definition.Kits) {
-            if ((kit?.Collider) is not { } collider) {
-                continue;
-            }
-
-            FixedQ4816 candidate;
-
-            switch (collider) {
-                case WorldCollider.Sphere sphere:
-                    candidate = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: sphere.Radius));
-
-                    break;
-                case WorldCollider.Capsule capsule:
-                    candidate = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: capsule.Radius));
-
-                    break;
-                case WorldCollider.Box box: {
-                    // The box's own center-to-corner distance, FIXED-POINT end to end — never
-                    // System.Numerics.Vector3.Length() (an intrinsified float square root: nearest-rounded, and
-                    // in the cross-machine float-ordering class a validation VERDICT must not ride) and rounded UP
-                    // (ceiling), never nearest, for the same reason every other term in the floor is.
-                    var x = FixedQ4816.FromDouble(value: box.HalfExtents.X).Value;
-                    var y = FixedQ4816.FromDouble(value: box.HalfExtents.Y).Value;
-                    var z = FixedQ4816.FromDouble(value: box.HalfExtents.Z).Value;
-
-                    if (!FixedDirectedRounding.TryCeilingMagnitude(x: x, y: y, z: z, result: out var boxRaw)) {
-                        unreadableKitName = kit!.Name;
-
-                        return false;
-                    }
-
-                    candidate = new FixedQ4816(Value: boxRaw);
-
-                    break;
-                }
-                default:
-                    unreadableKitName = kit!.Name;
-
-                    return false;
-            }
-
-            reach = FixedQ4816.Max(x: reach, y: candidate);
-        }
-
-        return true;
     }
 
     // The WorldAnchor union: the shared pose-target vocabulary a camera and speaker ride.

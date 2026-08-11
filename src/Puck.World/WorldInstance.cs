@@ -22,7 +22,7 @@ namespace Puck.World;
 /// boundary.</para></remarks>
 internal sealed class WorldInstance : IDisposable {
     private readonly Func<string> m_origin;
-    private readonly IDisposable? m_ownedBorderMargin;
+    private readonly IDisposable? m_ownedAdjacencies;
 
     /// <summary>Initializes one running instance's held graph.</summary>
     /// <param name="name">The console-facing instance name, unique among running instances.</param>
@@ -37,10 +37,10 @@ internal sealed class WorldInstance : IDisposable {
     /// <c>WorldBootComposition</c> wires for the boot instance, now held uniformly on every row (traveler-follow
     /// stage 1): <see cref="WorldInstanceHost.TryGetLink"/> is the one door a presentation-side consumer (an
     /// away-seat intent submission, an away view's mirror attach) resolves it through.</param>
-    /// <param name="ownedBorderMargin">The per-instance border resolver this row owns, or null for boot wiring.</param>
+    /// <param name="ownedAdjacencies">The per-instance adjacency resolver this row owns, or null for boot wiring.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstance(string name, Func<string> origin, WorldServer server, WorldMachineHost? ownedMachines, IServerLink link, IDisposable? ownedBorderMargin = null) {
+    public WorldInstance(string name, Func<string> origin, WorldServer server, WorldMachineHost? ownedMachines, IServerLink link, IDisposable? ownedAdjacencies = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentNullException.ThrowIfNull(argument: origin);
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -51,7 +51,7 @@ internal sealed class WorldInstance : IDisposable {
         Server = server;
         OwnedMachines = ownedMachines;
         Link = link;
-        m_ownedBorderMargin = ownedBorderMargin;
+        m_ownedAdjacencies = ownedAdjacencies;
     }
 
     /// <summary>This instance's own authoritative server — a distinct object graph per instance.</summary>
@@ -61,7 +61,7 @@ internal sealed class WorldInstance : IDisposable {
     public IServerLink Link { get; }
 
     /// <summary>This instance's portal-crossing edge state, read and written by
-    /// <see cref="WorldInstanceHost"/>'s diegetic portal scan (<see cref="WorldInstanceHost.ScanBootPortalTriggers"/>
+    /// <see cref="WorldInstanceHost"/>'s diegetic boundary scan (<see cref="WorldInstanceHost.ScanBootBoundaryTriggers"/>
     /// for the boot instance, <see cref="WorldInstanceHost.StepInstancesBesideBoot"/> for every other). Scoped to this
     /// instance object — a name reused after <see cref="WorldInstanceHost.TryStop"/> starts a brand-new instance with
     /// a brand-new latch rather than inheriting a departed instance's occupancy, exactly like every other
@@ -120,7 +120,7 @@ internal sealed class WorldInstance : IDisposable {
     /// <summary>Disposes what this instance owns. A no-op for the boot instance, whose machine host belongs to the
     /// container and outlives any retirement of the entry.</summary>
     public void Dispose() {
-        m_ownedBorderMargin?.Dispose();
+        m_ownedAdjacencies?.Dispose();
         OwnedMachines?.Dispose();
     }
 }

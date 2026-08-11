@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
 
 using Puck.World.Protocol;
@@ -91,8 +92,79 @@ public sealed class FederationTransferLawTests {
         Assert.Equal(expected: WorldTransferStatus.Committed, actual: fixture.Server.TransferStatus(sourceAuthority: request.SourceAuthority, transferId: request.TransferId));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReservationWire_PreservesAnonymousAutonomousIntentSource(bool producer) {
+        using var fixture = Fixtures.FreshServer();
+        var source = (producer ? IntentSource.Producer(name: "wander") : IntentSource.Idle);
+        var color = new Vector3(x: 0.125f, y: 0.5f, z: 0.875f);
+        var request = Reservation(sourceAuthority: "machine-a/boot", transferId: 31, border: "seam") with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: source, BodyColor: color)],
+        };
+
+        var bytes = WorldFederationWireFormat.EncodeReservation(request: request);
+        Assert.True(condition: WorldFederationWireFormat.TryDecodeReservation(body: bytes, defaults: fixture.Server.Definition.PlayerDefaults, request: out var decoded, reason: out var reason), userMessage: reason);
+        var member = Assert.Single(collection: decoded!.Members);
+        Assert.Null(@object: member.Identity);
+        Assert.Equal(expected: source, actual: member.Source);
+        Assert.Equal(expected: color, actual: member.BodyColor);
+        Assert.True(condition: decoded.PeerAdmission);
+    }
+
+    [Fact]
+    public void AutonomousTransfer_UsesEntityTableWithoutBecomingAHumanPeer() {
+        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        var request = Reservation(sourceAuthority: "machine-a/boot", transferId: 37, border: "seam") with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Source: IntentSource.Idle, BodyColor: new Vector3(x: 0.2f, y: 0.4f, z: 0.6f))],
+        };
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+
+        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);
+        var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
+        Assert.True(condition: fixture.Server.Population.IsActive(index: bodyIndex));
+        Assert.False(condition: fixture.Server.Population.IsAdmittedPeer(bodyIndex: bodyIndex));
+        Assert.Equal(expected: IntentSource.Idle, actual: fixture.Server.Population.EntryBody(index: bodyIndex)!.Source);
+        Assert.Equal(expected: new Vector3(x: 0.2f, y: 0.4f, z: 0.6f), actual: fixture.Server.Population.BodyColor(index: bodyIndex));
+        Assert.True(condition: fixture.Server.Population.TryCaptureTransferredEntity(index: bodyIndex, peer: out var captured));
+        Assert.True(condition: captured.AuthorityTransferred);
+
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
+        Assert.True(condition: fixture.Server.Population.IsActive(index: bodyIndex));
+        Assert.Equal(expected: IntentSource.Idle, actual: fixture.Server.Population.EntryBody(index: bodyIndex)!.Source);
+        Assert.Equal(expected: 2, actual: fixture.Server.Population.ActiveCount());
+    }
+
+    [Fact]
+    public void AutonomousTransfer_RefusesAnUnsupportedProducerBeforeCommit() {
+        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        var request = Reservation(sourceAuthority: "machine-a/boot", transferId: 41, border: "seam") with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Source: IntentSource.Producer(name: "not-declared"))],
+        };
+
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+
+        Assert.False(condition: reservation.Accepted);
+        Assert.Contains(expectedSubstring: "declares no parameters for producer 'not-declared'", actualString: reservation.Reason, comparisonType: StringComparison.Ordinal);
+    }
+
     private static WorldTransferReservationRequest Reservation(string sourceAuthority, ulong transferId, string border) =>
-        new(TransferId: transferId, SourceAuthority: sourceAuthority, SourceRateHz: 240, SourceTick: 0, DeadlineSourceTick: 60, Border: border, BorderCapacity: null, PartyAllOrNothing: true, RemoteAdmission: false, Members: [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 0)]);
+        new(TransferId: transferId, SourceAuthority: sourceAuthority, SourceRateHz: 240, SourceTick: 0, DeadlineSourceTick: 60, Border: border, BorderCapacity: null, PartyAllOrNothing: true, PeerAdmission: false, Members: [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 0)]);
+
+    private static WorldDefinition TransferPopulationDocument() {
+        var document = Fixtures.BuildDocument();
+        return document with {
+            Population = document.Population with {
+                Capacity = WorldPopulation.LocalSeatCount + 2,
+                NetworkPlayers = 2,
+            },
+        };
+    }
 
     private static async Task<(byte Kind, byte[] Body)> RequireFrameAsync(NetworkStream stream, CancellationToken ct) =>
         (await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct)) ?? throw new Xunit.Sdk.XunitException("federation peer closed before its required response");

@@ -3645,6 +3645,9 @@ public sealed record WorldHostDefaults(
 /// verb refuses by name) — see <see cref="WorldMarketSection"/>. Optional, for the same reason <see cref="Rules"/>
 /// is. Trailing by design, after <see cref="Admission"/>, for the identical reason every optional section here
 /// is.</param>
+/// <param name="Adjacencies">Invisible, reciprocal authority boundaries. Optional; a world declaring none has no
+/// seamless neighbours. The compiler derives overlap from both delivered documents rather than accepting an
+/// authored safety margin.</param>
 public sealed record WorldDefinition(
     WorldMotionDefaults Motion,
     IReadOnlyList<WorldSpawnPoint> SpawnPoints,
@@ -3717,7 +3720,9 @@ public sealed record WorldDefinition(
     // OPTIONAL, exactly like Admission above — a null section IS today's no-market behavior, no fallback object
     // needed beyond `current.Market ?? WorldMarketSection.Empty`. Trailing by design, for the identical reason
     // every optional section above it is.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMarketSection? Market = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMarketSection? Market = null,
+    // OPTIONAL topology. An adjacency is an invisible authority boundary, never a portal or screen facet.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdjacency>? Adjacencies = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";

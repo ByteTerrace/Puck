@@ -39,7 +39,7 @@ produced it, because a status sentence with no check behind it is how a reader e
 capability exists. This is the whole reason the old per-capability register was deleted and must not
 come back.
 
-**Verified 2026-08-10, at the `Four worlds meet at a corner you can walk across` landing:**
+**Verified 2026-08-11, at the seamless Four Corners landing:**
 
 | Claim | The check |
 |---|---|
@@ -52,8 +52,9 @@ come back.
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
 durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction
-substrate; `studio` and the first border crossing; a walkable four-zone corner with a live border
-margin strip.
+  substrate; `studio` and the first border crossing; a walkable four-zone corner whose four hosts
+  exchange geometry and generation-addressed bodies and migrate both human and autonomous entities
+  through invisible reciprocal topology rather than portal furniture.
 
 **The charter's back half has not started**: the owner feel sitting (the gate declared 2026-08-08,
 never held — and now well behind the motion work, so its recordings want redoing), win conditions,
@@ -88,15 +89,11 @@ ghost records**.
    makes bit identity plausible by construction, but the argument alone protects neither evaluation
    order, defaulting, nor serialization — the canary still needs a state-sensitive observation, and
    the read-back must show declared envelope values AND derived placements with proof margins.
-   **Track 1 also closes a LIVE soundness gap in what Wave 1 already shipped**, which is the
-   strongest argument for its priority: the border margin-depth floor consumes
-   `WorldFacePortalPolicy.SpeedCeiling` as a soundness term, but that ceiling is SAMPLING-only — a
-   seated player's profile speed can exceed an unenveloped kit's declared ceiling, so "a straddling
-   body always has ground under it" can fail today for a profile-boosted body. The fix is exactly
-   this track: bind every kit's speed with an authored envelope
-   (`MoveSpeedEnvelope`/`ThrustSpeedEnvelope`/`TopSpeedEnvelope`). The caveat is stated in
-   `WorldDefinitionValidator.TryMarginDepthFloor`; it is a decision-grade comment and must survive
-   any comment sweep.
+   **Track 1 also closes the soundness input that adjacency overlap now consumes**: every kit's
+   speed is bound by an authored envelope (`MoveSpeedEnvelope`/`ThrustSpeedEnvelope`/
+   `TopSpeedEnvelope`). Adjacencies themselves accept no guessed depth; the compiler derives one
+   symmetric overlap from body reach, interaction/targeting reach, and two slower-side delivery
+   periods of closing speed, with outward rounding.
 2. **The canary runner** — and it goes first, because track 1's own gate is a canary. `puck canary`
    strictly loads a central per-id manifest tree and runs each proof's positive and executable
    discriminating legs against one exact Release build of the real `Puck.World`. Every non-comment
@@ -114,13 +111,12 @@ ghost records**.
    `undo-all-or-nothing`, `strict-definition-parse`, `sdf-decode-sign-refusal`, `doc-links`,
    `addon-mutation-seam`, and `four-world-boot-smoke` remain named, on-demand, and UNGATED; the
    canary runner neither wraps nor weakens them.
-3. **The neighbour tape, then ghosts** — transport first, the ghost read-side riding the same
-   records. Adopts track 5's address vocabulary rather than defining its own. The neighbour field is
-   rebuilt lazily today when physics asks for it; hoisting that derivation to DELIVERY is the
-   boundary. **Pin which delivered revision a consumer tick sees at tick start** — "latest revision
-   when accessed" must never become the input. Definition deliveries and per-tick entity records stay
-   distinct, with per-tick records naming the installed revision. Ghosts are read-only and never
-   authoritative.
+3. **The neighbour tape, then ghosts** — the ghost read-side now rides the same delivered snapshot
+   as adjacency contact and rendering, and snapshots carry `(authority, body index, body generation)`
+   addresses. The remaining work is transport determinism: hoist neighbour-field derivation to
+   DELIVERY and tape per-tick records separately from definition revisions. **Pin which delivered
+   revision a consumer tick sees at tick start** — "latest revision when accessed" must never become
+   the input. Ghosts remain read-only and never authoritative.
 4. **Playability** — and it OPENS with one seat-lifetime view state: world-owned camera structure,
    profile-owned input preference, standard dual-stick movement/look, and one logical basis shared by
    intent composition, local rendering, traveler rendering, cursor capture, and read-back. No
@@ -129,11 +125,9 @@ ghost records**.
    then the touch-triggered win slice; navigation and equip facets follow. Ordering matters here:
    put navigation first and "feel is the gate" becomes prose while navigation expands underneath it.
 5. **Ownership, membership, combat** — entity-addressable rules and elemental interactions, both
-   with local first callers. **The entity address cannot bless today's `body:<index>`**: rules compile
-   a body reference to a LOCAL index and outbound snapshots carry that index with no body generation,
-   which is unsafe for ghosts because slots are reused. The transport/runtime address is at least
-   `authority/session generation + body index + body generation`, and authored local `body:n` lowers
-   to it at compile/install time. **Do not reuse `WorldHandle`** — it is a capability-table
+   with local first callers. The transport/runtime spine has landed as
+   `WorldEntityAddress(authority, index, generation)` and is already exercised by adjacency ghosts;
+   authored local `body:n` still needs to lower to that address at compile/install time. **Do not reuse `WorldHandle`** — it is a capability-table
    designation stamped with principal and capability, an authority identity, not an entity identity.
 
 **Reviewed 2026-08-10 (independent, Codex/GPT). Its recommendation, which is advice and not a
@@ -147,13 +141,17 @@ supports opening track 5 with verification rather than reconstruction, but does 
 behavioural survival. **If track 5 is aimed at the charter, its completion criterion becomes charter
 EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
 
-It also confirmed the committed margin-ground canary's positive leg passes on the real headless
-composition path — position `(-0.70, 0.02, -12.00)`, grounded, `wire.errors 0` — while its declared
-sensitivity control stays unexecuted, since that leg requires deliberately removing the binding.
+The obsolete portal-border canary was deleted with that model. Its replacement,
+`puck canary seamless-adjacency`, executes both the crossing and stationary discriminating legs on
+the real headless composition path. The stronger `docs/verification/four-corners-sharded/run.ps1`
+starts four distinct authorities and requires four simultaneous remote human handoffs, an
+autonomous-body handoff through the same seam, one player's complete four-host circuit with its
+original input credential and camera route still following, post-handoff queries, every host's two
+edge peers plus its compiler-derived diagonal corner peer, four non-colliding entity-address
+namespaces, and zero wire errors.
 
-**Open, and the owner's call:** whether the wave grows a sixth track for the charter's content, or
-track 5 is aimed at the charter from the start so its rule primitives land with their first real
-callers.
+**Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
+primitives land with the content that proves them.
 
 ## The rules that keep this honest
 

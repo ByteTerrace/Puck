@@ -125,10 +125,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
-    // The border-margin strip's render half — the neighbour's own solid geometry composed within each mapped portal
-    // facet's authored margin, through the SAME isometry the arrival math and the collision wrapper both use. Static
-    // content only (DynamicSlotCount 0), so it needs no dynamic-transform slot budgeting of its own.
-    private readonly WorldBorderMarginSceneEmitter m_borderMargin;
+    // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
+    // and handoff use, with remote avatar transforms in its own frozen slot range.
+    private readonly WorldAdjacencySceneEmitter m_adjacencies;
     private readonly SdfCompositionFrameSource m_composed;
     // This frame's composed program + packed transforms, stashed by Dress so the post-capture jumbotron pass
     // (RenderViews) films the SAME program the room renders. Null/empty until the first captured frame.
@@ -176,10 +175,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// it to exclude an away-routed seat from the local viewport layout.</param>
     /// <param name="awaySeatViews">The traveler-follow away-render pool (stage 1) — reconciled once per produced
     /// frame and rendered alongside the jumbotron pool.</param>
-    /// <param name="borderMargin">The injected neighbour resolver behind the border-margin strip's render half — the
-    /// SAME wire-shaped seam <see cref="Server.WorldServer.BorderMargin"/> reads for collision.</param>
+    /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldAwaySeatViews awaySeatViews, IWorldBorderMarginSource borderMargin) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldAwaySeatViews awaySeatViews, IWorldAdjacencySource adjacencies) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -200,7 +198,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: composer);
         ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
         ArgumentNullException.ThrowIfNull(argument: viewports);
-        ArgumentNullException.ThrowIfNull(argument: borderMargin);
+        ArgumentNullException.ThrowIfNull(argument: adjacencies);
 
         m_viewports = viewports;
         m_composition = composition;
@@ -243,12 +241,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
         // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
         m_emitter = new WorldSceneEmitter(client: client, settings: settings, targeting: targeting, drag: drag, workbench: workbench, animator: animator, audio: audio, anchor: anchor);
-        m_borderMargin = new WorldBorderMarginSceneEmitter(client: client, source: borderMargin);
+        m_adjacencies = new WorldAdjacencySceneEmitter(client: client, source: adjacencies);
         m_audio.ReconcileSpeakers(definition: definition);
         // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
-        m_composed = new SdfCompositionFrameSource(emitters: [m_emitter, m_sdfDocuments, m_borderMargin], dresser: this) {
+        m_composed = new SdfCompositionFrameSource(emitters: [m_emitter, m_sdfDocuments, m_adjacencies], dresser: this) {
             // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
             // outside the camera and tile-cull reach.
             ParkPosition = WorldSceneEmitter.HiddenAvatar,
@@ -328,7 +326,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
 
         WorldPlacementStamper.EmitProbe(
             builder: builder,
-            reservedCount: (WorldBorderMarginBands.CollectFrom(definition: worldDefinition).Count * WorldBorderMarginGeometry.MaximumPlacementsPerBand)
+            reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: worldDefinition) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
         );
 
         var measured = builder.Build();
@@ -874,7 +872,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
 
     // Build the camera query from the same static scene layers the composed frame renders. The live program cannot
     // be queried directly because its avatar catalog carries TransformDynamic instructions; reconstructing only the
-    // static placements/screens/margin strip keeps the camera from treating the avatar it follows as an obstacle.
+    // static placements/screens/adjacency geometry keeps the camera from treating the avatar it follows as an obstacle.
     private void RebuildCameraClearanceField() {
         m_cameraClearanceField = null;
 
@@ -898,7 +896,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 WorldScreenStamper.Emit(builder: builder, screen: screen);
             }
 
-            m_borderMargin.EmitCurrent(builder: builder);
+            m_adjacencies.EmitCurrent(builder: builder);
             m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
         } catch (ArgumentException) {
             // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored

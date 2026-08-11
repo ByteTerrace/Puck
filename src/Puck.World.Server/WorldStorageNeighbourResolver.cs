@@ -14,7 +14,7 @@ namespace Puck.World.Server;
 /// </summary>
 /// <remarks>
 /// Read-only, by design: this resolver never adopts, never tracks a version token, and never writes — it exists only
-/// so a validator can read a neighbour's declared data (kits, simulation rate, placements) to prove a border-margin
+/// so a validator can read a neighbour's declared data (kits, simulation rate, placements) to prove an adjacency
 /// claim, not to sync a catalog. It parses the fetched bytes through <see cref="WorldJsonPayload.TryParse{T}(string,
 /// System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}, out T, out string)"/> and <see cref="WorldDefinitionMigrations.Apply"/>
 /// only — never <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in

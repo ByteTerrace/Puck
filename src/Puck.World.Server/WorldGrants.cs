@@ -53,8 +53,9 @@ namespace Puck.World.Server;
 /// held body: exclusivity, not acquisition-time blocking, is what makes the reservation exclusive at the intent
 /// boundary. When a subject is not exclusively reserved, the normal wildcard/subject-set logic applies unchanged.</description></item>
 /// </list>
-/// <para>Single-threaded, like every server type here: grants apply in the command-apply window and are read at the
-/// tick boundary, both on the launcher's window-pump thread. No lock guards this state.</para>
+/// <para>This table owns no lock. Ordinary grants apply and read on the launcher tick thread; authenticated
+/// federation operations and the transfer host reach it only through <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>,
+/// which serializes those narrow operations against the fixed-step fold.</para>
 /// </remarks>
 public sealed class WorldGrants : IWorldGrantsView {
     private static readonly long s_defaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;

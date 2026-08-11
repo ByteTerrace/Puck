@@ -1,0 +1,35 @@
+# Four Corners seamless-ownership circuit. No portal, screen, doorway, or trigger furniture participates.
+# Every leg crosses an invisible authored adjacency; world.adjacencies proves the compiler-derived overlap and
+# delivered remote entity addresses, while the instance-qualified player.where calls prove one live owner per body.
+world.wait 5
+wire.errors reset
+world.adjacencies
+
+player.pose -2 0 -12 0 0 0 1
+player.press strafe 1 1 1
+world.wait 120
+player.where 1 instance:6~global2~ne
+world.adjacencies
+wire.errors
+wire.errors reset
+
+player.pose 12 0 -2 0 0 0 1 instance:6~global2~ne
+player.fly -1 0 0 0 0 0 1 1 instance:6~global2~ne
+world.wait 120
+player.where 1 instance:6~global2~se
+wire.errors
+wire.errors reset
+
+player.pose 2 0 12 0 0 0 1 instance:6~global2~se
+player.fly 0 -1 0 0 0 0 1 1 instance:6~global2~se
+world.wait 120
+player.where 1 instance:6~global2~sw
+wire.errors
+wire.errors reset
+
+player.pose -12 0 2 0 0 0 1 instance:6~global2~sw
+player.fly 1 0 0 0 0 0 1 1 instance:6~global2~sw
+world.wait 120
+player.where 1
+world.adjacencies
+wire.errors

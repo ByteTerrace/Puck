@@ -62,19 +62,16 @@ public sealed class WorldPopulation {
     /// <summary>The authored peer slice behind the reserved local seats.</summary>
     public int PeerCapacity => (Capacity - LocalSeatCount);
 
-    /// <summary>The most census/remote peers that fit right now behind the four local seats and below the lowest inhabited
-    /// body. Inhabited bodies (loopback-joined players) allocate downward from slot 127, census peers upward from slot 4,
-    /// so this floor is exactly where the two packings meet; it moves only with live inhabitant occupancy, never a boot
-    /// reservation. A live <c>world.population &lt;n&gt;</c> clamps against it and against the remote admission cap
-    /// (<c>networkPlayers</c>). Reading the floor (not a count) keeps existing inhabitant slots stable — a retired
-    /// inhabitant leaves a gap peers decline rather than forcing a renumber.</summary>
-    public int MaxSimulated => (m_inhabitantFloor - LocalSeatCount);
+    /// <summary>The number of entity-table slots currently eligible for destination-authored census bodies. Inhabitants,
+    /// connected humans, and authority-transferred entities are excluded wherever they sit; mapped handoff makes a
+    /// low-index exclusion ordinary, so no packing-order or contiguous-floor assumption is valid.</summary>
+    public int MaxSimulated => AvailableCensusSlots();
 
     /// <summary>The largest census <see cref="SetSimulatedCount"/> will actually grant right now — the tighter of the
-    /// remote admission cap (<c>networkPlayers</c>) and the live inhabitant floor (<see cref="MaxSimulated"/>). A request
+    /// remaining remote admission budget (<c>networkPlayers</c>) and eligible slots (<see cref="MaxSimulated"/>). A request
     /// above it is clamped to it, so the <c>world.population</c> echo names both the granted count and this ceiling
     /// rather than letting a script read a success for a crowd it never got.</summary>
-    public int SimulatedCeiling => Math.Min(val1: m_remoteCap, val2: MaxSimulated);
+    public int SimulatedCeiling => Math.Min(val1: Math.Max(val1: 0, val2: (m_remoteCap - CountExternalNetworkPlayers())), val2: MaxSimulated);
 
     private readonly Entry[] m_entries;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
@@ -103,13 +100,13 @@ public sealed class WorldPopulation {
     // CompileFixedTables and handed to every live body, so a live solid-geometry or collision-tuning edit takes
     // effect on the next tick with no restart. Grounded bodies solve their swept position against it.
     // m_contactField is the EFFECTIVE field a body resolves against — m_baseContactField wrapped by
-    // WorldBorderMarginContactField when a border resolver is configured AND the live definition authors a margin
-    // band, or m_baseContactField unwrapped otherwise (byte-identical to the pre-margin-strip behavior). Composed by
+    // WorldAdjacencyContactField when an adjacency resolver is configured AND the live definition authors an edge
+    // band, or m_baseContactField unwrapped otherwise. Composed by
     // ComposeContactField, the ONE place either input changes.
     private IContactField? m_baseContactField;
     private IContactField? m_contactField;
-    private WorldDefinition? m_borderMarginDefinition;
-    private IWorldBorderMarginSource? m_borderMargin;
+    private WorldDefinition? m_adjacencyDefinition;
+    private IWorldAdjacencySource? m_adjacencies;
     private FixedQ4816? m_waterline;
     private WorldContactCensus m_contactCensus;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
@@ -134,7 +131,6 @@ public sealed class WorldPopulation {
     // The lowest slot index a live inhabited body occupies (Capacity = none). Inhabited bodies claim the top of the
     // entity table (slots 127 downward); the census ceiling reads this floor so census peers never reach an inhabitant.
     // Reconciled by ReconcileInhabitants.
-    private int m_inhabitantFloor;
     private int m_revision;
     private IntentSource m_defaultPeerSource = IntentSource.Live;
     private readonly List<BodyEffectOutput> m_effectOutputs = [];
@@ -158,7 +154,6 @@ public sealed class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
-        m_inhabitantFloor = m_entries.Length;
 
         m_seatSpawns = CompileSeatSpawns(spawnPoints: definition.SpawnPoints, seatSpawns: definition.Population.SeatSpawns);
         // Boot the live peer-source default from the document (the session write-back home). A live retune/swap keeps the
@@ -228,7 +223,7 @@ public sealed class WorldPopulation {
             }
         }
         m_baseContactField = ResolveContactField(definition: definition, solids: derivedSolids);
-        m_borderMarginDefinition = definition;
+        m_adjacencyDefinition = definition;
         ComposeContactField();
         // The compiled waterline rides beside the contact field: one optional world fact every body carries, read only
         // by a swim-model kit's stages.
@@ -298,38 +293,38 @@ public sealed class WorldPopulation {
         return WorldColliderSet.Build(definition: definition);
     }
 
-    // Recomposes m_contactField from the current m_baseContactField + m_borderMargin + m_borderMarginDefinition — the
-    // ONE place any of the three changes. A definition authoring no margin band, or no injected resolver, leaves
-    // m_contactField pointing at m_baseContactField directly: byte-identical to the pre-margin-strip behavior.
+    // Recomposes m_contactField from the current base field, adjacency source, and live definition — the
+    // ONE place any of the three changes. A definition authoring no adjacency, or no injected source, leaves
+    // m_contactField pointing at m_baseContactField directly.
     private void ComposeContactField() {
-        if ((m_baseContactField is not { } baseField) || (m_borderMarginDefinition is not { } definition)) {
+        if ((m_baseContactField is not { } baseField) || (m_adjacencyDefinition is not { } definition)) {
             m_contactField = m_baseContactField;
 
             return;
         }
 
-        var bands = ((m_borderMargin is not null) ? WorldBorderMarginBands.CollectFrom(definition: definition) : []);
+        var bands = ((m_adjacencies is not null) ? WorldAdjacencyBands.CollectFrom(definition: definition) : []);
 
-        m_contactField = ((m_borderMargin is { } source) && (bands.Count > 0))
-            ? new WorldBorderMarginContactField(inner: baseField, bands: bands, source: source)
+        m_contactField = ((m_adjacencies is { } source) && (bands.Count > 0))
+            ? new WorldAdjacencyContactField(definition: definition, inner: baseField, bands: bands, source: source)
             : baseField;
     }
 
-    /// <summary>Configures (or clears) the injected border-margin neighbour resolver every live body's contact
-    /// resolution consults while standing inside a mapped portal facet's authored margin — see
-    /// <see cref="WorldServer.BorderMargin"/>, the one writer. Recomposes <see cref="m_contactField"/> immediately
+    /// <summary>Configures (or clears) the adjacency source every live body's contact resolution consults inside an
+    /// overlap — see
+    /// <see cref="WorldServer.Adjacencies"/>, the one writer. Recomposes <see cref="m_contactField"/> immediately
     /// against the current definition/base field, without rebuilding either — a border resolver becoming reachable
     /// (or unreachable) never itself re-derives the world's own solid geometry.</summary>
     /// <param name="source">The resolver, or <see langword="null"/> to fall back to this world's own geometry alone.</param>
-    public void ConfigureBorderMargin(IWorldBorderMarginSource? source) {
-        if (ReferenceEquals(objA: m_borderMargin, objB: source)) {
+    public void ConfigureAdjacencies(IWorldAdjacencySource? source) {
+        if (ReferenceEquals(objA: m_adjacencies, objB: source)) {
             return;
         }
 
-        m_borderMargin = source;
+        m_adjacencies = source;
         ComposeContactField();
 
-        // The composition root configures the runtime margin source after the boot seats already exist. Bodies retain
+        // The composition root configures the runtime adjacency source after the boot seats already exist. Bodies retain
         // their own field reference, so recomposing only the population's field would leave those live bodies on the
         // old base field forever. Hand the effective field to every live body on the same terms as Rebuild; pose,
         // velocity, intent, and every other body property remain untouched.
@@ -340,9 +335,9 @@ public sealed class WorldPopulation {
         }
     }
 
-    /// <summary>Gets the currently configured border-margin resolver — see <see cref="ConfigureBorderMargin"/>, the
+    /// <summary>Gets the currently configured adjacency resolver — see <see cref="ConfigureAdjacencies"/>, the
     /// one writer.</summary>
-    public IWorldBorderMarginSource? BorderMargin => m_borderMargin;
+    public IWorldAdjacencySource? Adjacencies => m_adjacencies;
 
     private int[] NewDesignations() {
         var values = new int[m_targets.Count];
@@ -436,8 +431,8 @@ public sealed class WorldPopulation {
     /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
-    /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows the resulting inhabitant floor (physical
-    /// occupancy), and the census is re-clamped so census peers never reach an inhabitant.</summary>
+    /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
+    /// census is re-clamped without renumbering an inhabitant or transferred entity.</summary>
     /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
     /// <param name="disconnected">Optional sink for the peer generations disconnected by the reconciliation.</param>
@@ -500,18 +495,7 @@ public sealed class WorldPopulation {
             }
         }
 
-        // The inhabitant floor is the lowest slot any live inhabitant now occupies; re-clamp the census to it so peers
-        // never reach an inhabitant, then bump the revision (the declared set moved).
-        m_inhabitantFloor = Capacity;
-
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            if (m_entries[index].PlacementId is not null) {
-                m_inhabitantFloor = index;
-
-                break;
-            }
-        }
-
+        // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
         m_revision++;
     }
@@ -1111,6 +1095,17 @@ public sealed class WorldPopulation {
     /// <param name="index">The population index (0-based).</param>
     public Vector3 BodyColor(int index) => m_entries[index].BodyColor;
 
+    /// <summary>Sets the exact rendered material color retained by an authority-transferred body.</summary>
+    public void SetBodyColor(int slot, Vector3 color) {
+        if ((uint)slot < (uint)Capacity) {
+            m_entries[slot].BodyColor = color;
+        }
+    }
+
+    /// <summary>The entry's activation generation. Combined with authority and slot, this prevents stale entity
+    /// addresses from aliasing a later occupant.</summary>
+    public int Generation(int index) => m_entries[index].Generation;
+
     /// <summary>Activates a local seat (indices <c>0..</c><see cref="LocalSeatCount"/>) — the session join's server
     /// half: mints the seat's body at its full authored spawn pose, seated on <paramref name="profile"/>. A no-op if
     /// the seat is already active. Bumps the revision.</summary>
@@ -1145,6 +1140,7 @@ public sealed class WorldPopulation {
         SeedSeatWander(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
+        entry.Generation = checked(entry.Generation + 1);
         entry.Active = true;
         m_revision++;
     }
@@ -1195,7 +1191,7 @@ public sealed class WorldPopulation {
         m_revision++;
     }
 
-    /// <summary>Detaches a local seat's body for a same-process, same-host-tick transfer to another world instance —
+    /// <summary>Detaches an authoritative body's embodiment for an atomic transfer to another world authority —
     /// the leave half of atomic body transfer (the composition root's per-host pending-transfer drain). Unlike
     /// <see cref="DeactivateSeat"/>, this never parks and never consults <c>reconnectGraceTicks</c>: it unconditionally
     /// clears <see cref="Entry.Body"/> and <see cref="Entry.Active"/> so the body stops being advanced (or counted
@@ -1236,6 +1232,16 @@ public sealed class WorldPopulation {
         entry.Parked = false;
         entry.ParkedUntilTick = null;
         ClearDesignations(entry: entry);
+        entry.PlacementId = null;
+        entry.IsAuthorityTransferred = false;
+        if (entry.IsRemoteHuman) {
+            entry.IsRemoteHuman = false;
+            entry.AdmissionInstalledGrantTemplates = [];
+            entry.AdmissionRevokedKeys.Clear();
+            entry.IdentityDomain = string.Empty;
+            entry.IdentitySubject = string.Empty;
+            m_simulatedCount = CountActiveCensus();
+        }
         m_revision++;
 
         return true;
@@ -1338,6 +1344,58 @@ public sealed class WorldPopulation {
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
         entry.Active = true;
         m_revision++;
+
+        return true;
+    }
+
+    /// <summary>Captures the generation-bearing admission row for a live transferred peer before detachment.</summary>
+    public bool TryCaptureTransferredPeer(int index, out WorldPeerEventEntry peer) {
+        if (((uint)(index - LocalSeatCount) < PeerCapacity) && m_entries[index].Active && m_entries[index].IsRemoteHuman) {
+            peer = PeerEventEntry(index: index);
+            return true;
+        }
+
+        peer = default;
+        return false;
+    }
+
+    /// <summary>Captures the generation-bearing row for any active entity-table peer before authority transfer.
+    /// Unlike <see cref="TryCaptureTransferredPeer"/>, this includes autonomous census and inhabitant bodies.</summary>
+    public bool TryCaptureTransferredEntity(int index, out WorldPeerEventEntry peer) {
+        if (((uint)(index - LocalSeatCount) < PeerCapacity) && m_entries[index].Active) {
+            peer = PeerEventEntry(index: index);
+            return true;
+        }
+
+        peer = default;
+        return false;
+    }
+
+    /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
+    /// admission facts, pose, dynamic state, and designation registers.</summary>
+    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+        if (((uint)(peer.BodyIndex - LocalSeatCount) >= PeerCapacity) || m_entries[peer.BodyIndex].Active) {
+            return false;
+        }
+
+        ApplyPeerAdmitted(peer: in peer, grantTemplates: grantTemplates);
+        var entry = m_entries[peer.BodyIndex];
+        if (entry.Body is not { } body) {
+            return false;
+        }
+
+        body.Profile = profile;
+        entry.BodyColor = (profile?.Color ?? Vector3.Zero);
+        body.Pose(position: position, yawRadians: yawRadians, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        body.ApplyTransferState(state: dynamicState);
+        ClearDesignations(entry: entry);
+        if (designations is not null) {
+            var count = Math.Min(val1: designations.Count, val2: entry.Designations.Length);
+            for (var index = 0; index < count; index++) {
+                entry.Designations[index] = designations[index];
+            }
+        }
 
         return true;
     }
@@ -1508,26 +1566,26 @@ public sealed class WorldPopulation {
     /// <param name="disconnected">Optional sink for the peer generations disconnected by the census change.</param>
     /// <returns>The clamped count actually applied.</returns>
     public int SetSimulatedCount(int count, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
-        // Clamp against the remote admission cap (networkPlayers) AND the live inhabitant floor: inhabited peers at the
-        // top of the table lower the census ceiling by their physical occupancy, so a request past either is clamped
-        // rather than allowed to collide with an inhabitant or breach the cap.
+        // Clamp against the shared networkPlayers budget and every non-census occupant's physical slot.
         var clamped = Math.Clamp(value: count, min: 0, max: SimulatedCeiling);
         var changed = false;
+        var remaining = clamped;
 
         for (var offset = 0; (offset < PeerCapacity); offset++) {
             var index = (LocalSeatCount + offset);
             var entry = m_entries[index];
 
-            // Inhabited peer slots are owned by ReconcileInhabitants; the census never activates or clears them. Because
-            // inhabitants claim the TOP of the peer slice and `clamped <= MaxSimulated`, `offset < clamped` never names
-            // an inhabited slot, so census peers and inhabitants cannot meet. A remote-admitted human (also parked at
-            // the top, via TryAdmitRemotePeer) is skipped the same way — a live human's body must never be silently
-            // deactivated (or reseeded) by an unrelated world.population count edit.
-            if ((entry.PlacementId is not null) || entry.IsRemoteHuman) {
+            // Inhabited and authority-transferred slots are owned by their own lifecycles. They may occupy any index
+            // after a mapped handoff, so census selection counts eligible slots instead of assuming all exclusions
+            // live at the top of the table.
+            if ((entry.PlacementId is not null) || entry.IsRemoteHuman || entry.IsAuthorityTransferred) {
                 continue;
             }
 
-            var desired = (offset < clamped);
+            var desired = (remaining > 0);
+            if (desired) {
+                remaining--;
+            }
 
             if (entry.Active == desired) {
                 continue;
@@ -1765,8 +1823,18 @@ public sealed class WorldPopulation {
     /// <param name="identitySubject">The verified identity subject.</param>
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
+    /// <param name="authorityTransferred">Whether the peer arrived through authority transfer and is therefore not
+    /// eligible for destination census reconciliation.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false) {
+        return TryAdmitTransferredEntityAtCore(slot: slot, source: source, remoteHuman: true, authorityTransferred: authorityTransferred, grantTemplates: grantTemplates, identityDomain: identityDomain, identitySubject: identitySubject, admitted: out admitted, refusal: out refusal);
+    }
+
+    /// <summary>Admits an autonomous traveler at the peer body index already bound by a transfer reservation.</summary>
+    public bool TryAdmitTransferredEntityAt(int slot, IntentSource source, out WorldPeerEventEntry admitted, out string refusal) =>
+        TryAdmitTransferredEntityAtCore(slot: slot, source: source, remoteHuman: false, authorityTransferred: true, grantTemplates: [], identityDomain: string.Empty, identitySubject: string.Empty, admitted: out admitted, refusal: out refusal);
+
+    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
 
         if ((slot < LocalSeatCount) || (slot >= Capacity) || m_entries[slot].Active) {
@@ -1776,10 +1844,16 @@ public sealed class WorldPopulation {
             return false;
         }
 
-        if (CountActiveCensus() >= m_remoteCap) {
+        if (CountNetworkPlayers() >= m_remoteCap) {
             admitted = default;
             refusal = $"the networkPlayers admission cap ({m_remoteCap}) is already met";
 
+            return false;
+        }
+
+        if (!SupportsSource(index: slot, source: source, refusal: out refusal)) {
+            admitted = default;
+            refusal = $"reserved peer body:{slot} {refusal}";
             return false;
         }
 
@@ -1788,7 +1862,8 @@ public sealed class WorldPopulation {
         var entry = m_entries[slot];
 
         entry.Active = true;
-        entry.IsRemoteHuman = true;
+        entry.IsRemoteHuman = remoteHuman;
+        entry.IsAuthorityTransferred = authorityTransferred;
         // The server-authored PeerAdmitted event applies the requested rows through the live grant door immediately
         // after this allocation and then records ONLY the rows that succeeded. Nothing is installed yet at this
         // point, so the revocation baseline must begin empty rather than containing authored attempts.
@@ -1878,6 +1953,8 @@ public sealed class WorldPopulation {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
+        entry.IsAuthorityTransferred = peer.AuthorityTransferred;
+        entry.PlacementId = peer.PlacementId;
 
         // Live admission already installed these fields before emitting the event, so this is idempotent there.
         // Replay reaches this path with a fresh population and needs the verified identity restored so a later
@@ -1919,6 +1996,8 @@ public sealed class WorldPopulation {
                 entry.Body = null;
                 entry.Active = false;
                 entry.IsRemoteHuman = false;
+                entry.IsAuthorityTransferred = false;
+                entry.PlacementId = null;
                 entry.AdmissionInstalledGrantTemplates = [];
                 entry.AdmissionRevokedKeys.Clear();
                 entry.IdentityDomain = string.Empty;
@@ -1991,6 +2070,8 @@ public sealed class WorldPopulation {
                 entry.Active = false;
                 entry.Parked = false;
                 entry.ParkedUntilTick = null;
+                entry.IsAuthorityTransferred = false;
+                entry.PlacementId = null;
 
                 if (entry.IsRemoteHuman) {
                     entry.IsRemoteHuman = false;
@@ -2062,18 +2143,49 @@ public sealed class WorldPopulation {
         var entry = m_entries[index];
         var identity = WorldPrincipal.Peer(index: index, generation: entry.Generation);
 
-        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity, IdentityDomain: entry.IdentityDomain, IdentitySubject: entry.IdentitySubject);
+        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity, IdentityDomain: entry.IdentityDomain, IdentitySubject: entry.IdentitySubject, AuthorityTransferred: entry.IsAuthorityTransferred, PlacementId: entry.PlacementId);
     }
 
     private int CountActiveCensus() {
         var count = 0;
 
-        for (var index = LocalSeatCount; index < m_inhabitantFloor; index++) {
-            if (m_entries[index].Active && (m_entries[index].PlacementId is null)) {
+        for (var index = LocalSeatCount; index < Capacity; index++) {
+            if (m_entries[index].Active && (m_entries[index].PlacementId is null) && !m_entries[index].IsRemoteHuman && !m_entries[index].IsAuthorityTransferred) {
                 count++;
             }
         }
 
+        return count;
+    }
+
+    private int CountNetworkPlayers() {
+        var count = 0;
+        for (var index = LocalSeatCount; index < Capacity; index++) {
+            if (m_entries[index].Active && (m_entries[index].PlacementId is null)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int CountExternalNetworkPlayers() {
+        var count = 0;
+        for (var index = LocalSeatCount; index < Capacity; index++) {
+            if (m_entries[index].Active && (m_entries[index].IsRemoteHuman || m_entries[index].IsAuthorityTransferred)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int AvailableCensusSlots() {
+        var count = 0;
+        for (var index = LocalSeatCount; index < Capacity; index++) {
+            var entry = m_entries[index];
+            if ((entry.PlacementId is null) && !entry.IsRemoteHuman && !entry.IsAuthorityTransferred) {
+                count++;
+            }
+        }
         return count;
     }
 
@@ -2188,6 +2300,9 @@ public sealed class WorldPopulation {
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.
         public bool IsRemoteHuman { get; set; }
+        // True when this entity-table occupant arrived through authority transfer rather than the destination's own
+        // census/inhabitant authoring. Population edits must not reseed it; replay and abort carry this bit explicitly.
+        public bool IsAuthorityTransferred { get; set; }
         // Admission templates that ACTUALLY reached the live table for THIS connection (empty for a plain census/
         // inhabitant activation, which never carries a verified remote identity). Updated after initial admission
         // and every rebuild re-authorization from successful grant-door outcomes only; an authored-but-rejected row

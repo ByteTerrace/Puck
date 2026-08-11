@@ -4,8 +4,8 @@ using Puck.Maths;
 
 namespace Puck.World.Server;
 
-/// <summary>Chooses the bounded, deterministic solid-placement subset shared by border contact and rendering.</summary>
-public static class WorldBorderMarginGeometry {
+/// <summary>Chooses the bounded, deterministic solid-placement subset shared by adjacency contact and rendering.</summary>
+public static class WorldAdjacencyGeometry {
     /// <summary>The one per-band budget both authoritative contact and presentation apply.</summary>
     public const int MaximumPlacementsPerBand = 8;
 
@@ -13,7 +13,7 @@ public static class WorldBorderMarginGeometry {
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
 
     /// <summary>Selects solid placements relevant to one counterpart band, in document order.</summary>
-    public static Selection Select(WorldDefinition definition, WorldFaceFrame frame, FixedQ4816 marginDepth, int maximum = MaximumPlacementsPerBand) {
+    public static Selection Select(WorldDefinition definition, WorldFaceFrame frame, FixedQ4816 overlapDepth, int maximum = MaximumPlacementsPerBand) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         ArgumentOutOfRangeException.ThrowIfNegative(value: maximum);
@@ -24,7 +24,7 @@ public static class WorldBorderMarginGeometry {
         foreach (var placement in definition.Placements) {
             if ((placement?.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) ||
-                !IsWithinReach(placement: placement, creation: creation, frame: frame, marginDepth: (float)(double)marginDepth)) {
+                !IsWithinReach(placement: placement, creation: creation, frame: frame, overlapDepth: (float)(double)overlapDepth)) {
                 continue;
             }
 
@@ -40,7 +40,7 @@ public static class WorldBorderMarginGeometry {
         return new Selection(Placements: selected, Truncated: truncated);
     }
 
-    private static bool IsWithinReach(WorldPlacement placement, WorldCreation creation, WorldFaceFrame frame, float marginDepth) {
+    private static bool IsWithinReach(WorldPlacement placement, WorldCreation creation, WorldFaceFrame frame, float overlapDepth) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
             if (CreationGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
                 return true;
@@ -53,7 +53,7 @@ public static class WorldBorderMarginGeometry {
         var alongRight = Vector3.Dot(vector1: delta, vector2: frame.Right.ToVector3());
         var alongUp = Vector3.Dot(vector1: delta, vector2: frame.Up.ToVector3());
 
-        return ((MathF.Abs(x: alongNormal) <= (marginDepth + reach)) &&
+        return ((MathF.Abs(x: alongNormal) <= (overlapDepth + reach)) &&
             (MathF.Abs(x: alongRight) <= ((float)(double)frame.HalfWidth + reach)) &&
             (MathF.Abs(x: alongUp) <= ((float)(double)frame.HalfHeight + reach)));
     }

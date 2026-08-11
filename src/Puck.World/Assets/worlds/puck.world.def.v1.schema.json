@@ -149,6 +149,9 @@
     "market": {
       "$ref": "./schema/market.schema.json"
     },
+    "adjacencies": {
+      "$ref": "./schema/adjacencies.schema.json"
+    },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"
     },

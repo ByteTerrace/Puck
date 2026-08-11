@@ -106,6 +106,17 @@ public static class WorldDefinitionRows {
         return null;
     }
 
+    /// <summary>Finds an adjacency row by stable name.</summary>
+    public static WorldAdjacency? FindAdjacency(IReadOnlyList<WorldAdjacency>? adjacencies, string name) {
+        foreach (var adjacency in (adjacencies ?? [])) {
+            if ((adjacency is not null) && string.Equals(a: adjacency.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
+                return adjacency;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Finds a state row by stable name — the ONE row-find every reader of the <c>state</c> section shares
     /// (the rule compiler's operand walk, the mutation compose arms, the console read-backs, the HUD binding
     /// resolver, and an owned identity document's own durable slots).</summary>

@@ -503,8 +503,9 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             if (m_roster.IsJoined(slot: rosterSlot) && !string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) && m_instances.TryGetLink(name: location.InstanceName, link: out var routedLink) && routedLink is not null) {
                 var routedResult = default(CommandResult);
                 routedLink.Query(query: new WorldQuery.PlayerWhere(Index: (location.InstanceSlot + 1)), completion: answer => {
-                    var tagged = WithInstanceTag(text: answer.Text, instanceName: location.InstanceName);
-                    routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{location.InstanceSlot}]") { IsError = answer.Refused };
+                    var current = m_instances.SeatLocation(slot: rosterSlot);
+                    var tagged = WithInstanceTag(text: answer.Text, instanceName: current.InstanceName);
+                    routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{current.InstanceSlot}]") { IsError = answer.Refused };
                 });
                 return routedResult;
             }

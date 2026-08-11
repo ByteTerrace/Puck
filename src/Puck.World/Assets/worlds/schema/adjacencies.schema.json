@@ -1,0 +1,71 @@
+{
+  "description": "Invisible, reciprocal authority boundaries. Optional; a world declaring none has no seamless neighbours. The compiler derives overlap from both delivered documents rather than accepting an authored safety margin.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One intentional adjacency between two authority-owned regions. It is topology, not visible furniture: no placement, screen, or portal is required. The compiler derives the overlap needed for observation, interaction, grounding, and handoff from the two delivered documents.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "This document\u0027s stable name for the edge.",
+        "type": "string"
+      },
+      "destination": {
+        "description": "A global persisted destination naming the neighbouring authority.",
+        "type": "string"
+      },
+      "counterpart": {
+        "description": "The reciprocal adjacency row in the destination document.",
+        "type": "string"
+      },
+      "boundary": {
+        "description": "The invisible source-side ownership boundary.",
+        "type": "object",
+        "properties": {
+          "center": {
+            "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates."
+          },
+          "outwardYawDegrees": {
+            "description": "The outward planar normal, in degrees (0 = \u002BZ, 90 = \u002BX).",
+            "type": "number"
+          },
+          "width": {
+            "description": "The full horizontal span of the boundary.",
+            "type": "number"
+          },
+          "height": {
+            "description": "The full vertical span of the boundary.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "center",
+          "outwardYawDegrees",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false
+      },
+      "unavailable": {
+        "description": "The authored failure treatment.",
+        "enum": [
+          "Closed"
+        ],
+        "default": "Closed"
+      }
+    },
+    "required": [
+      "name",
+      "destination",
+      "counterpart",
+      "boundary"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

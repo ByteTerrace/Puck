@@ -73,17 +73,6 @@ public enum WorldPortalArrival {
 /// document is not resolved at boot (same reason <paramref name="Destination"/> is not), so an absent placement/face
 /// refuses at transfer time instead, against the destination's own delivered definition (see
 /// <see cref="WorldPortalCounterpart"/>). Omitted from the wire when null.</param>
-/// <param name="MarginDepth">The depth (world units) of the shared ground strip this face and its
-/// <paramref name="Counterpart"/> face both author for a contiguous border — the terrain either side keeps solid so a
-/// body straddling the seam always has ground under it, never a wall it happens to be authoring past. Meaningful only
-/// when <paramref name="Arrival"/> is <see cref="WorldPortalArrival.Mapped"/> (refused by name otherwise, the same
-/// rule <paramref name="Counterpart"/> follows), and only for a Global destination while contact fields remain shared
-/// by one authority. Required — when a reachable <see cref="IWorldNeighbourResolver"/> is supplied — to be no
-/// shallower than the derived floor (interaction reach plus max closing speed times tape latency, all read from this
-/// document and the neighbour's own; see <see cref="WorldDefinitionValidator"/>), bit-identical to the value the
-/// neighbour document authors on the counterpart face, and reciprocal: that face must map back to this exact face.
-/// A strip only one side widens, or whose other half points at a different face, is not shared. <see langword="null"/>
-/// (the default) authors no strip: an unmapped or unauthored face is unchanged. Omitted from the wire when null.</param>
 /// <param name="Capacity">The maximum number of live bodies and outstanding reservations admitted through this
 /// border at once, or <see langword="null"/> to use the destination population's remaining capacity. A full border
 /// refuses the current attempt immediately; it never queues.</param>
@@ -92,7 +81,6 @@ public sealed record WorldPlacementPortal(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalTravel? Travel = null,
     WorldPortalArrival Arrival = WorldPortalArrival.Spawn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MarginDepth = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
 );
 

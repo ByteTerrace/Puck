@@ -13,7 +13,7 @@ internal static class WorldSessionRenderEnvelope {
     // session render cost.")
 
     /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
-    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, bool includeScreens = false, bool includeBorderMargins = false) {
+    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, bool includeScreens = false, bool includeAdjacencies = false) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
@@ -21,8 +21,8 @@ internal static class WorldSessionRenderEnvelope {
 
         EmitProbe(builder: builder, candidate: candidate, bodyColor: bodyColor, slotBase: 0, includeScreens: includeScreens);
 
-        if (includeBorderMargins) {
-            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: (WorldBorderMarginBands.CollectFrom(definition: candidate).Count * WorldBorderMarginGeometry.MaximumPlacementsPerBand));
+        if (includeAdjacencies) {
+            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand));
         }
 
         var measured = builder.Build();

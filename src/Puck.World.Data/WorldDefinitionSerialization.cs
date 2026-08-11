@@ -148,6 +148,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPropertyRegistrySection))]
 [JsonSerializable(typeof(WorldInteractionsSection))]
 [JsonSerializable(typeof(WorldInteraction))]
+[JsonSerializable(typeof(WorldAdjacency))]
+[JsonSerializable(typeof(WorldAdjacencyBoundary))]
 [JsonSourceGenerationOptions(
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>

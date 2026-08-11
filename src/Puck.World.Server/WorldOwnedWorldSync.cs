@@ -246,7 +246,7 @@ public sealed class WorldOwnedWorldSync {
 
         // The boot loader's gate (strict parse + validation) decides admission; a temp file that never matches the
         // catalog's *.world.json glob carries the bytes through it. Reuses this engine's OWN store/target/container
-        // (already resolved, since a pull cannot run without them) to prove the pulled document's own border-margin
+        // (already resolved, since a pull cannot run without them) to prove the pulled document's own adjacency
         // claims — a genuine document LOAD, the same "settled once, not on the tick path" case WorldServer.Neighbours'
         // own remarks describe, and cheap here: no extra wiring, the triple already sits on this instance.
         var neighbours = new WorldStorageNeighbourResolver(store: m_store, target: m_target, containerId: m_containerId);

@@ -1,11 +1,11 @@
 {
   "id": "travel-parity",
-  "title": "A mapped border is the same world over TCP",
+  "title": "An invisible adjacency is the same world over TCP",
   "bootShape": "windowed",
   "requirements": [],
   "seconds": 25,
   "timeoutSeconds": 60,
-  "binding": "The positive leg launches quilt-ne as a separate listening authority and walks through quilt-nw's mapped east border; the same script against the local discriminator must preserve arrival while losing the remote-authority evidence.",
+  "binding": "The positive leg launches quilt-ne as a separate listening authority and walks through quilt-nw's invisible east adjacency; the same script against colocated authorities must preserve arrival while losing only the remote-authority evidence.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
@@ -74,8 +74,8 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/quilt-nw-gap.world.json",
-    "script": "cross-ne.script.txt",
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "script": "cross-ne-local-control.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },

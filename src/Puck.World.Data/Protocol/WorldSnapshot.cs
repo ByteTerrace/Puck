@@ -2,6 +2,13 @@ using System.Numerics;
 
 namespace Puck.World.Protocol;
 
+/// <summary>A durable entity address: authority identity, population slot, and that slot's activation generation.
+/// Slot reuse therefore never aliases an entity that has already left or died.</summary>
+public readonly record struct WorldEntityAddress(string Authority, int Index, int Generation) {
+    /// <inheritdoc/>
+    public override string ToString() => $"{Authority}/{Index}:{Generation}";
+}
+
 /// <summary>How an entity's pose changed across the tick a <see cref="WorldSnapshot"/> reports — the presentation hint
 /// the client reads to interpolate, snap, or ease the on-screen pose toward the new authoritative one.</summary>
 public enum EntityContinuityKind : byte {
@@ -49,6 +56,8 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// <param name="Look">The entity's LOOK row index into the server-delivered definition's look table (drives the
 /// client's appearance resolution — catalog rig vs. creation stamp — PRESENTATION-ONLY, never who is driving it).</param>
 /// <param name="Continuity">How the pose changed across this tick — the client's interpolate/snap/ease hint.</param>
+/// <param name="Generation">The slot activation generation, paired with the snapshot authority and
+/// <paramref name="Index"/> to form a durable <see cref="WorldEntityAddress"/>.</param>
 /// <param name="PlacementId">The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer. The
 /// client renders an inhabitant's creation geometry (a body-rooted stamp riding this pose) instead of a catalog avatar —
 /// PRESENTATION-ONLY, never who is driving it. No transport change (the loopback is a pass-through).</param>
@@ -61,6 +70,7 @@ public readonly record struct EntitySnapshot(
     byte Kit,
     byte Look,
     EntityContinuity Continuity,
+    int Generation = 0,
     string? PlacementId = null
 );
 
@@ -71,6 +81,7 @@ public readonly record struct EntitySnapshot(
 /// <param name="Revision">The declared-set/palette revision; a change drives the client program rebuild.</param>
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
+/// <param name="Authority">The authority identity every entry belongs to.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -78,7 +89,8 @@ public readonly record struct WorldSnapshot(
     ulong Tick,
     int Revision,
     ulong StepTicks,
-    ReadOnlyMemory<EntitySnapshot> Entries
+    ReadOnlyMemory<EntitySnapshot> Entries,
+    string Authority = ""
 );
 
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a

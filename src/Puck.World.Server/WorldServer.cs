@@ -95,12 +95,17 @@ public readonly record struct WorldEditEcho(string Message, bool Rejected, World
 /// <see cref="WorldSnapshot"/> — plus, in any step that applied at least one edit, the new definition — to every
 /// subscriber of the <see cref="WorldOutputHub"/>.
 /// </summary>
-/// <remarks>Single-threaded on the host tick, like every simulation type here: submissions arrive during the command
-/// pump's apply window and <see cref="Step"/> runs immediately after, both on the launcher's window-pump thread. The
+/// <remarks>Ordinary work is single-threaded on the host tick: submissions arrive during the command
+/// pump's apply window and <see cref="Step"/> runs immediately after, both on the launcher's window-pump thread.
+/// Authenticated federation operations use <see cref="ExecuteAuthorityOperation{T}"/> so cyclic cross-host traffic
+/// can settle without racing that fold or waiting for another authority's next tick. The
 /// journal is the undo engine: the loaded base definition plus an append-only list of applied <see cref="WorldMutation"/>s;
 /// undo restores the base and deterministically replays the journal minus its tail through the same apply path — no
 /// per-mutation inverse logic is ever written.</remarks>
 public sealed class WorldServer : IWorldServerHost {
+    // Federation reserve/commit requests arrive on socket workers. They must be able to settle while this host's
+    // simulation thread waits on a different authority, otherwise simultaneous cyclic crossings deadlock.
+    private readonly object m_authorityGate = new();
     private readonly WorldPopulation m_population;
     private readonly WorldInputHoldRuntime m_inputHold;
     private readonly WorldOwnedWorlds m_profiles;
@@ -293,7 +298,8 @@ public sealed class WorldServer : IWorldServerHost {
     /// colocation and the TCP authority door; callers never reserve population capacity by inspecting it directly.</summary>
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
-    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) => m_transferEscrow.Reserve(request: request);
+    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Reserve(request: request));
 
     /// <summary>Commits detached bodies into a live reservation. A repeated committed id is idempotently accepted;
     /// an expired or absent reservation is refused.</summary>
@@ -302,26 +308,52 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="members">The travelers in reservation order.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns>Whether the commit is authoritative at this destination.</returns>
-    public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
-        m_transferEscrow.Commit(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out reason);
+    public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var resolvedReason = string.Empty;
+        var accepted = ExecuteAuthorityOperation(operation: () => m_transferEscrow.Commit(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out resolvedReason));
+        reason = resolvedReason;
+        return accepted;
+    }
 
     /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
-    public void AbortTransfer(string sourceAuthority, ulong transferId) => m_transferEscrow.Abort(sourceAuthority: sourceAuthority, transferId: transferId);
+    public void AbortTransfer(string sourceAuthority, ulong transferId) =>
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Abort(sourceAuthority: sourceAuthority, transferId: transferId));
 
     /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
-    public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) =>
-        m_transferEscrow.TryCommittedPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out principal);
+    public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
+        var resolved = default(WorldPrincipal);
+        var found = ExecuteAuthorityOperation(operation: () => m_transferEscrow.TryCommittedPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out resolved));
+        principal = resolved;
+        return found;
+    }
 
     /// <summary>Returns the destination's idempotent view of a source-scoped transfer.</summary>
     public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
-        m_transferEscrow.Status(sourceAuthority: sourceAuthority, transferId: transferId);
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Status(sourceAuthority: sourceAuthority, transferId: transferId));
+
+    /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
+    public T ExecuteAuthorityOperation<T>(Func<T> operation) {
+        ArgumentNullException.ThrowIfNull(operation);
+        lock (m_authorityGate) { return operation(); }
+    }
+
+    /// <summary>Executes a void authority operation under the same gate.</summary>
+    public void ExecuteAuthorityOperation(Action operation) {
+        ArgumentNullException.ThrowIfNull(operation);
+        lock (m_authorityGate) { operation(); }
+    }
 
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
     /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
+
+    /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
+    /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
+    /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity.</summary>
+    public string AuthorityIdentity { get; }
 
     /// <summary>Gets the durable writes emitted by the most recently completed tick.</summary>
     public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_population.DurableStateOutputs;
@@ -349,6 +381,7 @@ public sealed class WorldServer : IWorldServerHost {
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
         InstanceIdentity = instanceIdentity;
+        AuthorityIdentity = (definition.Host.Authority is { Length: > 0 } authority) ? authority : instanceIdentity;
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         m_machines = machines;
         m_driveDenied = new bool[population.Capacity];
@@ -533,6 +566,10 @@ public sealed class WorldServer : IWorldServerHost {
     /// check those two methods do not — a caller that only holds this property can never skip it.</summary>
     public IWorldGrantsView Grants => m_grants;
 
+    /// <summary>Returns the concrete grant rows held by one principal. Transfer rollback captures these before a
+    /// federated peer generation leaves so an aborted onward handoff can restore the exact source authority.</summary>
+    public IReadOnlyList<WorldGrant> GrantRows(WorldPrincipal principal) => m_grants.Rows(principal: principal);
+
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
     /// (<see cref="WorldCommand.Engage"/>/<see cref="WorldCommand.Disengage"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into
@@ -602,7 +639,7 @@ public sealed class WorldServer : IWorldServerHost {
     public Action<ulong>? SaveEffectTap { get; set; }
 
     /// <summary>Gets or sets the injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/> reads
-    /// for a cross-document border-margin check on a mapped portal facet's <see cref="WorldPlacementPortal.MarginDepth"/>
+    /// for a cross-document adjacency proof
     /// — the same "the server calls out, the composition root supplies the capability" shape as <see cref="EchoTap"/>/
     /// <see cref="SaveEffectTap"/>, and for the identical reason: <c>Puck.World.Server</c> carries no storage
     /// or filesystem dependency, so it cannot construct either resolver itself. Read only during synchronous
@@ -612,13 +649,16 @@ public sealed class WorldServer : IWorldServerHost {
     /// is reachable from the tick path. The resolver is likewise never read from <see cref="TryApplyMutation"/> or
     /// <see cref="ApplyUndo"/>: cross-document border compatibility is proved once at load, never re-litigated per
     /// mutation or journal entry. <see langword="null"/> (the default) is correct for an offline replay drive with no
-    /// reachable transport and means an authored <see cref="WorldPlacementPortal.MarginDepth"/> refuses by name for
-    /// want of proof rather than silently passing.</summary>
+    /// reachable transport and means an authored adjacency refuses by name for want of proof.</summary>
     public IWorldNeighbourResolver? Neighbours { get; set; }
 
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
     /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
     public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }
+
+    /// <summary>Gets or sets the composition-root route for a federated peer that subsequently leaves this
+    /// authority. Null when this server is not hosted by a multi-authority composition.</summary>
+    public IWorldTransferForwarder? TransferForwarder { get; set; }
 
     /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>
     public IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) {
@@ -627,20 +667,18 @@ public sealed class WorldServer : IWorldServerHost {
         return (RebuildNeighbours?.Invoke(arg: path) ?? Neighbours);
     }
 
-    /// <summary>Gets or sets the injected runtime border-margin neighbour resolver every live body's contact
-    /// resolution consults while standing inside a mapped portal facet's authored margin — the per-tick counterpart
-    /// to <see cref="Neighbours"/> (which proves the strip's shape once, at document-load time). The same
+    /// <summary>Gets or sets the runtime adjacency source every live body's contact resolution consults inside the
+    /// compiler-derived overlap — the per-tick counterpart to <see cref="Neighbours"/> (which proves reciprocal
+    /// topology once at document-load time). The same
     /// "the server calls out, the composition root supplies the capability" shape as <see cref="Neighbours"/>/
     /// <see cref="EchoTap"/>: <c>Puck.World.Server</c> carries no cross-instance dependency, so it cannot resolve a
     /// sibling instance itself. Forwards straight to <see cref="Population"/>'s own contact-field composition — see
-    /// <see cref="Server.WorldPopulation.ConfigureBorderMargin"/> — so a caller that sets this after the server
+    /// <see cref="Server.WorldPopulation.ConfigureAdjacencies"/> — so a caller that sets this after the server
     /// already stepped still takes effect on the very next tick, no restart. <see langword="null"/> (the default) is
-    /// correct whenever no resolver is wired, and simply means every mapped portal facet's <c>marginDepth</c> band
-    /// stays inert — a body straddling the seam solves against this world's own geometry alone, byte-identical to
-    /// the pre-margin-strip behavior.</summary>
-    public IWorldBorderMarginSource? BorderMargin {
-        get => m_population.BorderMargin;
-        set => m_population.ConfigureBorderMargin(source: value);
+    /// correct whenever no source is wired; the body then solves against this authority's own geometry alone.</summary>
+    public IWorldAdjacencySource? Adjacencies {
+        get => m_population.Adjacencies;
+        set => m_population.ConfigureAdjacencies(source: value);
     }
 
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
@@ -1503,6 +1541,12 @@ public sealed class WorldServer : IWorldServerHost {
     /// submitted tier is produced differs by occupancy.</remarks>
     /// <param name="context">The launcher's fixed-step context for this tick.</param>
     public void Step(in FixedStepContext context) {
+        lock (m_authorityGate) {
+            StepCore(context: in context);
+        }
+    }
+
+    private void StepCore(in FixedStepContext context) {
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -2398,11 +2442,11 @@ public sealed class WorldServer : IWorldServerHost {
             return false;
         }
 
-        // Cross-document margin claims are proved at load, never from this tick path. An edit that can change a
+        // Cross-document adjacency claims are proved at load, never from this tick path. An edit that can change a
         // standing claim or one of its floor inputs must go through a document reload; unrelated edits revalidate
         // only the facts owned by this document.
-        if (HasMarginDepth(definition: candidate) && MarginProofInputsChanged(current: m_definition, candidate: candidate, mutation: mutation)) {
-            Reject(mutation: mutation, reason: "the mutation changes a border-margin proof input; apply it through world.load/world.reload so the neighbour can be re-proved outside the tick path", connectionId: connectionId, correlationId: correlationId);
+        if ((candidate.Adjacencies is { Count: > 0 }) && AdjacencyProofInputsChanged(current: m_definition, candidate: candidate, mutation: mutation)) {
+            Reject(mutation: mutation, reason: "the mutation changes an adjacency overlap input; apply it through world.load/world.reload so the neighbour can be re-proved outside the tick path", connectionId: connectionId, correlationId: correlationId);
 
             return false;
         }
@@ -3546,27 +3590,14 @@ public sealed class WorldServer : IWorldServerHost {
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation;
 
-    // Margin proofs depend on the profileless motion ceiling, every kit's motion/collider, and the creation/placement
-    // rows that define each claimed face. Those edits need a fresh neighbour proof at the load boundary.
-    private static bool MarginProofInputsChanged(WorldDefinition current, WorldDefinition candidate, WorldMutation mutation) => mutation switch {
+    // Adjacency overlap proofs depend on motion envelopes, every kit's collider, and interaction/targeting reach.
+    // Those edits need a fresh neighbour proof at the load boundary.
+    private static bool AdjacencyProofInputsChanged(WorldDefinition current, WorldDefinition candidate, WorldMutation mutation) => mutation switch {
         WorldMutation.SetMotion => (current.Motion != candidate.Motion),
         WorldMutation.UpsertKit or WorldMutation.RemoveKit => !current.Kits.SequenceEqual(second: candidate.Kits),
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation => !current.Creations.SequenceEqual(second: candidate.Creations),
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement => !current.Placements.SequenceEqual(second: candidate.Placements),
+        WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => current.Interactions != candidate.Interactions,
         _ => false,
     };
-
-    private static bool HasMarginDepth(WorldDefinition definition) {
-        foreach (var placement in definition.Placements) {
-            foreach (var face in (placement?.FaceSources ?? [])) {
-                if (face?.Portal?.MarginDepth is not null) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
 
     // Build the SDF contact field for a candidate — null when the requirements permit analytic contact (the set is
     // derived inside the population's compile, not here), the built field under the FIELD provider, or a
@@ -5888,6 +5919,7 @@ public sealed class WorldServer : IWorldServerHost {
                 Kit: m_population.KitIndex(index: index),
                 Look: m_population.LookIndex(index: index),
                 Continuity: (consumeContinuity ? body.TakeContinuity() : body.PeekContinuity()),
+                Generation: m_population.Generation(index: index),
                 PlacementId: m_population.InhabitantPlacementId(index: index)
             );
         }
@@ -5896,7 +5928,8 @@ public sealed class WorldServer : IWorldServerHost {
             Tick: tick,
             Revision: m_population.Revision,
             StepTicks: stepTicks,
-            Entries: m_snapshotEntries.AsMemory(start: 0, length: count)
+            Entries: m_snapshotEntries.AsMemory(start: 0, length: count),
+            Authority: AuthorityIdentity
         );
     }
 
@@ -6091,7 +6124,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="identity">The attested traveler identity carried by the reservation.</param>
     /// <returns>The admission verdict.</returns>
     internal SessionReply AdmitTransferredPeer(int slot, WorldIdentity? identity) {
-        if (!m_population.TryAdmitRemotePeerAt(slot: slot, source: IntentSource.Live, grantTemplates: [], identityDomain: (identity?.Id ?? string.Empty), identitySubject: (identity?.Name ?? string.Empty), admitted: out var admitted, refusal: out var refusal)) {
+        if (!m_population.TryAdmitRemotePeerAt(slot: slot, source: IntentSource.Live, grantTemplates: [], identityDomain: (identity?.Id ?? string.Empty), identitySubject: (identity?.Name ?? string.Empty), admitted: out var admitted, refusal: out var refusal, authorityTransferred: true)) {
             return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: refusal);
         }
 
@@ -6102,6 +6135,35 @@ public sealed class WorldServer : IWorldServerHost {
         ]);
 
         return new SessionReply(Accepted: true, AssignedIndex: (slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
+    }
+
+    /// <summary>Commits an autonomous traveler into the entity-table index reserved by destination escrow. Its
+    /// authored intent source survives the crossing; unlike a live peer, it receives no connection route or Drive
+    /// grant and remains server-authored.</summary>
+    internal SessionReply AdmitTransferredEntity(int slot, IntentSource source, WorldIdentity? identity) {
+        if (source.IsLive) {
+            return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: "an autonomous transfer cannot carry the Live intent source");
+        }
+        if (!m_population.TryAdmitTransferredEntityAt(slot: slot, source: source, admitted: out var admitted, refusal: out var refusal)) {
+            return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: refusal);
+        }
+
+        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true);
+        if (identity is not null) {
+            m_population.SetSeatProfile(slot: slot, profile: identity);
+        }
+        return new SessionReply(Accepted: true, AssignedIndex: (slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
+    }
+
+    /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
+    /// generation-scoped grant minted with it.</summary>
+    internal void RollbackTransferredEntity(int slot) {
+        if (m_population.TryCaptureTransferredEntity(index: slot, peer: out var peer)) {
+            foreach (var grant in m_grants.Rows(principal: peer.Identity)) {
+                Revoke(grant: grant, actor: WorldPrincipal.Console);
+            }
+        }
+        _ = m_population.TryDetachSeatForTransfer(slot: slot, profile: out _);
     }
 
     // Builds the CONCRETE minted grant rows for one just-admitted peer from its verified admission templates — the

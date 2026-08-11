@@ -174,7 +174,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
     }
 
     private void TryTrack(string instanceName, int initialSlot) {
-        if (!m_instances.TryGetProjection(name: instanceName, definition: out var definition, attach: out var attach, envelope: out var envelope, borderMargin: out var borderMargin) || (definition is null) || (attach is null)) {
+        if (!m_instances.TryGetProjection(name: instanceName, definition: out var definition, attach: out var attach, envelope: out var envelope, adjacencies: out var adjacencies) || (definition is null) || (attach is null)) {
             return;
         }
 
@@ -190,24 +190,24 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             EnvelopeRegistration = null!,
             // Seeded from the initiating seat's OWN last-reported viewport size (this method runs from Reconcile,
             // BEFORE WorldFrameSource.Dress reports THIS frame's size — the previous frame's report, still the best
-            // available estimate) rather than the fixed legacy default, so the FIRST offscreen render this entry
+            // available estimate) rather than a fixed fallback, so the FIRST offscreen render this entry
             // ever builds is already close to right instead of guaranteed one ReconcileViewportSizes call stale.
             DesiredWidth = m_seatViewportWidth[initialSlot],
             DesiredHeight = m_seatViewportHeight[initialSlot],
         };
 
-        var marginEmitter = (borderMargin is null ? null : new WorldBorderMarginSceneEmitter(mirror: mirror, source: borderMargin));
+        var adjacencyEmitter = (adjacencies is null ? null : new WorldAdjacencySceneEmitter(mirror: mirror, source: adjacencies));
         var emitter = new AwaySeatSceneEmitter(
             mirror: mirror,
             viewState: () => m_roster.Seat(slot: entry.TrackedSlot)?.View,
             trackedTarget: () => new AwaySeatSceneEmitter.TrackedTarget(InstanceSlot: m_seatRouter.Location(slot: entry.TrackedSlot).InstanceSlot, LocalSlot: entry.TrackedSlot),
             layoutOverride: () => m_composition.ActiveLayout,
             cameraOverride: () => m_composition.SelectedCamera,
-            borderMargin: marginEmitter
+            adjacencies: adjacencyEmitter
         );
-        var frameSource = (marginEmitter is null
+        var frameSource = (adjacencyEmitter is null
             ? new SdfCompositionFrameSource(emitters: [emitter], dresser: emitter)
-            : new SdfCompositionFrameSource(emitters: [emitter, marginEmitter], dresser: emitter));
+            : new SdfCompositionFrameSource(emitters: [emitter, adjacencyEmitter], dresser: emitter));
 
         entry.Emitter = emitter;
         entry.FrameSource = frameSource;

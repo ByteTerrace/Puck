@@ -6,9 +6,9 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The inhabitation and creation-facet read-back surface — five Immediate censuses:
+/// The inhabitation and creation-facet read-back surface — six Immediate censuses:
 /// <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
-/// <c>world.destinations</c>. A placement's <c>inhabit</c> and <c>faceSources</c> facets ride its whole row through
+/// <c>world.adjacencies</c>, <c>world.destinations</c>. A placement's <c>inhabit</c> and <c>faceSources</c> facets ride its whole row through
 /// the general <see cref="WorldRowCommandModule"/> (<c>world.row.set placements &lt;json&gt;</c>), and
 /// <c>world.placement.get</c> (<see cref="WorldMutationCommandModule"/>) is the round-trip twin that harvests its
 /// exact current JSON to edit. A separate module from <see cref="WorldMutationCommandModule"/>, split at its
@@ -87,6 +87,18 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                 return new CommandResult(Output: WithInstanceTag(text: DescribeDestinations(instance: instance), instance: instance));
             }
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.adjacencies",
+            description: "Reports every invisible authority boundary and its live delivered neighbour: reciprocal row, boundary frame, compiler-derived overlap, neighbour tick, and durable addresses of active remote entities. Unreachable neighbours read CLOSED by name. A trailing instance:<name> token reads a named running authority.",
+            handler: (_, args) => {
+                if (!TryResolveInstance(args: in args, verb: "world.adjacencies", instance: out var instance, error: out var tokenError)) {
+                    return tokenError!.Value;
+                }
+
+                return new CommandResult(Output: WithInstanceTag(text: DescribeAdjacencies(instance: instance), instance: instance));
+            }
+        );
     }
 
     // The reserved trailing token every instance-addressed read-back in this module shares — the same spelling
@@ -152,6 +164,54 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
     // instance (null): its own echoes carry no tag.
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
         (((instance is not null) && text.EndsWith(value: ']')) ? $"{text[..^1]} instance:{instance.Name}]" : text);
+
+    private string DescribeAdjacencies(WorldInstance? instance) {
+        var definition = (instance?.Server.Definition ?? server.Definition);
+        var source = (instance?.Server.Adjacencies ?? server.Adjacencies);
+        var builder = new StringBuilder(value: "[world.adjacencies:");
+        var any = false;
+
+        foreach (var adjacency in (definition.Adjacencies ?? [])) {
+            if (adjacency is null) {
+                continue;
+            }
+
+            any = true;
+            var boundary = adjacency.Boundary;
+            _ = builder.Append(value: $" {adjacency.Name}[destination={adjacency.Destination} counterpart={adjacency.Counterpart} center={boundary.Center.X.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)},{boundary.Center.Y.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)},{boundary.Center.Z.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} yaw={boundary.OutwardYawDegrees.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} size={boundary.Width.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}x{boundary.Height.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}");
+
+            if ((source is null) || !source.TryResolve(adjacencyName: adjacency.Name.Value, neighbour: out var neighbour) || (neighbour is null)) {
+                _ = builder.Append(value: " state=CLOSED]");
+                continue;
+            }
+
+            var overlap = (WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour.Definition, depth: out var depth, reason: out var reason)
+                ? ((double)depth).ToString(format: "0.####", provider: CultureInfo.InvariantCulture)
+                : $"REFUSED({reason})");
+            var addresses = new List<string>();
+            for (var index = 0; index < neighbour.EntityCapacity; index++) {
+                if (neighbour.IsEntityActive(index: index)) {
+                    addresses.Add(item: neighbour.EntityAddress(index: index).ToString());
+                }
+            }
+            _ = builder.Append(value: $" state=open overlap={overlap} tick={neighbour.SnapshotTick} entities={(addresses.Count == 0 ? "none" : string.Join(separator: ",", values: addresses))}]");
+        }
+
+        if (source is not null) {
+            foreach (var projection in source.Visuals().Where(predicate: static projection => !projection.Direct)) {
+                any = true;
+                var addresses = new List<string>();
+                for (var index = 0; index < projection.Neighbour.EntityCapacity; index++) {
+                    if (projection.Neighbour.IsEntityActive(index: index)) {
+                        addresses.Add(item: projection.Neighbour.EntityAddress(index: index).ToString());
+                    }
+                }
+                _ = builder.Append(value: $" {projection.Name}[derived=corner hops={projection.Path.Count} state=open overlap={((double)projection.OverlapDepth).ToString(format: "0.####", provider: CultureInfo.InvariantCulture)} tick={projection.Neighbour.SnapshotTick} entities={(addresses.Count == 0 ? "none" : string.Join(separator: ",", values: addresses))}]");
+            }
+        }
+
+        return builder.Append(value: (any ? "" : " none")).Append(value: ']').ToString();
+    }
 
     private string DescribeInhabitants(WorldInstance? instance) {
         var pop = (instance?.Server.Population ?? population);

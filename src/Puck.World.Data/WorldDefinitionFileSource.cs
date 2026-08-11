@@ -24,14 +24,14 @@ public static class WorldDefinitionFileSource {
     /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="neighbours">The injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/>
-    /// reads for a cross-document border-margin check — see its own remarks. Optional here (unlike
+    /// reads for a cross-document adjacency proof — see its own remarks. Optional here (unlike
     /// <see cref="WorldDefinitionValidator.Validate"/>'s own required parameter): this method loads arbitrary files
-    /// for purposes that mostly have nothing to do with border margins (catalog scans, replay re-reads, tests), so
+    /// for purposes that mostly have nothing to do with adjacency (catalog scans, replay re-reads, tests), so
     /// <see langword="null"/> (the default) is the ordinary case. A caller that does have a reachable resolver at
     /// hand should pass it.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
     public static bool TryLoad(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours = null) =>
-        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: neighbours, validateMarginClaims: true);
+        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: neighbours, validateAdjacencyClaims: true);
 
     /// <summary>Loads a file while validating only the facts owned by that document. Used before the composition root
     /// can supply a neighbour resolver, and by replay to obtain the bytes whose recorded content hash is compared by
@@ -42,9 +42,9 @@ public static class WorldDefinitionFileSource {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the file loaded and its document-local facts validated.</returns>
     public static bool TryLoadLocally(string path, out WorldDefinition? definition, out string contentHash, out string reason) =>
-        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: null, validateMarginClaims: false);
+        TryLoadCore(path: path, definition: out definition, contentHash: out contentHash, reason: out reason, neighbours: null, validateAdjacencyClaims: false);
 
-    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateMarginClaims) {
+    private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
         definition = null;
         contentHash = string.Empty;
 
@@ -94,7 +94,7 @@ public static class WorldDefinitionFileSource {
 
             parsed = WorldDefinitionMigrations.Apply(definition: parsed);
 
-            if (validateMarginClaims) {
+            if (validateAdjacencyClaims) {
                 WorldDefinitionValidator.Validate(definition: parsed, neighbours: neighbours);
             } else if (!WorldDefinitionValidator.TryValidateLocally(definition: parsed, reason: out var localReason)) {
                 throw new InvalidOperationException(message: localReason);

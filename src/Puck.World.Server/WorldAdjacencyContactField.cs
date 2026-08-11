@@ -3,39 +3,43 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 /// <summary>
-/// Wraps this world's own compiled <see cref="IContactField"/> so a body standing within a mapped portal facet's
-/// authored margin gets ground from the neighbour's own solid geometry when this world's own field has none there —
-/// the collision half of the border-margin strip. Rendering's own composition
-/// (<c>Puck.World.Client.WorldBorderMarginSceneEmitter</c>) draws the same neighbour geometry through the same
+/// Wraps this world's own compiled <see cref="IContactField"/> so a body standing in a compiler-derived adjacency
+/// overlap gets ground from the neighbour's own solid geometry when this world's own field has none there.
+/// Rendering's own composition
+/// (<c>Puck.World.Client.WorldAdjacencySceneEmitter</c>) draws the same neighbour geometry through the same
 /// isometry, so what a body stands on and what it sees agree.
 /// </summary>
 /// <remarks>
 /// <para><b>The isometry.</b> A query position is mapped into the neighbour's own local frame, and the neighbour's
 /// answer is mapped back, through <c>Server.WorldPortalArrivalMath.ComputeArrival</c> — the exact same isometry a
-/// crossing traveler's arrival uses, anchored at the two faces' own frames rather than a crossing's swept seam (a
-/// margin strip serves every point near the border, not one traveler's own crossing point). Pure fixed-point
+/// crossing traveler's arrival uses, anchored at the two boundaries' own frames rather than one body's swept seam.
+/// The overlap serves every point near the boundary. Pure fixed-point
 /// throughout; no wall-clock, RNG, or float ever reaches this decision.</para>
 /// <para><b>Composition, not replacement.</b> This world's own field resolves first, exactly as it would with no
-/// margin strip at all — a margin band is consulted only when the body is not already grounded and its position
+/// adjacency at all — an overlap is consulted only when the body is not already grounded and its position
 /// falls inside one, so a world whose own geometry already reaches the border pays nothing extra and behaves
-/// identically to a world with no margin strip at all.</para>
+/// identically to a world with no adjacency at all.</para>
 /// </remarks>
-internal sealed class WorldBorderMarginContactField : IContactField {
+internal sealed class WorldAdjacencyContactField : IContactField {
     private static readonly FixedVector3 s_upAxis = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
 
     private readonly IContactField m_inner;
-    private readonly IReadOnlyList<WorldBorderMarginBand> m_bands;
-    private readonly IWorldBorderMarginSource m_source;
+    private readonly WorldDefinition m_definition;
+    private readonly IReadOnlyList<WorldAdjacencyBand> m_bands;
+    private readonly IWorldAdjacencySource m_source;
 
     /// <summary>Initializes the wrapper.</summary>
+    /// <param name="definition">This authority's live definition.</param>
     /// <param name="inner">This world's own compiled contact field.</param>
-    /// <param name="bands">Every mapped portal facet's margin band this definition authors.</param>
+    /// <param name="bands">Every adjacency band this definition authors.</param>
     /// <param name="source">The injected neighbour resolver.</param>
-    public WorldBorderMarginContactField(IContactField inner, IReadOnlyList<WorldBorderMarginBand> bands, IWorldBorderMarginSource source) {
+    public WorldAdjacencyContactField(WorldDefinition definition, IContactField inner, IReadOnlyList<WorldAdjacencyBand> bands, IWorldAdjacencySource source) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: inner);
         ArgumentNullException.ThrowIfNull(argument: bands);
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        m_definition = definition;
         m_inner = inner;
         m_bands = bands;
         m_source = source;
@@ -56,12 +60,13 @@ internal sealed class WorldBorderMarginContactField : IContactField {
         }
 
         foreach (var band in m_bands) {
-            if (!band.Contains(position: position)) {
+            if (!m_source.TryResolve(adjacencyName: band.Name, neighbour: out var neighbour) || (neighbour is null) ||
+                !WorldAdjacencyPolicy.TryDeriveOverlap(local: m_definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _) ||
+                !band.Contains(position: position, depth: depth)) {
                 continue;
             }
 
-            if (!m_source.TryResolve(placementId: band.PlacementId, faceName: band.FaceName, neighbour: out var neighbour) || (neighbour is null) ||
-                !neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) || (neighbourField is null)) {
+            if (!neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) || (neighbourField is null)) {
                 continue;
             }
 

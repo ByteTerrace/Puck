@@ -94,9 +94,9 @@ internal static class WorldDefinitionLoader {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.
     /// Defaults to the boot instance's own name.</param>
-    /// <param name="neighbours">The injected neighbour resolver a mapped portal facet's cross-document border-margin
-    /// check reads (see <see cref="WorldDefinitionValidator.Validate"/>). <see langword="null"/> (the default) is the
-    /// honest answer for a caller with no reachable resolver — an authored <c>marginDepth</c> then refuses by name
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads (see
+    /// <see cref="WorldDefinitionValidator.Validate"/>). <see langword="null"/> (the default) is the honest answer
+    /// for a caller with no reachable resolver — an authored adjacency then refuses by name
     /// for want of proof, exactly like every other call site of the underlying validator.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
     public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = WorldInstanceHost.BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
@@ -113,7 +113,7 @@ internal static class WorldDefinitionLoader {
 
         // A resolved draw writes a value the validator has already been told the site's domain admits, so this can
         // only fire if a domain narrowing went soft. Loud refusal rather than a silent bad boot. The SAME resolver
-        // (or null) the caller passed above proves a boot document's own marginDepth here too — a second pass in
+        // (or null) the caller passed above proves a boot document's own adjacencies here too — a second pass in
         // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
         // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
         if (!WorldDefinitionValidator.TryValidate(definition: resolved, reason: out var resolvedReason, neighbours: neighbours)) {

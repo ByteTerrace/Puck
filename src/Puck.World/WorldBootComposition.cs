@@ -426,15 +426,13 @@ internal static class WorldBootComposition {
         services.AddSingleton<WorldInstanceHost>();
         services.AddSingleton<ICommandModule, WorldInstanceCommandModule>();
 
-        // The border-margin strip's runtime neighbour resolver — CORE (not presentation-only): a body's contact
-        // resolution consumes it (WorldServer.BorderMargin, wired in WorldPostBuildWiring) regardless of boot shape;
-        // the render half (WorldBorderMarginSceneEmitter) additionally consumes it only in the windowed shape.
+        // The adjacency runtime source — CORE (not presentation-only): body contact consumes it regardless of boot
+        // shape; the render half additionally consumes it only in the windowed shape.
         // Registered as its own concrete singleton so container disposal releases its held observation leases, and
-        // resolved through IWorldBorderMarginSource by both consumers so they share the SAME instance (and so its
-        // per-facet handle cache is never duplicated).
-        services.AddSingleton<WorldBorderMarginFields>(implementationFactory: static sp =>
-            new WorldBorderMarginFields(instances: sp.GetRequiredService<WorldInstanceHost>(), sourceInstanceName: WorldInstanceHost.BootInstanceName));
-        services.AddSingleton<IWorldBorderMarginSource>(implementationFactory: static sp => sp.GetRequiredService<WorldBorderMarginFields>());
+        // resolved through IWorldAdjacencySource by both consumers so they share the same instance and handle cache.
+        services.AddSingleton<WorldAdjacencyFields>(implementationFactory: static sp =>
+            new WorldAdjacencyFields(instances: sp.GetRequiredService<WorldInstanceHost>(), sourceInstanceName: WorldInstanceHost.BootInstanceName));
+        services.AddSingleton<IWorldAdjacencySource>(implementationFactory: static sp => sp.GetRequiredService<WorldAdjacencyFields>());
 
         // Per-instance scheduling's own read-back + live pause/resume lever (docs/world-model.md Campaign 1 item 2)
         // — world.rate. Depends on WorldReplayTape (registered above) to tape a boot-instance pause/resume as an
@@ -849,7 +847,7 @@ internal static class WorldBootComposition {
                 viewports: sp.GetRequiredService<WorldSeatViewports>(),
                 seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>(),
                 awaySeatViews: sp.GetRequiredService<WorldAwaySeatViews>(),
-                borderMargin: sp.GetRequiredService<IWorldBorderMarginSource>()
+                adjacencies: sp.GetRequiredService<IWorldAdjacencySource>()
             );
 
             // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen

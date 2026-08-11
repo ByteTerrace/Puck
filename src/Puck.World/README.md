@@ -245,7 +245,7 @@ Facts a script needs:
   non-game dev canvas for character work reached only with `--world`: neutral
   floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout
   composing front/three-quarter/side/back at once; and the `quilt-*` documents,
-  test content for the border-margin and corner-crossing work, outside the
+  test content for adjacency and corner-crossing work, outside the
   charter roster and not game worlds), the default recording document
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world

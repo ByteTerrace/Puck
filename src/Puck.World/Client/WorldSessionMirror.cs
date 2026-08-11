@@ -51,10 +51,12 @@ internal sealed class WorldSessionMirror : IClientSink {
     private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
+    private readonly int[] m_generation = new int[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
 
     private WorldDefinition m_definition;
+    private string m_authority = string.Empty;
     private int m_definitionRevision;
     private long m_tickBits;
     private long m_stepTicksBits;
@@ -119,9 +121,15 @@ internal sealed class WorldSessionMirror : IClientSink {
     /// reason).</summary>
     public int SnapshotRevision => Volatile.Read(ref m_snapshotRevision);
 
+    /// <summary>The authority named by the latest delivered snapshot.</summary>
+    public string Authority => Volatile.Read(ref m_authority);
+
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => Volatile.Read(ref m_active[index]);
+
+    /// <summary>The durable address of the entity currently occupying a slot.</summary>
+    public WorldEntityAddress Address(int index) => new(Authority: Authority, Index: index, Generation: Volatile.Read(ref m_generation[index]));
 
     /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -190,6 +198,7 @@ internal sealed class WorldSessionMirror : IClientSink {
             m_seen[index] = true;
             m_bodyColor[index] = entry.BodyColor;
             m_look[index] = entry.Look;
+            Volatile.Write(ref m_generation[index], entry.Generation);
 
             if (!Volatile.Read(ref m_active[index]) || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
                 m_previousPosition[index] = entry.Position;
@@ -214,6 +223,7 @@ internal sealed class WorldSessionMirror : IClientSink {
         }
 
         _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)snapshot.Tick));
+        Volatile.Write(ref m_authority, snapshot.Authority);
         _ = Interlocked.Exchange(location1: ref m_stepTicksBits, value: unchecked((long)snapshot.StepTicks));
         Volatile.Write(location: ref m_snapshotRevision, value: snapshot.Revision);
         Volatile.Write(location: ref m_stepSecondsBits, value: BitConverter.SingleToInt32Bits((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)));

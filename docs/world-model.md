@@ -118,24 +118,35 @@ resolution even when they do not share presentation or transfer.
   root or carries its own rotation. Anchoring on the center alone is harmless for a picture-frame
   portal and wrong for contiguous terrain, where an off-center crossing must land at its exact
   counterpart for the ground to read as one continuous surface.
-- A mapped facet may author `marginDepth` — the shared border strip. At load it is proven, never
-  trusted: an injected `IWorldNeighbourResolver` fetches the counterpart document, and the
-  validator refuses by name a depth below the derived floor (interaction reach + both sides'
-  closing speed × one slower-side tick, every term declared data, every rounding directed up), a
-  depth not bit-identical on both sides, a counterpart that does not map back to the source face,
-  mismatched counterpart face extents, a non-global destination, or an unreachable neighbour. At
-  runtime the strip delivers for boot and spawned authorities alike: a body inside the band that this world's own field
-  leaves ungrounded is mapped through the pair's arrival isometry, resolved against the
-  neighbour's own compiled solid field, and mapped back (`WorldBorderMarginContactField`), while
-  rendering composes the neighbour's solid placements through the identical isometry
-  (`WorldBorderMarginSceneEmitter`), so the ground a straddling body stands on is the ground it
-  sees. The neighbour arrives over the session-mirror observation plane — wire-shaped delivered
-  data, never a reach into a sibling instance's live objects. Two named gaps: the mirror's
-  delivery timing is an UNTAPED cross-instance input — a body entering a band before the
-  neighbour's first delivery falls where a later run grounds, so margin grounding sits outside
-  the replay/determinism contract until the border tape makes neighbour data taped input. Geometry
-  is bounded to the first eight relevant solid placements in document order per band; collision and
-  rendering consume that one shared selection, and reaching the bound emits a named diagnostic.
+- Continuous topology is authored independently of portals through reciprocal `adjacencies` rows.
+  Each row names a global persisted destination, the neighbour's counterpart row, an invisible
+  rectangular boundary (`center`, exact-cardinal outward yaw, width, height), and the only supported
+  unavailable policy, `closed`. The validator fetches the neighbour document and refuses by name an
+  unreachable destination, a missing reverse edge, mismatched extents, or a non-reciprocal frame.
+  When two edge neighbours independently converge on the same fourth authority, the compiler also
+  derives that corner peer: the source must declare a global persisted destination/reference for
+  the peer, and validation proves both two-hop reciprocal paths. This adds observation and
+  interaction interest, never a diagonal ownership edge.
+  Authors declare physical and interaction envelopes; they do not guess a transport strip. The
+  compiler derives one symmetric overlap depth from both bodies' reach, interaction/targeting reach,
+  and two slower-side delivery periods of closing speed, rounding outward.
+- One delivered neighbour mirror feeds every adjacency consumer: selected solid placements are
+  mapped through the reciprocal frame for contact and rendering, active remote bodies are rendered
+  from the same tick records, and each body carries a durable `(authority, index, generation)`
+  address for future targeting. Crossing the outward half-space automatically performs a mapped
+  ownership transfer for local humans, already-transferred humans, and autonomous bodies. The
+  reservation carries the body's `Live`, `Idle`, or named producer source; a destination that cannot
+  embody that producer refuses before detach. Only `Live` travelers acquire credential forwarding
+  and a camera/input route. At a four-way corner, all three remote authorities' geometry and
+  addressable bodies are projected; an already-outside arrival can continue through the next edge
+  on the following step. A missing authority enforces `closed` by placing the body one fixed
+  unit inside and clearing its velocity. Portal facets remain authored travel doors and do not
+  participate in this topology.
+- The neighbour arrives over the session-mirror observation plane — wire-shaped delivered data,
+  never a reach into a sibling instance's live objects. Its delivery timing remains an UNTAPED
+  cross-authority input until the neighbour tape lands. Geometry is bounded to the first eight
+  relevant solid placements in document order per edge; collision and rendering consume that one
+  shared selection, and reaching the bound emits a named diagnostic.
 - One derivation serves every consumer. `WorldFaceCatalog` walks (placements × declared creation
   faces) once per document revision and produces a `WorldFaceFrame` — origin, a complete orthonormal
   right/up/normal triad, half-extents — entirely in fixed point: yaw through the integer `SinCos`
@@ -797,17 +808,17 @@ follows its dependency chains. A gate naming another row means finish that first
 | **View / sink compositor** | one mechanism for split-screen, multi-viewer and diegetic screens | sinks first-class, multi-world composition |
 | **World as a screen source** (authority-selected projection) | the local global-scoped session arm and embodied live projection (placements plus moving avatars) are shipped. What remains is target-selected full state, redacted state or frames, per-viewport scope, admission and disclosure enforcement | multi-world composition |
 | **A specified client wire** | the SAME boundary as a command-streamed screen: document, snapshot, submissions. A foreign host rendering this engine and a cabinet rendering a remote world differ only in whose renderer draws. The seam exists (`IServerLink`/`IClientSink`, loopback and TCP); the format is internal and nothing outside .NET speaks it | world as a screen source |
-| **Cross-host authority as a committed handover** | same-process transfer preserves one active authority, but no failure-safe remote protocol exists. It needs transfer ids, epochs/leases, stale-authority fencing, durable commit, idempotent retry and a rule for an authority that dies holding a cluster | authenticated client wire, target admission |
+| **Cross-host authority failure hardening** | FED3 now carries authenticated, source-scoped reserve/commit/abort/status operations with tick-denominated leases, exact replay checks, lost-ack status recovery, and one live owner after acknowledged commit. What remains is durable recovery/fencing when an authority dies mid-transaction rather than merely becoming unavailable and closing the seam | replication, durable authority epochs |
 | **Replication: what a replica actually needs** | a snapshot today carries render poses, appearance and continuity — not timers, velocities, action state, addon or machine state, or grants. A replica needs full simulation state, a catch-up path, resynchronisation when it diverges, a downstream codec, and agreement on versions. This is a system, not a field, and the wire row understates it without this | client wire |
-| **Cross-host body transfer** | same-process body/party transfer is running WITH cohort atomicity, whole-party reservation, idempotent transfer ids and field-audited exact rollback. What remains is carrying that transaction over the authenticated wire: acknowledgement, authority epochs/fencing and a durable commit | authenticated client wire, target admission |
+| **Cross-host body transfer — LANDED 2026-08-11** | the same reservation/commit path runs locally or over FED3; human credentials forward over multi-hop transfers, presentation/input follows the resolved route, and autonomous entities preserve their authored intent source without becoming human peers. `four-corners-sharded/run.ps1` proves four distinct hosts, simultaneous human and autonomous handoffs, diagonal observation, and one complete multi-host traveler circuit | shipped: authenticated federation door, destination admission, per-world clocks |
 | **Write-back that survives a retry** | an operation id so a repeated Add adds once, a precondition or owner version so a delayed Set cannot overwrite newer state, atomic persistence so a torn write cannot destroy an owner document, and a receipt the visitor can actually observe | shipped: write-back (happy path) |
 | **Portal display and hardened local entry** | destination/session authoring, resolver-shared preview/crossing identity (keyed by durability, scope and canonical document), disposable observation leases, face-derived swept scanning with its regression law, whole-party reservation, coalesced idempotent transfer ids, and commit-or-abort with field-audited exact rollback are running, with live embodied destination images in `play`. Per-viewport scoped images and destination-side replay remain open | local portal campaign above |
 | **Authenticating the game wire** — LANDED 2026-08-09 | the blob path already has TLS and per-tenant ABAC routing; the game's own socket now authenticates too. `WorldHelloDoor` still checks protocol-version compatibility first, with its own refusal spelling; a second door, `WorldAdmissionDoor` (`Puck.World.Data`), then runs a challenge-response over `Puck.Carriage`'s signed-carriage envelopes — the server mints a fresh nonce, the peer signs it with its identity's signing key, the server verifies the claim (and, for a vouching root, its two-hop chain) against the world document's own authored `admission` trust-list section — and maps the verified identity to that entry's own authored `WorldGrant` templates, never a blanket `Control`/`all`. An unauthenticated, wrong-key, or unlisted identity is refused by name, distinctly from a version mismatch. This closes the identity half of "federation cannot cross a machine boundary" — the remaining half (destination/session resolution, an unembodied session authority, projection authorization, replication) is Campaign 2 items 1-2 above and the rows below | shipped: platform identity (unembodied session authority, destination/session resolution) |
 | **Issuer-signed slots** | tamper-evident carriage of what another world entrusted you with: a slot that declares an issuer is one you hold but may not write. See *Signed carriage* below | shipped: platform identity |
 | **An authored trust list** | which issuers a world accepts, and what each may reach. See *Signed carriage* below | issuer-signed slots |
 | **Per-world time completion** | document-authored integer Hz, independent scheduling, live authority pause/resume, durable zero, replay rate stamping/refusal, `world.rate` read-back, exact rate-transition ordering and remainder carry for uneven consumers are running; rate-zero reconnect parking represents forever as null/positive infinity rather than a numeric sentinel, and rate independence is proven live across a 1–240 Hz spread. What remains is derived-band read-back and a long-run remainder-drift demonstration | local portal campaign above |
-| **Seamless crossing** (overlap band, ghosts, authority handoff) | continuous space across zones; the expensive cousin of portal entry | cross-host body transfer, per-world time completion |
-| **The range chain, validator-derived** | overlap band >= co-location range >= interaction range + closing margin. A world declares its interaction range and top speed, the engine derives the band and refuses a border too narrow to hold it, so weapon reach reaches terrain layout at author time rather than in production | seamless crossing |
+| **Seamless crossing — LANDED 2026-08-11** | reciprocal invisible adjacency rectangles compile into one overlap/contact/render projection; all three remote authorities appear at a four-way corner, bodies have generation-addressed ghost identities, and outward sweeps hand authority to the mapped counterpart. Portals remain intentional travel furniture and are not involved | shipped: cross-host body transfer, per-world clocks |
+| **The range chain, validator-derived** | overlap depth >= body reach + interaction/targeting reach + two slower-side delivery periods of closing speed. Both worlds declare their envelopes; the compiler derives one symmetric band, so weapon reach reaches topology at author time rather than in production | seamless crossing |
 | **Proximity co-location + interaction flag** | correct PvP across an authority boundary: interacting entities resolve under one authority, never two. Candidacy is proximity between entities the DOCUMENT declares interaction-capable — the same flag as targetability, not a second one — so a peaceful NPC or a player with PvP off never co-locates and a quiet border costs nothing. Binding is PREEMPTIVE: migration lands while people walk, never on the first effect, which is the most latency-sensitive moment there is — and which is also why neither party gains from striking first, since the migration is already done before anyone swings. Direction is settled by acceptance and the deterministic tie-break, not by who is defending | seamless crossing |
 | **Occlusion-aware candidacy, derived** | terrain barriers become a real performance lever instead of decoration: entities behind cover do not co-locate, so a wall shrinks the cluster. NOT an authored flag — a flag can silently become a lie the day someone authors an ability that reaches through cover, and two entities interacting under different authorities is split-brain. Derived instead from whether every interaction the world declares respects occlusion, refused by name at load when one does not. At a border the union of both worlds' interactions governs | co-location |
 | **View holds, for parity** | input holds equalise when players *act*, not what they *see*: the authority reads the current tick while a guest reads state a round trip old, and fresher information is an advantage at equal action delay. Parity needs the authority's view held too — presentation-side, so it never touches the tape | latency equalisation, which needs a real RTT source first — a self-reported hold raises every equalised participant's |

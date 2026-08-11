@@ -102,7 +102,6 @@ $shippedWorlds = @(
     @{ Id = 'jump'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\jump.world.json') },
     @{ Id = 'studio'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\studio.world.json') },
     @{ Id = 'quilt-ne'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-ne.world.json') },
-    @{ Id = 'quilt-nw-gap'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-nw-gap.world.json') },
     @{ Id = 'quilt-nw'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-nw.world.json') },
     @{ Id = 'quilt-se'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-se.world.json') },
     @{ Id = 'quilt-sw'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-sw.world.json') },
