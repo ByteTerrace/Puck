@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Overlays;
 using Puck.SdfVm;
+using Puck.SdfVm.Queries;
 using Puck.SdfVm.Views;
 using Puck.World.Client.Sdf;
 using Puck.World.Protocol;
@@ -141,6 +142,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private SdfProgram? m_program;
     private DynamicTransform[] m_transforms = [];
     private SdfProgram? m_lastProgram;
+    private SdfFieldEvaluator? m_cameraClearanceField;
     // Advances exactly when the composed program is a NEW instance — the jumbotron engines' re-upload trigger.
     private int m_programRevision;
     private int m_builtDefinitionRevision;
@@ -460,6 +462,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         if (programChanged) {
             m_lastProgram = program;
             m_programRevision++;
+            RebuildCameraClearanceField();
         }
 
         // Emit one view per joined local seat (a 1..MaxSlots count up to the ViewportCapacity floor, so players can join
@@ -527,11 +530,11 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
 
             if (composed.Camera is { } cameraName) {
                 // A single followed traveler still owns the window's composition context. Its pixels come from the
-                // away render, so a live camera override must show that render's newly selected destination camera
+                // away render, so both its destination-authored default rig and a live camera override must show
                 // through the reserved periscope quad; resolving cameraName against m_client.Definition here would
                 // keep filming the boot scene after the crossing. Multi-seat camera slots remain process-global —
                 // there is no unique routed instance to choose when several seats occupy different worlds.
-                if ((m_composition.SelectedCamera is not null) && (joinedRosterCount == 1)) {
+                if (joinedRosterCount == 1) {
                     var routedSlot = joinedRosterSlots[0];
 
                     if (!string.Equals(a: m_seatRouter.Location(slot: routedSlot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
@@ -566,6 +569,13 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
 
             var slot = joinedRosterSlots[composed.SeatOrder];
+            var seatPixelWidth = (uint)(region.Width * width);
+            var seatPixelHeight = (uint)(region.Height * height);
+
+            // Keep the seat's composed extent warm while it is still boot-bound. A seamless crossing has no
+            // presentation-side arrival callback: the away projection must be able to allocate its first target
+            // from the preceding frame's exact viewport, before this frame reaches the routed branch below.
+            m_awaySeatViews.ReportSeatViewportSize(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
 
             // TRAVELER-FOLLOW STAGE 1, item (c): an away-routed seat's region renders its own reserved periscope
             // quad (WorldAwaySeatQuad) instead of the ordinary boot-scoped chase — the quad's bound screen source
@@ -574,8 +584,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             // composites with. No seat-camera-pose/gizmo/viewport-unproject publication for an away seat: none of
             // those are meaningful against a periscope framing a flat quad rather than the room.
             if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
-                var seatPixelWidth = (uint)(region.Width * width);
-                var seatPixelHeight = (uint)(region.Height * height);
                 var periscope = WorldAwaySeatQuad.PeriscopeCamera(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
 
                 // This IS the one place the seat's actual composed viewport pixel size is known — hand it to the
@@ -584,8 +592,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 // was never sized for. WorldAwaySeatViews.ReconcileViewportSizes reads every seat's report once per
                 // produced frame and re-targets the SHARED render at the largest requesting seat's own size when two
                 // or more seats follow the same instance.
-                m_awaySeatViews.ReportSeatViewportSize(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
-
                 m_views.Add(item: new SdfViewSnapshot(Camera: periscope, Region: region) {
                     RenderScale = (m_settings.RenderScale * transitionScale),
                     UpscaleSharpness = m_settings.UpscaleSharpness,
@@ -924,6 +930,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             target: ref target
         );
 
+        if (ReferenceEquals(objA: rig, objB: m_cameraRigs[slot])) {
+            eye = WorldCameraClearance.Resolve(field: m_cameraClearanceField, desiredEye: eye, target: target);
+        }
+
         return CameraSnapshot.LookAt(
             position: eye,
             target: target,
@@ -931,6 +941,40 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             viewportWidth: Math.Max(val1: 1u, val2: (uint)(region.Width * width)),
             viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
+    }
+
+    // Build the camera query from the same static scene layers the composed frame renders. The live program cannot
+    // be queried directly because its avatar catalog carries TransformDynamic instructions; reconstructing only the
+    // static placements/screens/margin strip keeps the camera from treating the avatar it follows as an obstacle.
+    private void RebuildCameraClearanceField() {
+        m_cameraClearanceField = null;
+
+        try {
+            var definition = m_client.Definition;
+            var builder = new SdfProgramBuilder();
+
+            WorldPlacementStamper.EmitStatic(builder: builder, creations: definition.Creations, placements: definition.Placements);
+
+            foreach (var screen in definition.Screens) {
+                WorldScreenStamper.Emit(builder: builder, screen: screen);
+            }
+
+            var facets = WorldCreationFacets.Derive(
+                definition: definition,
+                derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+                derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+            );
+
+            foreach (var screen in facets.Faces) {
+                WorldScreenStamper.Emit(builder: builder, screen: screen);
+            }
+
+            m_borderMargin.EmitCurrent(builder: builder);
+            m_cameraClearanceField = new SdfFieldEvaluator(program: builder.Build(buildInstanceGrid: false));
+        } catch (ArgumentException) {
+            // Render-only warp/texture operations have no fixed-point query twin. Those worlds retain the authored
+            // eye; query-compatible worlds still receive the presentation-only clearance correction.
+        }
     }
 
     // Recompiles every seat's chase rig from the authored seat rig (the built-in default carries OrientedFollowRig's

@@ -496,6 +496,20 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.where: expected at most 1 value — an optional player index]");
         }
 
+        if (WorldArgs.TryParseIndex(args: in args, at: 0, min: 1, max: m_population.Capacity, fallback: 1, value: out var routedIndex) && (routedIndex <= PlayerRoster.MaxSlots)) {
+            var rosterSlot = PlayerRoster.SlotFromDisplay(number: routedIndex);
+            var location = m_instances.SeatLocation(slot: rosterSlot);
+
+            if (m_roster.IsJoined(slot: rosterSlot) && !string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) && m_instances.TryGetLink(name: location.InstanceName, link: out var routedLink) && routedLink is not null) {
+                var routedResult = default(CommandResult);
+                routedLink.Query(query: new WorldQuery.PlayerWhere(Index: (location.InstanceSlot + 1)), completion: answer => {
+                    var tagged = WithInstanceTag(text: answer.Text, instanceName: location.InstanceName);
+                    routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{location.InstanceSlot}]") { IsError = answer.Refused };
+                });
+                return routedResult;
+            }
+        }
+
         var (player, index, error) = ResolveTarget(args: in args, requiredCount: 0, verb: "player.where");
 
         if (player is null) {
@@ -1147,16 +1161,6 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.fly: expected 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus an optional player index]");
         }
 
-        var (player, index, error) = ResolveTarget(args: in args, requiredCount: 7, verb: "player.fly");
-
-        if (player is null) {
-            return CommandResult.Error(output: error!);
-        }
-
-        if (PendingTapeError(index: index, verb: "player.fly") is { } pendingError) {
-            return pendingError;
-        }
-
         if (!TryParseFlySegment(args: in args, forward: out var forward, strafe: out var strafe, up: out var up, yaw: out var yaw, pitch: out var pitch, roll: out var roll, seconds: out var seconds)) {
             return CommandResult.Error(output: "[player.fly: could not parse the seven values as numbers]");
         }
@@ -1165,11 +1169,58 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.fly: <seconds> must be greater than 0]");
         }
 
+        if (!WorldArgs.TryParseIndex(args: in args, at: 7, min: 1, max: m_population.Capacity, fallback: 1, value: out var index)) {
+            return CommandResult.Error(output: $"[player.fly: player index must be an integer 1..{m_population.Capacity}]");
+        }
+
+        // A local seat keeps its console-facing player number while its authoritative body travels. Follow the
+        // identical live route player.where and ordinary device intent already use; resolving through the boot
+        // roster here would reject the deliberately departed boot body and make a remotely presented seat
+        // inspectable but not script-drivable. The routed link owns both local-instance and federated credential
+        // translation, while the destination definition supplies its own channel ordinals.
+        if (index <= PlayerRoster.MaxSlots) {
+            var rosterSlot = PlayerRoster.SlotFromDisplay(number: index);
+            var location = m_instances.SeatLocation(slot: rosterSlot);
+
+            if (m_roster.IsJoined(slot: rosterSlot) &&
+                !string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) &&
+                m_instances.TryGetLink(name: location.InstanceName, link: out var routedLink) &&
+                routedLink is not null) {
+                var routedChannels = WorldChannelTable.Compile(channels: m_instances.ResolveRoutedDefinition(slot: rosterSlot).Channels);
+
+                routedLink.SubmitCommand(command: new WorldCommand.EnqueueSegment(
+                    Principal: context.ActingPrincipal(),
+                    EntityIndex: location.InstanceSlot,
+                    Intent: routedChannels.RoleOrdinals.Intent(
+                        moveForward: FixedQ4816.FromDouble(value: forward),
+                        moveStrafe: FixedQ4816.FromDouble(value: strafe),
+                        turn: FixedQ4816.FromDouble(value: yaw),
+                        moveUp: FixedQ4816.FromDouble(value: up),
+                        pitch: FixedQ4816.FromDouble(value: pitch),
+                        roll: FixedQ4816.FromDouble(value: roll)
+                    ),
+                    Seconds: seconds
+                ));
+
+                return Echoed(args: in args, handler: $"[player.fly: p{index} via '{location.InstanceName}' body={location.InstanceSlot} fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]");
+            }
+        }
+
+        var (player, resolvedIndex, error) = ResolveTarget(args: in args, requiredCount: 7, verb: "player.fly");
+
+        if (player is null) {
+            return CommandResult.Error(output: error!);
+        }
+
+        if (PendingTapeError(index: resolvedIndex, verb: "player.fly") is { } pendingError) {
+            return pendingError;
+        }
+
         // The fly channel order (forward, strafe, up, yaw, pitch, roll) maps onto PlayerIntent (MoveForward, MoveStrafe,
         // Turn, MoveUp, Pitch, Roll) — the "yaw" channel is the Turn rate.
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
             Principal: context.ActingPrincipal(),
-            EntityIndex: (index - 1),
+            EntityIndex: (resolvedIndex - 1),
             Intent: m_channels.RoleOrdinals.Intent(
                 moveForward: FixedQ4816.FromDouble(value: forward),
                 moveStrafe: FixedQ4816.FromDouble(value: strafe),

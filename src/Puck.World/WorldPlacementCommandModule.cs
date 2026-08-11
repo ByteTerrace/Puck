@@ -262,6 +262,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         var resolved = (instance ?? instances.Boot);
         var definition = (resolved?.Server.Definition ?? server.Definition);
         var defaultTravel = (definition.Portals?.PortalDefaults.Travel ?? WorldPortalTravel.Body);
+        var defaults = (definition.Portals?.PortalDefaults ?? new WorldPortalDefaults(Travel: WorldPortalTravel.Body));
         var builder = new StringBuilder(value: "[world.portals:");
         var any = false;
 
@@ -278,8 +279,9 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                 var durability = ((destination is not null) ? WorldDestinationTokens.DurabilityToken(durability: destination.Durability) : "?");
                 var arrivalToken = WorldDestinationTokens.ArrivalToken(arrival: portal.Arrival);
                 var counterpartText = ((portal.Arrival == WorldPortalArrival.Mapped) ? $" counterpart={portal.Counterpart}" : "");
+                var capacityText = ((portal.Capacity is { } capacity) ? capacity.ToString(provider: CultureInfo.InvariantCulture) : "population");
 
-                _ = builder.Append(value: $" {placement.Id}/{face.Face}[-> {portal.Destination} durability={durability} travel={WorldDestinationTokens.TravelToken(travel: travel)} arrival={arrivalToken}{counterpartText} inside={DescribeOccupancy(instance: resolved, placementId: placement.Id, faceName: face.Face)}]");
+                _ = builder.Append(value: $" {placement.Id}/{face.Face}[-> {portal.Destination} durability={durability} travel={WorldDestinationTokens.TravelToken(travel: travel)} arrival={arrivalToken}{counterpartText} holdSeconds={defaults.HoldSeconds.ToString(provider: CultureInfo.InvariantCulture)} full={defaults.Full.ToString().ToLowerInvariant()} partyAllOrNothing={defaults.PartyAllOrNothing.ToString().ToLowerInvariant()} capacity={capacityText} inside={DescribeOccupancy(instance: resolved, placementId: placement.Id, faceName: face.Face)}]");
             }
         }
 

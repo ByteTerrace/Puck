@@ -5,6 +5,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Launcher;
 using Puck.World;
+using Puck.World.Protocol;
 
 // The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
 // with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
@@ -68,25 +69,15 @@ var listenOption = new Option<string?>(name: "--listen") {
     DefaultValueFactory = static _ => null,
     Description = "Override the TCP listen endpoint (an \"ip:port\" pair, e.g. 127.0.0.1:7777). Absent uses the world document's host.listen (null = loopback-only, never opens a socket).",
 };
-// NOT a host.* reflection — connecting is inherently this ONE run's transport target, never a property of the
-// world being authored. Present, the whole normal composition (GPU, local authoritative server, CommandRegistry) is
-// skipped in favor of Puck.World.WorldRemoteClient's minimal socket harness; every other option is ignored.
+// NOT a host.* reflection — connecting is inherently this one run's initial transport target. It selects the
+// remote authority beneath the normal boot composition; rendering, commands, input, and routing remain unchanged.
 var connectOption = new Option<string?>(name: "--connect") {
     DefaultValueFactory = static _ => null,
-    Description = "Connect to a remote TCP host instead of booting locally (an \"ip:port\" pair). Skips the whole normal composition in favor of a minimal stdin/socket client (Puck.World.WorldRemoteClient); every other option is ignored.",
-};
-// SESSION CREDENTIAL MATERIAL, never durable world configuration — a private key cannot live in the document, so
-// this rides beside --connect as the one narrow exception to "no PUCK_* configuration surface, durable values are
-// document fields": the identity a real client would hold locally, not a property of the world being authored.
-// Only meaningful with --connect; ignored (and unused) otherwise.
-var connectIdentityDirOption = new Option<string?>(name: "--connect-identity-dir") {
-    DefaultValueFactory = static _ => null,
-    Description = "With --connect: a directory carrying the identity to answer the TCP door's admission challenge with (private-key.pkcs8, domain.txt, subject.txt, algorithm.txt, optional chain/1.envelope + chain/2.envelope). Absent, the client signs with a freshly minted, unregistered throwaway key instead — a deliberate way to exercise the identity door's refusal path.",
+    Description = "Boot into a remote authority (an \"ip:port\" pair) through the normal window/headless composition. --world supplies the initial definition until the authority's definition revision arrives.",
 };
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
-    connectIdentityDirOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -112,10 +103,7 @@ if (parseResult.Errors.Count > 0) {
     return 1;
 }
 
-// --connect bypasses the whole normal composition — a minimal socket client, not a second world boot.
-if (parseResult.GetValue(option: connectOption) is { } connectTarget) {
-    return await WorldRemoteClient.RunAsync(connect: connectTarget, identityDir: parseResult.GetValue(option: connectIdentityDirOption));
-}
+var connectTarget = parseResult.GetValue(option: connectOption);
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
 }
@@ -293,6 +281,17 @@ var host = builder.Build();
 // document the real vocabulary would have refused.
 if (!WorldPostBuildWiring.Install(services: host.Services)) {
     return 1;
+}
+
+if (connectTarget is { } remoteEndpoint) {
+    var instances = host.Services.GetRequiredService<WorldInstanceHost>();
+    _ = instances.EnqueueTransfer(
+        sourceInstance: WorldInstanceHost.BootInstanceName,
+        scope: WorldInstanceHost.TransferScope.Body,
+        sourceSlot: 0,
+        destination: WorldInstanceHost.TransferDestination.Remote(name: "remote-boot", documentPath: worldSource.SourcePath, authority: remoteEndpoint),
+        actingPrincipal: WorldPrincipal.Console
+    );
 }
 await host.RunAsync();
 return 0;

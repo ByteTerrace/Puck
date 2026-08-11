@@ -82,8 +82,11 @@ be nonempty. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence. Assertions cover stream-specific exact/contained lines,
 verb/occurrence/exact-cardinality responses, ordered sequences, named response
-field extraction, equality/inequality, inclusive bounds, and minimum margins —
-no regex programs, loops, callbacks, conditionals, shell, or embedded scripts.
+field extraction, equality/inequality, inclusive bounds, minimum margins, and
+byte-level file equality/inequality. A manifest may start a companion authority
+world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
+and assertions for per-leg capture paths. There are no regex programs, loops,
+callbacks, conditionals, shell, or embedded scripts.
 Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
 usage, manifest, build, or infrastructure refusal.
 

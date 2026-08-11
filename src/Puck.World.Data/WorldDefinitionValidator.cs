@@ -254,6 +254,8 @@ public static class WorldDefinitionValidator {
         // same forward-threading creationIds/lookNames already ride.
         var referenceNames = ValidateReferences(references: definition.References, errors: errors);
 
+        ValidatePortals(portals: definition.Portals, errors: errors);
+
         // A portal facet's destination resolves against THIS set (below, inside ValidatePlacements), never against
         // referenceNames directly — the destinations section is the layer a portal facet now names, exactly the
         // model docs/world-model.md "Reference, destination and session are different facts" describes. A scope=group
@@ -3519,6 +3521,32 @@ public static class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.marginDepth {marginDepth} must be finite and positive.");
             }
         }
+
+        if (portal.Capacity is { } capacity) {
+            RequireIntRange(value: capacity, min: 1, max: WorldPopulationLimits.CapacityCeiling, name: $"{path}.capacity", errors: errors);
+        }
+    }
+
+    private static void ValidatePortals(WorldPortalsSection? portals, List<string> errors) {
+        if (portals is null) {
+            return;
+        }
+
+        var defaults = portals.PortalDefaults;
+
+        if (!Enum.IsDefined(value: defaults.Travel)) {
+            errors.Add(item: $"portals.portalDefaults.travel '{defaults.Travel}' is not a defined WorldPortalTravel.");
+        }
+
+        if (!double.IsFinite(d: defaults.HoldSeconds) || (defaults.HoldSeconds <= 0.0)) {
+            errors.Add(item: $"portals.portalDefaults.holdSeconds {defaults.HoldSeconds} must be finite and positive.");
+        } else if (!FixedTickConversion.TryDurationEngineTicksExact(seconds: (decimal)defaults.HoldSeconds, ticks: out _)) {
+            errors.Add(item: $"portals.portalDefaults.holdSeconds {defaults.HoldSeconds} does not convert to an exact whole tick across the {FixedTickConversion.TicksPerSecond} engine-tick bridge.");
+        }
+
+        if (!Enum.IsDefined(value: defaults.Full)) {
+            errors.Add(item: $"portals.portalDefaults.full '{defaults.Full}' is not a defined WorldTransferFullPolicy.");
+        }
     }
 
     // The border-margin strip: walks every mapped portal facet that authors a marginDepth and proves it against the
@@ -4174,6 +4202,26 @@ public static class WorldDefinitionValidator {
                     errors.Add(item: $"host.listen '{listen}' must be a \"host:port\" pair with a port 1..65535.");
                 }
             }
+        }
+
+        ValidateHostEndpoint(value: host.Authority, path: "host.authority", errors: errors);
+    }
+
+    private static void ValidateHostEndpoint(string? value, string path, List<string> errors) {
+        if (value is null) {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(value: value)) {
+            errors.Add(item: $"{path} must be a non-whitespace \"host:port\" pair or null.");
+
+            return;
+        }
+
+        var separator = value.LastIndexOf(value: ':');
+
+        if ((separator <= 0) || (separator == (value.Length - 1)) || !int.TryParse(s: value[(separator + 1)..], result: out var port) || (port <= 0) || (port > 65535)) {
+            errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port 1..65535.");
         }
     }
 

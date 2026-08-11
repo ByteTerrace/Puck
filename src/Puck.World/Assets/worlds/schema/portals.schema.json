@@ -16,6 +16,24 @@
             "party",
             "body"
           ]
+        },
+        "holdSeconds": {
+          "description": "How long a destination reservation is binding, converted from source simulation ticks through the exact 50400 engine-tick bridge.",
+          "type": "number",
+          "default": 2
+        },
+        "full": {
+          "description": "Whether the client may retry after an immediate full-border refusal.",
+          "enum": [
+            "Retry",
+            "Refuse"
+          ],
+          "default": "Retry"
+        },
+        "partyAllOrNothing": {
+          "description": "Whether a party transfer reserves and commits as one cohort. When false, each member is a separate atomic body transfer.",
+          "type": "boolean",
+          "default": true
         }
       },
       "required": [

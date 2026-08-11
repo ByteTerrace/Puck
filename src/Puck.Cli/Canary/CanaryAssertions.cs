@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace Puck.Cli.Canary;
 
-internal sealed record CanaryTranscript(IReadOnlyList<string> Stderr, IReadOnlyList<string> Stdout);
+internal sealed record CanaryTranscript(string RunDirectory, IReadOnlyList<string> Stderr, IReadOnlyList<string> Stdout);
 
 internal sealed record CanaryAssertionResult(string Detail, bool Passed);
 
@@ -34,10 +34,32 @@ internal static class CanaryAssertions {
                 case CanaryRelationAssertion relation:
                     results.Add(item: EvaluateRelation(assertion: relation, values: values));
                     break;
+                case CanaryFileDifferenceAssertion files:
+                    results.Add(item: EvaluateFileDifference(assertion: files, transcript: transcript));
+                    break;
             }
         }
 
         return new CanaryEvaluation(Results: results);
+    }
+
+    private static CanaryAssertionResult EvaluateFileDifference(CanaryFileDifferenceAssertion assertion, CanaryTranscript transcript) {
+        var beforePath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.Before);
+        var afterPath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.After);
+
+        if (!File.Exists(path: beforePath) || !File.Exists(path: afterPath)) {
+            var missing = new[] { beforePath, afterPath }.Where(predicate: static path => !File.Exists(path: path)).Select(selector: Path.GetFileName);
+
+            return new CanaryAssertionResult(Detail: $"{assertion.Name}: missing capture(s) {string.Join(separator: ", ", values: missing)}", Passed: false);
+        }
+
+        var equal = File.ReadAllBytes(path: beforePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: afterPath));
+        var passed = assertion.Different ? !equal : equal;
+
+        return new CanaryAssertionResult(
+            Detail: $"{assertion.Name}: {assertion.Before} and {assertion.After} are {(equal ? "byte-identical" : "different")}",
+            Passed: passed
+        );
     }
 
     public static IReadOnlyList<string> ResponseLines(CanaryTranscript transcript, CanaryStream stream, string verb) {

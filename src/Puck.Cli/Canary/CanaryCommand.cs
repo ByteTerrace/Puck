@@ -1,12 +1,13 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Nodes;
 
 namespace Puck.Cli.Canary;
 
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
 internal static class CanaryCommand {
-    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 180);
+    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 420);
     private const string ScratchPrefix = "puck-canary-";
 
     public static int Run(string[] args) {
@@ -63,7 +64,7 @@ internal static class CanaryCommand {
         try {
             build = CliProcess.RunCaptured(
                 fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo"],
+                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
                 timeout: RemainingBudget(clock: suiteClock)
             );
@@ -154,7 +155,13 @@ internal static class CanaryCommand {
         var stateDirectory = Path.Combine(path1: runDirectory, path2: "state");
         var stdoutPath = Path.Combine(path1: runDirectory, path2: "stdout.log");
         var stderrPath = Path.Combine(path1: runDirectory, path2: "stderr.log");
-        var input = File.ReadAllText(path: leg.ScriptPath);
+        var input = File.ReadAllText(path: leg.ScriptPath).Replace(oldValue: "{run}", newValue: runDirectory.Replace(oldChar: '\\', newChar: '/'), comparisonType: StringComparison.Ordinal);
+        var executionWorld = leg.WorldPath;
+        var authorityExecutionWorld = leg.AuthorityWorldPath;
+
+        if (leg.AuthorityWorldPath is not null) {
+            (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(leg: leg, runDirectory: runDirectory);
+        }
 
         if (!input.EndsWith(value: '\n')) {
             input += Environment.NewLine;
@@ -171,12 +178,22 @@ internal static class CanaryCommand {
         }
 
         CliProcessResult process;
+        AuthorityCompanion? authority = null;
         try {
+            if (authorityExecutionWorld is { } authorityWorld) {
+                authority = AuthorityCompanion.Start(artifact: artifact, world: authorityWorld, stateDirectory: Path.Combine(path1: runDirectory, path2: "authority-state"), seconds: (manifest.Seconds + 2));
+                if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(5))) {
+                    authority.Dispose();
+                    return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: "companion authority did not report a bound listener within 5 seconds");
+                }
+            }
+
             process = CliProcess.RunCaptured(
                 fileName: "dotnet",
                 arguments: [
                     artifact,
-                    "--world", leg.WorldPath,
+                    "--world", executionWorld,
+                    .. (leg.Connect ? new[] { "--connect", "127.0.0.1:38473" } : []),
                     "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", stateDirectory,
                     "--headless", ((manifest.BootShape == CanaryBootShape.Headless) ? "true" : "false"),
@@ -186,14 +203,20 @@ internal static class CanaryCommand {
             );
         } catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception) {
             return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: exception.Message.ReplaceLineEndings(replacementText: " "));
+        } finally {
+            if (authority is not null) {
+                File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: "authority-stdout.log"), contents: authority.Stdout, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: "authority-stderr.log"), contents: authority.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                authority.Dispose();
+            }
         }
 
         File.WriteAllText(path: stdoutPath, contents: process.Stdout, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         File.WriteAllText(path: stderrPath, contents: process.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-        var transcript = new CanaryTranscript(Stderr: SplitLines(text: process.Stderr), Stdout: SplitLines(text: process.Stdout));
+        var transcript = new CanaryTranscript(RunDirectory: runDirectory, Stderr: SplitLines(text: process.Stderr), Stdout: SplitLines(text: process.Stdout));
         var assertions = CanaryAssertions.Evaluate(leg: leg, transcript: transcript);
-        var invariants = EvaluateRunnerInvariants(manifest: manifest, leg: leg, process: process, transcript: transcript);
+        var invariants = EvaluateRunnerInvariants(manifest: manifest, leg: leg, process: process, transcript: transcript, executionWorld: executionWorld);
 
         return new CanaryLegRun(
             Assertions: assertions,
@@ -207,17 +230,118 @@ internal static class CanaryCommand {
         );
     }
 
+    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory) {
+        const string endpoint = "127.0.0.1:38473";
+        var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
+        var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
+        Directory.CreateDirectory(path: federatedDirectory);
+
+        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchPattern: "*.world.json", searchOption: SearchOption.TopDirectoryOnly)) {
+            File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: source)), overwrite: true);
+        }
+
+        var authoritySource = leg.AuthorityWorldPath!;
+        var authorityTarget = Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: authoritySource));
+        if (!File.Exists(path: authorityTarget)) {
+            File.Copy(sourceFileName: authoritySource, destFileName: authorityTarget, overwrite: true);
+        }
+
+        var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
+            ?? throw new InvalidOperationException("authority world is not a JSON object"));
+        var host = (root["host"]?.AsObject() ?? throw new InvalidOperationException("authority world has no host object"));
+        host["listen"] = endpoint;
+        host["authority"] = endpoint;
+        if (root["population"] is JsonObject population) {
+            population["capacity"] = Math.Max(8, population["capacity"]?.GetValue<int>() ?? 8);
+            population["networkPlayers"] = Math.Max(4, population["networkPlayers"]?.GetValue<int>() ?? 4);
+        }
+        File.WriteAllText(path: authorityTarget, contents: root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        return (leg.Connect ? leg.WorldPath : Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: leg.WorldPath)), authorityTarget);
+    }
+
+    private sealed class AuthorityCompanion : IDisposable {
+        private readonly Process m_process;
+        private readonly StringBuilder m_stdout = new();
+        private readonly StringBuilder m_stderr = new();
+        private readonly object m_gate = new();
+
+        private AuthorityCompanion(Process process) {
+            m_process = process;
+            process.OutputDataReceived += (_, args) => {
+                if (args.Data is { } line) {
+                    lock (m_gate) {
+                        m_stdout.AppendLine(value: line);
+                    }
+                }
+            };
+            process.ErrorDataReceived += (_, args) => {
+                if (args.Data is { } line) {
+                    lock (m_gate) {
+                        m_stderr.AppendLine(value: line);
+                    }
+                }
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.StandardInput.Close();
+        }
+
+        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
+        public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
+
+        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, int seconds) {
+            var startInfo = new ProcessStartInfo {
+                CreateNoWindow = true,
+                FileName = "dotnet",
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
+            foreach (var argument in new[] { artifact, "--world", world, "--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", stateDirectory, "--headless", "true" }) {
+                startInfo.ArgumentList.Add(item: argument);
+            }
+            return new AuthorityCompanion(process: Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException("failed to start companion authority"));
+        }
+
+        public bool WaitUntilListening(TimeSpan timeout) {
+            var clock = Stopwatch.StartNew();
+            while (clock.Elapsed < timeout) {
+                lock (m_gate) {
+                    if (m_stderr.ToString().Contains(value: "[world.listen: bound ", comparisonType: StringComparison.Ordinal)) {
+                        return true;
+                    }
+                }
+                if (m_process.HasExited) {
+                    return false;
+                }
+                _ = m_process.WaitForExit(milliseconds: 25);
+            }
+            return false;
+        }
+
+        public void Dispose() {
+            if (!m_process.HasExited) {
+                try { m_process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                m_process.WaitForExit();
+            }
+            m_process.Dispose();
+        }
+    }
+
     private static IReadOnlyList<CanaryAssertionResult> EvaluateRunnerInvariants(
         CanaryManifest manifest,
         CanaryLeg leg,
         CliProcessResult process,
-        CanaryTranscript transcript
+        CanaryTranscript transcript,
+        string executionWorld
     ) {
         var results = new List<CanaryAssertionResult> {
             new(Detail: $"process exited 0 (actual {process.ExitCode})", Passed: (!process.TimedOut && (process.ExitCode == 0))),
             new(Detail: $"leg completed before {manifest.TimeoutSeconds}s timeout", Passed: !process.TimedOut),
         };
-        var origin = $"[world] definition: {leg.WorldPath} (--world)";
+        var origin = $"[world] definition: {executionWorld} (--world)";
 
         results.Add(item: new CanaryAssertionResult(
             Detail: "stderr names the exact absolute --world origin",
@@ -498,7 +622,7 @@ internal static class CanaryCommand {
             Leg: leg,
             RunDirectory: runDirectory,
             TimedOut: false,
-            Transcript: new CanaryTranscript(Stderr: [], Stdout: [])
+            Transcript: new CanaryTranscript(RunDirectory: runDirectory, Stderr: [], Stdout: [])
         );
     }
 }

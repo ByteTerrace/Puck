@@ -104,6 +104,7 @@ public sealed class WorldServer : IWorldServerHost {
     private readonly WorldPopulation m_population;
     private readonly WorldInputHoldRuntime m_inputHold;
     private readonly WorldOwnedWorlds m_profiles;
+    private readonly WorldTransferEscrow m_transferEscrow;
     private WorldDocumentSubmissionReceipt? m_lastDocumentReceipt;
     private readonly WorldRenderEnvelope m_envelope;
     private readonly Queue<IntentSubmission> m_intents = new();
@@ -288,6 +289,29 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Gets the tick a durable input submitted during the current command window must name.</summary>
     public ulong NextInputTick => (m_lastCompletedTick + 1UL);
 
+    /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
+    /// colocation and the TCP authority door; callers never reserve population capacity by inspecting it directly.</summary>
+    /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
+    /// <returns>The destination's verdict and assigned body indices.</returns>
+    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) => m_transferEscrow.Reserve(request: request);
+
+    /// <summary>Commits detached bodies into a live reservation. A repeated committed id is idempotently accepted;
+    /// an expired or absent reservation is refused.</summary>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="members">The travelers in reservation order.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns>Whether the commit is authoritative at this destination.</returns>
+    public bool CommitTransfer(ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
+        m_transferEscrow.Commit(transferId: transferId, members: members, reason: out reason);
+
+    /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    public void AbortTransfer(ulong transferId) => m_transferEscrow.Abort(transferId: transferId);
+
+    /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
+    public bool TryTransferredPrincipal(ulong transferId, int ordinal, out WorldPrincipal principal) =>
+        m_transferEscrow.TryCommittedPrincipal(transferId: transferId, ordinal: ordinal, principal: out principal);
+
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
     /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
@@ -346,6 +370,7 @@ public sealed class WorldServer : IWorldServerHost {
         m_population = population;
         m_inputHold = new WorldInputHoldRuntime(settings: definition.CompiledInputHold, capacity: population.Capacity);
         m_profiles = profiles;
+        m_transferEscrow = new WorldTransferEscrow(server: this);
         m_envelope = envelope;
         // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
         // construction) — the server owns it from here without a second build.
@@ -1576,6 +1601,7 @@ public sealed class WorldServer : IWorldServerHost {
         EvaluateWorldRules(tick: tick, stepTicks: context.StepTicks);
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
+        m_transferEscrow.ReclaimExpired(tick: tick);
         // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
         // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
         SettleExpiredMarketListings(tick: tick);
@@ -6051,6 +6077,25 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
     internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
         ApplyLifecycleEvents(admitted: [], disconnected: [peer], ordered: true);
+    }
+
+    /// <summary>Commits a federated transfer into the peer body index destination escrow reserved. Admission assigns
+    /// the ordinary <see cref="PrincipalKind.Peer"/> principal and body together; no transfer-only principal exists.</summary>
+    /// <param name="slot">The reserved destination body index.</param>
+    /// <param name="identity">The attested traveler identity carried by the reservation.</param>
+    /// <returns>The admission verdict.</returns>
+    internal SessionReply AdmitTransferredPeer(int slot, WorldIdentity? identity) {
+        if (!m_population.TryAdmitRemotePeerAt(slot: slot, source: IntentSource.Live, grantTemplates: [], identityDomain: (identity?.Id ?? string.Empty), identitySubject: (identity?.Name ?? string.Empty), admitted: out var admitted, refusal: out var refusal)) {
+            return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: refusal);
+        }
+
+        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true, overrideMintedGrants: [
+            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false),
+            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: admitted.BodyIndex), Exclusive: true, Budget: 64),
+            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Observe, Subject: GrantSubject.Body(index: admitted.BodyIndex), Exclusive: false, Budget: 64),
+        ]);
+
+        return new SessionReply(Accepted: true, AssignedIndex: (slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
     }
 
     // Builds the CONCRETE minted grant rows for one just-admitted peer from its verified admission templates — the

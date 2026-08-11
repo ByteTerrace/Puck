@@ -81,6 +81,14 @@
         "null"
       ]
     },
+    "authority": {
+      "description": "The TCP endpoint at which this world\u0027s authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "backendDraw": {
       "description": "The backend choice\u0027s authored-randomness facet, or null for an ordinary literal Backend. A boot-only site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike CapacityDraw\u0027s struct-typed site.",
       "type": [

@@ -5,10 +5,8 @@ using Puck.SdfVm.Views;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Traveler-follow stage 1's away-render pool: one offscreen render per followed instance (never per seat),
-/// refcounted like <see cref="WorldInstanceHost.ReapIfEmpty"/>'s own occupancy rule — a second seat crossing into an
-/// already-tracked instance shares its render rather than double-registering, and tracking releases only once the
-/// last seat following that instance leaves it. Mirrors <see cref="WorldScreenBinder.ResolveSession"/>/
+/// The traveler-follow projection pool: one offscreen render per local seat occupying a non-boot authority.
+/// Mirrors <see cref="WorldScreenBinder.ResolveSession"/>/
 /// <see cref="WorldScreenBinder.RegisterSessionView"/>'s construction exactly: a <see cref="WorldSessionMirror"/>
 /// attached via <see cref="Server.WorldServer.AttachSink"/>, composed through an <see cref="AwaySeatSceneEmitter"/>
 /// into an <see cref="SdfCompositionFrameSource"/>, wrapped in a <see cref="WorldSessionView"/> registered into this
@@ -18,11 +16,8 @@ namespace Puck.World.Client;
 /// <remarks>
 /// <para><b>Reconciliation, once per produced frame.</b> <see cref="Reconcile"/> (called from
 /// <see cref="WorldFrameSource.CaptureFrame"/>, before anything resolves a handle this frame) diffs the router's
-/// current away locations against the tracked set: a newly-away instance starts tracking, an instance no seat
-/// follows any more stops. The tracked slot (whose mirrored entity the chase camera follows) is recomputed the same
-/// pass — the lowest local seat slot currently following that instance — so two seats sharing one destination
-/// degrade gracefully (the render follows one of them, never neither) rather than needing a widened multi-camera
-/// contract this stage does not build. The same definition revision reconciles the followed world's authored and
+/// current away locations against the tracked set: a newly-away seat starts tracking and a returning seat stops.
+/// The same definition revision reconciles the followed world's authored and
 /// derived session screens: each global source resolves through <see cref="WorldInstanceHost.TryResolveObservedDestination"/>
 /// and registers a screen-free child projection before the parent view, so portal openings remain live after a
 /// crossing while recursion stops structurally at depth one.</para>
@@ -45,23 +40,15 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         public Dictionary<int, NestedFeed> SessionFeeds { get; } = new();
         public int SessionSourceRevision = -1;
         public WorldSessionView? View;
-        // The lowest local seat slot currently following this instance — recomputed every Reconcile call, read live
-        // by the emitter's own tracked-index delegate (never cached past one frame).
+        // The local seat slot owning this projection, read live by the emitter's tracked-index delegate.
         public int TrackedSlot;
-        // The offscreen render's currently constructed size — the largest-area following seat's own exact composed
-        // viewport as of the last commit in ReconcileViewportSizes. An offscreen render target cannot resize in
+        // The offscreen render's currently constructed size — this seat's exact composed viewport as of the last
+        // commit in ReconcileViewportSizes. An offscreen render target cannot resize in
         // place, so a change here drives a release-and-recreate, never an in-place mutation of the live View.
-        public uint DesiredWidth = WorldSessionView.DefaultWidth;
-        public uint DesiredHeight = WorldSessionView.DefaultHeight;
-        // The size ReconcileViewportSizes most recently OBSERVED (as opposed to DesiredWidth/Height, which only
-        // moves once that observation has held for ViewportSettleFrameThreshold consecutive produced frames) and how
-        // many consecutive frames it has held — a layout transition eases its region continuously, so the reported
-        // pixel size changes on nearly every produced frame during a reflow; without this debounce every one of
-        // those changes would release and rebuild the WorldSessionView + engine.
-        public uint PendingWidth;
-        public uint PendingHeight;
-        public int StableFrameCount;
-        public string RegistrationName => $"away-seat:{InstanceName}";
+        public uint DesiredWidth;
+        public uint DesiredHeight;
+        public bool RegistrationNarrated;
+        public string RegistrationName => $"away-seat:{TrackedSlot}:{InstanceName}";
     }
 
     private sealed class NestedFeed {
@@ -82,14 +69,13 @@ internal sealed class WorldAwaySeatViews : IDisposable {
     private readonly WorldSeatInstanceRouter m_seatRouter;
     private readonly WorldCameraOrbit m_cameraOrbit;
     private readonly WorldCompositionState m_composition;
-    private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
-    private readonly List<string> m_releaseScratch = new();
-    // Away-seat render resolution: each local seat's own composed viewport pixel size, reported once per produced
-    // frame by WorldFrameSource.Dress (the one place that resolves it) via ReportSeatViewportSize, before this
-    // pool's own RenderViews runs later the same frame. Seeded at the default size so a tracked-but-never-reported
-    // slot still renders something rather than a degenerate 0x0 offscreen target.
-    private readonly uint[] m_seatViewportWidth = CreateSeatDimensionArray(value: WorldSessionView.DefaultWidth);
-    private readonly uint[] m_seatViewportHeight = CreateSeatDimensionArray(value: WorldSessionView.DefaultHeight);
+    private readonly Dictionary<int, Entry> m_entries = new();
+    private readonly List<int> m_releaseScratch = new();
+    // Away-seat render resolution: every local seat's composed viewport pixel size is kept warm while boot-bound
+    // as well as away. A crossing therefore constructs its first target from the preceding composed frame rather
+    // than from the small session-panel fallback.
+    private readonly uint[] m_seatViewportWidth = new uint[WorldSeatBindings.SeatCount];
+    private readonly uint[] m_seatViewportHeight = new uint[WorldSeatBindings.SeatCount];
     private ViewStack? m_viewStack;
     private SdfViewGpuServices? m_services;
     private bool m_hostsOnDirectX;
@@ -163,49 +149,39 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             return;
         }
 
-        var wanted = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
             var location = m_seatRouter.Location(slot: slot);
 
             if (string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                if (m_entries.ContainsKey(key: slot)) {
+                    m_releaseScratch.Add(item: slot);
+                }
                 continue;
             }
 
-            if (!wanted.ContainsKey(key: location.InstanceName)) {
-                wanted[location.InstanceName] = slot;
-            }
-        }
-
-        foreach (var (name, slot) in wanted) {
-            if (m_entries.TryGetValue(key: name, value: out var existing)) {
-                existing.TrackedSlot = slot;
+            if (m_entries.TryGetValue(key: slot, value: out var existing) && string.Equals(a: existing.InstanceName, b: location.InstanceName, comparisonType: StringComparison.Ordinal)) {
                 ReconcileSessionSources(entry: existing);
             } else {
-                TryTrack(instanceName: name, initialSlot: slot);
+                if (existing is not null) {
+                    Untrack(slot: slot);
+                }
+                TryTrack(instanceName: location.InstanceName, initialSlot: slot);
             }
         }
 
+        foreach (var slot in m_releaseScratch) {
+            Untrack(slot: slot);
+        }
         m_releaseScratch.Clear();
-
-        foreach (var name in m_entries.Keys) {
-            if (!wanted.ContainsKey(key: name)) {
-                m_releaseScratch.Add(item: name);
-            }
-        }
-
-        foreach (var name in m_releaseScratch) {
-            Untrack(instanceName: name);
-        }
     }
 
     private void TryTrack(string instanceName, int initialSlot) {
-        if (!m_instances.TryGet(name: instanceName, instance: out var instance) || (instance is null)) {
+        if (!m_instances.TryGetProjection(name: instanceName, definition: out var definition, attach: out var attach, envelope: out var envelope, borderMargin: out var borderMargin) || (definition is null) || (attach is null)) {
             return;
         }
 
-        var mirror = new WorldSessionMirror(placeholder: instance.Server.Definition);
-        var lease = instance.Server.AttachSink(sink: mirror);
+        var mirror = new WorldSessionMirror(placeholder: definition);
+        var lease = attach(mirror);
         var entry = new Entry {
             InstanceName = instanceName,
             Mirror = mirror,
@@ -222,14 +198,18 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             DesiredHeight = m_seatViewportHeight[initialSlot],
         };
 
+        var marginEmitter = (borderMargin is null ? null : new WorldBorderMarginSceneEmitter(mirror: mirror, source: borderMargin));
         var emitter = new AwaySeatSceneEmitter(
             mirror: mirror,
             cameraOrbit: m_cameraOrbit,
             trackedTarget: () => new AwaySeatSceneEmitter.TrackedTarget(InstanceSlot: m_seatRouter.Location(slot: entry.TrackedSlot).InstanceSlot, LocalSlot: entry.TrackedSlot),
-            cameraOverride: () => m_composition.SelectedCamera
+            layoutOverride: () => m_composition.ActiveLayout,
+            cameraOverride: () => m_composition.SelectedCamera,
+            borderMargin: marginEmitter
         );
-        var borderMargin = new WorldBorderMarginSceneEmitter(mirror: mirror, source: instance.Server.BorderMargin!);
-        var frameSource = new SdfCompositionFrameSource(emitters: [emitter, borderMargin], dresser: emitter);
+        var frameSource = (marginEmitter is null
+            ? new SdfCompositionFrameSource(emitters: [emitter], dresser: emitter)
+            : new SdfCompositionFrameSource(emitters: [emitter, marginEmitter], dresser: emitter));
 
         entry.Emitter = emitter;
         entry.FrameSource = frameSource;
@@ -240,27 +220,21 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         // Candidate-aware: the emitter measures the candidate's own placement/creation rows plus the identical
         // all-avatar probe used to size this frame source; using the frozen capacity instead would compare the
         // ceiling to itself and admit every mutation, including one that overflows the next offscreen rebuild.
-        entry.EnvelopeRegistration = instance.Server.Envelope.Configure(
+        entry.EnvelopeRegistration = (envelope?.Configure(
             programWordCapacity: frameSource.WorstCaseProgramWordCapacity,
             instanceCapacity: frameSource.WorstCaseInstanceCapacity,
             measure: emitter.MeasureCandidate
-        );
+        ) ?? NullLease.Instance);
 
-        m_entries[instanceName] = entry;
+        m_entries[initialSlot] = entry;
         ReconcileSessionSources(entry: entry);
         EnsureNestedRegistered(entry: entry);
         EnsureRegistered(entry: entry);
 
-        // Capacity honesty: names the ACTUAL offscreen render size this registration just claimed, not merely the
-        // fixed legacy default — the same information a program-word/instance ceiling breach already narrates by
-        // name, now extended to the size dimension WorldRenderEnvelope's own measure stays blind to (program
-        // words/instances are geometry-shaped and provably independent of viewport pixels — see
-        // ReportSeatViewportSize's own remarks on the clamp that keeps this dimension bounded).
-        Console.Error.WriteLine(value: $"[world.view: tracking '{instanceName}' for the away-seat render (seat {(initialSlot + 1)}, {entry.DesiredWidth}x{entry.DesiredHeight})]");
     }
 
-    private void Untrack(string instanceName) {
-        if (!m_entries.Remove(key: instanceName, value: out var entry)) {
+    private void Untrack(int slot) {
+        if (!m_entries.Remove(key: slot, value: out var entry)) {
             return;
         }
 
@@ -274,11 +248,12 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         entry.EnvelopeRegistration.Dispose();
         entry.Lease.Dispose();
 
-        Console.Error.WriteLine(value: $"[world.view: released the away-seat render tracking '{instanceName}']");
+        Console.Error.WriteLine(value: $"[world.projection: released '{entry.InstanceName}' for seat {(slot + 1)}]");
     }
 
     private void EnsureRegistered(Entry entry) {
-        if ((m_services is not { } services) || (m_viewStack is not { } stack) || (entry.View is not null)) {
+        if ((m_services is not { } services) || (m_viewStack is not { } stack) || (entry.View is not null) ||
+            (entry.DesiredWidth == 0u) || (entry.DesiredHeight == 0u)) {
             return;
         }
 
@@ -297,6 +272,11 @@ internal sealed class WorldAwaySeatViews : IDisposable {
 
         _ = stack.Register(name: entry.RegistrationName, content: view, band: ScreenSlotPriority.Ambient);
         entry.View = view;
+
+        if (!entry.RegistrationNarrated) {
+            entry.RegistrationNarrated = true;
+            Console.Error.WriteLine(value: $"[world.projection: tracking '{entry.InstanceName}' for seat {(entry.TrackedSlot + 1)} at {entry.DesiredWidth}x{entry.DesiredHeight}]");
+        }
     }
 
     /// <summary>Reports local seat <paramref name="slot"/>'s own composed viewport pixel size this produced frame —
@@ -323,31 +303,9 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         m_seatViewportHeight[slot] = Math.Clamp(value: height, min: 1u, max: (uint)WorldDefinitionValidator.MaxSurfaceDimension);
     }
 
-    // How many consecutive ReconcileViewportSizes calls (produced frames) a candidate size must hold before it is
-    // committed to DesiredWidth/Height and rebuilt. Large enough that a layout transition's continuously-eased
-    // region does not each register as a new target; small enough that a genuine settle is not visibly delayed.
-    // Frame-count, never wall-clock, though this is a presentation-side debounce.
-    private const int ViewportSettleFrameThreshold = 3;
-
-    /// <summary>Re-targets every tracked entry's own offscreen render to the LARGEST-AREA currently-following seat's
-    /// OWN reported viewport size — a real follower's exact request, never a component-wise max across followers
-    /// (which can synthesize a size no follower asked for: e.g. 1920x540 and 960x1080 maxing to 1920x1080, an
-    /// aspect neither requested). Ties break toward the lowest seat slot, the same tie-break
-    /// <see cref="Reconcile"/> already uses to pick a tracked entry's chase target. The chosen follower's shared
-    /// render is exact for it; every OTHER follower samples it up or down to their own region, never the reverse.
-    /// <para>
-    /// A candidate size only commits once it has been reported unchanged for
-    /// <see cref="ViewportSettleFrameThreshold"/> consecutive produced frames (see <see cref="Entry.PendingWidth"/>)
-    /// — a layout transition eases its region continuously, so the reported pixel size changes on nearly every
-    /// produced frame during a reflow (a seat joining or leaving reflows every composed region). Rebuilding on each
-    /// of those intermediate frames would release and reconstruct the WorldSessionView + engine dozens of times
-    /// during one reflow; a briefly stretched image at the previous extent beats that rebuild storm. Once a
-    /// candidate settles, this method releases the registration (disposing the old <see cref="WorldSessionView"/>
-    /// and its engine) and rebuilds fresh via <see cref="EnsureRegistered"/> — the same release-and-recreate seam
-    /// <see cref="WorldScreenBinder.ReconcileCameras"/> uses for a camera-view dimension change and
-    /// <see cref="WorldSessionView.NotifyDeviceLost"/>'s device-loss reset establishes (drop the device-owned state,
-    /// rebuild lazily).
-    /// </para>
+    /// <summary>Re-targets every tracked entry's offscreen render to its owning seat's exact reported viewport.
+    /// Every seat owns its projection, so its dimensions apply immediately; no shared-target compromise or
+    /// resolution ramp exists.
     /// Called once per produced frame from <see cref="RenderViews"/>, AFTER <see cref="WorldFrameSource.Dress"/> has
     /// reported every away seat's size for this frame and BEFORE this pool's own <see cref="ViewStack.RenderFrame"/>
     /// resolves anything, so a committed size change lands before the next image is produced rather than one frame
@@ -358,25 +316,8 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         }
 
         foreach (var entry in m_entries.Values) {
-            var bestArea = 0UL;
-            var width = 0u;
-            var height = 0u;
-
-            for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-                if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: entry.InstanceName, comparisonType: StringComparison.Ordinal)) {
-                    continue;
-                }
-
-                // Strict '>' (not '>=') keeps the FIRST (lowest-slot) follower on an area tie, mirroring
-                // Reconcile's own lowest-slot tie-break for the tracked chase target.
-                var area = ((ulong)m_seatViewportWidth[slot] * m_seatViewportHeight[slot]);
-
-                if (area > bestArea) {
-                    bestArea = area;
-                    width = m_seatViewportWidth[slot];
-                    height = m_seatViewportHeight[slot];
-                }
-            }
+            var width = m_seatViewportWidth[entry.TrackedSlot];
+            var height = m_seatViewportHeight[entry.TrackedSlot];
 
             // No seat currently resolves to this instance (a same-frame edge between Reconcile tracking it and
             // Dress reporting a size for it) — keep whatever size is already desired rather than collapsing to 0.
@@ -385,26 +326,6 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             }
 
             if ((width == entry.DesiredWidth) && (height == entry.DesiredHeight)) {
-                // Already at the constructed size — nothing pending (this also clears a stale in-flight count from
-                // an overshoot that eased back to rest without ever reaching the settle threshold).
-                entry.PendingWidth = width;
-                entry.PendingHeight = height;
-                entry.StableFrameCount = 0;
-
-                continue;
-            }
-
-            if ((width == entry.PendingWidth) && (height == entry.PendingHeight)) {
-                entry.StableFrameCount++;
-            } else {
-                entry.PendingWidth = width;
-                entry.PendingHeight = height;
-                entry.StableFrameCount = 1;
-            }
-
-            if (entry.StableFrameCount < ViewportSettleFrameThreshold) {
-                // Still moving (or too freshly arrived to trust) — keep rendering at the previous extent rather than
-                // chasing every intermediate frame of the ease.
                 continue;
             }
 
@@ -414,12 +335,16 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             entry.DesiredWidth = width;
             entry.DesiredHeight = height;
 
-            if (entry.View is not null) {
+            var hadView = (entry.View is not null);
+            if (hadView) {
                 stack.Release(name: entry.RegistrationName);
                 entry.View = null;
-                EnsureRegistered(entry: entry);
+            }
 
-                Console.Error.WriteLine(value: $"[world.view: '{entry.InstanceName}' away-seat render re-targeted {previousWidth}x{previousHeight} -> {width}x{height}]");
+            EnsureRegistered(entry: entry);
+
+            if (hadView) {
+                Console.Error.WriteLine(value: $"[world.projection: '{entry.InstanceName}' seat projection re-targeted {previousWidth}x{previousHeight} -> {width}x{height}]");
             }
         }
     }
@@ -463,7 +388,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
 
         foreach (var (index, session) in desired) {
             if (!m_instances.TryResolveObservedDestination(source: sourceInstance, destinationName: session.Destination, target: out var target, resolved: out var resolved, reason: out var reason) || (target is null)) {
-                Console.Error.WriteLine(value: $"[world.view: '{entry.InstanceName}' session screen {index} refused ({reason})]");
+                Console.Error.WriteLine(value: $"[world.projection: '{entry.InstanceName}' session screen {index} refused ({reason})]");
 
                 continue;
             }
@@ -492,7 +417,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
 
             entry.SessionFeeds[index] = feed;
             EnsureNestedRegistered(entry: entry, feed: feed);
-            Console.Error.WriteLine(value: $"[world.view: '{entry.InstanceName}' session screen {index} -> destination '{session.Destination}' resolved to instance '{resolved.InstanceName}' generation {resolved.GenerationId}; recursion stops at this child projection]");
+            Console.Error.WriteLine(value: $"[world.projection: '{entry.InstanceName}' session screen {index} -> destination '{session.Destination}' resolved to instance '{resolved.InstanceName}' generation {resolved.GenerationId}; recursion stops at this child projection]");
         }
     }
 
@@ -509,17 +434,17 @@ internal sealed class WorldAwaySeatViews : IDisposable {
 
         var view = new WorldSessionView(services: services, hostsOnDirectX: m_hostsOnDirectX, frameSource: feed.FrameSource);
 
-        _ = stack.Register(name: feed.RegistrationName(parentInstanceName: entry.InstanceName), content: view, band: ScreenSlotPriority.Ambient);
+        _ = stack.Register(name: feed.RegistrationName(parentInstanceName: entry.RegistrationName), content: view, band: ScreenSlotPriority.Ambient);
         feed.View = view;
     }
 
     private nint ResolveNestedHandle(Entry entry, int screenIndex) =>
         ((entry.SessionFeeds.TryGetValue(key: screenIndex, value: out var feed) && (m_viewStack is { } stack))
-            ? stack.Resolve(name: feed.RegistrationName(parentInstanceName: entry.InstanceName))
+            ? stack.Resolve(name: feed.RegistrationName(parentInstanceName: entry.RegistrationName))
             : 0);
 
     private void ReleaseNested(Entry entry, NestedFeed feed) {
-        m_viewStack?.Release(name: feed.RegistrationName(parentInstanceName: entry.InstanceName));
+        m_viewStack?.Release(name: feed.RegistrationName(parentInstanceName: entry.RegistrationName));
         feed.EnvelopeRegistration.Dispose();
         feed.Lease.Dispose();
     }
@@ -535,7 +460,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             }
         }
 
-        Console.Error.WriteLine(value: $"[world.view: '{parentInstanceName}' session screen {index} -> destination '{destinationName}' names unknown camera '{name}' — falling back to the default projection]");
+        Console.Error.WriteLine(value: $"[world.projection: '{parentInstanceName}' session screen {index} -> destination '{destinationName}' names unknown camera '{name}' — falling back to the default projection]");
 
         return null;
     }
@@ -556,7 +481,7 @@ internal sealed class WorldAwaySeatViews : IDisposable {
             return 0;
         }
 
-        return ((m_entries.TryGetValue(key: location.InstanceName, value: out var entry) && (m_viewStack is { } stack))
+        return ((m_entries.TryGetValue(key: slot, value: out var entry) && (m_viewStack is { } stack))
             ? stack.Resolve(name: entry.RegistrationName)
             : 0);
     }
@@ -619,13 +544,8 @@ internal sealed class WorldAwaySeatViews : IDisposable {
         m_services = null;
     }
 
-    // A fixed-value seed for the per-seat reported-size arrays — WorldSeatBindings.SeatCount entries, all starting at
-    // the legacy fixed default so a slot never reports a degenerate 0x0 before its first ReportSeatViewportSize call.
-    private static uint[] CreateSeatDimensionArray(uint value) {
-        var values = new uint[WorldSeatBindings.SeatCount];
-
-        Array.Fill(array: values, value: value);
-
-        return values;
+    private sealed class NullLease : IDisposable {
+        public static NullLease Instance { get; } = new();
+        public void Dispose() { }
     }
 }

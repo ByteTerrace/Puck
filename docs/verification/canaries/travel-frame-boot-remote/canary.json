@@ -1,0 +1,61 @@
+{
+  "id": "travel-frame-boot-remote",
+  "title": "A remote boot frame follows its body",
+  "bootShape": "windowed",
+  "requirements": ["gpu"],
+  "seconds": 20,
+  "timeoutSeconds": 30,
+  "binding": "Both legs boot normal window composition through --connect to a runner-owned quilt-nw authority; only the positive leg moves the remotely authoritative body between captures.",
+  "fixtures": [],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "connect": true,
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "remote pose before move", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose after move", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
+      { "type": "relation", "name": "remote authority moved the body", "left": { "value": "beforeZ" }, "operator": "minimumMargin", "right": { "value": "afterZ" }, "margin": 1 },
+      { "type": "filesDiffer", "name": "moving the remote boot body changes the composed frame", "before": "before.png", "after": "after.png" },
+      { "type": "line", "name": "both captures resolved", "stream": "stderr", "match": "contains", "text": "after.png", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "authorityWorld": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "connect": true,
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "remote pose before control wait", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
+      { "type": "response", "name": "remote pose after control wait", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
+      { "type": "relation", "name": "without input the remote body stays put", "left": { "value": "beforeZ" }, "operator": "equal", "right": { "value": "afterZ" } },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

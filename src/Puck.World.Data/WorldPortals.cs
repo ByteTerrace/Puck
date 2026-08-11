@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
@@ -10,6 +11,18 @@ public enum WorldPortalTravel {
 
     /// <summary>One seat only — mirrors <c>WorldInstanceHost.TransferScope.Body</c>.</summary>
     Body,
+}
+
+/// <summary>What the source does after a destination refuses a transfer because the authored border capacity is
+/// full. Both cases refuse the current attempt immediately; <see cref="Retry"/> permits the client to try again on
+/// a later source tick, while <see cref="Refuse"/> makes that refusal terminal. Neither case creates a queue.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldTransferFullPolicy>))]
+public enum WorldTransferFullPolicy : byte {
+    /// <summary>Refuse this attempt and let the client retry on a later source tick.</summary>
+    Retry,
+
+    /// <summary>Refuse this attempt without scheduling another one.</summary>
+    Refuse,
 }
 
 /// <summary>Where a traveler lands at a <see cref="WorldPlacementPortal"/>'s destination — the positional-continuity
@@ -71,12 +84,16 @@ public enum WorldPortalArrival {
 /// neighbour document authors on the counterpart face, and reciprocal: that face must map back to this exact face.
 /// A strip only one side widens, or whose other half points at a different face, is not shared. <see langword="null"/>
 /// (the default) authors no strip: an unmapped or unauthored face is unchanged. Omitted from the wire when null.</param>
+/// <param name="Capacity">The maximum number of live bodies and outstanding reservations admitted through this
+/// border at once, or <see langword="null"/> to use the destination population's remaining capacity. A full border
+/// refuses the current attempt immediately; it never queues.</param>
 public sealed record WorldPlacementPortal(
     string Destination,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalTravel? Travel = null,
     WorldPortalArrival Arrival = WorldPortalArrival.Spawn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MarginDepth = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? MarginDepth = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
 );
 
 /// <summary>Parses and resolves a <see cref="WorldPlacementPortal.Counterpart"/> string — the one spelling shared by
@@ -160,10 +177,19 @@ public static class WorldPortalCounterpart {
     }
 }
 
-/// <summary>The world-scope default a portal facet's absent <see cref="WorldPlacementPortal.Travel"/> resolves to —
-/// the <c>portals</c> section's one authored fact today (see <see cref="WorldPortalsSection"/>).</summary>
+/// <summary>The world-scope transfer defaults a portal facet resolves against.</summary>
 /// <param name="Travel">The default travel scope (see <see cref="WorldPortalTravel"/>).</param>
-public sealed record WorldPortalDefaults(WorldPortalTravel Travel);
+/// <param name="HoldSeconds">How long a destination reservation is binding, converted from source simulation ticks
+/// through the exact 50400 engine-tick bridge.</param>
+/// <param name="Full">Whether the client may retry after an immediate full-border refusal.</param>
+/// <param name="PartyAllOrNothing">Whether a party transfer reserves and commits as one cohort. When false, each
+/// member is a separate atomic body transfer.</param>
+public sealed record WorldPortalDefaults(
+    WorldPortalTravel Travel,
+    double HoldSeconds = 2.0,
+    WorldTransferFullPolicy Full = WorldTransferFullPolicy.Retry,
+    bool PartyAllOrNothing = true
+);
 
 /// <summary>
 /// The <c>portals</c> section — the world-scope defaults a <see cref="WorldPlacementPortal"/> facet resolves

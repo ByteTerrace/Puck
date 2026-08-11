@@ -1753,9 +1753,25 @@ public sealed class WorldPopulation {
 
         var slot = HighestFreeSlot();
 
-        if (slot < 0) {
+        return TryAdmitRemotePeerAt(slot: slot, source: source, grantTemplates: grantTemplates, identityDomain: identityDomain, identitySubject: identitySubject, admitted: out admitted, refusal: out refusal);
+    }
+
+    /// <summary>Admits a remote peer at a body index already bound by a transfer reservation. This is the
+    /// commit-side companion to <see cref="TryAdmitRemotePeer"/>; callers must reserve the exact index first.</summary>
+    /// <param name="slot">The reserved peer body index.</param>
+    /// <param name="source">The body's live or simulated intent source.</param>
+    /// <param name="grantTemplates">Admission grant templates to install.</param>
+    /// <param name="identityDomain">The verified identity domain.</param>
+    /// <param name="identitySubject">The verified identity subject.</param>
+    /// <param name="admitted">The admitted peer entry on success.</param>
+    /// <param name="refusal">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> on success.</returns>
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
+
+        if ((slot < LocalSeatCount) || (slot >= Capacity) || m_entries[slot].Active) {
             admitted = default;
-            refusal = $"the {Capacity}-slot entity table is full";
+            refusal = ((slot < 0) ? $"the {Capacity}-slot entity table is full" : $"reserved peer body:{slot} is no longer free");
 
             return false;
         }
