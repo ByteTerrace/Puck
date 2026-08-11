@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Laws for the render-capacity registrations shared by boot, session-screen, and traveler-follow views.</summary>
+/// <summary>Laws for the render-capacity registrations shared by the world continuum and session-screen views.</summary>
 public sealed class WorldRenderEnvelopeLawTests {
     /// <summary>Every active renderer constrains admission independently, and disposing one renderer removes only
     /// its own constraint. This pins both halves of the lease contract: no last-writer-wins overwrite and no stale

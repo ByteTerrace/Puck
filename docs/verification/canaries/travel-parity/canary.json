@@ -40,7 +40,7 @@
       },
       {
         "type": "response",
-        "name": "destination rig answered after crossing",
+        "name": "unified camera answered through the transferred authority route",
         "stream": "stdout",
         "verb": "world.view.camera",
         "occurrence": 1,
@@ -49,19 +49,11 @@
       },
       {
         "type": "line",
-        "name": "first remote projection uses the composed viewport",
-        "stream": "stderr",
+        "name": "transferred camera has a generation-addressed continuum anchor",
+        "stream": "stdout",
         "match": "contains",
-        "text": "for seat 1 at 1920x1080",
+        "text": "resolved=true anchor=",
         "present": true
-      },
-      {
-        "type": "line",
-        "name": "no small-panel resolution ramp",
-        "stream": "stderr",
-        "match": "contains",
-        "text": "160x144",
-        "present": false
       },
       {
         "type": "line",
@@ -102,6 +94,14 @@
         "occurrence": 1,
         "count": 1,
         "extract": []
+      },
+      {
+        "type": "line",
+        "name": "local camera has the same continuum anchor contract",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "resolved=true anchor=",
+        "present": true
       },
       {
         "type": "line",

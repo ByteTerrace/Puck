@@ -14,7 +14,9 @@ namespace Puck.World.Protocol;
 /// excluded from destination-authored census reconciliation.</param>
 /// <param name="PlacementId">The source-local inhabited placement claim, carried only so an aborted detach can restore
 /// the exact admission row; a committed destination admission starts without it.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred = false, string? PlacementId = null);
+/// <param name="CatalogRig">The occupant-owned procedural appearance rig, recorded so replay restores the same shape
+/// even when authority admission selected another population slot.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig);
 
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>

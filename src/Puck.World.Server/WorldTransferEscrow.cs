@@ -10,7 +10,9 @@ namespace Puck.World.Server;
 /// <param name="Identity">The attested owned-world identity carried by a federated traveler.</param>
 /// <param name="Source">The traveler's authored intent source, preserved across the authority boundary.</param>
 /// <param name="BodyColor">The source body's exact rendered material color, preserved across ownership.</param>
-public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity = null, IntentSource Source = default, Vector3 BodyColor = default);
+/// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
+/// look authoring may deliberately override it; ordinary admission may not.</param>
+public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig);
 
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
@@ -84,6 +86,12 @@ internal sealed class WorldTransferEscrow {
 
         if (request.Members.Count == 0) {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
+        }
+
+        for (var index = 0; index < request.Members.Count; index++) {
+            if (request.Members[index].CatalogRig >= WorldLookSource.Catalog.RigCount) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} catalog rig {request.Members[index].CatalogRig} is outside 0..{WorldLookSource.Catalog.RigCount - 1}");
+            }
         }
 
         if ((request.SourceRateHz <= 0) || (request.DeadlineSourceTick <= request.SourceTick)) {
@@ -239,6 +247,7 @@ internal sealed class WorldTransferEscrow {
                 m_server.Population.SetSeatProfile(slot: slot, profile: profile);
             }
             m_server.Population.SetBodyColor(slot: slot, color: reservationMember.BodyColor);
+            m_server.Population.SetCatalogRig(slot: slot, catalogRig: reservationMember.CatalogRig);
 
             if (member.HasMappedArrival) {
                 m_server.Population.ApplyMappedArrival(slot: slot, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity);
@@ -320,7 +329,7 @@ internal sealed class WorldTransferEscrow {
             var a = left.Members[index];
             var b = right.Members[index];
 
-            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || (a.Source != b.Source) || (a.BodyColor != b.BodyColor) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
+            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || (a.Source != b.Source) || (a.BodyColor != b.BodyColor) || (a.CatalogRig != b.CatalogRig) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
                 return false;
             }
         }

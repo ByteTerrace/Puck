@@ -35,8 +35,6 @@ namespace Puck.World;
 public static class WorldDefinitionValidator {
     // World-local CPU/GPU screen sources are intentionally presentation-sized. A bad authored extent must fail here,
     // before it can become an unchecked pixel-buffer or offscreen-render allocation. Public: it is also the structural
-    // GPU-safety ceiling Puck.World.Client.WorldAwaySeatViews clamps a DERIVED (not authored) away-seat render target
-    // to, so a maximized/multi-monitor window cannot silently drive an unbounded offscreen allocation.
     public const int MaxSurfaceDimension = 4096;
     // A look scale feeds the stamp pool's per-instance bound radius; an unbounded one is a GPU-SAFETY issue (a
     // spatial-cull metadata blow-up), not a taste one, so it carries a hard ceiling beside MaxSurfaceDimension.
@@ -339,8 +337,6 @@ public static class WorldDefinitionValidator {
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
         var reservedFaceStart = WorldPlacementPolicy.DerivedFaceBase;
         var reservedFaceEnd = (reservedFaceStart + authoring.DerivedFaceScreens);
-        var awaySeatStart = WorldPlacementPolicy.AwaySeatScreenBase;
-        var awaySeatEnd = (awaySeatStart + WorldPlacementPolicy.AwaySeatScreenCount);
 
         {
             var screens = definition.Screens;
@@ -360,8 +356,6 @@ public static class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.index {screen.Index} is duplicated.");
                 } else if (WorldPlacementPolicy.IsReservedFaceIndex(index: screen.Index, derivedFaceScreens: authoring.DerivedFaceScreens)) {
                     errors.Add(item: $"{path}.index {screen.Index} is inside the reserved derived-face range {reservedFaceStart}..{(reservedFaceEnd - 1)} (creation faces bind there — author screens below {reservedFaceStart}).");
-                } else if (WorldPlacementPolicy.IsReservedAwaySeatScreenIndex(index: screen.Index)) {
-                    errors.Add(item: $"{path}.index {screen.Index} is inside the reserved traveler-follow range {awaySeatStart}..{(awaySeatEnd - 1)} (one away-seat view binds each local seat there).");
                 }
 
                 if (!IsFinite(value: screen.Origin) || !IsFinite(value: screen.Right) || !IsFinite(value: screen.Up)) {
@@ -395,10 +389,10 @@ public static class WorldDefinitionValidator {
                 }
             }
 
-            var availableHeadroom = (SdfProgramBuilder.MaxScreenSurfaces - WorldPlacementPolicy.AwaySeatScreenCount - authoring.DerivedFaceScreens - screenIndices.Count);
+            var availableHeadroom = (SdfProgramBuilder.MaxScreenSurfaces - authoring.DerivedFaceScreens - screenIndices.Count);
 
             if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
-                errors.Add(item: $"authoring.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(val1: 0, val2: availableHeadroom)} remain after {screenIndices.Count} authored screen(s), {authoring.DerivedFaceScreens} derived-face reservation(s), and {WorldPlacementPolicy.AwaySeatScreenCount} traveler-follow reservation(s).");
+                errors.Add(item: $"authoring.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(val1: 0, val2: availableHeadroom)} remain after {screenIndices.Count} authored screen(s) and {authoring.DerivedFaceScreens} derived-face reservation(s).");
             }
         }
 
@@ -3051,8 +3045,7 @@ public static class WorldDefinitionValidator {
 
         RequireIntRange(value: authoring.PreviewDeadlineFrames, min: 1, max: 600, name: "authoring.previewDeadlineFrames", errors: errors);
         // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The
-        // ceiling is the span up to the fixed traveler-follow band; a larger count would collide with an away-seat
-        // screen even though both ranges individually remain below the engine's absolute surface ceiling.
+        // ceiling is the remaining span in the engine's screen table.
         RequireIntRange(value: authoring.DerivedFaceScreens, min: 0, max: WorldPlacementPolicy.MaxDerivedFaceScreens, name: "authoring.derivedFaceScreens", errors: errors);
     }
 
@@ -3533,6 +3526,7 @@ public static class WorldDefinitionValidator {
     private static void ValidateAdjacencies(WorldDefinition definition, HashSet<string> destinationNames, IWorldNeighbourResolver? neighbours, bool proveNeighbours, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var resolutions = new Dictionary<string, WorldNeighbourResolution>(comparer: StringComparer.Ordinal);
+        var channels = WorldChannelTable.Compile(channels: definition.Channels);
 
         foreach (var adjacency in (definition.Adjacencies ?? [])) {
             if (adjacency is null) {
@@ -3563,6 +3557,10 @@ public static class WorldDefinitionValidator {
             }
             if (!Enum.IsDefined(value: adjacency.Unavailable)) {
                 errors.Add(item: $"{path}.unavailable '{adjacency.Unavailable}' is not defined.");
+            }
+            if ((adjacency.OnUnavailable is { } onUnavailable) &&
+                (string.IsNullOrWhiteSpace(value: onUnavailable) || !channels.TryGetOrdinal(name: onUnavailable, ordinal: out _))) {
+                errors.Add(item: $"{path}.onUnavailable '{onUnavailable}' names no declared channel.");
             }
             if (!proveNeighbours) {
                 continue;
@@ -3657,8 +3655,71 @@ public static class WorldDefinitionValidator {
 
                 ValidateCornerPath(path: path, viaDocument: leftDocument, via: leftDefinition!, viaEdge: leftEdge!, cornerDocument: cornerDocument, corner: cornerDefinition!, errors: errors);
                 ValidateCornerPath(path: path, viaDocument: rightDocument, via: rightDefinition!, viaEdge: rightEdge!, cornerDocument: cornerDocument, corner: cornerDefinition!, errors: errors);
+                ValidateCornerDiamond(
+                    path: path,
+                    leftSourceEdge: left,
+                    left: leftDefinition!,
+                    leftCornerEdge: leftEdge!,
+                    rightSourceEdge: right,
+                    right: rightDefinition!,
+                    rightCornerEdge: rightEdge!,
+                    cornerDocument: cornerDocument,
+                    corner: cornerDefinition!,
+                    errors: errors);
             }
         }
+    }
+
+    private static void ValidateCornerDiamond(
+        string path,
+        WorldAdjacency leftSourceEdge,
+        WorldDefinition left,
+        WorldAdjacency leftCornerEdge,
+        WorldAdjacency rightSourceEdge,
+        WorldDefinition right,
+        WorldAdjacency rightCornerEdge,
+        string cornerDocument,
+        WorldDefinition corner,
+        List<string> errors
+    ) {
+        if ((WorldDefinitionRows.FindAdjacency(adjacencies: left.Adjacencies, name: leftSourceEdge.Counterpart) is not { } leftBack) ||
+            (WorldDefinitionRows.FindAdjacency(adjacencies: right.Adjacencies, name: rightSourceEdge.Counterpart) is not { } rightBack) ||
+            (WorldDefinitionRows.FindAdjacency(adjacencies: corner.Adjacencies, name: leftCornerEdge.Counterpart) is not { } cornerToLeft) ||
+            (WorldDefinitionRows.FindAdjacency(adjacencies: corner.Adjacencies, name: rightCornerEdge.Counterpart) is not { } cornerToRight)) {
+            return;
+        }
+
+        var cornerOrigin = cornerToLeft.Boundary.CompileFrame().Origin;
+        var probes = new[] {
+            cornerOrigin,
+            (cornerOrigin + new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)),
+            (cornerOrigin + new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One)),
+        };
+
+        foreach (var probe in probes) {
+            var viaLeft = MapTwoStages(
+                point: probe,
+                firstSource: cornerToLeft.Boundary.CompileFrame(),
+                firstDestination: leftCornerEdge.Boundary.CompileFrame(),
+                secondSource: leftBack.Boundary.CompileFrame(),
+                secondDestination: leftSourceEdge.Boundary.CompileFrame());
+            var viaRight = MapTwoStages(
+                point: probe,
+                firstSource: cornerToRight.Boundary.CompileFrame(),
+                firstDestination: rightCornerEdge.Boundary.CompileFrame(),
+                secondSource: rightBack.Boundary.CompileFrame(),
+                secondDestination: rightSourceEdge.Boundary.CompileFrame());
+
+            if (viaLeft != viaRight) {
+                errors.Add(item: $"{path} does not close its transform diamond for corner '{cornerDocument}' — the left path maps {probe} to {viaLeft}, while the right path maps it to {viaRight}.");
+                return;
+            }
+        }
+    }
+
+    private static FixedVector3 MapTwoStages(FixedVector3 point, WorldFaceFrame firstSource, WorldFaceFrame firstDestination, WorldFaceFrame secondSource, WorldFaceFrame secondDestination) {
+        var intermediate = WorldFrameIsometry.MapPoint(point: point, source: in firstSource, destination: in firstDestination);
+        return WorldFrameIsometry.MapPoint(point: intermediate, source: in secondSource, destination: in secondDestination);
     }
 
     private static bool TryResolved(

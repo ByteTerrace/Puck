@@ -17,6 +17,15 @@ namespace Puck.World.Server;
 /// (<c>Server.WorldServer.AttachSink</c>), so the answer is data that could equally have arrived over a real network
 /// connection, never a same-process shortcut into the neighbour's live server objects.</remarks>
 public interface IWorldAdjacencySource {
+    /// <summary>Returns the durable address of one locally authoritative entity. Cross-authority interaction uses
+    /// this identity—not process placement or transport arrival order—to settle a single responder.</summary>
+    WorldEntityAddress LocalEntityAddress(int index);
+
+    /// <summary>Freezes the delivered neighbour records that simulation may read during one authority tick. A
+    /// transport may continue delivering newer records concurrently, but they become eligible only at the next
+    /// call. Rendering observes the same most-recent frozen record.</summary>
+    void BeginTick(ulong tick);
+
     /// <summary>Attempts to resolve one live authored adjacency.</summary>
     /// <param name="adjacencyName">The source document's stable adjacency name.</param>
     /// <param name="neighbour">The resolved neighbour handle, when reachable.</param>
@@ -43,6 +52,9 @@ public sealed record WorldAdjacencyProjection(string Name, IWorldAdjacencyNeighb
 /// revision of the neighbour's geometry they answer against.
 /// </summary>
 public interface IWorldAdjacencyNeighbour {
+    /// <summary>The identity stamped on this delivered authority image.</summary>
+    string Authority { get; }
+
     /// <summary>Gets the neighbour's live delivered definition.</summary>
     WorldDefinition Definition { get; }
 
@@ -61,6 +73,10 @@ public interface IWorldAdjacencyNeighbour {
     /// <summary>The delivered entity-set/palette revision.</summary>
     int SnapshotRevision { get; }
 
+    /// <summary>The presentation fraction through the delivered snapshot interval, derived from that neighbour's
+    /// own clock rather than the observing world's tick rate.</summary>
+    float InterpolationAlpha { get; }
+
     /// <summary>The maximum addressable entity slots in the delivered image.</summary>
     int EntityCapacity { get; }
 
@@ -76,6 +92,10 @@ public interface IWorldAdjacencyNeighbour {
     Quaternion CurrentOrientation(int index);
     Vector3 BodyColor(int index);
     WorldLook Look(int index);
+    byte CatalogRig(int index);
+
+    /// <summary>The authored collider currently worn by the delivered entity, or null for a volumeless kit.</summary>
+    FixedWorldCollider? Collider(int index);
 
     /// <summary>Attempts to resolve a solid contact field compiled over <see cref="Definition"/> — the SAME
     /// derivation (<see cref="WorldSolidField.TryBuild"/>) the neighbour's own authority would compile for itself,

@@ -237,7 +237,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
     // button and would otherwise let it hijack a human pad's slot assignment.
     private readonly HashSet<InputDeviceId> m_programmaticDevices = new();
     // A slot's overridden acting identity, if something other than the ordinary seat claimed it via TryClaimSlot; null
-    // means the slot submits under its own WorldPrincipal.Seat as usual. WorldClient.SubmitSeatIntents reads this
+    // means the slot submits under its own WorldPrincipal.Seat as usual. WorldClient.SubmitAuthorityIntents reads this
     // (through PrincipalOf) so the write-boundary separation — a claimed slot's submission is checked under ITS OWN
     // principal, never silently promoted to the seat's — is a first-class roster property, not a per-caller carve-out.
     private readonly WorldPrincipal?[] m_slotPrincipal = new WorldPrincipal?[MaxSlots];
@@ -561,7 +561,7 @@ internal sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolv
 
     /// <summary>The slot's acting identity: the <see cref="WorldPrincipal"/> a claim recorded via
     /// <see cref="TryClaimSlot"/>, or its ordinary <see cref="WorldPrincipal.Seat"/> when nothing has claimed it. The
-    /// single read seam <see cref="Client.WorldClient.SubmitSeatIntents"/> uses to decide which identity a slot's
+    /// single read seam <see cref="Client.WorldClient.SubmitAuthorityIntents"/> uses to decide which identity a slot's
     /// per-tick submission is checked under — the write-boundary separation is a property of the slot, not a
     /// per-caller carve-out this type has to know the shape of.</summary>
     /// <param name="slot">The slot index (0-based).</param>

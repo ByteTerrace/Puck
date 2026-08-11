@@ -57,6 +57,14 @@
           "Closed"
         ],
         "default": "Closed"
+      },
+      "onUnavailable": {
+        "description": "Optional declared channel pressed once on the body after the engine applies the failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback; ownership safety never depends on the binding.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [

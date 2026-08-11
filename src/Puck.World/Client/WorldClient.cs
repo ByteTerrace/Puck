@@ -19,17 +19,14 @@ namespace Puck.World.Client;
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
 internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly PlayerRoster m_roster;
-    private readonly IServerLink m_link;
-    // The traveler-follow router (stage 1) — every seat submission below resolves its own current presenting
-    // location through it: boot-bound (the ordinary default) or away, in a running WorldInstanceHost instance.
-    // Presentation-side only, same as WorldPerceptionAnchor's own anchor table.
-    private readonly WorldSeatInstanceRouter m_seatRouter;
+    // The authority claim is the sole source for both the entity an input drives and the endpoint that accepts it.
+    // There is no boot/away distinction in this client.
+    private readonly WorldSeatAuthorityRouter m_seatRouter;
     // The shared per-seat live orbit. Camera-relative movement reads only its already-integrated yaw while composing
     // a world-frame intent; the deterministic simulation still receives ordinary fixed-point role channels and has
     // no camera dependency of its own.
-    // De-dups the away-claimed-seat stderr narration (see SubmitAwaySeatIntents) so a seat that stays claimed while
-    // away does not spam one line per tick — cleared the moment that seat is no longer both claimed and away.
-    private readonly bool[] m_awayClaimWarned = new bool[PlayerRoster.MaxSlots];
+    private readonly ulong[] m_lastSubmissionEpoch = new ulong[PlayerRoster.MaxSlots];
+    private readonly ulong[] m_lastSubmissionTick = new ulong[PlayerRoster.MaxSlots];
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
     private WorldSessionLeverSink? m_levers;
@@ -46,6 +43,10 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
     private readonly byte[] m_look = new byte[EntityCapacity];
+    // The occupant-owned procedural rig. This is deliberately distinct from the authority-local entity index: a
+    // seamless transfer may move the occupant to another slot without changing its implicit shape.
+    private readonly byte[] m_catalogRig = new byte[EntityCapacity];
+    private readonly int[] m_generation = new int[EntityCapacity];
     private readonly string?[] m_placementId = new string?[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
@@ -57,6 +58,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private int m_definitionRevision;
     private int m_activePeerCount;
     private ulong m_tick;
+    private string m_authority = string.Empty;
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
@@ -72,24 +74,20 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     public const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
 
     /// <summary>Initializes a new instance of the <see cref="WorldClient"/> class over the seat table it submits for
-    /// and the link it submits on.</summary>
+    /// through the authority table.</summary>
     /// <param name="roster">The client seat table (device metadata, seat controllers, pending state).</param>
-    /// <param name="link">The client→server link intents ride.</param>
     /// <param name="definition">The boot world definition — the initial live definition the frame source reads.</param>
     /// <param name="composition">The shared live composition-override store (also read by the frame source's composer);
     /// <see cref="DeliverComposition"/> applies accepted overrides into it.</param>
-    /// <param name="seatRouter">The traveler-follow router (stage 1) — <see cref="SubmitSeatIntents"/> and
-    /// <see cref="SubmitAwaySeatIntents"/> both resolve a seat's current presenting location through it.</param>
+    /// <param name="seatRouter">The CAS-published authority table every seat-facing consumer shares.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldClient(PlayerRoster roster, IServerLink link, WorldDefinition definition, WorldCompositionState composition, WorldSeatInstanceRouter seatRouter) {
+    public WorldClient(PlayerRoster roster, WorldDefinition definition, WorldCompositionState composition, WorldSeatAuthorityRouter seatRouter) {
         ArgumentNullException.ThrowIfNull(argument: roster);
-        ArgumentNullException.ThrowIfNull(argument: link);
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: composition);
         ArgumentNullException.ThrowIfNull(argument: seatRouter);
 
         m_roster = roster;
-        m_link = link;
         m_seatRouter = seatRouter;
         m_definition = definition;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
@@ -143,14 +141,23 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// census (drives the fleet-tier auto quality levers).</summary>
     public int ActivePeerCount => m_activePeerCount;
 
+    /// <summary>The authority stamped on the latest delivered entity image.</summary>
+    public string Authority => m_authority;
+
     /// <summary>Whether the entity is drawn this frame (present in the latest snapshot).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_active[index];
+
+    /// <summary>The complete durable address of the active occupant in a local slot.</summary>
+    public WorldEntityAddress EntityAddress(int index) => new(Authority: m_authority, Index: index, Generation: m_generation[index]);
 
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public byte LookIndex(int index) => m_look[index];
+
+    /// <summary>The entity-owned procedural catalog rig from the latest snapshot.</summary>
+    public byte CatalogRig(int index) => m_catalogRig[index];
 
     /// <summary>The look row an entity wears: the delivered look table indexed by <see cref="LookIndex"/>, or the
     /// implicit single catalog look when the world authors no <c>looks</c> section, and for an index the delivered
@@ -271,28 +278,30 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// submissions go out. The server's existing per-body contention reporter then makes that different-principal
     /// collision loud and attributed, exactly as it does when two claimed slots resolve to one body; no winner is
     /// selected here.</para></summary>
-    /// <param name="tick">The tick the submissions are for.</param>
-    /// <remarks><b>Traveler-follow stage 1.</b> Scoped to boot-bound seats only — a seat
-    /// <see cref="WorldSeatInstanceRouter"/> currently routes away is skipped here entirely (its device intent
-    /// submits instead through <see cref="SubmitAwaySeatIntents"/>, called from
-    /// <see cref="WorldInstanceHost.StepInstancesBesideBoot"/> at that instance's own next-tick coordinate). The rest
-    /// of this method — target resolution, the co-driver/background-plumbing yield, the submission itself — is
-    /// unchanged: a boot-bound seat's own path is exactly what it was before this router existed.</remarks>
-    public void SubmitSeatIntents(ulong tick) {
+    /// <param name="endpoint">The authority whose clock is about to consume <paramref name="tick"/>.</param>
+    /// <param name="tick">The authority-local tick the submissions are for.</param>
+    public void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick) {
+        ArgumentNullException.ThrowIfNull(argument: endpoint);
         Span<bool> live = stackalloc bool[PlayerRoster.MaxSlots];
         Span<int> targets = stackalloc int[PlayerRoster.MaxSlots];
+        var routes = new WorldAuthorityRoute?[PlayerRoster.MaxSlots];
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
                 continue;
             }
 
-            if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+            var route = m_seatRouter.Route(slot: slot);
+            if (!ReferenceEquals(objA: route.Endpoint, objB: endpoint)) {
+                continue;
+            }
+            if ((m_lastSubmissionEpoch[slot] == route.Epoch) && (m_lastSubmissionTick[slot] >= tick)) {
                 continue;
             }
 
             live[slot] = true;
-            targets[slot] = m_roster.DriveTarget(slot: slot);
+            targets[slot] = route.EntityIndex;
+            routes[slot] = route;
         }
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -301,10 +310,11 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
             }
 
             var seat = m_roster.Seat(slot: slot)!;
-            var definition = m_definition;
+            var definition = endpoint.Definition;
             var intent = ComposeMoveFrame(
                 slot: slot,
                 bodyIndex: targets[slot],
+                endpoint: endpoint,
                 definition: definition,
                 intent: seat.HeldIntent()
             );
@@ -317,85 +327,15 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 continue;
             }
 
-            m_link.SubmitIntent(submission: new IntentSubmission(
+            endpoint.Submissions.SubmitIntent(submission: new IntentSubmission(
                 Tick: tick,
                 EntityIndex: targets[slot],
                 Intent: intent,
                 Principal: m_roster.PrincipalOf(slot: slot),
                 HeldChannels: heldChannels
             ));
-        }
-    }
-
-    /// <summary>Submits every seat <see cref="WorldSeatInstanceRouter"/> currently routes to
-    /// <paramref name="instanceName"/> — <see cref="WorldInstanceHost.StepInstancesBesideBoot"/>'s own door, called
-    /// immediately before that instance's <c>Server.Step</c>, at that instance's own next-tick coordinate. Mirrors
-    /// <see cref="SubmitSeatIntents"/>'s boot-bound path with one deliberate stage-1 narrowing: the entity index is
-    /// always the router's own <see cref="SeatLocation.InstanceSlot"/> (never a claim-resolved target — a claimed
-    /// seat away from boot is refused below, since claim resolution reads boot's own grant table, which a
-    /// cross-instance claim has no way to honor yet). Absolute-orbit world-frame movement composes from the routed
-    /// definition and the seat's shared live orbit, so it remains camera-relative across a crossing without reading
-    /// boot-scoped body poses. Every kit that stays on the default heading frame is unaffected.</summary>
-    /// <param name="instanceName">The instance about to step.</param>
-    /// <param name="tick">The tick the submissions are for — that instance's own next tick.</param>
-    /// <param name="link">That instance's own transport (<see cref="WorldInstanceHost.TryGetLink"/>).</param>
-    /// <param name="definition">That instance's current definition.</param>
-    public void SubmitAwaySeatIntents(string instanceName, ulong tick, IServerLink link, WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: link);
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || !seat.Source.IsLive) {
-                continue;
-            }
-
-            var location = m_seatRouter.Location(slot: slot);
-
-            if (!string.Equals(a: location.InstanceName, b: instanceName, comparisonType: StringComparison.Ordinal)) {
-                continue;
-            }
-
-            // V1 RESTRICTION: a claimed (co-drive) seat away from boot is refused, not silently wrong — claim
-            // resolution (PlayerRoster.DriveTarget) reads BOOT's own grant table over the boot loopback view, which
-            // has no way to answer for a body that is not even in boot's population any more. Narrated once per
-            // (slot, instance) rather than every tick.
-            if (m_roster.IsClaimed(slot: slot)) {
-                if (!m_awayClaimWarned[slot]) {
-                    m_awayClaimWarned[slot] = true;
-
-                    Console.Error.WriteLine(value: $"[world.view: seat {(slot + 1)} is claimed (co-drive) and away in '{instanceName}' — cross-instance claim resolution is a stage-1 residue; its submission is refused until it returns to boot or is reclaimed there]");
-                }
-
-                continue;
-            }
-
-            m_awayClaimWarned[slot] = false;
-
-            var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
-            var look = seat.AnalogLook;
-            seat.View.Nudge(
-                input: new Vector2(x: (float)(double)look.X, y: (float)(double)look.Y),
-                yawScale: preference.StickLookRate / Math.Max(1, definition.SimulationRateHz),
-                pitchScale: preference.StickLookRate / Math.Max(1, definition.SimulationRateHz),
-                preference: preference,
-                control: definition.Views.SeatControl
-            );
-
-            var intent = ComposeMoveFrame(
-                slot: slot,
-                bodyIndex: location.InstanceSlot,
-                definition: definition,
-                intent: seat.HeldIntent(),
-                permitBodyRelative: false
-            );
-
-            link.SubmitIntent(submission: new IntentSubmission(
-                Tick: tick,
-                EntityIndex: location.InstanceSlot,
-                Intent: intent,
-                Principal: m_roster.PrincipalOf(slot: slot),
-                HeldChannels: seat.HeldChannels
-            ));
+            m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
+            m_lastSubmissionTick[slot] = tick;
         }
     }
 
@@ -410,14 +350,13 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// pair unchanged, byte-identical to before this composition existed.</summary>
     /// <param name="slot">The 0-based local seat whose camera frames the movement.</param>
     /// <param name="bodyIndex">The 0-based entity index this submission will drive.</param>
+    /// <param name="endpoint">The authority that owns the body and supplies its current orientation.</param>
     /// <param name="definition">The definition of the instance receiving the intent.</param>
     /// <param name="intent">The seat's raw held intent.</param>
-    /// <param name="permitBodyRelative">Whether this caller can resolve <paramref name="bodyIndex"/>'s rendered
-    /// orientation. Away-instance submissions set this false; absolute-orbit composition needs no body pose.</param>
     /// <returns><paramref name="intent"/> with <c>MoveForward</c>/<c>MoveStrafe</c> rotated into world axes, or
     /// <paramref name="intent"/> unchanged when the seat kit is not camera-relative, the body is inactive, or the
     /// commanded vector is already zero (rotating zero is zero — skipped purely to avoid the trig).</returns>
-    private PlayerIntent ComposeMoveFrame(int slot, int bodyIndex, WorldDefinition definition, PlayerIntent intent, bool permitBodyRelative = true) {
+    private PlayerIntent ComposeMoveFrame(int slot, int bodyIndex, WorldAuthorityEndpoint endpoint, WorldDefinition definition, PlayerIntent intent) {
         var channels = (ReferenceEquals(objA: definition, objB: m_definition)
             ? m_channels
             : WorldChannelTable.Compile(channels: definition.Channels));
@@ -432,12 +371,12 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         }
 
         if ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body)
-            && (!permitBodyRelative || !IsActive(index: bodyIndex))) {
+            && !endpoint.TryEntityPose(index: bodyIndex, position: out _, orientation: out _)) {
             return intent;
         }
 
         var orientation = ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body)
-            ? Orientation(index: bodyIndex)
+            ? (endpoint.TryEntityPose(index: bodyIndex, position: out _, orientation: out var bodyOrientation) ? bodyOrientation : Quaternion.Identity)
             : Quaternion.Identity);
         var yaw = (m_roster.Seat(slot: slot)?.View.LogicalYaw(views: definition.Views, bodyOrientation: orientation) ?? 0f);
         var sin = MathF.Sin(x: yaw);
@@ -486,15 +425,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 continue;
             }
 
-            var definition = ((string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName,
-                b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal))
-                ? m_definition
-                : null);
-            // The instance host owns away definitions; callers already integrate at the host tick. A routed away
-            // seat is advanced by its emitter/pointer path until the host exposes that definition here.
-            if (definition is null) {
-                continue;
-            }
+            var definition = m_seatRouter.Route(slot: slot).Endpoint.Definition;
 
             var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
             var look = seat.AnalogLook;
@@ -521,7 +452,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
     }
 
     /// <summary>Whether another live, claimed slot resolves to <paramref name="body"/> this tick. Used only after
-    /// <see cref="SubmitSeatIntents"/> has established that the unclaimed seat's own submission carries no input, so
+    /// <see cref="SubmitAuthorityIntents"/> has established that the unclaimed seat's own submission carries no input, so
     /// only background plumbing yields to the deliberate claim.</summary>
     /// <param name="live">Which roster slots are live for this tick.</param>
     /// <param name="targets">Each live slot's resolved drive target.</param>
@@ -550,6 +481,8 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
+            m_catalogRig[index] = entry.CatalogRig;
+            m_generation[index] = entry.Generation;
             m_placementId[index] = entry.PlacementId;
 
             if (!m_active[index]) {
@@ -600,6 +533,10 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
             m_currentPosition[index] = entry.Position;
             m_currentOrientation[index] = entry.Orientation;
+            // Keep the resolved pose meaningful in a headless composition, where no presentation frame calls
+            // UpdateRenderPoses. A windowed frame replaces these with its interpolated/eased values before drawing.
+            m_renderPosition[index] = entry.Position;
+            m_renderOrientation[index] = entry.Orientation;
             m_active[index] = true;
         }
 
@@ -627,6 +564,7 @@ internal sealed class WorldClient : IClientSink, ISdfAnchorSource {
         // well as up. That is why WriteRevision reports it as its own component instead of adding it to anything.
         m_serverRevision = snapshot.Revision;
         m_tick = snapshot.Tick;
+        m_authority = snapshot.Authority;
     }
 
     /// <inheritdoc/>

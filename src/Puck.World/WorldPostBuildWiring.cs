@@ -74,9 +74,8 @@ internal static class WorldPostBuildWiring {
 
         // THE CROSSING-PARITY BINDING SWAP: wired here rather than a presentation-only composition method because
         // bindings/channels resolve on the console/peer input path in EVERY boot shape, headless included, and
-        // headless's WorldSimulation twin (HeadlessWorldSimulation) carries no per-tick seat-binding poll of its own
-        // — this event is the ONLY mechanism that reaches a headless seat's crossing. The instant
-        // WorldSeatInstanceRouter.Publish reports a seat's presenting INSTANCE actually
+        // headless and presented shapes share the input lifecycle, while this event still applies the route edge
+        // immediately. The instant WorldSeatAuthorityRouter publishes a changed claim,
         // changed (a crossing in or out — see that event's own remarks), recompose that ONE seat's binding pages,
         // wheels, and channel vocabulary from its NEW route's own document (WorldInstanceHost.ResolveRoutedDefinition
         // — the identical routed-definition lookup WorldSeatViewInput already subscribes to this same event for,
@@ -85,7 +84,7 @@ internal static class WorldPostBuildWiring {
         // parallel mechanism.
         var instances = services.GetRequiredService<WorldInstanceHost>();
 
-        services.GetRequiredService<WorldSeatInstanceRouter>().LocationChanged += slot =>
+        services.GetRequiredService<WorldSeatAuthorityRouter>().RouteChanged += slot =>
             seatBindings.SyncSeat(slot: slot, definition: instances.ResolveRoutedDefinition(slot: slot));
 
         // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at

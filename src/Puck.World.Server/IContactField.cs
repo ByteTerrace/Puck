@@ -37,6 +37,12 @@ public interface IContactField {
     bool TryUp(in FixedVector3 position, out FixedVector3 up);
 }
 
+/// <summary>A contact field that needs the durable identity of the body being resolved. WorldBody supplies the
+/// entity index only to this refinement; ordinary terrain fields remain unaware of population addressing.</summary>
+internal interface IEntityContactField : IContactField {
+    ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes);
+}
+
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator
 /// already consults, plus the last resolved non-walkable contact's surface normal. Read-back only:
 /// <see cref="ObstructionNormal"/> feeds no integration and changes no simulation behavior — it is

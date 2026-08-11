@@ -69,6 +69,7 @@ public sealed class WorldTcpHost : IDisposable {
     private CancellationTokenSource? m_cts;
     private Task? m_acceptLoop;
     private int m_nextConnectionId;
+    private long m_nextFederationIntentLease;
     private int m_pendingHandshakes;
     private bool m_disposed;
 
@@ -401,36 +402,13 @@ public sealed class WorldTcpHost : IDisposable {
                 await StreamProjectionAsync(stream: stream, ct: ct).ConfigureAwait(false);
                 return;
 
-            case WorldFederationWireFormat.RequestKind.Intent: {
-                    if (!WorldFederationWireFormat.TryDecodeIntent(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, ordinal: out var ordinal, submission: out var submission) ||
-                        !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                        await WriteFederationRefusal(stream: stream, reason: "intent names no committed transfer body", ct: ct).ConfigureAwait(false);
-                        return;
-                    }
-
-                    if (!m_server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out var principal)) {
-                        await WriteFederationRefusal(stream: stream, reason: "intent names no committed transfer body", ct: ct).ConfigureAwait(false);
-                        return;
-                    }
-
-                    var accepted = false;
-                    var forwardReason = string.Empty;
-                    if (TransferredPrincipalIsLive(principal: principal)) {
-                        accepted = m_server.ExecuteAuthorityOperation(operation: () => {
-                            var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
-                            m_server.EnqueueIntent(submission: in stamped);
-                            return true;
-                        });
-                    } else if (m_server.TransferForwarder is { } forwarder) {
-                        accepted = forwarder.TryForwardIntent(source: m_server, principal: principal, submission: in submission, reason: out forwardReason);
-                    }
-                    if (!accepted) {
-                        await WriteFederationRefusal(stream: stream, reason: (forwardReason.Length > 0 ? forwardReason : "intent names no live or forwarded transfer body"), ct: ct).ConfigureAwait(false);
-                        return;
-                    }
-                    await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: ct).ConfigureAwait(false);
+            case WorldFederationWireFormat.RequestKind.IntentStream:
+                if (frame.Value.Body.Length != 0) {
+                    await WriteFederationRefusal(stream: stream, reason: "intent stream opening carries an unexpected payload", ct: ct).ConfigureAwait(false);
                     return;
                 }
+                await StreamFederatedIntentsAsync(stream: stream, sourceAuthority: sourceAuthority, ct: ct).ConfigureAwait(false);
+                return;
 
             case WorldFederationWireFormat.RequestKind.Submission: {
                     if (!WorldFederationWireFormat.TryDecodeSubmission(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, ordinal: out var ordinal, frame: out var submittedFrame)
@@ -500,22 +478,37 @@ public sealed class WorldTcpHost : IDisposable {
                         return;
                     }
 
-                    string endpoint;
-                    int bodyIndex;
+                    WorldAuthorityRouteDescription route;
                     var routeReason = string.Empty;
                     var declaredEndpoint = (m_server.Definition.Host.Authority ?? ListenEndpoint);
                     if (TransferredPrincipalIsLive(principal: principal) && (declaredEndpoint is { } localEndpoint)) {
-                        endpoint = localEndpoint;
-                        bodyIndex = principal.Index;
-                        routeReason = string.Empty;
-                    } else if ((m_server.TransferForwarder is { } forwarder) && forwarder.TryDescribeForwarding(source: m_server, principal: principal, endpoint: out endpoint, bodyIndex: out bodyIndex, reason: out routeReason)) {
+                        route = m_server.ExecuteAuthorityOperation(operation: () => {
+                            var body = m_server.Population.EntryBody(index: principal.Index) ??
+                                throw new InvalidOperationException(message: $"live transferred {principal.Describe()} has no body");
+                            return new WorldAuthorityRouteDescription(
+                                Endpoint: localEndpoint,
+                                Entity: new WorldEntityAddress(
+                                    Authority: m_server.AuthorityIdentity,
+                                    Index: principal.Index,
+                                    Generation: m_server.Population.Generation(index: principal.Index)),
+                                Tick: (m_server.NextInputTick - 1UL),
+                                Position: body.FixedPosition,
+                                Orientation: body.FixedOrientation,
+                                BodyColor: m_server.Population.BodyColor(index: principal.Index),
+                                Kit: m_server.Population.KitIndex(index: principal.Index),
+                                Look: m_server.Population.LookIndex(index: principal.Index),
+                                CatalogRig: m_server.Population.CatalogRig(index: principal.Index),
+                                PlacementId: m_server.Population.InhabitantPlacementId(index: principal.Index),
+                                Definition: m_server.Definition);
+                        });
+                    } else if ((m_server.TransferForwarder is { } forwarder) && forwarder.TryDescribeForwarding(source: m_server, principal: principal, route: out route, reason: out routeReason)) {
                         // The composition root recursively resolved the final authority.
                     } else {
                         await WriteFederationRefusal(stream: stream, reason: (routeReason.Length > 0 ? routeReason : "traveler has no live or forwarded route"), ct: ct).ConfigureAwait(false);
                         return;
                     }
 
-                    await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Route, body: WorldFederationWireFormat.EncodeRoute(endpoint: endpoint, bodyIndex: bodyIndex), ct: ct).ConfigureAwait(false);
+                    await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Route, body: WorldFederationWireFormat.EncodeRoute(route: in route), ct: ct).ConfigureAwait(false);
                     return;
                 }
 
@@ -554,6 +547,93 @@ public sealed class WorldTcpHost : IDisposable {
         private void Write(WorldFederationWireFormat.ResponseKind kind, byte[] body) {
             if (!m_frames.Writer.TryWrite(item: (kind, body))) {
                 _ = m_frames.Writer.TryComplete(error: new IOException("federation observer exceeded its bounded projection backlog"));
+            }
+        }
+    }
+
+    // A long-lived authenticated control lane. The socket carries state updates, not impulses: the WorldServer
+    // republishes the latest accepted image on every destination tick until another update or this connection's
+    // finally releases its lease. Request/ack remains ordered, while connection setup and challenge authentication
+    // are paid once rather than once per simulation tick.
+    private async Task StreamFederatedIntentsAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
+        var leaseId = Interlocked.Increment(location: ref m_nextFederationIntentLease);
+        var touched = new Dictionary<WorldPrincipal, IntentSubmission>();
+        var forwardRelease = true;
+        await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: ct).ConfigureAwait(false);
+
+        try {
+            while (!ct.IsCancellationRequested) {
+                var frame = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+                if (frame is null) {
+                    return;
+                }
+                if (frame.Value.Kind == (byte)WorldFederationWireFormat.RequestKind.IntentStreamHandoff) {
+                    if (frame.Value.Body.Length != 0) {
+                        await WriteFederationRefusal(stream: stream, reason: "intent stream handoff carries an unexpected payload", ct: ct).ConfigureAwait(false);
+                        return;
+                    }
+
+                    // The same client is deliberately moving this held-state lane to the newly published authority.
+                    // Its new lane immediately seeds the current state, so forwarding a synthetic neutral from this
+                    // older lane would race that seed and could cancel a still-held stick after the handoff.
+                    forwardRelease = false;
+                    await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: ct).ConfigureAwait(false);
+                    return;
+                }
+                if (frame.Value.Kind != (byte)WorldFederationWireFormat.RequestKind.Intent ||
+                    !WorldFederationWireFormat.TryDecodeIntent(body: frame.Value.Body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, ordinal: out var ordinal, submission: out var submission) ||
+                    !string.Equals(a: carriedAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal) ||
+                    !m_server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, principal: out var principal)) {
+                    await WriteFederationRefusal(stream: stream, reason: "intent stream update names no committed transfer body", ct: ct).ConfigureAwait(false);
+                    return;
+                }
+
+                var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
+                var accepted = false;
+                var reason = string.Empty;
+
+                if (TransferredPrincipalIsLive(principal: principal)) {
+                    m_server.PublishFederatedIntent(leaseId: leaseId, submission: in stamped);
+                    accepted = true;
+                } else if (m_server.TransferForwarder is { } forwarder) {
+                    // Detach necessarily precedes publication of the committed onward route. Socket ingress can land
+                    // inside that tiny window; retain this state update and retry the route lookup rather than
+                    // turning an ordinary handoff into a visible control-lane outage.
+                    for (var attempt = 0; attempt < 25; attempt++) {
+                        accepted = forwarder.TryForwardIntent(source: m_server, principal: principal, submission: in stamped, reason: out reason);
+                        if (accepted) {
+                            break;
+                        }
+                        await Task.Delay(delay: TimeSpan.FromMilliseconds(4), cancellationToken: ct).ConfigureAwait(false);
+                    }
+                }
+
+                if (!accepted) {
+                    await WriteFederationRefusal(stream: stream, reason: (reason.Length > 0 ? reason : "intent stream update names no live or forwarded transfer body"), ct: ct).ConfigureAwait(false);
+                    return;
+                }
+
+                touched[principal] = stamped;
+                await WorldFederationWireFormat.WriteResponseAsync(stream: stream, kind: WorldFederationWireFormat.ResponseKind.Ack, body: [], ct: ct).ConfigureAwait(false);
+            }
+        } finally {
+            m_server.ReleaseFederatedIntents(leaseId: leaseId);
+
+            // A stream may now terminate at an older authority in a forwarding chain. Publish an explicit neutral
+            // image through that same chain so the final writer never retains a held stick after its originating
+            // connection vanished.
+            foreach (var pair in touched) {
+                if (!forwardRelease) {
+                    break;
+                }
+                if (TransferredPrincipalIsLive(principal: pair.Key) || (m_server.TransferForwarder is not { } forwarder)) {
+                    continue;
+                }
+
+                var released = pair.Value with { Intent = default, HeldChannels = default };
+                if (!forwarder.TryForwardIntent(source: m_server, principal: pair.Key, submission: in released, reason: out var reason)) {
+                    Console.Error.WriteLine(value: $"[world.authority unavailable: {pair.Key.Describe()} release could not follow its committed route ({reason})]");
+                }
             }
         }
     }

@@ -71,7 +71,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     // declared name resolves. NEVER the source a bound channel verb dispatches against — see m_seatBindings.
     private readonly WorldChannelTable m_channels = WorldChannelTable.Compile(channels: definition.Channels);
     // The per-seat CURRENTLY ROUTED channel vocabulary (WorldSeatBindings.Channels, kept in sync with each seat's
-    // WorldSeatInstanceRouter location by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
+    // WorldSeatAuthorityRouter claim by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
     // channel NAME through that table to one of the fixed ordinal commands registered below; ChannelVerb checks the
     // same table again when the bound control fires. The command registry and its replay-stable ids therefore never
     // depend on which local, late-mounted, or remote destination documents happened to be readable at boot.
@@ -360,17 +360,17 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     // fire every deflected frame; the handler routes the dispatch (with its device id) into the roster and returns
     // None (no stdout spam per frame).
     private IEnumerable<CommandDefinition> StickVerbs() {
-        yield return CommandDefinition.Verb(
+        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: MoveCommand,
-            description: "The left stick's movement channel (Axis2D, +Y forward / +X strafe right) — routed to the owning device's player each frame; not meant to be typed.",
+            description: "The left stick's movement channel (Axis2D, +Y forward / +X strafe right) — routed to the owning device's player each frame. A typed player.move <x> <y> injects one exact tick through this same router for automation and accessibility surfaces.",
             valueKind: CommandValueKind.Axis2D,
             handler: MoveRouter
         );
-        yield return CommandDefinition.Verb(
+        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: LookCommand,
-            description: "The right stick's look channel (Axis2D, +X turns the body right / +Y pitches the camera up) — routed to the owning device's player each frame; not meant to be typed.",
+            description: "The right stick's look channel (Axis2D, +X looks right / +Y looks up) — routed to the owning device's player each frame. A typed player.look <x> <y> injects one exact tick through this same router.",
             valueKind: CommandValueKind.Axis2D,
             handler: LookRouter
         );
@@ -386,16 +386,40 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
     // One of exactly two quantization doors (see CommandValueQuantization.QuantizeAxis's own remarks) — the router
     // seam where a physical stick float first becomes command state. Everything below this call is fixed point;
     // nothing downstream re-derives a conversion.
-    private CommandResult MoveRouter(CommandContext context) {
-        m_roster.RouteMove(slot: context.Slot, value: CommandValueQuantization.QuantizeAxis(value: context.Value.AsAxis2D), actingPrincipal: context.ActingPrincipal());
+    private CommandResult MoveRouter(CommandContext context, WireArgs args) {
+        if (!TryStickValue(context: context, args: in args, verb: MoveCommand, value: out var value, error: out var error)) {
+            return error;
+        }
+        m_roster.RouteMove(slot: context.Slot, value: value, actingPrincipal: context.ActingPrincipal());
 
         return CommandResult.None;
     }
     // The other of the two quantization doors — see MoveRouter's remarks.
-    private CommandResult LookRouter(CommandContext context) {
-        m_roster.RouteLook(slot: context.Slot, value: CommandValueQuantization.QuantizeAxis(value: context.Value.AsAxis2D), actingPrincipal: context.ActingPrincipal());
+    private CommandResult LookRouter(CommandContext context, WireArgs args) {
+        if (!TryStickValue(context: context, args: in args, verb: LookCommand, value: out var value, error: out var error)) {
+            return error;
+        }
+        m_roster.RouteLook(slot: context.Slot, value: value, actingPrincipal: context.ActingPrincipal());
 
         return CommandResult.None;
+    }
+
+    private static bool TryStickValue(CommandContext context, in WireArgs args, string verb, out FixedVector2 value, out CommandResult error) {
+        if (args.Count == 0) {
+            value = CommandValueQuantization.QuantizeAxis(value: context.Value.AsAxis2D);
+            error = default;
+            return true;
+        }
+        if ((args.Count != 2) || !args.TryFloat(index: 0, value: out var x) || !args.TryFloat(index: 1, value: out var y) ||
+            !float.IsFinite(f: x) || !float.IsFinite(f: y)) {
+            value = default;
+            error = CommandResult.Error(output: $"[{verb}: expected two finite values — <x> <y>]");
+            return false;
+        }
+
+        value = CommandValueQuantization.QuantizeAxis(value: new Vector2(x: Math.Clamp(value: x, min: -1f, max: 1f), y: Math.Clamp(value: y, min: -1f, max: 1f)));
+        error = default;
+        return true;
     }
     private CommandResult SticksHandler(CommandContext context) {
         var segments = new List<string>(capacity: PlayerRoster.MaxSlots);
@@ -498,14 +522,14 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
 
         if (WorldArgs.TryParseIndex(args: in args, at: 0, min: 1, max: m_population.Capacity, fallback: 1, value: out var routedIndex) && (routedIndex <= PlayerRoster.MaxSlots)) {
             var rosterSlot = PlayerRoster.SlotFromDisplay(number: routedIndex);
-            var location = m_instances.SeatLocation(slot: rosterSlot);
+            var location = m_instances.SeatRoute(slot: rosterSlot);
 
-            if (m_roster.IsJoined(slot: rosterSlot) && !string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) && m_instances.TryGetLink(name: location.InstanceName, link: out var routedLink) && routedLink is not null) {
+            if (m_roster.IsJoined(slot: rosterSlot) && !string.Equals(a: location.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
                 var routedResult = default(CommandResult);
-                routedLink.Query(query: new WorldQuery.PlayerWhere(Index: (location.InstanceSlot + 1)), completion: answer => {
-                    var current = m_instances.SeatLocation(slot: rosterSlot);
-                    var tagged = WithInstanceTag(text: answer.Text, instanceName: current.InstanceName);
-                    routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{current.InstanceSlot}]") { IsError = answer.Refused };
+                location.Endpoint.Submissions.Query(query: new WorldQuery.PlayerWhere(Index: (location.EntityIndex + 1)), completion: answer => {
+                    var current = m_instances.SeatRoute(slot: rosterSlot);
+                    var tagged = WithInstanceTag(text: answer.Text, instanceName: current.Endpoint.Identity);
+                    routedResult = new CommandResult(Output: $"{tagged[..^1]} anchor=body:{current.EntityIndex}]") { IsError = answer.Refused };
                 });
                 return routedResult;
             }
@@ -692,6 +716,25 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
 
         if (instanceTarget.EffectiveCount > 1) {
             return CommandResult.Error(output: "[player.stop: expected at most 1 value — an optional player index]");
+        }
+
+        if (!WorldArgs.TryParseIndex(args: in args, at: 0, min: 1, max: m_population.Capacity, fallback: 1, value: out var requestedIndex)) {
+            return CommandResult.Error(output: $"[player.stop: player index must be an integer 1..{m_population.Capacity}]");
+        }
+
+        // A local seat retains its console-facing number after authority handoff. Stop through the same immutable
+        // route used by live sticks and player.fly; resolving the departed boot body first would reject precisely
+        // the panic command a traveler needs during a remote-control failure.
+        if (requestedIndex <= PlayerRoster.MaxSlots) {
+            var routedSlot = PlayerRoster.SlotFromDisplay(number: requestedIndex);
+            var route = m_instances.SeatRoute(slot: routedSlot);
+            if (m_roster.IsJoined(slot: routedSlot) &&
+                !string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.Stop(Principal: context.ActingPrincipal(), EntityIndex: route.EntityIndex));
+                m_roster.Seat(slot: routedSlot)?.ReleaseAllHeld();
+                var routedLatches = router().ClearSlotHeld(slot: routedSlot);
+                return Echoed(args: in args, handler: $"[player.stop: p{requestedIndex} via '{route.Endpoint.Identity}' body={route.EntityIndex} — tape and held input cleared, {routedLatches} toggle latch{((routedLatches == 1) ? "" : "es")} cleared]");
+            }
         }
 
         var (player, index, error) = ResolveTarget(args: in args, requiredCount: 0, verb: "player.stop");
@@ -1181,17 +1224,15 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         // translation, while the destination definition supplies its own channel ordinals.
         if (index <= PlayerRoster.MaxSlots) {
             var rosterSlot = PlayerRoster.SlotFromDisplay(number: index);
-            var location = m_instances.SeatLocation(slot: rosterSlot);
+            var location = m_instances.SeatRoute(slot: rosterSlot);
 
             if (m_roster.IsJoined(slot: rosterSlot) &&
-                !string.Equals(a: location.InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) &&
-                m_instances.TryGetLink(name: location.InstanceName, link: out var routedLink) &&
-                routedLink is not null) {
+                !string.Equals(a: location.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
                 var routedChannels = WorldChannelTable.Compile(channels: m_instances.ResolveRoutedDefinition(slot: rosterSlot).Channels);
 
-                routedLink.SubmitCommand(command: new WorldCommand.EnqueueSegment(
+                location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.EnqueueSegment(
                     Principal: context.ActingPrincipal(),
-                    EntityIndex: location.InstanceSlot,
+                    EntityIndex: location.EntityIndex,
                     Intent: routedChannels.RoleOrdinals.Intent(
                         moveForward: FixedQ4816.FromDouble(value: forward),
                         moveStrafe: FixedQ4816.FromDouble(value: strafe),
@@ -1203,7 +1244,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                     Seconds: seconds
                 ));
 
-                return Echoed(args: in args, handler: $"[player.fly: p{index} via '{location.InstanceName}' body={location.InstanceSlot} fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]");
+                return Echoed(args: in args, handler: $"[player.fly: p{index} via '{location.Endpoint.Identity}' body={location.EntityIndex} fwd={forward:0.##} strafe={strafe:0.##} up={up:0.##} yaw={yaw:0.##} pitch={pitch:0.##} roll={roll:0.##} for {seconds:0.##}s]");
             }
         }
 

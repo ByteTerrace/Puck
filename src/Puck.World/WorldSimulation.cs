@@ -61,10 +61,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // uses this shell's own contiguous next-tick coordinate (frozen below while boot does not step), matching
         // what WorldServerStepShell.Step is about to report as the completed tick — never context.Tick + 1, the
         // pump's raw un-frozen cursor (see the bootContext remarks below).
-        if (stepsBoot) {
-            m_client.AdvanceSeatViews(deltaSeconds: (float)EngineTicks.ToSeconds(ticks: context.StepTicks));
-            m_client.SubmitSeatIntents(tick: (Tick + 1UL));
-        }
+        m_instances.PrepareBootSeatIntents(stepsBoot: stepsBoot, tick: (Tick + 1UL), stepTicks: context.StepTicks);
 
         var rosterTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
 
@@ -75,6 +72,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // WorldServer.Step. A transfer is a host act, so it settles at this host's one fixed point rather than
         // inline with whichever instance's step produced it.
         m_instances.DrainPendingTransfers();
+        m_instances.SubmitExternallyClockedSeatIntents();
 
         // The boot instance steps by the same per-instance pause/rate-0 rule as every other instance. When it is
         // not due (a live world.rate pause, or an authored rateHz of 0), the tape/wait-gate/socket bookkeeping this
@@ -154,7 +152,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         var populationTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
 
         phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
-        m_client.Roster.ClearAnalog();
+        m_instances.FinishSeatIntents();
         // Promote this tick's staged editor-stick samples to the frame-visible latch (the editor camera's per-frame
         // integration cadence), beside the seats' own analog clear.
         m_editor.LatchTick();

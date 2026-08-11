@@ -34,9 +34,8 @@ internal sealed class WorldInstance : IDisposable {
     /// <param name="ownedMachines">The machine host this instance owns and must dispose, or <see langword="null"/>
     /// when the container owns it (the boot instance) — disposal follows ownership, never presence.</param>
     /// <param name="link">This instance's own transport — the same two-line <see cref="LoopbackTransport"/> pattern
-    /// <c>WorldBootComposition</c> wires for the boot instance, now held uniformly on every row (traveler-follow
-    /// stage 1): <see cref="WorldInstanceHost.TryGetLink"/> is the one door a presentation-side consumer (an
-    /// away-seat intent submission, an away view's mirror attach) resolves it through.</param>
+    /// <c>WorldBootComposition</c> wires for the boot instance, now held uniformly on every row:
+    /// <see cref="WorldInstanceHost.TryGetLink"/> is the one local-authority submission door.</param>
     /// <param name="ownedAdjacencies">The per-instance adjacency resolver this row owns, or null for boot wiring.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>

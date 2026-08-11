@@ -45,17 +45,12 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
-    // The traveler-follow router (stage 1) — the per-seat roster-bookkeeping pass in Dress reads it to keep an
-    // away-routed seat OUT of the local viewport layout (its own body left boot's simulation with it, so nothing
-    // here can frame a camera against it) rather than reading stale/reused boot-scoped body data.
-    private readonly WorldSeatInstanceRouter m_seatRouter;
+    // The continuum maps every routed authority pose into this frame. The ordinary seat viewport/camera path then
+    // treats a local and transferred traveler identically instead of creating an away-view presentation system.
+    private readonly WorldContinuum m_continuum;
     // The routed-definition registry supplies the structure half of each seat's live look policy while the
     // presentation clock integrates its latched stick Y. A traveling seat therefore uses the destination's clamp,
     // exactly like pointer drag and world.view.camera, rather than silently retaining the boot world's structure.
-    // The traveler-follow away-render pool (stage 1, item 5/6) — tracks a WorldSessionMirror/AwaySeatSceneEmitter/
-    // WorldSessionView per FOLLOWED INSTANCE (refcounted, never per seat), reconciled once per produced frame
-    // against the router's current away locations, and rendered alongside the jumbotron pool in RenderViews.
-    private readonly WorldAwaySeatViews m_awaySeatViews;
     // Every local seat's live camera-orbit yaw/pitch — armed and shaped per that seat's own control feel, composed
     // into the resolved orbit rig at ResolveCamera. WorldClient also reads yaw to rotate an authored world-frame
     // movement pair before submission. Pointer drag and the look stick share its one policy nudge door.
@@ -66,7 +61,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // mechanism this type carries; any other authored motion renders untouched, with no live composition at all):
     // rebuilt only when the authored orbit motion instance or that seat's composed yaw/pitch actually changed since
     // the last frame, so an unmoved drag on a stationary body costs no per-frame rig recompile — see
-    // WorldSeatCameraResolver.ResolveChase, the same shared path AwaySeatSceneEmitter reuses for a traveling seat.
+    // WorldSeatCameraResolver.ResolveChase, the single shared path every traveling seat uses.
     // Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
     private readonly WorldSimulation m_simulation;
     // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
@@ -90,6 +85,10 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     private readonly OverlayGizmoChip[][] m_gizmoChips = new OverlayGizmoChip[PlayerRoster.MaxSlots][];
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
+    private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
+    private readonly Quaternion[] m_lastSeatAnchorOrientation = new Quaternion[PlayerRoster.MaxSlots];
+    private readonly bool[] m_hasSeatAnchor = new bool[PlayerRoster.MaxSlots];
+    private readonly bool[] m_missingSeatAnchorNarrated = new bool[PlayerRoster.MaxSlots];
     // The per-seat viewport + camera publication (the cursor feed's unproject seam): republished every dressed
     // frame from the SAME resolved region/camera each seat view renders with.
     private readonly WorldSeatViewports m_viewports;
@@ -101,7 +100,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // The seat-chase smoothing gap: the authored WorldCameraRig.SmoothRate the current seat rig carries (0 = off,
     // the unsmoothed snap every shipped world used before this field existed) and, per slot, the previously resolved
     // eye/target the exponential ease lags toward — see WorldSeatCameraResolver.Smooth (the same shared ease
-    // AwaySeatSceneEmitter reuses for a traveling seat), which mirrors the "seed un-smoothed on first resolve, alpha
+    // every traveling seat reuses, which mirrors the "seed un-smoothed on first resolve, alpha
     // = 1 - e^(-rate * dt) after" shape WorldGroupAnchors already establishes for the establishing-shot centroid.
     // Presentation-only: never read by anything that feeds back into the sim. Rig-level (not motion-level): every
     // motion kind shares one smoothing knob, so Orbit/Static/Track ease too.
@@ -171,18 +170,14 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="sdfDocuments">The first-party puck.sdf.v1 document emitter (world.sdf.load composes into it) —
     /// configured here with the SAME probed floors and the reciprocal composed measurer, so a document load is
     /// checked against the live world definition exactly as a scene mutation is checked against the live document.</param>
-    /// <param name="seatRouter">The traveler-follow router (stage 1) — the per-seat roster-bookkeeping pass reads
-    /// it to exclude an away-routed seat from the local viewport layout.</param>
-    /// <param name="awaySeatViews">The traveler-follow away-render pool (stage 1) — reconciled once per produced
-    /// frame and rendered alongside the jumbotron pool.</param>
+    /// <param name="continuum">The shared authority-to-presentation-frame pose resolver.</param>
     /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldSeatInstanceRouter seatRouter, WorldAwaySeatViews awaySeatViews, IWorldAdjacencySource adjacencies) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, WorldSimulation simulation, WorldRenderSettings settings, WorldScreenBinder binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, WorldAudioDirector audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, IWorldAdjacencySource adjacencies) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
-        ArgumentNullException.ThrowIfNull(argument: seatRouter);
-        ArgumentNullException.ThrowIfNull(argument: awaySeatViews);
+        ArgumentNullException.ThrowIfNull(argument: continuum);
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
@@ -204,8 +199,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_composition = composition;
         m_composer = composer;
         m_gizmos = gizmos;
-        m_seatRouter = seatRouter;
-        m_awaySeatViews = awaySeatViews;
+        m_continuum = continuum;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_gizmoChips[slot] = [];
@@ -347,7 +341,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
-        m_awaySeatViews.NotifyDeviceLost();
     }
 
     /// <inheritdoc/>
@@ -382,9 +375,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // through a clock the host would have to query.
         m_emitter.AdvanceContentClock(seconds: m_elapsedSeconds);
         ReconcileDelivery();
-        // Traveler-follow stage 1: track/untrack away instances against the router's CURRENT locations before Dress
-        // resolves any periscope handle this frame — see WorldAwaySeatViews.Reconcile's own remarks.
-        m_awaySeatViews.Reconcile();
         return m_composed.CaptureFrame(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
     }
 
@@ -444,12 +434,9 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 m_audio.SubmitCue(eventToken: WorldAudioCue.SeatJoin, site: m_client.Position(index: m_anchor.PerceivedBody(slot: slot)));
             }
 
-            // TRAVELER-FOLLOW STAGE 1: a followed seat stays a roster participant while away (WorldInstanceHost.
-            // ApplyTransfer's commit loop skips VacateSeat for it — see that loop's own remarks), so m_roster.Seat
-            // above no longer excludes it the way an ordinary departure would — it keeps its own composed layout
-            // slot exactly like a boot-bound seat; the per-composed-slot loop below is what tells its region apart
-            // (periscope camera + away-view fill instead of the ordinary boot-scoped chase). The seat-join cue
-            // above still runs once on arrival/return either way.
+            // A transferred seat remains the same roster participant and keeps the same composed layout slot.
+            // The per-slot camera below resolves its routed body through WorldContinuum, so no presentation mode
+            // changes at the authority boundary.
             joinedRosterSlots[joinedRosterCount++] = slot;
         }
 
@@ -471,29 +458,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             var region = composed.Region;
 
             if (composed.Camera is { } cameraName) {
-                // A single followed traveler still owns the window's composition context. Its pixels come from the
-                // away render, so both its destination-authored default rig and a live camera override must show
-                // through the reserved periscope quad; resolving cameraName against m_client.Definition here would
-                // keep filming the boot scene after the crossing. Multi-seat camera slots remain process-global —
-                // there is no unique routed instance to choose when several seats occupy different worlds.
-                if (joinedRosterCount == 1) {
-                    var routedSlot = joinedRosterSlots[0];
-
-                    if (!string.Equals(a: m_seatRouter.Location(slot: routedSlot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
-                        var routedPixelWidth = (uint)(region.Width * width);
-                        var routedPixelHeight = (uint)(region.Height * height);
-                        var periscope = WorldAwaySeatQuad.PeriscopeCamera(slot: routedSlot, width: routedPixelWidth, height: routedPixelHeight);
-
-                        m_awaySeatViews.ReportSeatViewportSize(slot: routedSlot, width: routedPixelWidth, height: routedPixelHeight);
-                        m_views.Add(item: new SdfViewSnapshot(Camera: periscope, Region: region) {
-                            RenderScale = (m_settings.RenderScale * transitionScale),
-                            UpscaleSharpness = m_settings.UpscaleSharpness,
-                        });
-
-                        continue;
-                    }
-                }
-
                 // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
                 if (ResolveNamedCamera(name: cameraName, region: region, width: width, height: height, deltaSeconds: deltaSeconds, camera: out var namedCamera)) {
                     m_views.Add(item: new SdfViewSnapshot(Camera: namedCamera, Region: region) {
@@ -511,38 +475,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
 
             var slot = joinedRosterSlots[composed.SeatOrder];
-            var seatPixelWidth = (uint)(region.Width * width);
-            var seatPixelHeight = (uint)(region.Height * height);
-
-            // Keep the seat's composed extent warm while it is still boot-bound. A seamless crossing has no
-            // presentation-side arrival callback: the away projection must be able to allocate its first target
-            // from the preceding frame's exact viewport, before this frame reaches the routed branch below.
-            m_awaySeatViews.ReportSeatViewportSize(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
-
-            // TRAVELER-FOLLOW STAGE 1, item (c): an away-routed seat's region renders its own reserved periscope
-            // quad (WorldAwaySeatQuad) instead of the ordinary boot-scoped chase — the quad's bound screen source
-            // (WorldAwaySeatViews.ResolveHandle, merged into the engine's screen-source providers) fills it with
-            // the away view's last rendered image, the SAME textured-quad technique a jumbotron session screen
-            // composites with. No seat-camera-pose/gizmo/viewport-unproject publication for an away seat: none of
-            // those are meaningful against a periscope framing a flat quad rather than the room.
-            if (!string.Equals(a: m_seatRouter.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
-                var periscope = WorldAwaySeatQuad.PeriscopeCamera(slot: slot, width: seatPixelWidth, height: seatPixelHeight);
-
-                // This IS the one place the seat's actual composed viewport pixel size is known — hand it to the
-                // away-render pool so the followed instance's own offscreen render targets it instead of the fixed
-                // native brick-panel size (WorldSessionView.DefaultWidth/DefaultHeight) stretched over a viewport it
-                // was never sized for. WorldAwaySeatViews.ReconcileViewportSizes reads every seat's report once per
-                // produced frame and re-targets the SHARED render at the largest requesting seat's own size when two
-                // or more seats follow the same instance.
-                m_views.Add(item: new SdfViewSnapshot(Camera: periscope, Region: region) {
-                    RenderScale = (m_settings.RenderScale * transitionScale),
-                    UpscaleSharpness = m_settings.UpscaleSharpness,
-                });
-
-                continue;
-            }
-
-            var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, eye: out var eye, target: out var target);
+            var camera = ResolveCamera(slot: slot, region: region, width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha, eye: out var eye, target: out var target);
 
             // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
             // any lower tier renders that view's SDF at a reduced extent and upsamples. A layout transition dips it.
@@ -676,9 +609,6 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         }
 
         m_binder.RenderViews(context: in context, program: program, revision: m_programRevision, transforms: m_transforms, time: m_elapsedSeconds, authoritativeTick: m_simulation.Tick, hostFrame: hostFrame);
-        // The away-seat render pool, rendered the SAME way and at the SAME point the jumbotron pool is — before the
-        // screen-source provider poll, so a followed instance's periscope quad samples THIS frame's offscreen image.
-        m_awaySeatViews.RenderViews(context: in context, program: program, revision: m_programRevision, transforms: m_transforms, time: m_elapsedSeconds, authoritativeTick: m_simulation.Tick, hostFrame: hostFrame);
     }
 
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
@@ -822,26 +752,43 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, out Vector3 eye, out Vector3 target) {
-        var body = m_anchor.PerceivedBody(slot: slot);
-        var bodyOrientation = m_client.Orientation(index: body);
-        var views = m_client.Definition.Views;
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target) {
+        var route = m_continuum.Route(slot: slot);
+        var views = route.Endpoint.Definition.Views;
+
+        if (m_continuum.TryResolve(route: route, interpolationAlpha: interpolationAlpha, position: out var bodyPosition, orientation: out var bodyOrientation)) {
+            m_lastSeatAnchorPosition[slot] = bodyPosition;
+            m_lastSeatAnchorOrientation[slot] = bodyOrientation;
+            m_hasSeatAnchor[slot] = true;
+            m_missingSeatAnchorNarrated[slot] = false;
+        } else if (m_hasSeatAnchor[slot]) {
+            bodyPosition = m_lastSeatAnchorPosition[slot];
+            bodyOrientation = m_lastSeatAnchorOrientation[slot];
+
+            if (!m_missingSeatAnchorNarrated[slot]) {
+                m_missingSeatAnchorNarrated[slot] = true;
+                Console.Error.WriteLine(value: $"[world.continuum: seat {(slot + 1)} authority '{route.Endpoint.Identity}' has not delivered body:{route.EntityIndex}; holding the last continuous camera anchor]");
+            }
+        } else {
+            var fallbackBody = m_anchor.PerceivedBody(slot: slot);
+            bodyPosition = m_client.Position(index: fallbackBody);
+            bodyOrientation = m_client.Orientation(index: fallbackBody);
+        }
 
         // The one live-orbit mechanism: an authored Orbit seat rig feeds this seat's live pointer/stick offset into the
         // document's own orbit vocabulary (authored yaw/pitch + the live offset) via WorldSeatCameraResolver — the
-        // same shared path AwaySeatSceneEmitter reuses for a traveling seat, so a destination frames identically
+        // same shared path every traveling seat uses, so a destination frames identically
         // whether the seat sits at its boot or arrived through a portal. The merged seat-look's WorldAxes selects
         // what the composed yaw rides on top of — false (today's shipped default) adds the body's own yaw so the
         // orbit rides the body's heading (turn, and the camera swings with you); true drops it, an absolute orbit
         // independent of facing. WorldAxes is rig STRUCTURE (the boot world's own playerDefaults.seatLook, never a
-        // joined profile's — see WorldSeatCameraResolver.ResolveSeatLook), so it agrees with the away path's own
-        // structure-only read of a destination's WorldAxes. Any other authored motion renders through the plain
+        // joined profile's — see WorldSeatCameraResolver.ResolveSeatLook). Any other authored motion renders through the plain
         // compiled chase untouched. m_client.Orientation (the sim body orientation) is never written — everything
         // here is a local presentation-only derivation.
         var view = m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller");
         var chase = view.ResolveChase(views: views, bodyOrientation: bodyOrientation);
 
-        var anchor = new SdfAnchor(Position: m_client.Position(index: body), Orientation: bodyOrientation);
+        var anchor = new SdfAnchor(Position: bodyPosition, Orientation: bodyOrientation);
         var rig = m_editor.ResolveRig(slot: slot, chase: chase, anchor: in anchor, time: m_elapsedSeconds, deltaSeconds: deltaSeconds);
         var fieldOfView = 0f;
 
@@ -869,6 +816,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             viewportHeight: Math.Max(val1: 1u, val2: (uint)(region.Height * height))
         );
     }
+
 
     // Build the camera query from the same static scene layers the composed frame renders. The live program cannot
     // be queried directly because its avatar catalog carries TransformDynamic instructions; reconstructing only the

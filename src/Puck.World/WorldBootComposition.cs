@@ -70,21 +70,17 @@ internal static class WorldBootComposition {
         // CORE: the HUD binding resolver and player.where's anchor echo consume it in every boot shape;
         // presentation's frame source and scene emitter reach the same singleton.
         services.AddSingleton<WorldPerceptionAnchor>();
-        // The traveler-follow router (stage 1) — shaped identically to WorldPerceptionAnchor above: a small fixed
-        // presentation-side table, one writer (WorldInstanceHost.ApplyTransfer's commit loop), consumed by
+        // The seat authority router — a small fixed CAS table, one writer (WorldInstanceHost's transfer commit), consumed by
         // WorldClient's seat-submission doors, WorldFrameSource's per-seat loop, WorldHudBindingResolver, and
         // WorldAudioDirector's listener resolution.
-        services.AddSingleton<WorldSeatInstanceRouter>();
-        // The traveler-follow away-render pool (stage 1, items 5/6) — one offscreen render per followed instance,
-        // refcounted; see WorldAwaySeatViews' own remarks. Registered here (core) since ConfigureViews below is the
-        // only presentation-specific step and everything else about tracking is renderer-neutral.
-        services.AddSingleton<WorldAwaySeatViews>();
+        services.AddSingleton<WorldSeatAuthorityRouter>();
         services.AddSingleton<IInputSlotResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
         // The roster answers BOTH input seams: which slot a device belongs to, and who is acting through that slot.
         // The mixer stamps every captured entry from the second one, so a claimed slot's input carries the claimant's
         // identity.
         services.AddSingleton<ICommandPrincipalResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
         services.AddSingleton<ICommandModule, PlayerCommandModule>();
+        services.AddSingleton<ICommandModule, WorldSeatCameraCommandModule>();
         services.AddSingleton<ICommandModule, IdentityCommandModule>();
         services.AddSingleton<ICommandModule, ChatCommandModule>();
 
@@ -110,8 +106,7 @@ internal static class WorldBootComposition {
         // attached is simply never drained — harmless headless).
         services.AddSingleton(implementationFactory: static sp => new WorldAudioDirector(
             client: sp.GetRequiredService<WorldClient>(),
-            animator: sp.GetRequiredService<WorldStampPool>(),
-            seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>()
+            animator: sp.GetRequiredService<WorldStampPool>()
         ));
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
@@ -170,10 +165,9 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => {
             var client = new WorldClient(
                 roster: sp.GetRequiredService<PlayerRoster>(),
-                link: sp.GetRequiredService<IServerLink>(),
                 definition: sp.GetRequiredService<WorldDefinition>(),
                 composition: sp.GetRequiredService<WorldCompositionState>(),
-                seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>()
+                seatRouter: sp.GetRequiredService<WorldSeatAuthorityRouter>()
             );
 
             // The local client sink stays attached for the whole process lifetime, so its lease is deliberately never disposed.
@@ -379,8 +373,7 @@ internal static class WorldBootComposition {
             client: sp.GetRequiredService<WorldClient>(),
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             population: sp.GetRequiredService<WorldPopulation>(),
-            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
-            seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>()
+            continuum: sp.GetRequiredService<WorldContinuum>()
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
             server: sp.GetRequiredService<WorldServer>(),
@@ -433,6 +426,7 @@ internal static class WorldBootComposition {
         services.AddSingleton<WorldAdjacencyFields>(implementationFactory: static sp =>
             new WorldAdjacencyFields(instances: sp.GetRequiredService<WorldInstanceHost>(), sourceInstanceName: WorldInstanceHost.BootInstanceName));
         services.AddSingleton<IWorldAdjacencySource>(implementationFactory: static sp => sp.GetRequiredService<WorldAdjacencyFields>());
+        services.AddSingleton<WorldContinuum>();
 
         // Per-instance scheduling's own read-back + live pause/resume lever (docs/world-model.md Campaign 1 item 2)
         // — world.rate. Depends on WorldReplayTape (registered above) to tape a boot-instance pause/resume as an
@@ -845,8 +839,7 @@ internal static class WorldBootComposition {
                 composer: sp.GetRequiredService<WorldViewComposer>(),
                 sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
                 viewports: sp.GetRequiredService<WorldSeatViewports>(),
-                seatRouter: sp.GetRequiredService<WorldSeatInstanceRouter>(),
-                awaySeatViews: sp.GetRequiredService<WorldAwaySeatViews>(),
+                continuum: sp.GetRequiredService<WorldContinuum>(),
                 adjacencies: sp.GetRequiredService<IWorldAdjacencySource>()
             );
 
@@ -859,13 +852,6 @@ internal static class WorldBootComposition {
                 programWordCapacity: frameSource.ProgramWordCapacity,
                 instanceCapacity: frameSource.InstanceCapacity,
                 dynamicTransformCapacity: frameSource.DynamicTransformCapacity
-            );
-
-            // The traveler-follow away-render pool's own GPU registration — deferred the SAME way, for the SAME
-            // reason (the render envelope/GPU services are not known until here).
-            sp.GetRequiredService<WorldAwaySeatViews>().ConfigureViews(
-                services: viewGpuServices,
-                hostsOnDirectX: hostSettings.HostsOnDirectX
             );
 
             // Captured out of the Decorate closure so the probe can expose the overlay's pass timing (world.gpu).
@@ -944,12 +930,7 @@ internal static class WorldBootComposition {
                     // The diegetic screens' source + light providers — the test-pattern screen's CPU feed and its
                     // room glow; an unbound screen has no provider (the engine's procedural fallback lights it).
                     ScreenLights = binder.ScreenLights,
-                    // Disjoint index ranges by shared policy: WorldDefinitionValidator refuses authored/derived/
-                    // headroom overlap with WorldPlacementPolicy's away-seat band, so a plain concat is exact — the
-                    // traveler-follow away-render pool's own reserved screen sources, merged alongside the binder's.
-                    ScreenSources = binder.ScreenSources
-                        .Concat(second: sp.GetRequiredService<WorldAwaySeatViews>().ScreenSources)
-                        .ToDictionary(keySelector: static pair => pair.Key, elementSelector: static pair => pair.Value),
+                    ScreenSources = binder.ScreenSources,
                     ViewportCapacity = PlayerRoster.MaxSlots,
                 }
             );

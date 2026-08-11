@@ -26,7 +26,7 @@
                 "const": "catalog"
               },
               "index": {
-                "description": "The procedural renderer catalog rig to pin, or null for the index-derived pick.",
+                "description": "The procedural renderer catalog rig to pin, or null for the occupant-owned pick. A fresh occupant seeds that pick from its first local slot and carries it across authority transfers, so ordinary admission does not restyle it.",
                 "type": [
                   "integer",
                   "null"

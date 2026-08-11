@@ -16,11 +16,13 @@
       { "verb": "world.console", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.view.camera", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "player.fly", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.view.camera", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }

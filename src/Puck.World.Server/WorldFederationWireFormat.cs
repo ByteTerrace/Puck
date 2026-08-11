@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using System.Text.Json;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -14,7 +15,7 @@ public static class WorldFederationWireFormat {
     public const int MaxFrameBytes = (32 * 1024 * 1024);
 
     /// <summary>Federation request kinds.</summary>
-    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8, Route = 9 }
+    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8, Route = 9, IntentStream = 10, IntentStreamHandoff = 11 }
     /// <summary>Federation response/event kinds.</summary>
     public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7, Challenge = 8, Status = 9, Route = 10 }
 
@@ -35,20 +36,80 @@ public static class WorldFederationWireFormat {
         }
     }
 
-    /// <summary>Encodes the final observable authority route for one traveler.</summary>
-    public static byte[] EncodeRoute(string endpoint, int bodyIndex) {
+    /// <summary>Encodes the final observable authority epoch for one traveler.</summary>
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(endpoint); writer.Write(bodyIndex);
+        writer.Write(route.Endpoint);
+        writer.Write(route.Entity.Authority);
+        writer.Write(route.Entity.Index);
+        writer.Write(route.Entity.Generation);
+        writer.Write(route.Tick);
+        WriteFixedVector(writer: writer, value: route.Position);
+        writer.Write(route.Orientation.X.Value);
+        writer.Write(route.Orientation.Y.Value);
+        writer.Write(route.Orientation.Z.Value);
+        writer.Write(route.Orientation.W.Value);
+        WriteVector(writer: writer, value: route.BodyColor);
+        writer.Write(route.Kit);
+        writer.Write(route.Look);
+        writer.Write(route.CatalogRig);
+        writer.Write(route.PlacementId is not null);
+        if (route.PlacementId is { } placementId) {
+            writer.Write(placementId);
+        }
+        var definition = EncodeDefinition(definition: route.Definition);
+        writer.Write(definition.Length);
+        writer.Write(definition);
         return output.ToArray();
     }
 
-    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out string endpoint, out int bodyIndex) {
+    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            endpoint = reader.ReadString(); bodyIndex = reader.ReadInt32();
-            return !string.IsNullOrWhiteSpace(value: endpoint) && (bodyIndex >= 0) && (input.Position == input.Length);
-        } catch (Exception exception) when (exception is IOException or FormatException) {
-            endpoint = string.Empty; bodyIndex = -1; return false;
+            var endpoint = reader.ReadString();
+            var authority = reader.ReadString();
+            var bodyIndex = reader.ReadInt32();
+            var generation = reader.ReadInt32();
+            var tick = reader.ReadUInt64();
+            var position = ReadFixedVector(reader: reader);
+            var orientation = new FixedQuaternion(
+                X: new FixedQ4816(reader.ReadInt64()),
+                Y: new FixedQ4816(reader.ReadInt64()),
+                Z: new FixedQ4816(reader.ReadInt64()),
+                W: new FixedQ4816(reader.ReadInt64()));
+            var bodyColor = ReadVector(reader: reader);
+            var kit = reader.ReadByte();
+            var look = reader.ReadByte();
+            var catalogRig = reader.ReadByte();
+            var placementId = (reader.ReadBoolean() ? reader.ReadString() : null);
+            var definitionLength = reader.ReadInt32();
+            if ((definitionLength <= 0) || (definitionLength > MaxFrameBytes)) {
+                throw new FormatException();
+            }
+            var definitionBytes = reader.ReadBytes(definitionLength);
+            if (definitionBytes.Length != definitionLength) {
+                throw new FormatException();
+            }
+            var definition = DecodeDefinition(body: definitionBytes);
+            route = new WorldAuthorityRouteDescription(
+                Endpoint: endpoint,
+                Entity: new WorldEntityAddress(Authority: authority, Index: bodyIndex, Generation: generation),
+                Tick: tick,
+                Position: position,
+                Orientation: orientation,
+                BodyColor: bodyColor,
+                Kit: kit,
+                Look: look,
+                CatalogRig: catalogRig,
+                PlacementId: placementId,
+                Definition: definition);
+            return !string.IsNullOrWhiteSpace(value: endpoint) && !string.IsNullOrWhiteSpace(value: authority) &&
+                ((uint)bodyIndex < (uint)WorldPopulationLimits.CapacityCeiling) && (generation >= 0) &&
+                ((uint)kit < (uint)definition.Kits.Count) && (look < Math.Max(val1: definition.Looks.Count, val2: 1)) &&
+                (catalogRig < WorldLookSource.Catalog.RigCount) &&
+                float.IsFinite(bodyColor.X) && float.IsFinite(bodyColor.Y) && float.IsFinite(bodyColor.Z) && (input.Position == input.Length);
+        } catch (Exception exception) when (exception is IOException or FormatException or JsonException or ArgumentException) {
+            route = default; return false;
         }
     }
 
@@ -128,6 +189,7 @@ public static class WorldFederationWireFormat {
             writer.Write(member.PreferredSlot);
             WriteIntentSource(writer: writer, source: member.Source);
             WriteVector(writer: writer, value: member.BodyColor);
+            writer.Write(member.CatalogRig);
             var document = member.Identity?.Document;
             var identityBytes = (document is null ? [] : WorldDefinitionSerialization.Serialize(definition: document));
             writer.Write(identityBytes.Length);
@@ -165,6 +227,7 @@ public static class WorldFederationWireFormat {
                 if (!float.IsFinite(bodyColor.X) || !float.IsFinite(bodyColor.Y) || !float.IsFinite(bodyColor.Z)) {
                     throw new FormatException($"traveler {index + 1} body color is not finite");
                 }
+                var catalogRig = reader.ReadByte();
                 var byteCount = reader.ReadInt32();
                 if ((byteCount < 0) || (byteCount > (16 * 1024 * 1024))) {
                     throw new FormatException($"traveler {index + 1} identity document length {byteCount} is invalid");
@@ -178,7 +241,7 @@ public static class WorldFederationWireFormat {
                     var definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
                     identity = new WorldIdentity(document: definition, defaults: defaults);
                 }
-                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor);
+                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor, CatalogRig: catalogRig);
             }
 
             if (input.Position != input.Length) {
@@ -278,7 +341,7 @@ public static class WorldFederationWireFormat {
         writer.Write(snapshot.Tick); writer.Write(snapshot.Revision); writer.Write(snapshot.StepTicks); writer.Write(snapshot.Authority); writer.Write(snapshot.Entries.Length);
         foreach (var entry in snapshot.Entries.Span) {
             writer.Write(entry.Index); WriteVector(writer, entry.Position); WriteQuaternion(writer, entry.Orientation); WriteVector(writer, entry.BodyColor);
-            writer.Write(entry.Active); writer.Write(entry.Kit); writer.Write(entry.Look); writer.Write((byte)entry.Continuity.Kind); writer.Write(entry.Continuity.Seconds); writer.Write(entry.Generation);
+            writer.Write(entry.Active); writer.Write(entry.Kit); writer.Write(entry.Look); writer.Write(entry.CatalogRig); writer.Write((byte)entry.Continuity.Kind); writer.Write(entry.Continuity.Seconds); writer.Write(entry.Generation);
             writer.Write(entry.PlacementId is not null);
             if (entry.PlacementId is { } placementId) {
                 writer.Write(placementId);
@@ -292,7 +355,10 @@ public static class WorldFederationWireFormat {
         using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
         var tick = reader.ReadUInt64(); var revision = reader.ReadInt32(); var stepTicks = reader.ReadUInt64(); var authority = reader.ReadString(); var count = reader.ReadInt32(); var entries = new EntitySnapshot[count];
         for (var i = 0; i < count; i++) {
-            entries[i] = new EntitySnapshot(reader.ReadInt32(), ReadVector(reader), ReadQuaternion(reader), ReadVector(reader), reader.ReadBoolean(), reader.ReadByte(), reader.ReadByte(), new EntityContinuity((EntityContinuityKind)reader.ReadByte(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadBoolean() ? reader.ReadString() : null);
+            entries[i] = new EntitySnapshot(reader.ReadInt32(), ReadVector(reader), ReadQuaternion(reader), ReadVector(reader), reader.ReadBoolean(), reader.ReadByte(), reader.ReadByte(), reader.ReadByte(), new EntityContinuity((EntityContinuityKind)reader.ReadByte(), reader.ReadSingle()), reader.ReadInt32(), reader.ReadBoolean() ? reader.ReadString() : null);
+            if (entries[i].CatalogRig >= WorldLookSource.Catalog.RigCount) {
+                throw new FormatException(message: $"snapshot entity {entries[i].Index} catalog rig {entries[i].CatalogRig} is outside 0..{WorldLookSource.Catalog.RigCount - 1}");
+            }
         }
         return new WorldSnapshot(tick, revision, stepTicks, entries, authority);
     }

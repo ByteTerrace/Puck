@@ -4,9 +4,9 @@ using Puck.World.Server;
 
 namespace Puck.World.Client;
 
-/// <summary>Builds the candidate-aware worst-case program shared by session-screen and away-seat renderers. The
+/// <summary>Builds the candidate-aware worst-case program used by session-screen renderers. The
 /// placement rows come from the candidate definition while avatar colors come from the live mirror; every catalog
-/// avatar/rig is emitted, matching both renderers' construction probe.</summary>
+/// avatar/rig is emitted, matching the renderer's construction probe.</summary>
 internal static class WorldSessionRenderEnvelope {
     // (See WorldSessionWindowLeases below for the WINDOW projection's own render-cost lease — a distinct concern
     // from this type's program-capacity measurement, kept in the same file because both answer "what does this
@@ -84,12 +84,6 @@ internal static class WorldSessionRenderEnvelope {
         foreach (var face in facets.Faces) {
             _ = used.Add(item: face.Index);
             WorldScreenStamper.Emit(builder: builder, screen: face);
-        }
-
-        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            if (WorldAwaySeatQuad.IsReservedIndex(index: index)) {
-                _ = used.Add(item: index);
-            }
         }
 
         var reserved = 0;

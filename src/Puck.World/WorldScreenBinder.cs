@@ -1727,7 +1727,7 @@ internal sealed class WorldScreenBinder : IDisposable {
 
         // The destination instance's own render envelope is not configured for a jumbotron session by default — an
         // unconfigured envelope admits any document mutation regardless of capacity. Configuring it here closes
-        // that gap the same way WorldAwaySeatViews does for an away-seat view. The candidate-aware emitter
+        // that gap for ordinary authored session screens. The candidate-aware emitter
         // measurement is load-bearing: returning the construction capacity for every candidate would make
         // WorldRenderEnvelope compare the ceiling to itself and admit every mutation.
         if (m_instanceHost.TryGet(name: feed.InstanceName, instance: out var destination) && (destination is not null)) {

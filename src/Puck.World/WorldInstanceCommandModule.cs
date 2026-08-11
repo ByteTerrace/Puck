@@ -32,9 +32,9 @@ namespace Puck.World;
 /// itself (already reachable per-instance, exactly as the instance-targeted player verbs reach it), but wiring a live
 /// socket connection to address anything but the boot instance is unbuilt. See
 /// <c>src/Puck.World.Server/WorldTcpHost.cs</c> for where that door lives today.</para></remarks>
-internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Client.WorldSeatInstanceRouter seatRouter) : ICommandModule {
+internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     private readonly WorldInstanceHost m_instances = instances;
-    private readonly Client.WorldSeatInstanceRouter m_seatRouter = seatRouter;
+    private readonly Client.WorldSeatAuthorityRouter m_seatRouter = seatRouter;
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -106,15 +106,15 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view",
-            description: "Reads back the traveler-follow router (stage 1): which instance (and instance-local seat) EVERY local seat currently presents from (world.view) or one seat by number (world.view <n>, 1-based) — <instance>:<slot> per seat, slot 1-based like every other seat echo. A seat presenting from boot reads 'boot:<n>' at boot, the same number it would show before any transfer; a followed seat crossing to another instance reads that instance's own name and its own local seat there. Immediate. A decision this router makes and nothing else could echo.",
+            description: "Reads each local seat's immutable authority claim: world.view [seat] echoes <authority>:<entity>@<epoch>. Boot begins at boot:<seat>@1; every committed handoff publishes a whole new claim by CAS. Immediate.",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     var parts = new string[WorldSeatBindings.SeatCount];
 
                     for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-                        var location = m_seatRouter.Location(slot: slot);
+                        var location = m_seatRouter.Route(slot: slot);
 
-                        parts[slot] = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(slot + 1)}={location.InstanceName}:{(location.InstanceSlot + 1)}");
+                        parts[slot] = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(slot + 1)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}");
                     }
 
                     return new CommandResult(Output: $"[world.view: {string.Join(separator: " ", values: parts)}]");
@@ -128,9 +128,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: $"[world.view: expected a seat number 1..{WorldSeatBindings.SeatCount}]");
                 }
 
-                var seatLocation = m_seatRouter.Location(slot: (seat - 1));
+                var seatLocation = m_seatRouter.Route(slot: (seat - 1));
 
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.view {seat}: {seatLocation.InstanceName}:{(seatLocation.InstanceSlot + 1)}]"));
+                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.view {seat}: {seatLocation.Endpoint.Identity}:{(seatLocation.EntityIndex + 1)}@{seatLocation.Epoch}]"));
             },
             routing: CommandRouting.Immediate
         );

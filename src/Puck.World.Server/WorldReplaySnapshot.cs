@@ -1323,6 +1323,7 @@ public sealed class WorldReplaySnapshot {
             writer.Write(value: entry.IdentityDomain);
             writer.Write(value: entry.IdentitySubject);
             writer.Write(value: entry.AuthorityTransferred);
+            writer.Write(value: entry.CatalogRig);
             writer.Write(value: entry.PlacementId is not null);
             if (entry.PlacementId is { } placementId) {
                 writer.Write(value: placementId);
@@ -1348,13 +1349,18 @@ public sealed class WorldReplaySnapshot {
             var identityDomain = reader.ReadString();
             var identitySubject = reader.ReadString();
             var authorityTransferred = reader.ReadBoolean();
+            var catalogRig = reader.ReadByte();
             var placementId = (reader.ReadBoolean() ? reader.ReadString() : null);
+
+            if (catalogRig >= WorldLookSource.Catalog.RigCount) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: catalog rig {catalogRig} is outside 0..{WorldLookSource.Catalog.RigCount - 1}.");
+            }
 
             if ((identity.Kind != PrincipalKind.Peer) || (identity.Index != bodyIndex) || (identity.Generation != generation)) {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: identity {identity.Describe()} does not match body {bodyIndex}, generation {generation}.");
             }
 
-            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity, IdentityDomain: identityDomain, IdentitySubject: identitySubject, AuthorityTransferred: authorityTransferred, PlacementId: placementId));
+            entries.Add(item: new WorldPeerEventEntry(BodyIndex: bodyIndex, Generation: generation, Source: source, Identity: identity, IdentityDomain: identityDomain, IdentitySubject: identitySubject, AuthorityTransferred: authorityTransferred, PlacementId: placementId, CatalogRig: catalogRig));
         }
 
         var grantCount = ReadCount(reader: reader, minimumBytesEach: 5, what: "peer event grant");

@@ -55,6 +55,8 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// who is driving it).</param>
 /// <param name="Look">The entity's LOOK row index into the server-delivered definition's look table (drives the
 /// client's appearance resolution — catalog rig vs. creation stamp — PRESENTATION-ONLY, never who is driving it).</param>
+/// <param name="CatalogRig">The entity-owned procedural catalog rig. An explicit authored catalog look overrides it;
+/// an implicit catalog look reads it, so changing authority slots cannot silently change the entity's shape.</param>
 /// <param name="Continuity">How the pose changed across this tick — the client's interpolate/snap/ease hint.</param>
 /// <param name="Generation">The slot activation generation, paired with the snapshot authority and
 /// <paramref name="Index"/> to form a durable <see cref="WorldEntityAddress"/>.</param>
@@ -69,6 +71,7 @@ public readonly record struct EntitySnapshot(
     bool Active,
     byte Kit,
     byte Look,
+    byte CatalogRig,
     EntityContinuity Continuity,
     int Generation = 0,
     string? PlacementId = null

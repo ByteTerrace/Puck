@@ -1076,6 +1076,26 @@ public sealed class WorldBody {
         m_continuity = EntityContinuity.Teleport;
     }
 
+    /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport.</summary>
+    internal void ApplyDynamicContact(FixedVector3 correction) {
+        if (correction == FixedVector3.Zero) {
+            return;
+        }
+
+        m_position += correction;
+        var normal = correction.Normalize();
+        var velocity = (m_planarVelocity + (s_unitY * m_verticalVelocity));
+        var inward = FixedVector3.Dot(left: velocity, right: normal);
+        if (inward < FixedQ4816.Zero) {
+            velocity -= (normal * inward);
+            m_planarVelocity = new FixedVector3(X: velocity.X, Y: FixedQ4816.Zero, Z: velocity.Z);
+            if (m_verticalVelocity != velocity.Y) {
+                m_verticalVelocity = velocity.Y;
+                m_verticalVelocityAccumulator.Reset();
+            }
+        }
+    }
+
     /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/world-model.md's
     /// "In-flight state at transfer" names ("drop and re-derive what the engine can recompute; carry what the player
     /// can perceive") applied to a same-process transfer's abort/restore path
@@ -2238,7 +2258,9 @@ public sealed class WorldBody {
     private void ResolveProgramContacts(ref BodyMotionScratch scratch) {
         if ((m_contactField is { } field) && (m_collider is { } collider)) {
             var resolvedVelocity = scratch.Velocity;
-            var contactResolution = field.Resolve(position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes);
+            var contactResolution = ((field is IEntityContactField entityField)
+                ? entityField.ResolveEntity(entityIndex: scratch.EntityIndex, position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes)
+                : field.Resolve(position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes));
 
             m_grounded = contactResolution.Grounded;
             m_lastContactCount = (m_grounded ? 1 : 0);

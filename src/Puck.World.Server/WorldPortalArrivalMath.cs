@@ -58,13 +58,10 @@ public static class WorldPortalArrivalMath {
     // The world-up rotation axis every portal frame rotates about — no pitch/roll ever enters this computation (the
     // same grounded, yaw-only convention WorldInstanceHost.ScanPortalFace and WorldPopulation.ActivateSeat's own
     // spawn pose already assume for a placement's authored transform).
-    private static readonly FixedVector3 s_upAxis = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
     // The 180° flip folded into every mapped crossing — see this type's own remarks for why walking OUT of the
     // source face must walk IN through the destination face. A fixed-point constant, computed once via the SAME
     // FromDouble(degrees * pi/180) boundary every other authored yaw in this engine crosses through
     // (WorldPlacementAttachment.TryResolve, WorldPopulation's own spawn-pose conversion).
-    private static readonly FixedQ4816 s_flipRadians = FixedQ4816.FromDouble(value: Math.PI);
-    private static readonly FixedQ4816 s_fullTurnRadians = (s_flipRadians + s_flipRadians);
 
     /// <summary>Returns the destination frame point corresponding to a source crossing coordinate. The isometry's
     /// 180-degree flip reverses the horizontal face axis, so <paramref name="seamU"/> changes sign while vertical
@@ -106,22 +103,10 @@ public static class WorldPortalArrivalMath {
         FixedVector3 destinationPosition,
         FixedQ4816 destinationYawRadians
     ) {
-        var deltaYaw = ((destinationYawRadians - sourceYawRadians) + s_flipRadians);
-        // Atan2-derived opposite cardinal headings can express one full turn one raw unit away from twice the
-        // independently rounded pi constant. Both are the same rotation; treating that one-unit representation gap
-        // as a real turn injects motion into an authored identity mapping.
-        var identityRotation = (Math.Abs(deltaYaw.Value) <= 1L) ||
-            (Math.Abs(deltaYaw.Value - s_fullTurnRadians.Value) <= 1L) ||
-            (Math.Abs(deltaYaw.Value + s_fullTurnRadians.Value) <= 1L);
+        var deltaYaw = WorldFrameIsometry.RotationDelta(sourceYaw: sourceYawRadians, destinationYaw: destinationYawRadians);
         var relativePosition = (travelerPosition - sourcePosition);
-        var offset = relativePosition;
-        var planarVelocity = travelerPlanarVelocity;
-
-        if (!identityRotation) {
-            var rotation = FixedQuaternion.FromAxisAngle(axis: s_upAxis, angle: deltaYaw);
-            offset = rotation.Rotate(vector: relativePosition);
-            planarVelocity = rotation.Rotate(vector: travelerPlanarVelocity);
-        }
+        var offset = WorldFrameIsometry.Rotate(value: relativePosition, deltaYaw: deltaYaw);
+        var planarVelocity = WorldFrameIsometry.Rotate(value: travelerPlanarVelocity, deltaYaw: deltaYaw);
 
         return new Arrival(
             Position: (destinationPosition + offset),

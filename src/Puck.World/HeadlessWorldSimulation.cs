@@ -5,8 +5,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The headless fixed-step shell (<c>host.presentation: none</c>) — the authoritative <see cref="WorldServer"/> alone,
-/// WITHOUT <c>Puck.World.Client.WorldClient</c>, screens, or the editor session. It shares
+/// The headless fixed-step shell (<c>host.presentation: none</c>) — the authoritative <see cref="WorldServer"/> plus
+/// the same seat/authority input lifecycle as the presented host, but without screens or the editor session. It shares
 /// <see cref="WorldServerStepShell"/> with the windowed <see cref="WorldSimulation"/> so tape/wait-gate semantics can
 /// never fork by boot shape — the same server-side step, driven by the same
 /// <c>Puck.Launcher.FixedStepPump</c> (snapshot → apply → step, in that exact order) either shape uses.
@@ -29,10 +29,17 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
 
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
+        var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
+
+        // View-relative controls are client-side simulation composition, not rendering. The shared host lifecycle
+        // keeps a headless authority equivalent to the presented shape for the same command snapshot.
+        m_instances.PrepareBootSeatIntents(stepsBoot: stepsBoot, tick: (Tick + 1UL), stepTicks: context.StepTicks);
+
         // Same fixed point as the windowed shape (WorldSimulation.Step) — see its own remarks: drain BEFORE any
         // instance steps this tick (a transfer drained here was enqueued by a per-step portal scan during the
         // PREVIOUS master call), so a transfer lands and is advanced exactly once, this same tick.
         m_instances.DrainPendingTransfers();
+        m_instances.SubmitExternallyClockedSeatIntents();
 
         // See WorldSimulation.Step's identical gate for the full remarks: boot steps by the same pause/rate-0 rule
         // as every other instance, trivially due almost always; when it is not, the tape/wait-gate/socket
@@ -40,7 +47,6 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
         // mutation apply. The portal scan for boot runs immediately after its own step, never when it did not step
         // at all. context.StepTicks is threaded in so ShouldStepBoot can refuse a call whose pump-supplied width no
         // longer matches boot's current rate.
-        var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
         var stepTick = Tick;
 
         if (stepsBoot) {
@@ -77,5 +83,6 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
         // schedule — folded into the SAME fixed-step call rather than a second pump (see WorldInstanceHost's own
         // remarks). masterDeltaTicks is the host's own per-call engine-time advance, never a second clock.
         m_instances.StepInstancesBesideBoot(masterDeltaTicks: context.StepTicks);
+        m_instances.FinishSeatIntents();
     }
 }

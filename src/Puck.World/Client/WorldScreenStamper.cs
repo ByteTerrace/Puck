@@ -4,7 +4,7 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>Turns one authored or derived <see cref="WorldScreen"/> row into the sampled slab geometry shared by
-/// the boot scene and traveler-follow scenes.</summary>
+/// every continuum-composed scene.</summary>
 internal static class WorldScreenStamper {
     /// <summary>Emits one sampled screen slab at its authored world-space frame.</summary>
     public static void Emit(SdfProgramBuilder builder, WorldScreen screen) {

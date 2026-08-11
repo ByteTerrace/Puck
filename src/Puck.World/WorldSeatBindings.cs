@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -80,7 +79,7 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
         m_channels = new WorldChannelTable[SeatCount];
 
-        // Every seat is boot-routed until it first crosses (WorldSeatInstanceRouter's own boot-seeded default), so
+        // Every seat's authority claim begins at boot, so
         // every seat seeds from the SAME boot overlays/channels here — SyncSeat is what lets them diverge later.
         var bootOverlays = (definition.BindingOverlays ?? []);
         var bootChannels = definition.Channels;
@@ -365,7 +364,7 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     }
 
     /// <summary>Reflects seat <paramref name="slot"/>'s currently routed definition: a seat's binding pages, wheels,
-    /// and channel vocabulary compose from whichever world its <see cref="WorldSeatInstanceRouter"/> route currently
+    /// and channel vocabulary compose from whichever world its <see cref="Client.WorldSeatAuthorityRouter"/> route currently
     /// frames it from, never a single world every seat shares. The caller resolves that document once (see
     /// <see cref="WorldInstanceHost.ResolveRoutedDefinition"/>, the same source <see cref="WorldSeatViewInput"/>
     /// already reads for the pitch clamp) and hands it here — this type carries no instance-registry reference of its

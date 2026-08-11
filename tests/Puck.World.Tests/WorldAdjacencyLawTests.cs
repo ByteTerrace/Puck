@@ -78,6 +78,39 @@ public sealed class WorldAdjacencyLawTests {
     }
 
     [Fact]
+    public void ValidatorRefusesACornerWhoseTwoTransformPathsDisagree() {
+        var (source, left, right, corner) = Corner();
+        var shiftedCorner = corner with {
+            Adjacencies = [
+                corner.Adjacencies![0],
+                corner.Adjacencies[1] with {
+                    Boundary = corner.Adjacencies[1]!.Boundary with { Center = new Vector3(x: 0.25f, y: 0f, z: 0f) },
+                },
+            ],
+        };
+        var resolver = new Resolver(new Dictionary<string, WorldDefinition> {
+            ["left.world.json"] = left,
+            ["right.world.json"] = right,
+            ["corner.world.json"] = shiftedCorner,
+        });
+
+        Assert.False(WorldDefinitionValidator.TryValidate(source, out var refused, resolver));
+        Assert.Contains("does not close its transform diamond", refused, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnavailableBindingMustNameADeclaredChannel() {
+        var (west, east) = Pair();
+        west = west with {
+            Adjacencies = [west.Adjacencies![0] with { OnUnavailable = "missing-channel" }],
+        };
+        var resolver = new Resolver(new Dictionary<string, WorldDefinition> { ["east.world.json"] = east, ["west.world.json"] = west });
+
+        Assert.False(WorldDefinitionValidator.TryValidate(west, out var refused, resolver));
+        Assert.Contains("onUnavailable 'missing-channel' names no declared channel", refused, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FederatedEntityAddressesUseTheDeclaredAuthorityNamespace() {
         const string endpoint = "127.0.0.1:38601";
         var definition = Fixtures.BuildDocument() with { Host = Fixtures.BuildDocument().Host with { Authority = endpoint } };

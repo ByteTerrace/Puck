@@ -4,12 +4,13 @@ using Puck.SdfVm.Queries;
 
 namespace Puck.World.Client;
 
-/// <summary>Keeps a chase eye and its sightline out of rendered static geometry while preserving the authored
-/// target and orbit radius.</summary>
+/// <summary>Keeps a chase eye and its sightline out of rendered static geometry without changing the authored
+/// azimuth or elevation. Obstruction may shorten the camera boom; only explicit look input may steer it.</summary>
 internal static class WorldCameraClearance {
     private static readonly FixedQ4816 EyeRadius = FixedQ4816.FromDouble(value: 0.3);
     private static readonly FixedQ4816 TargetSkin = FixedQ4816.FromDouble(value: 0.15);
     private static readonly FixedQ4816 ObstructedTargetSkin = FixedQ4816.FromDouble(value: 1.1);
+    private static readonly FixedQ4816 RetractionSkin = FixedQ4816.FromDouble(value: 0.05);
 
     public static Vector3 Resolve(SdfFieldEvaluator? field, Vector3 desiredEye, Vector3 target) {
         if (field is null) {
@@ -23,26 +24,36 @@ internal static class WorldCameraClearance {
             return desiredEye;
         }
 
-        var offset = (desiredEye - target);
-        ReadOnlySpan<float> turns = (targetObstructed
-            ? [(MathF.PI / 4f), (-MathF.PI / 4f), (MathF.PI / 2f), (-MathF.PI / 2f), (3f * MathF.PI / 4f), (-3f * MathF.PI / 4f), MathF.PI]
-            : [(MathF.PI / 4f), (-MathF.PI / 4f), (MathF.PI / 2f), (-MathF.PI / 2f), (3f * MathF.PI / 4f), (-3f * MathF.PI / 4f), MathF.PI]);
-
-        foreach (var turn in turns) {
-            var candidate = (target + Vector3.Transform(value: offset, rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: turn)));
-
-            // A portal frame can legitimately surround the arrival pivot itself. In that case every sightline
-            // marched all the way to the pivot reports the same frame as a hit, even though an orbit around it can
-            // frame the body cleanly. Ignore only the target-local shell while choosing a new eye; the eye and the
-            // rest of the sightline still use the normal body-sized clearance.
-            var targetSkin = (targetObstructed ? ObstructedTargetSkin : TargetSkin);
-
-            if (IsClear(field: field, eye: candidate, target: target, targetSkin: targetSkin)) {
-                return candidate;
-            }
+        var offset = FixedVector3.FromVector3(value: (desiredEye - target));
+        var boomLength = offset.Length;
+        if (boomLength <= FixedQ4816.Zero) {
+            return desiredEye;
         }
 
-        return desiredEye;
+        // Sweep OUT from the target along the authored boom. A target-local portal frame can surround the pivot;
+        // skip only that already-known shell, exactly as the old sightline check did. Crucially, no fallback rotates
+        // the boom: collision is allowed to change distance, never yaw or pitch.
+        var targetSkin = (targetObstructed ? ObstructedTargetSkin : TargetSkin);
+        if (targetSkin >= boomLength) {
+            return desiredEye;
+        }
+
+        var direction = offset.Normalize();
+        var sweepOrigin = (fixedTarget + (direction * targetSkin));
+        if (field.Overlap(center: sweepOrigin, radius: EyeRadius)) {
+            // There is no same-ray clearance answer outside the ignored target shell. Preserve the authored camera
+            // instead of inventing a steering input; the renderer may clip, but the player's orientation cannot jump.
+            return desiredEye;
+        }
+
+        var sweepLength = (boomLength - targetSkin);
+        if (!field.SphereCast(origin: sweepOrigin, dir: direction, radius: EyeRadius, maxDist: sweepLength, hit: out var hit)) {
+            return desiredEye;
+        }
+
+        var clearTravel = FixedQ4816.Max(x: FixedQ4816.Zero, y: (hit.Distance - RetractionSkin));
+        var retracted = (fixedTarget + (direction * (targetSkin + clearTravel)));
+        return retracted.Local.ToVector3();
     }
 
     private static bool IsClear(SdfFieldEvaluator field, Vector3 eye, Vector3 target, FixedQ4816 targetSkin) {

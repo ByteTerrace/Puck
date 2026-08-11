@@ -20,7 +20,7 @@ namespace Puck.World.Server;
 /// falls inside one, so a world whose own geometry already reaches the border pays nothing extra and behaves
 /// identically to a world with no adjacency at all.</para>
 /// </remarks>
-internal sealed class WorldAdjacencyContactField : IContactField {
+internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private static readonly FixedVector3 s_upAxis = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
 
     private readonly IContactField m_inner;
@@ -53,9 +53,18 @@ internal sealed class WorldAdjacencyContactField : IContactField {
 
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        return ResolveCore(entityIndex: -1, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+    }
+
+    /// <inheritdoc/>
+    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        return ResolveCore(entityIndex: entityIndex, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+    }
+
+    private ContactResolution ResolveCore(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
         var resolution = m_inner.Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
 
-        if (resolution.Grounded || (m_bands.Count == 0)) {
+        if (m_bands.Count == 0) {
             return resolution;
         }
 
@@ -63,10 +72,6 @@ internal sealed class WorldAdjacencyContactField : IContactField {
             if (!m_source.TryResolve(adjacencyName: band.Name, neighbour: out var neighbour) || (neighbour is null) ||
                 !WorldAdjacencyPolicy.TryDeriveOverlap(local: m_definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _) ||
                 !band.Contains(position: position, depth: depth)) {
-                continue;
-            }
-
-            if (!neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) || (neighbourField is null)) {
                 continue;
             }
 
@@ -88,9 +93,41 @@ internal sealed class WorldAdjacencyContactField : IContactField {
             var neighbourVelocity = new FixedVector3(X: toNeighbour.PlanarVelocity.X, Y: toNeighbour.VerticalVelocity, Z: toNeighbour.PlanarVelocity.Z);
             var neighbourOrientation = (deltaRotation * orientation).Normalize();
 
-            var neighbourResolution = neighbourField.Resolve(position: ref neighbourPosition, velocity: ref neighbourVelocity, orientation: in neighbourOrientation, volumes: volumes);
+            var dynamicObstruction = FixedVector3.Zero;
+            var localAddress = ((entityIndex >= 0) ? m_source.LocalEntityAddress(index: entityIndex) : default);
+            for (var entity = 0; entity < neighbour.EntityCapacity; entity++) {
+                if (!neighbour.IsEntityActive(index: entity) || (neighbour.Collider(index: entity) is not { } neighbourCollider) ||
+                    (entityIndex < 0) || !WorldCrossAuthoritySettlement.LocalResponds(local: in localAddress, remote: neighbour.EntityAddress(index: entity), interaction: "physical-contact")) {
+                    continue;
+                }
 
-            if (!neighbourResolution.Grounded && (neighbourResolution.ObstructionNormal == FixedVector3.Zero)) {
+                if (!WorldDynamicBodyContacts.TryCorrection(
+                    leftPosition: neighbourPosition,
+                    leftOrientation: neighbourOrientation,
+                    leftVolumes: volumes,
+                    rightPosition: FixedVector3.FromVector3(value: neighbour.CurrentPosition(index: entity)),
+                    rightOrientation: FixedQuaternion.FromQuaternion(value: neighbour.CurrentOrientation(index: entity)).Normalize(),
+                    rightCollider: in neighbourCollider,
+                    tieBreaker: entity,
+                    correction: out var correction)) {
+                    continue;
+                }
+
+                neighbourPosition += correction;
+                var normal = correction.Normalize();
+                var inward = FixedVector3.Dot(left: neighbourVelocity, right: normal);
+                if (inward < FixedQ4816.Zero) {
+                    neighbourVelocity -= (normal * inward);
+                }
+                dynamicObstruction = normal;
+            }
+
+            var neighbourResolution = default(ContactResolution);
+            if (!resolution.Grounded && neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) && (neighbourField is not null)) {
+                neighbourResolution = neighbourField.Resolve(position: ref neighbourPosition, velocity: ref neighbourVelocity, orientation: in neighbourOrientation, volumes: volumes);
+            }
+
+            if ((dynamicObstruction == FixedVector3.Zero) && !neighbourResolution.Grounded && (neighbourResolution.ObstructionNormal == FixedVector3.Zero)) {
                 // Nothing on the neighbour's side either — try the next band (a body straddling a corner post could
                 // sit inside two bands' extents at once) rather than committing an inert round trip.
                 continue;
@@ -112,12 +149,16 @@ internal sealed class WorldAdjacencyContactField : IContactField {
             position = back.Position;
             velocity = new FixedVector3(X: back.PlanarVelocity.X, Y: back.VerticalVelocity, Z: back.PlanarVelocity.Z);
 
+            var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
+                ? neighbourResolution.ObstructionNormal
+                : dynamicObstruction);
             return new ContactResolution(
-                Grounded: neighbourResolution.Grounded,
-                ObstructionNormal: (neighbourResolution.Grounded ? FixedVector3.Zero : backRotation.Rotate(vector: neighbourResolution.ObstructionNormal))
+                Grounded: (resolution.Grounded || neighbourResolution.Grounded),
+                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero) ? resolution.ObstructionNormal : backRotation.Rotate(vector: neighbourObstruction))
             );
         }
 
         return resolution;
     }
+
 }

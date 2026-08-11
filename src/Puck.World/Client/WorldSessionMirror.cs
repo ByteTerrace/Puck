@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Hosting;
+using Puck.World.Server;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -51,16 +52,34 @@ internal sealed class WorldSessionMirror : IClientSink {
     private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
+    private readonly byte[] m_catalogRig = new byte[EntityCapacity];
+    private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
+    // A route seed is written by the transfer/route thread while ordinary snapshots arrive on the observer task.
+    // Serialize those two writers: the seqlock below protects readers from a torn image, but by itself does not
+    // prevent two writers from interleaving their odd/even sequence increments and publishing a mixture.
+    private readonly object m_snapshotWriteGate = new();
+
+    // Attach replays the authority's most recently completed snapshot. A transfer committed after that snapshot
+    // can therefore seed an entity at the SAME tick immediately before attach replays an image in which the entity
+    // is still absent. Keep the causally newer commit image until an ordinary snapshot advances beyond its tick or
+    // explicitly contains the committed generation.
+    private WorldEntityAddress? m_seededRouteEntity;
+    private ulong m_seededRouteTick;
 
     private WorldDefinition m_definition;
+    private FixedWorldCollider?[] m_kitColliders;
     private string m_authority = string.Empty;
     private int m_definitionRevision;
     private long m_tickBits;
     private long m_stepTicksBits;
     private int m_snapshotRevision;
+    // Seqlock guarding a coherent copy of the complete delivered entity image. Odd means the socket/server delivery
+    // is writing; even means stable. Per-field publication remains for render reads that do not require a whole-tick
+    // record, while adjacency simulation uses CopySnapshotTo below.
+    private int m_snapshotSequence;
     // The destination's own step duration in seconds, derived from the latest snapshot's StepTicks — the
     // presentation clock WorldSessionSceneEmitter normalizes real elapsed time against (see its own remarks on why
     // it cannot read a host alpha/delta for a session view).
@@ -80,6 +99,7 @@ internal sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_definition = placeholder;
+        m_kitColliders = CompileColliders(definition: placeholder);
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -114,6 +134,11 @@ internal sealed class WorldSessionMirror : IClientSink {
     /// elapsed real time against, since a session view supplies neither a host delta nor a host alpha (see that
     /// type's own remarks).</summary>
     public long SnapshotArrivalTimestamp => Interlocked.Read(ref m_snapshotArrivalTimestamp);
+
+    /// <summary>The honest presentation fraction through the currently delivered snapshot interval. Remote and
+    /// colocated mirrors derive it from the snapshot's own step width and arrival time, never from whichever world
+    /// happens to be drawing them.</summary>
+    public float InterpolationAlpha => ResolveInterpolationAlpha(stepSeconds: StepSeconds, arrivalTimestamp: SnapshotArrivalTimestamp);
 
     /// <summary>The declared-set/palette revision from the latest snapshot — a separate rebuild-watch component from
     /// <see cref="DefinitionRevision"/> (never summed with it: this one is assigned from the wire and can move down,
@@ -170,10 +195,53 @@ internal sealed class WorldSessionMirror : IClientSink {
         return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
     }
 
+    /// <summary>The entity-owned procedural rig mirrored from the authoritative snapshot.</summary>
+    public byte CatalogRig(int index) => m_catalogRig[index];
+
+    public FixedWorldCollider? Collider(int index) {
+        var colliders = Volatile.Read(ref m_kitColliders);
+        var kit = m_kit[index];
+        return ((kit < colliders.Length) ? colliders[kit] : null);
+    }
+
+    /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
+    /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
+    /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
+    public void SeedRoute(in WorldAuthorityRouteDescription route) {
+        var index = route.Entity.Index;
+        if ((uint)index >= EntityCapacity) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(route), message: $"route entity {index} exceeds mirror capacity {EntityCapacity}");
+        }
+
+        lock (m_snapshotWriteGate) {
+            DeliverDefinition(definition: route.Definition);
+            _ = Interlocked.Increment(ref m_snapshotSequence);
+            var position = route.Position.ToVector3();
+            var orientation = route.Orientation.ToQuaternion();
+            m_previousPosition[index] = position;
+            m_currentPosition[index] = position;
+            m_previousOrientation[index] = orientation;
+            m_currentOrientation[index] = orientation;
+            m_bodyColor[index] = route.BodyColor;
+            m_kit[index] = route.Kit;
+            m_look[index] = route.Look;
+            m_catalogRig[index] = route.CatalogRig;
+            Volatile.Write(ref m_generation[index], route.Entity.Generation);
+            Volatile.Write(ref m_authority, route.Entity.Authority);
+            _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)route.Tick));
+            _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
+            Volatile.Write(ref m_active[index], value: true);
+            m_seededRouteEntity = route.Entity;
+            m_seededRouteTick = route.Tick;
+            _ = Interlocked.Increment(ref m_snapshotSequence);
+        }
+    }
+
     /// <inheritdoc/>
     public void DeliverDefinition(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        Volatile.Write(ref m_kitColliders, CompileColliders(definition: definition));
         Volatile.Write(ref m_definition, definition);
         _ = Interlocked.Increment(ref m_definitionRevision);
     }
@@ -186,48 +254,143 @@ internal sealed class WorldSessionMirror : IClientSink {
     /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
     /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        Array.Clear(array: m_seen);
+        lock (m_snapshotWriteGate) {
+            var seeded = m_seededRouteEntity;
+            var containsSeed = ((seeded is { } address) && SnapshotContains(snapshot: in snapshot, entity: in address));
+            var preserveSeed = ((seeded is not null) && !containsSeed && (snapshot.Tick <= m_seededRouteTick));
+            if (containsSeed || ((seeded is not null) && !preserveSeed)) {
+                m_seededRouteEntity = null;
+            }
+
+            _ = Interlocked.Increment(ref m_snapshotSequence);
+            Array.Clear(array: m_seen);
+
+            foreach (ref readonly var entry in snapshot.Entries.Span) {
+                var index = entry.Index;
+
+                if ((uint)index >= EntityCapacity ||
+                    (preserveSeed && (seeded is { } preserved) && (index == preserved.Index) &&
+                        (!string.Equals(a: snapshot.Authority, b: preserved.Authority, comparisonType: StringComparison.Ordinal) || (entry.Generation != preserved.Generation)))) {
+                    continue;
+                }
+
+                m_seen[index] = true;
+                m_bodyColor[index] = entry.BodyColor;
+                m_kit[index] = entry.Kit;
+                m_look[index] = entry.Look;
+                m_catalogRig[index] = entry.CatalogRig;
+                Volatile.Write(ref m_generation[index], entry.Generation);
+
+                if (!Volatile.Read(ref m_active[index]) || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
+                    m_previousPosition[index] = entry.Position;
+                    m_previousOrientation[index] = entry.Orientation;
+                } else {
+                    m_previousPosition[index] = m_currentPosition[index];
+                    m_previousOrientation[index] = m_currentOrientation[index];
+                }
+
+                m_currentPosition[index] = entry.Position;
+                m_currentOrientation[index] = entry.Orientation;
+                // The release write is the publication edge for every pose/color/look field above. A local instance
+                // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
+                // IsActive's acquire read makes the completed record visible before an emitter consumes it.
+                Volatile.Write(ref m_active[index], value: entry.Active);
+            }
+
+            for (var index = 0; (index < EntityCapacity); index++) {
+                if (!m_seen[index] && (!preserveSeed || (seeded is not { } preserved) || (index != preserved.Index))) {
+                    Volatile.Write(ref m_active[index], value: false);
+                }
+            }
+
+            _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)Math.Max(snapshot.Tick, preserveSeed ? m_seededRouteTick : 0UL)));
+            if (!preserveSeed) {
+                Volatile.Write(ref m_authority, snapshot.Authority);
+            }
+            _ = Interlocked.Exchange(location1: ref m_stepTicksBits, value: unchecked((long)snapshot.StepTicks));
+            Volatile.Write(location: ref m_snapshotRevision, value: snapshot.Revision);
+            Volatile.Write(location: ref m_stepSecondsBits, value: BitConverter.SingleToInt32Bits((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)));
+            _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
+            _ = Interlocked.Increment(ref m_snapshotSequence);
+        }
+    }
+
+    private static bool SnapshotContains(in WorldSnapshot snapshot, in WorldEntityAddress entity) {
+        if (!string.Equals(a: snapshot.Authority, b: entity.Authority, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
-            var index = entry.Index;
+            if ((entry.Index == entity.Index) && (entry.Generation == entity.Generation) && entry.Active) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-            if ((uint)index >= EntityCapacity) {
+    /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
+    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
+    internal void CopySnapshotTo(
+        bool[] active,
+        WorldEntityAddress[] addresses,
+        Vector3[] previousPositions,
+        Quaternion[] previousOrientations,
+        Vector3[] currentPositions,
+        Quaternion[] currentOrientations,
+        Vector3[] colors,
+        WorldLook[] looks,
+        byte[] catalogRigs,
+        FixedWorldCollider?[] colliders,
+        out ulong tick,
+        out int revision,
+        out float stepSeconds,
+        out long arrivalTimestamp
+    ) {
+        for (;;) {
+            var sequence = Volatile.Read(ref m_snapshotSequence);
+            if ((sequence & 1) != 0) {
+                Thread.SpinWait(iterations: 1);
                 continue;
             }
 
-            m_seen[index] = true;
-            m_bodyColor[index] = entry.BodyColor;
-            m_look[index] = entry.Look;
-            Volatile.Write(ref m_generation[index], entry.Generation);
-
-            if (!Volatile.Read(ref m_active[index]) || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
-                m_previousPosition[index] = entry.Position;
-                m_previousOrientation[index] = entry.Orientation;
-            } else {
-                m_previousPosition[index] = m_currentPosition[index];
-                m_previousOrientation[index] = m_currentOrientation[index];
+            for (var index = 0; index < EntityCapacity; index++) {
+                active[index] = IsActive(index: index);
+                addresses[index] = Address(index: index);
+                previousPositions[index] = PreviousPosition(index: index);
+                previousOrientations[index] = PreviousOrientation(index: index);
+                currentPositions[index] = CurrentPosition(index: index);
+                currentOrientations[index] = CurrentOrientation(index: index);
+                colors[index] = BodyColor(index: index);
+                looks[index] = Look(index: index);
+                catalogRigs[index] = CatalogRig(index: index);
+                colliders[index] = Collider(index: index);
             }
 
-            m_currentPosition[index] = entry.Position;
-            m_currentOrientation[index] = entry.Orientation;
-            // The release write is the publication edge for every pose/color/look field above. A local instance
-            // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
-            // IsActive's acquire read makes the completed record visible before an emitter consumes it.
-            Volatile.Write(ref m_active[index], value: entry.Active);
-        }
-
-        for (var index = 0; (index < EntityCapacity); index++) {
-            if (!m_seen[index]) {
-                Volatile.Write(ref m_active[index], value: false);
+            tick = Tick;
+            revision = SnapshotRevision;
+            stepSeconds = StepSeconds;
+            arrivalTimestamp = SnapshotArrivalTimestamp;
+            if (sequence == Volatile.Read(ref m_snapshotSequence)) {
+                return;
             }
         }
+    }
 
-        _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)snapshot.Tick));
-        Volatile.Write(ref m_authority, snapshot.Authority);
-        _ = Interlocked.Exchange(location1: ref m_stepTicksBits, value: unchecked((long)snapshot.StepTicks));
-        Volatile.Write(location: ref m_snapshotRevision, value: snapshot.Revision);
-        Volatile.Write(location: ref m_stepSecondsBits, value: BitConverter.SingleToInt32Bits((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)));
-        _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
+    internal static float ResolveInterpolationAlpha(float stepSeconds, long arrivalTimestamp) {
+        if (stepSeconds <= 0f) {
+            return 1f;
+        }
+
+        var elapsedSeconds = (float)Stopwatch.GetElapsedTime(startingTimestamp: arrivalTimestamp).TotalSeconds;
+        return Math.Clamp(value: (elapsedSeconds / stepSeconds), min: 0f, max: 1f);
+    }
+
+    private static FixedWorldCollider?[] CompileColliders(WorldDefinition definition) {
+        var colliders = new FixedWorldCollider?[definition.Kits.Count];
+        for (var index = 0; index < colliders.Length; index++) {
+            colliders[index] = FixedWorldCollider.Compile(collider: definition.Kits[index].Collider, creations: definition.Creations);
+        }
+        return colliders;
     }
 
     /// <inheritdoc/>

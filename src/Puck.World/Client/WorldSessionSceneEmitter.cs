@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
@@ -33,7 +32,7 @@ namespace Puck.World.Client;
 /// <b>The interpolation timebase.</b> <see cref="WorldSessionView"/> calls <c>ISdfFrameSource.CaptureFrame</c> with a
 /// fixed zero delta/alpha on every resolve (see that type's own remarks: "never through the host's own clock") — so
 /// neither <see cref="Dress"/>'s <c>interpolationAlpha</c> parameter nor <see cref="SdfEmitContext.InterpolationAlpha"/>
-/// ever carries anything but 0 for this emitter. <see cref="ResolveInterpolationAlpha"/> derives its own honest
+/// ever carries anything but 0 for this emitter. <see cref="WorldSessionMirror.InterpolationAlpha"/> derives its own honest
 /// fraction instead, purely from the mirror's (tick, pose) pairs plus this call's own wall-clock arrival: real elapsed
 /// time since <see cref="WorldSessionMirror.SnapshotArrivalTimestamp"/>, normalized by
 /// <see cref="WorldSessionMirror.StepSeconds"/>. The destination's tick thread and the thread that calls
@@ -136,13 +135,13 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
 
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
-    /// <see cref="ResolveInterpolationAlpha"/> for the timebase) plus a distance-driven gait phase; every other slot
+    /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase; every other slot
     /// is left untouched, which the composition host already parks at <see cref="SdfEmitContext.ParkPosition"/> before
     /// any emitter's <see cref="PackDynamicTransforms"/> runs (see <see cref="Client.WorldSceneEmitter"/>'s identical
     /// remark).</remarks>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
         var avatars = slots.Slice(start: context.SlotBase, length: WorldAvatarCatalog.DynamicTransformCapacity);
-        var alpha = ResolveInterpolationAlpha();
+        var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
             if (!m_mirror.IsActive(index: index)) {
@@ -177,7 +176,7 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
                 // no observer — false is exact, not an approximation.
                 castsSoftShadow: false,
                 transforms: avatars,
-                rig: LookRig(look: look),
+                rig: LookRig(look: look, catalogRig: m_mirror.CatalogRig(index: index)),
                 scale: look.Scale
             );
         }
@@ -206,32 +205,16 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
             accentMaterials: accentMaterials,
             probeWorstCase: probeWorstCase,
             slotBase: slotBase,
-            rigFor: (probeWorstCase ? null : index => LookRig(look: m_mirror.Look(index: index))),
+            rigFor: (probeWorstCase ? null : index => LookRig(look: m_mirror.Look(index: index), catalogRig: m_mirror.CatalogRig(index: index))),
             scaleFor: (probeWorstCase ? null : index => m_mirror.Look(index: index).Scale)
         );
     }
 
-    // The honest render alpha for a session view: real elapsed wall time since the mirror's current snapshot arrived,
-    // normalized by the destination's own step duration and clamped to [0, 1] — see this type's own remarks on why
-    // neither a host delta nor a host alpha is available here. A step duration of zero (no snapshot delivered yet)
-    // snaps to the latest pose rather than dividing by zero.
-    private float ResolveInterpolationAlpha() {
-        var stepSeconds = m_mirror.StepSeconds;
-
-        if (stepSeconds <= 0f) {
-            return 1f;
-        }
-
-        var elapsedSeconds = (float)Stopwatch.GetElapsedTime(startingTimestamp: m_mirror.SnapshotArrivalTimestamp).TotalSeconds;
-
-        return Math.Clamp(value: (elapsedSeconds / stepSeconds), min: 0f, max: 1f);
-    }
-
-    // The catalog geometry-source rig for a look: a Catalog(Index) pin, or -1 (the entity's own index-derived rig)
+    // The catalog geometry-source rig for a look: an authored Catalog(Index) pin, or the occupant-owned carried rig
     // for an unpinned catalog OR a Creation look — the identical selector Client.WorldSceneEmitter.LookRig applies.
     // A Creation look's body would render through the stamp pool on the boot path; this emitter has no stamp-pool
     // seam (see this type's own remarks), so a mirrored Creation-look body still renders as its catalog avatar.
-    private static int LookRig(WorldLook look) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : -1);
+    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : catalogRig);
 
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Numerics;
+using Microsoft.Extensions.Hosting;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
@@ -77,7 +79,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private static readonly StringComparison PathComparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<(WorldServer Server, WorldPrincipal Principal), ForwardedBody> m_forwardedBodies = [];
+    private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
+    // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
+    // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
+    private readonly ConcurrentDictionary<(WorldServer Server, WorldPrincipal Principal), ForwardedBody> m_forwardedBodies = [];
     private readonly record struct ForwardedBody(WorldRemoteAuthority Authority, int BodyIndex);
     // Every instance shares the machine's own persisted id — it identifies the MACHINE, not a world, so minting a
     // fresh one per instance would both misreport the machine and put a Guid.NewGuid() on a boot path.
@@ -85,20 +90,18 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private readonly string m_stateRoot;
     // LAZY, the same reason WorldBindingCommandModule's own router field is: InputRouter's construction resolves
     // the CommandRegistry, which aggregates every module's GetCommands() at container-build time, so a direct
-    // constructor dependency here would cycle. Resolved only when a transfer actually departs a seat.
+    // constructor dependency here would cycle. Resolved only when a seat actually leaves the world continuum.
     private readonly Func<InputRouter> m_router;
     // The BOOT instance's client-side participant table — the one instance whose seats a local client mirrors (see
     // this type's own "what is flat and what is not" remark). A transfer crossing that boundary emits the roster's
     // seat-vacated/seat-occupied facts through it; a transfer between two non-boot instances never touches it.
     private readonly PlayerRoster m_roster;
-    // The traveler-follow router (stage 1) — this host is its ONE writer (see WorldSeatInstanceRouter's own
-    // remarks): ApplyTransfer publishes every followed landed member, and LeaveRosterSeat resets a committed
-    // departure to the vacated roster slot's boot default. Not lazy: WorldSeatInstanceRouter carries no dependency that could
+    // The seat authority router — this host is its ONE writer: transfer commit publishes every landed member, and
+    // LeaveRosterSeat resets a committed departure to the vacated roster slot's boot default. Not lazy: it carries no dependency that could
     // cycle back through this type (it is a small fixed array, like WorldPerceptionAnchor).
-    private readonly WorldSeatInstanceRouter m_seatRouter;
-    // The local client — StepInstancesBesideBoot's per-instance loop calls its away-seat submission door
-    // immediately before that instance's own Server.Step (stage 1's correctness-critical piece: an away seat's
-    // input must apply at THAT instance's own next-tick coordinate, never boot's). Not lazy: WorldClient's own
+    private readonly WorldSeatAuthorityRouter m_seatRouter;
+    // The local client. Every clock-owned authority asks it for the seats currently routed there immediately before
+    // that authority's Server.Step, at that authority's own next-tick coordinate. Not lazy: WorldClient's own
     // construction never reaches back into this type (see this type's remarks on the router Func's OWN cycle,
     // which WorldClient's dependency graph does not share).
     private readonly WorldClient m_client;
@@ -113,6 +116,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // or destination), since the tape covers the boot instance alone.
     private readonly WorldReplayTape m_bootReplayTape;
     private readonly WorldFederationSecurity m_federationSecurity;
+    private readonly CancellationToken m_applicationStopping;
 
     /// <summary>Gets the instance this process booted with — the one an instance-addressed read-back reaches when it
     /// is given no <c>instance:</c> token.</summary>
@@ -124,24 +128,24 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <param name="bootOrigin">The console's tracked document origin for the boot instance, read live.</param>
     /// <param name="bootOwnedWorlds">The boot instance's owned-world store, read for the machine id and the state
     /// root every later instance derives its own directory under.</param>
-    /// <param name="router">The lazy input-router resolver — a departing transfer clears the source seat's
-    /// input-layer held state through it (see <see cref="ApplyTransfer"/>).</param>
+    /// <param name="router">The lazy input-router resolver — a successful explicit leave clears the departing
+    /// seat's input-layer held state through it.</param>
     /// <param name="roster">The boot instance's client-side participant table — a transfer across the boot boundary
     /// emits its seat-vacated/seat-occupied facts through it (see <see cref="ApplyTransfer"/>).</param>
     /// <param name="resolver">The transport-neutral local session resolver <see cref="ResolveAndEnqueueCoalescedTransfers"/>
     /// consumes (see <see cref="WorldSessionResolver"/>).</param>
     /// <param name="bootReplayTape">The boot instance's own replay tape — a transfer touching the boot instance
     /// records its decided outcome onto it (see <see cref="ApplyTransfer"/>).</param>
-    /// <param name="seatRouter">The traveler-follow router (stage 1) — this type's ApplyTransfer is its one
-    /// writer.</param>
-    /// <param name="client">The local client — this type's StepInstancesBesideBoot calls its away-seat intent
-    /// submission door.</param>
+    /// <param name="seatRouter">The CAS-published seat authority table — this type's transfer commit is its one writer.</param>
+    /// <param name="client">The local client whose intents this host submits through each seat's authority route.</param>
     /// <param name="bootLink">The boot instance's own transport (the container's <c>LoopbackTransport</c> singleton)
     /// — every instance now carries its own transport uniformly (see <see cref="WorldInstance.Link"/>'s own
     /// remarks); the boot row simply holds the one that already existed.</param>
     /// <param name="federationSecurity">The process-scoped credentials used for authenticated remote authorities.</param>
+    /// <param name="applicationLifetime">The host lifetime. Its stopping token closes every persistent federation
+    /// lane before companion authorities observe an ordinary process shutdown as a live-path outage.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstanceHost(WorldServer bootServer, WorldDefinitionSource bootOrigin, WorldOwnedWorlds bootOwnedWorlds, Func<InputRouter> router, PlayerRoster roster, WorldSessionResolver resolver, WorldReplayTape bootReplayTape, WorldSeatInstanceRouter seatRouter, WorldClient client, IServerLink bootLink, WorldFederationSecurity federationSecurity) {
+    public WorldInstanceHost(WorldServer bootServer, WorldDefinitionSource bootOrigin, WorldOwnedWorlds bootOwnedWorlds, Func<InputRouter> router, PlayerRoster roster, WorldSessionResolver resolver, WorldReplayTape bootReplayTape, WorldSeatAuthorityRouter seatRouter, WorldClient client, IServerLink bootLink, WorldFederationSecurity federationSecurity, IHostApplicationLifetime applicationLifetime) {
         ArgumentNullException.ThrowIfNull(argument: bootServer);
         ArgumentNullException.ThrowIfNull(argument: bootOrigin);
         ArgumentNullException.ThrowIfNull(argument: bootOwnedWorlds);
@@ -153,6 +157,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: bootLink);
         ArgumentNullException.ThrowIfNull(argument: federationSecurity);
+        ArgumentNullException.ThrowIfNull(argument: applicationLifetime);
 
         m_machineId = bootOwnedWorlds.MachineId;
         m_stateRoot = WorldStateRoot.Resolve();
@@ -163,6 +168,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         m_seatRouter = seatRouter;
         m_client = client;
         m_federationSecurity = federationSecurity;
+        m_applicationStopping = applicationLifetime.ApplicationStopping;
         bootServer.TransferForwarder = this;
         m_instances[BootInstanceName] = new WorldInstance(
             name: BootInstanceName,
@@ -171,6 +177,16 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             server: bootServer,
             ownedMachines: null
         );
+        var bootEndpoint = EndpointFor(instance: m_instances[BootInstanceName]);
+        for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
+            _ = m_seatRouter.Publish(
+                slot: slot,
+                endpoint: bootEndpoint,
+                entity: new WorldEntityAddress(
+                    Authority: bootServer.AuthorityIdentity,
+                    Index: slot,
+                    Generation: bootServer.Population.Generation(index: slot)));
+        }
         m_roster.ConfigureLeave(leave: LeaveRosterSeat);
     }
 
@@ -204,21 +220,20 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         var accepted = route.Authority.TryForwardSubmission(bodyIndex: route.BodyIndex, payload: RebindForwardedPayload(payload: payload, bodyIndex: route.BodyIndex), result: out result, reason: out reason);
         if (accepted && (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
             (result is WorldSubmissionResult.Session { Reply.Accepted: true })) {
-            _ = m_forwardedBodies.Remove(key: (source, principal));
+            _ = m_forwardedBodies.TryRemove(key: (source, principal), value: out _);
         }
         return accepted;
     }
 
     /// <inheritdoc/>
-    public bool TryDescribeForwarding(WorldServer source, WorldPrincipal principal, out string endpoint, out int bodyIndex, out string reason) {
+    public bool TryDescribeForwarding(WorldServer source, WorldPrincipal principal, out WorldAuthorityRouteDescription routeDescription, out string reason) {
         if (!m_forwardedBodies.TryGetValue(key: (source, principal), value: out var route)) {
-            endpoint = string.Empty;
-            bodyIndex = -1;
+            routeDescription = default;
             reason = $"{principal.Describe()} has no committed onward route";
             return false;
         }
 
-        return route.Authority.TryDescribeRoute(bodyIndex: route.BodyIndex, endpoint: out endpoint, routedBodyIndex: out bodyIndex, reason: out reason);
+        return route.Authority.TryDescribeRoute(bodyIndex: route.BodyIndex, route: out routeDescription, reason: out reason);
     }
 
     private static WorldSubmissionPayload RebindForwardedPayload(WorldSubmissionPayload payload, int bodyIndex) => payload switch {
@@ -236,10 +251,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     };
 
     /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
-    /// live <see cref="WorldSeatInstanceRouter"/> route — the one structure source every drag-time/read-back
-    /// consumer that is not already sitting inside the routed instance's own context (unlike
-    /// <see cref="AwaySeatSceneEmitter"/>, which already holds the destination's mirror directly) reads
-    /// through, so a boot-anchored seat and a traveling one never derive "which document currently frames me" two
+    /// live <see cref="WorldSeatAuthorityRouter"/> route — the one structure source every drag-time/read-back
+    /// consumer reads through, so seats never derive "which document currently frames me" two
     /// different ways. <see cref="WorldSeatViewInput"/> (the live drag clamp) and <c>WorldViewCommandModule</c>'s
     /// <c>world.view.camera</c> echo are today's two callers.</summary>
     /// <param name="slot">The 0-based local roster slot.</param>
@@ -247,19 +260,45 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// for a boot-routed seat, an out-of-range slot, or a route naming an instance that has since stopped — the same
     /// defensive fallback <see cref="LeaveRosterSeat"/> already applies to a stale route.</returns>
     public WorldDefinition ResolveRoutedDefinition(int slot) {
-        var location = m_seatRouter.Location(slot: slot);
+        return m_seatRouter.Route(slot: slot).Endpoint.Definition;
+    }
 
-        if (string.Equals(a: location.InstanceName, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
-            return m_client.Definition;
+    private WorldAuthorityEndpoint EndpointFor(WorldInstance instance) {
+        if (m_authorityEndpoints.TryGetValue(key: instance.Name, value: out var endpoint)) {
+            return endpoint;
         }
 
-        if (m_remoteAuthorities.TryGetValue(key: location.InstanceName, value: out var remote)) {
-            return remote.Definition;
+        endpoint = new WorldAuthorityEndpoint(
+            identity: instance.Name,
+            definition: () => instance.Server.Definition,
+            submissions: instance.Link,
+            observe: instance.Server.AttachSink,
+            adjacencies: () => instance.Server.Adjacencies,
+            nextInputTick: () => instance.Server.NextInputTick,
+            clockOwnedHere: true);
+        m_authorityEndpoints[instance.Name] = endpoint;
+        return endpoint;
+    }
+
+    private WorldAuthorityEndpoint EndpointFor(string identity, WorldRemoteAuthority authority, WorldAuthorityRouteDescription? seed = null) {
+        if (m_authorityEndpoints.TryGetValue(key: identity, value: out var endpoint)) {
+            if (seed is { } existingSeed) {
+                endpoint.SeedRoute(route: in existingSeed);
+            }
+            return endpoint;
         }
 
-        return (m_instances.TryGetValue(key: location.InstanceName, value: out var instance) && (instance is not null)
-            ? instance.Server.Definition
-            : m_client.Definition);
+        endpoint = new WorldAuthorityEndpoint(
+            identity: identity,
+            definition: () => authority.Definition,
+            submissions: authority.Link,
+            observe: authority.AttachSink,
+            adjacencies: static () => null,
+            nextInputTick: () => authority.NextInputTick,
+            clockOwnedHere: false,
+            seed: seed);
+        m_authorityEndpoints[identity] = endpoint;
+        return endpoint;
     }
 
     /// <summary>Resolves a shared presentation consumer from one running source instance through the same scoped
@@ -332,11 +371,11 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// the named body is the local traveler's current embodiment.</summary>
     public bool TryFindFollowedRosterSlot(string instanceName, int instanceSlot, out int rosterSlot) {
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            var location = m_seatRouter.Location(slot: slot);
+            var location = m_seatRouter.Route(slot: slot);
 
             if ((m_roster.Seat(slot: slot) is not null) &&
-                string.Equals(a: location.InstanceName, b: instanceName, comparisonType: StringComparison.Ordinal) &&
-                (location.InstanceSlot == instanceSlot)) {
+                string.Equals(a: location.Endpoint.Identity, b: instanceName, comparisonType: StringComparison.Ordinal) &&
+                (location.EntityIndex == instanceSlot)) {
                 rosterSlot = slot;
 
                 return true;
@@ -353,27 +392,15 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
     // presentation route. Reaping runs last, after the route no longer makes TryStop's traveler guard fire.
     private bool LeaveRosterSeat(int rosterSlot, WorldPrincipal actingPrincipal) {
-        var location = m_seatRouter.Location(slot: rosterSlot);
-
-        if (!m_instances.TryGetValue(key: location.InstanceName, value: out var instance)) {
-            // Defensive repair for a stale route produced by an older build: the instance is already gone, so no
-            // authoritative body remains to leave. Retire the local half instead of making the slot impossible to
-            // reuse forever.
-            _ = m_router().ClearSlotHeld(slot: rosterSlot);
-            _ = m_roster.VacateSeat(slot: rosterSlot);
-            m_seatRouter.Publish(slot: rosterSlot, instanceName: BootInstanceName, instanceSlot: rosterSlot);
-            Console.Error.WriteLine(value: $"[player.leave: repaired stale route for player {(rosterSlot + 1)} — instance '{location.InstanceName}' no longer exists]");
-
-            return true;
-        }
+        var location = m_seatRouter.Route(slot: rosterSlot);
 
         var accepted = false;
 
-        instance.Link.SubmitSession(
-            request: new SessionRequest.Leave(Principal: actingPrincipal, Slot: location.InstanceSlot),
+        location.Endpoint.Submissions.SubmitSession(
+            request: new SessionRequest.Leave(Principal: actingPrincipal, Slot: location.EntityIndex),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.leave denied: '{location.InstanceName}' seat {(location.InstanceSlot + 1)} — {reply.Reason}]");
+                    Console.Error.WriteLine(value: $"[player.leave denied: '{location.Endpoint.Identity}' seat {(location.EntityIndex + 1)} — {reply.Reason}]");
 
                     return;
                 }
@@ -388,23 +415,30 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         _ = m_router().ClearSlotHeld(slot: rosterSlot);
         _ = m_roster.VacateSeat(slot: rosterSlot);
-        m_seatRouter.Publish(slot: rosterSlot, instanceName: BootInstanceName, instanceSlot: rosterSlot);
-        if (location.InstanceName.StartsWith(value: "$traveler/", comparisonType: StringComparison.Ordinal) &&
-            m_remoteAuthorities.Remove(key: location.InstanceName, value: out var travelerRoute)) {
+        _ = m_seatRouter.Publish(
+            slot: rosterSlot,
+            endpoint: EndpointFor(instance: Boot),
+            entity: new WorldEntityAddress(
+                Authority: Boot.Server.AuthorityIdentity,
+                Index: rosterSlot,
+                Generation: Boot.Server.Population.Generation(index: rosterSlot)));
+        if (location.Endpoint.Identity.StartsWith(value: "$traveler/", comparisonType: StringComparison.Ordinal) &&
+            m_remoteAuthorities.Remove(key: location.Endpoint.Identity, value: out var travelerRoute)) {
             travelerRoute.Dispose();
+            if (m_authorityEndpoints.Remove(key: location.Endpoint.Identity, value: out var travelerEndpoint)) {
+                travelerEndpoint.Dispose();
+            }
         }
 
-        if (!string.Equals(a: location.InstanceName, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
-            _ = ReapIfEmpty(name: location.InstanceName);
+        if (!string.Equals(a: location.Endpoint.Identity, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+            _ = ReapIfEmpty(name: location.Endpoint.Identity);
         }
 
         return true;
     }
 
-    /// <summary>Looks up a running instance's own transport (traveler-follow stage 1) — <c>WorldClient</c>'s
-    /// away-seat intent submission door and an away view's mirror attach both resolve through this rather than a
-    /// container singleton, since every instance (boot included — see <see cref="WorldInstance.Link"/>'s own
-    /// remarks) now carries its own uniformly.</summary>
+    /// <summary>Looks up a running authority's submission transport. Every local instance and remote traveler route
+    /// carries the same transport capability; consumers do not branch on where that authority is hosted.</summary>
     /// <param name="name">The console-facing instance name.</param>
     /// <param name="link">The instance's transport, when found.</param>
     /// <returns>Whether an instance is running under <paramref name="name"/>.</returns>
@@ -526,7 +560,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
             // The identical two-line pattern WorldBootComposition wires for the boot instance's own transport (a
             // WorldServer implements IWorldServerHost directly — see LoopbackTransport's own remarks) — one
-            // transport per instance uniformly, never a special case reserved for boot (traveler-follow stage 1).
+            // transport per instance uniformly, never a special case reserved for boot.
             started = new WorldInstance(
                 name: name,
                 origin: () => resolvedPath,
@@ -543,6 +577,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         }
 
         m_instances[name] = started;
+        _ = EndpointFor(instance: started);
         instance = started;
         reason = string.Empty;
 
@@ -598,9 +633,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // crossing could ever bring that participant home. Automatic reaping reaches this method only AFTER a
         // committed transfer has republished the router, so this guard affects the explicit operator stop alone.
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            var location = m_seatRouter.Location(slot: slot);
+            var location = m_seatRouter.Route(slot: slot);
 
-            if ((m_roster.Seat(slot: slot) is not null) && string.Equals(a: location.InstanceName, b: name, comparisonType: StringComparison.Ordinal)) {
+            if ((m_roster.Seat(slot: slot) is not null) && string.Equals(a: location.Endpoint.Identity, b: name, comparisonType: StringComparison.Ordinal)) {
                 reason = $"'{name}' is presenting local seat {(slot + 1)} — transfer that traveler out before stopping the instance";
 
                 return false;
@@ -608,6 +643,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         }
 
         _ = m_instances.Remove(key: name);
+        if (m_authorityEndpoints.Remove(key: name, value: out var retiredEndpoint)) {
+            retiredEndpoint.Dispose();
+        }
 
         // An explicit stop clears retention once the local-follow guard above proves it cannot orphan presentation.
         // A later name reuse (a fresh world.instance.start under the same spelling) starts out with ordinary
@@ -635,6 +673,43 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         Path.GetFullPath(path: (string.Equals(a: name, b: BootInstanceName, comparisonType: StringComparison.Ordinal)
             ? Path.Combine(path1: m_stateRoot, path2: "owned-worlds")
             : Path.Combine(path1: InstancesRoot(), path2: name, path3: "owned-worlds")));
+
+    /// <summary>Consumes the seats' tick-local look samples, then submits the seats currently claimed by the boot
+    /// authority when that authority will consume a tick. This is the one boot-input lifecycle used by both the
+    /// presented and headless executable shapes: camera-relative movement is simulation input, so a renderer may
+    /// observe the view state but must not own its advancement.</summary>
+    public void PrepareBootSeatIntents(bool stepsBoot, ulong tick, ulong stepTicks) {
+        m_client.AdvanceSeatViews(deltaSeconds: (float)EngineTicks.ToSeconds(ticks: stepTicks));
+
+        if (!stepsBoot) {
+            return;
+        }
+
+        var boot = m_instances[BootInstanceName];
+        m_client.SubmitAuthorityIntents(endpoint: EndpointFor(instance: boot), tick: tick);
+    }
+
+    /// <summary>Closes the shared boot-input lifecycle after every host call. Raw analog samples are tick-local;
+    /// carried device state is re-dispatched by the input router on the next tick.</summary>
+    public void FinishSeatIntents() {
+        m_client.Roster.ClearAnalog();
+    }
+
+    /// <summary>
+    /// Submits each externally clocked authority once at the next tick announced by its observation stream. The
+    /// client de-duplicates by route epoch and authority tick, so a stalled network snapshot cannot enqueue a
+    /// growing copy of the same held input.
+    /// </summary>
+    public void SubmitExternallyClockedSeatIntents() {
+        var submitted = new HashSet<WorldAuthorityEndpoint>();
+
+        for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
+            var endpoint = m_seatRouter.Route(slot: slot).Endpoint;
+            if (!endpoint.ClockOwnedHere && submitted.Add(item: endpoint)) {
+                m_client.SubmitAuthorityIntents(endpoint: endpoint, tick: endpoint.NextInputTick);
+            }
+        }
+    }
 
     /// <summary>Advances every instance except the boot one on its own authored schedule — the boot instance is
     /// handled by <see cref="WorldServerStepShell"/> separately (see <see cref="ShouldStepBoot"/>), which also
@@ -696,10 +771,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 var elapsedTicks = (instance.ElapsedEngineTicks + stepWidth);
                 var context = new FixedStepContext(ElapsedTicks: elapsedTicks, StepTicks: stepWidth, Tick: tick);
 
-                // An away-routed seat's device intent is submitted here, immediately before this instance's
-                // own Step call, at this instance's own next-tick coordinate (tick + 1) — never boot's clock.
-                // A fast instance stepping several times per master call submits fresh input before each step.
-                m_client.SubmitAwaySeatIntents(instanceName: name, tick: (tick + 1UL), link: instance.Link, definition: instance.Server.Definition);
+                m_client.SubmitAuthorityIntents(endpoint: EndpointFor(instance: instance), tick: (tick + 1UL));
 
                 instance.Server.Step(context: in context);
                 instance.ElapsedEngineTicks = elapsedTicks;
@@ -1168,7 +1240,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     public void DrainPendingTransfers() {
         ReconcileInDoubtTransfers();
 
-        while (m_pendingTransfers.TryDequeue(result: out var transfer)) {
+        // A Retry refusal deliberately re-enqueues the same transfer. Drain only the batch that existed at this
+        // tick's entry: consuming a retry again in this same loop would spin forever inside the host act and prevent
+        // the authority from reaching Server.Step—the refused body (and every unrelated body) would appear frozen.
+        // FIFO is preserved, and the retried request becomes the next tick's ordinary first-class attempt.
+        var batchCount = m_pendingTransfers.Count;
+        for (var index = 0; (index < batchCount) && m_pendingTransfers.TryDequeue(result: out var transfer); index++) {
             ApplyTransfer(transfer: in transfer);
         }
     }
@@ -1256,8 +1333,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private readonly record struct AdjacencyEdgeHit(WorldAdjacency Adjacency, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, FixedQ4816 Parameter);
 
     // Adjacencies are ownership topology, not portal furniture. Every local body is tested against the authored
-    // invisible rectangles after its authority step; one earliest edge wins, with the adjacency name as the stable
-    // tie-break at a four-way corner. Each body transfers independently, which is what keeps a melee straddling a
+    // invisible rectangles after its authority step; geometry selects the earliest edge. A genuine equal-parameter
+    // junction tie is distributed by a stable hash of the entity generation and authority identity over the sorted
+    // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
     private void ScanInstanceAdjacencies(WorldInstance instance) {
         if (instance.Server.Definition.Adjacencies is not { Count: > 0 } adjacencies) {
@@ -1265,7 +1343,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         }
 
         var population = instance.Server.Population;
-        var winners = new AdjacencyEdgeHit?[population.Capacity];
+        var candidates = new List<AdjacencyEdgeHit>[population.Capacity];
 
         foreach (var adjacency in adjacencies) {
             if (adjacency is null) {
@@ -1283,20 +1361,37 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     continue;
                 }
 
-                var hit = new AdjacencyEdgeHit(Adjacency: adjacency, Seat: seat, Frame: frame, SeamU: crossing.SeamU, SeamV: crossing.SeamV, Parameter: crossing.Parameter);
-                if ((winners[seat] is not { } standing) ||
-                    (hit.Parameter < standing.Parameter) ||
-                    ((hit.Parameter == standing.Parameter) && (string.CompareOrdinal(strA: hit.Adjacency.Name.Value, strB: standing.Adjacency.Name.Value) < 0))) {
-                    winners[seat] = hit;
-                }
+                (candidates[seat] ??= []).Add(item: new AdjacencyEdgeHit(Adjacency: adjacency, Seat: seat, Frame: frame, SeamU: crossing.SeamU, SeamV: crossing.SeamV, Parameter: crossing.Parameter));
             }
         }
 
-        foreach (var winner in winners) {
-            if (winner is { } hit) {
-                EnqueueAdjacencyTransfer(instance: instance, hit: in hit);
+        for (var seat = 0; seat < candidates.Length; seat++) {
+            if (candidates[seat] is not { Count: > 0 } hits) {
+                continue;
             }
+
+            var earliest = hits.Min(selector: static hit => hit.Parameter);
+            var eligible = hits.Where(predicate: hit => hit.Parameter == earliest)
+                .OrderBy(keySelector: static hit => hit.Adjacency.Name.Value, comparer: StringComparer.Ordinal)
+                .ToArray();
+            var choice = (eligible.Length == 1)
+                ? 0
+                : (int)(StableJunctionSeed(authority: instance.Server.AuthorityIdentity, entity: seat, generation: population.Generation(index: seat)) % (uint)eligible.Length);
+            var winner = eligible[choice];
+            EnqueueAdjacencyTransfer(instance: instance, hit: in winner);
         }
+    }
+
+    private static uint StableJunctionSeed(string authority, int entity, int generation) {
+        const uint offset = 2166136261u;
+        const uint prime = 16777619u;
+        var hash = offset;
+        foreach (var character in authority) {
+            hash = ((hash ^ character) * prime);
+        }
+        hash = ((hash ^ unchecked((uint)entity)) * prime);
+        hash = ((hash ^ unchecked((uint)generation)) * prime);
+        return hash;
     }
 
     private void EnqueueAdjacencyTransfer(WorldInstance instance, in AdjacencyEdgeHit hit) {
@@ -1366,7 +1461,13 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         var closedPosition = (hit.Frame.PointAt(u: hit.SeamU, v: hit.SeamV) - (hit.Frame.Normal * inward));
         body.Pose(position: closedPosition, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
         body.SetArrivalVelocity(planarVelocity: FixedVector3.Zero, verticalVelocity: FixedQ4816.Zero);
-        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{hit.Adjacency.Name}' seat {(hit.Seat + 1)} CLOSED ({reason})]");
+        var binding = "engine-only";
+        if ((hit.Adjacency.OnUnavailable is { } channel) &&
+            instance.Server.Population.Channels.TryGetOrdinal(name: channel, ordinal: out var ordinal)) {
+            body.PressChannel(ordinal: ordinal, value: FixedQ4816.One);
+            binding = $"channel:{channel}";
+        }
+        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{hit.Adjacency.Name}' seat {(hit.Seat + 1)} CLOSED ({reason}); response={binding}]");
     }
 
     // One edge-triggered portal hit, collected during a scan rather than acted on immediately — see
@@ -1953,7 +2054,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 try {
                     if (!m_remoteAuthorities.TryGetValue(key: resolvedName, value: out var remote) || !string.Equals(a: remote.Endpoint, b: endpoint, comparisonType: StringComparison.Ordinal)) {
                         remote?.Dispose();
-                        remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: definition, security: m_federationSecurity, observerAuthority: $"{m_machineId:N}/observer");
+                        remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: definition, security: m_federationSecurity, observerAuthority: $"{m_machineId:N}/observer", applicationStopping: m_applicationStopping);
                         m_remoteAuthorities[resolvedName] = remote;
                     }
 
@@ -1997,7 +2098,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     }
 
     /// <summary>Returns the authority/body currently followed by one local roster slot.</summary>
-    public SeatLocation SeatLocation(int slot) => m_seatRouter.Location(slot: slot);
+    public WorldAuthorityRoute SeatRoute(int slot) => m_seatRouter.Route(slot: slot);
 
     /// <summary>Remote-capable form of <see cref="TryResolveObservedDestination"/>. It resolves the same global
     /// session but returns its projection contract instead of requiring a local <see cref="WorldInstance"/>.</summary>
@@ -2056,7 +2157,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         if (loaded.Host.Authority is { Length: > 0 } endpoint) {
             try {
-                var remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: loaded, security: m_federationSecurity, observerAuthority: $"{m_machineId:N}/observer");
+                var remote = new WorldRemoteAuthority(endpoint: endpoint, placeholder: loaded, security: m_federationSecurity, observerAuthority: $"{m_machineId:N}/observer", applicationStopping: m_applicationStopping);
                 m_remoteAuthorities[instanceName] = remote;
                 definition = loaded;
                 attach = remote.AttachSink;
@@ -2236,9 +2337,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             var sourceSlot = members[reservationIndex];
             var traveler = source.Server.ExecuteAuthorityOperation(operation: () => {
                 var body = source.Server.Population.EntryBody(index: sourceSlot);
-                return (Identity: body?.Profile, Source: body?.Source ?? IntentSource.Idle, BodyColor: source.Server.Population.BodyColor(index: sourceSlot));
+                return (Identity: body?.Profile, Source: body?.Source ?? IntentSource.Idle, BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot));
             });
-            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor);
+            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor, CatalogRig: traveler.CatalogRig);
         }
 
         var sourceAuthority = $"{m_machineId:N}/{transfer.SourceInstance}";
@@ -2530,7 +2631,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // than per member as each lands — the landing loop can still abort, and the unwind above restores
         // bodies, not latches, so a per-member seed would outlive its own member. Commit-time seeding needs
         // no inverse operation to keep in sync with rollback.
-        foreach (var member in landed) {
+        for (var memberOrdinal = 0; memberOrdinal < landed.Count; memberOrdinal++) {
+            var member = landed[memberOrdinal];
             if ((member.Peer is { Source.IsLive: true }) && (sourceInstance is not null) && (targetAuthority.Remote is { } forwardedAuthority)) {
                 m_forwardedBodies[(sourceInstance.Server, member.SourcePrincipal)] = new ForwardedBody(Authority: forwardedAuthority, BodyIndex: member.TargetSlot);
             }
@@ -2545,7 +2647,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // left at all (see LandedMember's own remarks). The transfer's authoritative body work is already complete;
         // this route decides where subsequent presentation and input submissions follow it.
         foreach (var member in landed) {
-            // TRAVELER-FOLLOW STAGE 1: any LOCAL roster slot the router currently has presenting from
+            // Any local roster slot whose authority claim currently names
             // (transfer.SourceInstance, member.SourceSlot) moves WITH this member — unconditional across
             // boot<->anywhere and anywhere<->anywhere, the ONE new write this stage adds. At most one roster slot
             // ever matches (a followed seat's own location is exactly its own presenting body), but the walk costs
@@ -2553,35 +2655,60 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             var followed = false;
 
             for (var followedSlot = 0; (followedSlot < WorldSeatBindings.SeatCount); followedSlot++) {
-                var location = m_seatRouter.Location(slot: followedSlot);
+                var location = m_seatRouter.Route(slot: followedSlot);
 
-                if (!string.Equals(a: location.InstanceName, b: transfer.SourceInstance, comparisonType: StringComparison.Ordinal) || (location.InstanceSlot != member.SourceSlot)) {
+                if (!string.Equals(a: location.Endpoint.Identity, b: transfer.SourceInstance, comparisonType: StringComparison.Ordinal) || (location.EntityIndex != member.SourceSlot)) {
                     continue;
                 }
 
                 followed = true;
-                // The seat's input-layer held state — destination-embodies doctrine: a traveler arrives in a new
-                // world in a neutral stance, so a BindingEntryMode.Toggle latch (sprint held ON, say) does not ride
-                // through the door. Generalized from the old boot-only call: an away<->away crossing carries the
-                // identical doctrine, and previously never cleared it at all.
-                _ = m_router().ClearSlotHeld(slot: followedSlot);
-                var presentationTargetName = targetName;
+                WorldAuthorityEndpoint endpoint;
+                WorldAuthorityRouteDescription? initialRoute = null;
                 if (targetAuthority.Remote is { } remoteTarget) {
+                    try {
+                        if (remoteTarget.TryDescribeRoute(bodyIndex: member.TargetSlot, route: out var describedRoute, reason: out var routeReason)) {
+                            initialRoute = describedRoute;
+                        } else {
+                            Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]");
+                        }
+                    } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+                        Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]");
+                    }
+
                     var trackedSlot = followedSlot;
                     var routeName = $"$traveler/{m_machineId:N}/{transfer.TransferId}/{trackedSlot}";
-                    if (!m_remoteAuthorities.ContainsKey(key: routeName)) {
-                        m_remoteAuthorities[routeName] = new WorldRemoteAuthority(
+                    if (!m_remoteAuthorities.TryGetValue(key: routeName, value: out var routeAuthority)) {
+                        WorldAuthorityEndpoint? publishedEndpoint = null;
+                        routeAuthority = new WorldRemoteAuthority(
                             endpoint: remoteTarget.Endpoint,
                             placeholder: remoteTarget.Definition,
                             security: m_federationSecurity,
                             observerAuthority: $"{m_machineId:N}/{routeName}",
                             submissionAuthority: remoteTarget,
                             submissionBodyIndex: member.TargetSlot,
-                            routeChanged: bodyIndex => m_seatRouter.Publish(slot: trackedSlot, instanceName: routeName, instanceSlot: bodyIndex));
+                            initialRoute: initialRoute,
+                            applicationStopping: m_applicationStopping,
+                            routeChanged: route => {
+                                var expected = m_seatRouter.Route(slot: trackedSlot);
+                                if ((publishedEndpoint is not null) && ReferenceEquals(objA: expected.Endpoint, objB: publishedEndpoint)) {
+                                    publishedEndpoint.SeedRoute(route: in route);
+                                    _ = m_seatRouter.CompareExchangeEntity(slot: trackedSlot, expected: expected, entity: route.Entity, current: out _);
+                                }
+                            });
+                        m_remoteAuthorities[routeName] = routeAuthority;
+                        publishedEndpoint = EndpointFor(identity: routeName, authority: routeAuthority, seed: initialRoute);
                     }
-                    presentationTargetName = routeName;
+                    endpoint = EndpointFor(identity: routeName, authority: routeAuthority);
+                } else if (targetAuthority.Local is { } localEndpointTarget) {
+                    endpoint = EndpointFor(instance: localEndpointTarget);
+                } else {
+                    throw new InvalidOperationException(message: "committed transfer has no target authority");
                 }
-                m_seatRouter.Publish(slot: followedSlot, instanceName: presentationTargetName, instanceSlot: member.TargetSlot);
+                var routedEntity = (initialRoute?.Entity ?? new WorldEntityAddress(
+                    Authority: targetAuthority.Local?.Server.AuthorityIdentity ?? endpoint.Authority,
+                    Index: member.TargetSlot,
+                    Generation: targetAuthority.Local?.Server.Population.Generation(index: member.TargetSlot) ?? 0));
+                _ = m_seatRouter.Publish(slot: followedSlot, endpoint: endpoint, entity: routedEntity);
             }
 
             // Scoped to the BOOT instance on each side independently, because that is the only instance a
@@ -2589,7 +2716,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             // unscoped write would clear or fill a boot seat belonging to somebody who never moved. A
             // followed seat's local participant does not vacate when it departs boot — it relocates (the
             // router publish above already records exactly where), so the roster's own occupied/device-bound
-            // state stays as it was through the whole trip, and WorldClient.SubmitAwaySeatIntents keeps
+            // state stays as it was through the whole trip, and WorldClient.SubmitAuthorityIntents keeps
             // reading a live seat rather than a vacated one. A followed seat returning to boot symmetrically
             // skips OccupySeat below: the slot was never vacated, so it is already occupied under the same
             // participant that left.
@@ -2789,6 +2916,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var endpoint in m_authorityEndpoints.Values) {
+            endpoint.Dispose();
+        }
+
         foreach (var instance in m_instances.Values) {
             instance.Dispose();
         }
@@ -2799,6 +2930,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         m_instances.Clear();
         m_remoteAuthorities.Clear();
+        m_authorityEndpoints.Clear();
     }
 
     // The directory every non-boot instance's store hangs under, separator-terminated so a prefix test is a containment

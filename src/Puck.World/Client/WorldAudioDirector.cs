@@ -75,7 +75,6 @@ internal sealed class WorldAudioDirector {
 
     private readonly WorldClient? m_client;
     private readonly WorldStampPool? m_animator;
-    private readonly WorldSeatInstanceRouter? m_seatRouter;
     private readonly WorldAudioSnapshot[] m_slabs;
     private readonly PublishBuffer<WorldAudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
@@ -119,14 +118,9 @@ internal sealed class WorldAudioDirector {
     /// emitters resolve absent (honest silence); without an animator, placements resolve through the static stamp math.</summary>
     /// <param name="client">The snapshot-fed entity view, or <see langword="null"/> headless.</param>
     /// <param name="animator">The animated-placement replay pool, or <see langword="null"/> headless.</param>
-    /// <param name="seatRouter">The traveler-follow router (stage 1) — <see langword="null"/> for the offline driver,
-    /// which carries no seats to guard. <see cref="ResolveListenerPose"/> reads it so an away seat's own resolved
-    /// camera pose (a boot-scoped read that would otherwise be stale or wrong once that seat's body has left boot's
-    /// simulation) never becomes the spatial listener.</param>
-    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator, WorldSeatInstanceRouter? seatRouter = null) {
+    public WorldAudioDirector(WorldClient? client, WorldStampPool? animator) {
         m_client = client;
         m_animator = animator;
-        m_seatRouter = seatRouter;
         m_slabs = new WorldAudioSnapshot[SnapshotRotation];
 
         for (var index = 0; (index < SnapshotRotation); index++) {
@@ -1104,26 +1098,17 @@ internal sealed class WorldAudioDirector {
         return new WorldAudioListener(Position: FixedVector3.FromVector3(value: eye), Yaw: m_lastListenerYaw);
     }
 
-    // True when no router was supplied (the offline driver, which carries no seats to guard) or the seat currently
-    // presents from the boot instance — false for a seat WorldSeatInstanceRouter routes away.
-    private bool IsBootPresenting(int slot) =>
-        ((m_seatRouter is not { } router) || string.Equals(a: router.Location(slot: slot).InstanceName, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal));
-
     // The listener policy: focus = the first joined seat's resolved view camera (the editor rig when that
     // seat edits — the frame source resolves the SAME rig the seat renders through); seat:<n> pins that seat (falling
     // back to focus while it is unjoined); a camera name resolves the declared camera row. No candidate at all
     // (headless, no seats) listens from the origin facing -Z.
     //
-    // AUDIO GUARD: a seat WorldSeatInstanceRouter currently routes AWAY never becomes the spatial listener, seat:<n>
-    // pin or focus fallback alike — WorldFrameSource's own Dress guard already leaves an away seat's
-    // WorldSeatCameraPose at its default (Joined: false), so this check is a defensive SECOND gate, never trusting
-    // Joined alone to encode "presenting from boot".
     private (Vector3 Eye, Vector3 Forward) ResolveListenerPose(ReadOnlySpan<WorldSeatCameraPose> seats, ReadOnlySpan<DynamicTransform> transforms) {
         var listener = (m_definition?.Audio.Listener ?? WorldAudioDefaults.ListenerFocus);
 
         if (listener.StartsWith(value: WorldAudioDefaults.ListenerSeatPrefix, comparisonType: StringComparison.Ordinal) &&
             int.TryParse(s: listener.AsSpan(start: WorldAudioDefaults.ListenerSeatPrefix.Length), result: out var seat) &&
-            ((seat - 1) is var slot) && ((uint)slot < (uint)seats.Length) && seats[slot].Joined && IsBootPresenting(slot: slot)) {
+            ((seat - 1) is var slot) && ((uint)slot < (uint)seats.Length) && seats[slot].Joined) {
             return (Eye: seats[slot].Eye, Forward: seats[slot].Forward);
         }
 
@@ -1134,7 +1119,7 @@ internal sealed class WorldAudioDirector {
         }
 
         for (var candidateSlot = 0; (candidateSlot < seats.Length); candidateSlot++) {
-            if (seats[candidateSlot].Joined && IsBootPresenting(slot: candidateSlot)) {
+            if (seats[candidateSlot].Joined) {
                 return (Eye: seats[candidateSlot].Eye, Forward: seats[candidateSlot].Forward);
             }
         }

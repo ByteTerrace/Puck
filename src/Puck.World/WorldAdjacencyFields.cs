@@ -36,6 +36,28 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
     }
 
     /// <inheritdoc/>
+    public Protocol.WorldEntityAddress LocalEntityAddress(int index) {
+        if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
+            return new Protocol.WorldEntityAddress(Authority: m_sourceInstanceName, Index: index, Generation: 0);
+        }
+
+        return new Protocol.WorldEntityAddress(Authority: source.Server.AuthorityIdentity, Index: index, Generation: source.Server.Population.Generation(index: index));
+    }
+
+    /// <inheritdoc/>
+    public void BeginTick(ulong tick) {
+        if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
+            return;
+        }
+
+        foreach (var row in source.Server.Definition.Adjacencies ?? []) {
+            if ((row is not null) && TryResolve(adjacencyName: row.Name.Value, neighbour: out var neighbour) && (neighbour is Handle handle)) {
+                handle.Pin(sourceTick: tick);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
     public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
         neighbour = null;
 
@@ -166,44 +188,118 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
 
     private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription) : IWorldAdjacencyNeighbour, IDisposable {
+        private readonly bool[] m_active = new bool[WorldAvatarCatalog.Capacity];
+        private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldAvatarCatalog.Capacity];
+        private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldAvatarCatalog.Capacity];
+        private readonly System.Numerics.Quaternion[] m_previousOrientations = new System.Numerics.Quaternion[WorldAvatarCatalog.Capacity];
+        private readonly System.Numerics.Vector3[] m_currentPositions = new System.Numerics.Vector3[WorldAvatarCatalog.Capacity];
+        private readonly System.Numerics.Quaternion[] m_currentOrientations = new System.Numerics.Quaternion[WorldAvatarCatalog.Capacity];
+        private readonly System.Numerics.Vector3[] m_colors = new System.Numerics.Vector3[WorldAvatarCatalog.Capacity];
+        private readonly WorldLook[] m_looks = new WorldLook[WorldAvatarCatalog.Capacity];
+        private readonly byte[] m_catalogRigs = new byte[WorldAvatarCatalog.Capacity];
+        private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldAvatarCatalog.Capacity];
         private int m_builtRevision = -1;
         private WorldFaceFrame m_frame;
         private bool m_frameResolved;
         private WorldSolidField? m_field;
         private string m_fieldReason = string.Empty;
+        private WorldDefinition? m_pinnedDefinition;
+        private WorldFaceFrame m_pinnedFrame;
+        private WorldSolidField? m_pinnedField;
+        private string m_pinnedFieldReason = string.Empty;
+        private ulong m_pinnedSnapshotTick;
+        private int m_pinnedSnapshotRevision;
+        private float m_pinnedStepSeconds;
+        private long m_pinnedArrivalTimestamp;
+        private bool m_hasPin;
 
         public HandleIdentity Identity { get; } = identity;
 
-        public WorldDefinition Definition => mirror.Definition;
+        public string Authority => mirror.Authority;
+
+        public WorldDefinition Definition => (m_pinnedDefinition ?? mirror.Definition);
 
         public int DefinitionRevision => mirror.DefinitionRevision;
 
-        public WorldFaceFrame CounterpartFrame => m_frame;
+        public WorldFaceFrame CounterpartFrame => (m_hasPin ? m_pinnedFrame : m_frame);
 
-        public ulong SnapshotTick => mirror.Tick;
+        public ulong SnapshotTick => (m_hasPin ? m_pinnedSnapshotTick : mirror.Tick);
 
-        public int SnapshotRevision => mirror.SnapshotRevision;
+        public int SnapshotRevision => (m_hasPin ? m_pinnedSnapshotRevision : mirror.SnapshotRevision);
+
+        public float InterpolationAlpha => (m_hasPin
+            ? WorldSessionMirror.ResolveInterpolationAlpha(stepSeconds: m_pinnedStepSeconds, arrivalTimestamp: m_pinnedArrivalTimestamp)
+            : mirror.InterpolationAlpha);
 
         public int EntityCapacity => WorldAvatarCatalog.Capacity;
 
-        public bool IsEntityActive(int index) => mirror.IsActive(index: index);
+        public bool IsEntityActive(int index) => (m_hasPin ? m_active[index] : mirror.IsActive(index: index));
 
-        public Protocol.WorldEntityAddress EntityAddress(int index) => mirror.Address(index: index);
+        public Protocol.WorldEntityAddress EntityAddress(int index) => (m_hasPin ? m_addresses[index] : mirror.Address(index: index));
 
-        public System.Numerics.Vector3 PreviousPosition(int index) => mirror.PreviousPosition(index: index);
+        public System.Numerics.Vector3 PreviousPosition(int index) => (m_hasPin ? m_previousPositions[index] : mirror.PreviousPosition(index: index));
 
-        public System.Numerics.Quaternion PreviousOrientation(int index) => mirror.PreviousOrientation(index: index);
+        public System.Numerics.Quaternion PreviousOrientation(int index) => (m_hasPin ? m_previousOrientations[index] : mirror.PreviousOrientation(index: index));
 
-        public System.Numerics.Vector3 CurrentPosition(int index) => mirror.CurrentPosition(index: index);
+        public System.Numerics.Vector3 CurrentPosition(int index) => (m_hasPin ? m_currentPositions[index] : mirror.CurrentPosition(index: index));
 
-        public System.Numerics.Quaternion CurrentOrientation(int index) => mirror.CurrentOrientation(index: index);
+        public System.Numerics.Quaternion CurrentOrientation(int index) => (m_hasPin ? m_currentOrientations[index] : mirror.CurrentOrientation(index: index));
 
-        public System.Numerics.Vector3 BodyColor(int index) => mirror.BodyColor(index: index);
+        public System.Numerics.Vector3 BodyColor(int index) => (m_hasPin ? m_colors[index] : mirror.BodyColor(index: index));
 
-        public WorldLook Look(int index) => mirror.Look(index: index);
+        public WorldLook Look(int index) => (m_hasPin ? m_looks[index] : mirror.Look(index: index));
+
+        public byte CatalogRig(int index) => (m_hasPin ? m_catalogRigs[index] : mirror.CatalogRig(index: index));
+
+        public FixedWorldCollider? Collider(int index) => (m_hasPin ? m_colliders[index] : mirror.Collider(index: index));
+
+        public void Pin(ulong sourceTick) {
+            Refresh();
+            if (!m_frameResolved) {
+                m_hasPin = false;
+                return;
+            }
+
+            mirror.CopySnapshotTo(
+                active: m_active,
+                addresses: m_addresses,
+                previousPositions: m_previousPositions,
+                previousOrientations: m_previousOrientations,
+                currentPositions: m_currentPositions,
+                currentOrientations: m_currentOrientations,
+                colors: m_colors,
+                looks: m_looks,
+                catalogRigs: m_catalogRigs,
+                colliders: m_colliders,
+                tick: out m_pinnedSnapshotTick,
+                revision: out m_pinnedSnapshotRevision,
+                stepSeconds: out m_pinnedStepSeconds,
+                arrivalTimestamp: out m_pinnedArrivalTimestamp);
+            m_pinnedDefinition = mirror.Definition;
+            m_pinnedFrame = m_frame;
+            m_pinnedField = m_field;
+            m_pinnedFieldReason = m_fieldReason;
+            m_hasPin = true;
+            _ = sourceTick;
+        }
 
         public bool TryResolve(out IWorldAdjacencyNeighbour? neighbour) {
             neighbour = null;
+
+            if (!m_hasPin) {
+                Refresh();
+            }
+
+            if (!(m_hasPin || m_frameResolved)) {
+                return false;
+            }
+
+            neighbour = this;
+
+            return true;
+        }
+
+        private void Refresh() {
 
             if (m_builtRevision != mirror.DefinitionRevision) {
                 if (WorldDefinitionRows.FindAdjacency(adjacencies: mirror.Definition.Adjacencies, name: Identity.Counterpart) is { Boundary: { } boundary }) {
@@ -227,18 +323,11 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                 m_builtRevision = mirror.DefinitionRevision;
             }
 
-            if (!m_frameResolved) {
-                return false;
-            }
-
-            neighbour = this;
-
-            return true;
         }
 
         public bool TryGetSolidField(out WorldSolidField? field, out string reason) {
-            field = m_field;
-            reason = m_fieldReason;
+            field = (m_hasPin ? m_pinnedField : m_field);
+            reason = (m_hasPin ? m_pinnedFieldReason : m_fieldReason);
 
             return (m_field is not null);
         }

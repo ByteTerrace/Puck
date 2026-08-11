@@ -172,6 +172,7 @@ public sealed class WorldPopulation {
             m_entries[index] = new Entry {
                 KitIndex = SelectRow(index: index, assignment: definition.Assignment, rows: assignmentRows, rowCount: m_kits.Length),
                 Kind = ((index < LocalSeatCount) ? PopulationKind.LocalSeat : PopulationKind.NetworkPeer),
+                CatalogRig = checked((byte)index),
                 Designations = NewDesignations(),
             };
         }
@@ -527,6 +528,7 @@ public sealed class WorldPopulation {
         entry.PlacementId = placement.Id;
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
+        entry.CatalogRig = checked((byte)index);
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         ClearDesignations(entry: entry);
@@ -760,6 +762,17 @@ public sealed class WorldPopulation {
     /// renderer (presentation-only).</summary>
     /// <param name="index">The 0-based population index.</param>
     public byte LookIndex(int index) => m_entries[index].LookIndex;
+
+    /// <summary>The entity-owned procedural appearance rig. Unlike a look row, this follows the occupant when
+    /// authority transfer assigns it a different population slot.</summary>
+    public byte CatalogRig(int index) => m_entries[index].CatalogRig;
+
+    /// <summary>Restores a transferred occupant's procedural appearance identity.</summary>
+    public void SetCatalogRig(int slot, byte catalogRig) {
+        if ((uint)slot < Capacity) {
+            m_entries[slot].CatalogRig = catalogRig;
+        }
+    }
 
     /// <summary>The live look rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
     public IReadOnlyList<WorldLook> LookRows => m_lookRows;
@@ -1140,6 +1153,7 @@ public sealed class WorldPopulation {
         SeedSeatWander(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
+        entry.CatalogRig = checked((byte)slot);
         entry.Generation = checked(entry.Generation + 1);
         entry.Active = true;
         m_revision++;
@@ -1545,6 +1559,39 @@ public sealed class WorldPopulation {
         }
     }
 
+    /// <summary>
+    /// Resolves active local body pairs after every body has integrated. Pair order is stable population-index order;
+    /// each body's own authority remains its sole pose writer and an overlap is shared equally between the pair.
+    /// </summary>
+    public void ResolveDynamicContacts() {
+        var two = FixedQ4816.FromInteger(value: 2L);
+        for (var leftIndex = 0; leftIndex < Capacity; leftIndex++) {
+            if (!m_entries[leftIndex].Active || (m_entries[leftIndex].Body is not { Collider: { } leftCollider } left)) {
+                continue;
+            }
+
+            for (var rightIndex = (leftIndex + 1); rightIndex < Capacity; rightIndex++) {
+                if (!m_entries[rightIndex].Active || (m_entries[rightIndex].Body is not { Collider: { } rightCollider } right)) {
+                    continue;
+                }
+
+                if (WorldDynamicBodyContacts.TryCorrection(
+                    leftPosition: left.FixedPosition,
+                    leftOrientation: left.FixedOrientation,
+                    leftCollider: in leftCollider,
+                    rightPosition: right.FixedPosition,
+                    rightOrientation: right.FixedOrientation,
+                    rightCollider: in rightCollider,
+                    tieBreaker: (leftIndex ^ rightIndex),
+                    correction: out var correction)) {
+                    var shared = (correction / two);
+                    left.ApplyDynamicContact(correction: shared);
+                    right.ApplyDynamicContact(correction: -shared);
+                }
+            }
+        }
+    }
+
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
         var kitIndex = ((entry.Kind == PopulationKind.LocalSeat) ? m_seatKit : entry.KitIndex);
@@ -1760,6 +1807,7 @@ public sealed class WorldPopulation {
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
+        m_entries[index].CatalogRig = checked((byte)index);
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
@@ -1955,6 +2003,7 @@ public sealed class WorldPopulation {
         }
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
+        entry.CatalogRig = peer.CatalogRig;
 
         // Live admission already installed these fields before emitting the event, so this is idempotent there.
         // Replay reaches this path with a fresh population and needs the verified identity restored so a later
@@ -2143,7 +2192,7 @@ public sealed class WorldPopulation {
         var entry = m_entries[index];
         var identity = WorldPrincipal.Peer(index: index, generation: entry.Generation);
 
-        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity, IdentityDomain: entry.IdentityDomain, IdentitySubject: entry.IdentitySubject, AuthorityTransferred: entry.IsAuthorityTransferred, PlacementId: entry.PlacementId);
+        return new WorldPeerEventEntry(BodyIndex: index, Generation: entry.Generation, Source: (entry.Body?.Source ?? m_defaultPeerSource), Identity: identity, IdentityDomain: entry.IdentityDomain, IdentitySubject: entry.IdentitySubject, AuthorityTransferred: entry.IsAuthorityTransferred, PlacementId: entry.PlacementId, CatalogRig: entry.CatalogRig);
     }
 
     private int CountActiveCensus() {
@@ -2358,6 +2407,9 @@ public sealed class WorldPopulation {
         // The resolved LOOK row index (PRESENTATION-ONLY; carried out on the snapshot). Reassigned by ResolveLookIndices
         // on construction and on every Rebuild.
         public byte LookIndex { get; set; }
+        // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
+        // override it, but an authority handoff preserves it.
+        public required byte CatalogRig { get; set; }
         public FixedVector3 SpawnPosition { get; set; }
         public FixedQ4816 SpawnYaw { get; set; }
     }

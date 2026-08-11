@@ -9,7 +9,7 @@ internal sealed class WorldSeatViewInput : IWorldPointerConsumer {
     private readonly PlayerRoster m_roster;
     private readonly WorldPointer m_pointer;
 
-    public WorldSeatViewInput(WorldInstanceHost instances, PlayerRoster roster, WorldPointer pointer, WorldSeatInstanceRouter seatRouter) {
+    public WorldSeatViewInput(WorldInstanceHost instances, PlayerRoster roster, WorldPointer pointer, WorldSeatAuthorityRouter seatRouter) {
         ArgumentNullException.ThrowIfNull(argument: instances);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: pointer);
@@ -17,7 +17,7 @@ internal sealed class WorldSeatViewInput : IWorldPointerConsumer {
         m_instances = instances;
         m_roster = roster;
         m_pointer = pointer;
-        seatRouter.LocationChanged += OnLocationChanged;
+        seatRouter.RouteChanged += OnLocationChanged;
     }
 
     public WorldSeatLook Preference(int slot, WorldDefinition definition) =>

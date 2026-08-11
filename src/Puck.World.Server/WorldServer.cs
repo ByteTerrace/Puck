@@ -113,6 +113,13 @@ public sealed class WorldServer : IWorldServerHost {
     private WorldDocumentSubmissionReceipt? m_lastDocumentReceipt;
     private readonly WorldRenderEnvelope m_envelope;
     private readonly Queue<IntentSubmission> m_intents = new();
+    // A federated player's device image is replicated state, not a packet-rate-shaped impulse. One authenticated
+    // intent stream owns each slot at a time and the destination republishes its latest image on every authority
+    // tick until that stream changes it or disconnects. This is what makes a 30 Hz player host driving a 240 Hz
+    // authority move exactly like a colocated player: missing network packets cannot masquerade as released sticks.
+    // The stream lease id is server-minted; an older socket's finally block can therefore never clear a replacement
+    // socket's state after a reconnect.
+    private readonly FederatedIntentState[] m_federatedIntents;
     // The buffered live-edit ops (mutations, whole-document swaps, journal undo), drained FIFO at the step boundary
     // BEFORE intents. New allocation lives here, at the mutation boundary; an idle tick pays one empty-queue check.
     private readonly Queue<PendingOp> m_pending = new();
@@ -386,6 +393,7 @@ public sealed class WorldServer : IWorldServerHost {
         m_machines = machines;
         m_driveDenied = new bool[population.Capacity];
         m_contended = new bool[population.Capacity];
+        m_federatedIntents = new FederatedIntentState[population.Capacity];
         m_snapshotEntries = new EntitySnapshot[population.Capacity];
         m_events = new WorldEventFeed();
         m_grants = new WorldGrants(seatCount: WorldPopulation.LocalSeatCount, population: population.Capacity, routeTransition: QueueRouteTransition);
@@ -514,7 +522,7 @@ public sealed class WorldServer : IWorldServerHost {
 
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
     /// source renders this instance (the boot world's own <c>WorldFrameSource</c>, or an observing destination's
-    /// session/away-seat view), so a document mutation the same instance receives is checked against the same
+    /// session or continuum view), so a document mutation the same instance receives is checked against the same
     /// probed floor a renderer already committed to. Unconfigured (nothing renders this instance yet) reads as
     /// "fits" — <see cref="WorldRenderEnvelope"/>'s own documented default.</summary>
     public WorldRenderEnvelope Envelope => m_envelope;
@@ -791,6 +799,37 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="submission">The tick, entity index, and merged intent.</param>
     public void EnqueueIntent(in IntentSubmission submission) {
         m_intents.Enqueue(item: submission);
+    }
+
+    /// <summary>Publishes one authenticated federation stream's latest device image. The image is held as replicated
+    /// input state and reapplied once per destination tick; it is not consumed merely because this socket update was
+    /// sparse relative to the destination clock.</summary>
+    public void PublishFederatedIntent(long leaseId, in IntentSubmission submission) {
+        if ((leaseId <= 0) || ((uint)submission.EntityIndex >= (uint)m_federatedIntents.Length)) {
+            return;
+        }
+
+        var published = submission;
+        ExecuteAuthorityOperation(operation: () => {
+            ref var state = ref m_federatedIntents[published.EntityIndex];
+            state = new FederatedIntentState(LeaseId: leaseId, Principal: published.Principal, Submission: published, Active: true);
+        });
+    }
+
+    /// <summary>Releases every device image still owned by one closing federation stream. Lease comparison makes
+    /// reconnect replacement atomic: a superseded stream cannot release the newer writer.</summary>
+    public void ReleaseFederatedIntents(long leaseId) {
+        if (leaseId <= 0) {
+            return;
+        }
+
+        ExecuteAuthorityOperation(operation: () => {
+            for (var index = 0; index < m_federatedIntents.Length; index++) {
+                if (m_federatedIntents[index].Active && (m_federatedIntents[index].LeaseId == leaseId)) {
+                    m_federatedIntents[index] = default;
+                }
+            }
+        });
     }
 
     /// <summary>Buffers one live world mutation for the next <see cref="Step"/> (drained before intents). Retains the
@@ -1565,6 +1604,8 @@ public sealed class WorldServer : IWorldServerHost {
             _ = ApplyIntentSubmission(body: body, submission: in submission);
         }
 
+        ApplyFederatedIntents();
+
         m_addons?.ApplyContributions(tick: (context.Tick + 1UL));
         FoldChannelContributions();
         m_inputHold.Apply(population: m_population);
@@ -1587,8 +1628,10 @@ public sealed class WorldServer : IWorldServerHost {
         ResolveEngageProbes(ordinals: engageProbeOrdinals, screens: engageProbeScreens);
 
         var tick = (context.Tick + 1UL);
+        m_population.Adjacencies?.BeginTick(tick: tick);
         m_population.AdvanceSimulated(tick: tick, stepTicks: context.StepTicks);
         m_population.AdvanceSeats(tick: tick, stepTicks: context.StepTicks, engageProbeOrdinals: engageProbeOrdinals, engageEdges: engageEdges);
+        m_population.ResolveDynamicContacts();
         m_population.CompleteStep(tick: tick);
         foreach (var designation in m_population.DesignationOutputs) {
             _ = ApplyDesignationCore(designation: designation, principal: WorldPrincipal.Console, knownSubject: true, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0);
@@ -1806,6 +1849,23 @@ public sealed class WorldServer : IWorldServerHost {
 
         reason = string.Empty;
         return true;
+    }
+
+    // Re-materializes every live federation stream's latest device state into this authority tick. A row is
+    // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
+    // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
+    private void ApplyFederatedIntents() {
+        for (var index = 0; index < m_federatedIntents.Length; index++) {
+            ref readonly var state = ref m_federatedIntents[index];
+
+            if (!state.Active || (Body(index: index) is not { } body) ||
+                !m_population.IsAdmittedPeer(bodyIndex: index) || (m_population.PeerPrincipal(index: index) != state.Principal)) {
+                continue;
+            }
+
+            var submission = state.Submission with { EntityIndex = index, Principal = state.Principal };
+            _ = ApplyIntentSubmission(body: body, submission: in submission);
+        }
     }
 
     /// <summary>Applies one submission to a live body under the per-tick Drive check, and returns the verdict that
@@ -5918,6 +5978,7 @@ public sealed class WorldServer : IWorldServerHost {
                 Active: true,
                 Kit: m_population.KitIndex(index: index),
                 Look: m_population.LookIndex(index: index),
+                CatalogRig: m_population.CatalogRig(index: index),
                 Continuity: (consumeContinuity ? body.TakeContinuity() : body.PeekContinuity()),
                 Generation: m_population.Generation(index: index),
                 PlacementId: m_population.InhabitantPlacementId(index: index)
@@ -6294,4 +6355,6 @@ public sealed class WorldServer : IWorldServerHost {
 
         return templates;
     }
+
+    private readonly record struct FederatedIntentState(long LeaseId, WorldPrincipal Principal, IntentSubmission Submission, bool Active);
 }

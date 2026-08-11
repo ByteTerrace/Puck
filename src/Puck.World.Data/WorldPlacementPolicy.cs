@@ -51,16 +51,8 @@ public static class WorldPlacementPolicy {
     /// because the document validator must exclude the same reserved band an authored screen index cannot enter.</summary>
     public const int DerivedFaceBase = 24;
 
-    /// <summary>The number of engine screen-surface slots reserved for the local traveler-follow views — one per
-    /// local seat. Authored screens, derived creation faces, and authoring headroom all exclude this fixed band.</summary>
-    public const int AwaySeatScreenCount = WorldPopulationLimits.LocalSeatCount;
-
-    /// <summary>The first traveler-follow screen slot. The band occupies the top
-    /// <see cref="AwaySeatScreenCount"/> entries of the engine surface table.</summary>
-    public const int AwaySeatScreenBase = (Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces - AwaySeatScreenCount);
-
-    /// <summary>The most derived-face slots a world may reserve without entering the traveler-follow band.</summary>
-    public const int MaxDerivedFaceScreens = (AwaySeatScreenBase - DerivedFaceBase);
+    /// <summary>The most derived-face slots a world may reserve in the engine surface table.</summary>
+    public const int MaxDerivedFaceScreens = (Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces - DerivedFaceBase);
 
     /// <summary>Determines whether <paramref name="index"/> falls inside the reserved derived-face band
     /// <c>[<see cref="DerivedFaceBase"/>, DerivedFaceBase + <paramref name="derivedFaceScreens"/>)</c> — the ONE
@@ -72,7 +64,4 @@ public static class WorldPlacementPolicy {
     public static bool IsReservedFaceIndex(int index, int derivedFaceScreens) =>
         ((index >= DerivedFaceBase) && (index < (DerivedFaceBase + derivedFaceScreens)));
 
-    /// <summary>Determines whether <paramref name="index"/> falls inside the fixed traveler-follow screen band.</summary>
-    public static bool IsReservedAwaySeatScreenIndex(int index) =>
-        ((index >= AwaySeatScreenBase) && (index < (AwaySeatScreenBase + AwaySeatScreenCount)));
 }

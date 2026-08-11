@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -10,19 +12,22 @@ namespace Puck.World;
 /// <summary>The remote implementation of the authority contract used by transfer and continuous projection.</summary>
 internal sealed class WorldRemoteAuthority : IDisposable {
     private IPEndPoint m_endpoint;
-    private readonly CancellationTokenSource m_lifetime = new();
+    private readonly CancellationTokenSource m_lifetime;
     private readonly Dictionary<int, (string SourceAuthority, ulong TransferId, int Ordinal)> m_credentials = new();
+    private readonly ConcurrentDictionary<string, FederatedIntentPump> m_intentPumps = new(comparer: StringComparer.Ordinal);
     private readonly WorldFederatedServerLink m_link;
     private readonly WorldFederationSecurity m_security;
     private readonly string m_observerAuthority;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
     private readonly int m_submissionBodyIndex;
-    private int m_observedBodyIndex;
-    private readonly Action<int>? m_routeChanged;
-    private ulong m_lastRouteProbeTick;
+    private WorldAuthorityRouteDescription? m_observedRoute;
+    private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
+    private int m_routeRevision;
+    private long m_lastObservedTickBits;
+    private string m_authority = string.Empty;
     private WorldDefinition m_definition;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, int submissionBodyIndex = -1, Action<int>? routeChanged = null) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, int submissionBodyIndex = -1, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
         if (!IPEndPoint.TryParse(endpoint, out var parsed)) {
             throw new FormatException($"host.authority '{endpoint}' is not a parseable IP endpoint");
         }
@@ -33,14 +38,26 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         m_observerAuthority = observerAuthority;
         m_submissionAuthority = submissionAuthority;
         m_submissionBodyIndex = submissionBodyIndex;
-        m_observedBodyIndex = submissionBodyIndex;
+        m_observedRoute = initialRoute;
         m_routeChanged = routeChanged;
+        m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
+        if (initialRoute is { } route) {
+            if (!IPEndPoint.TryParse(route.Endpoint, out var initialEndpoint)) {
+                throw new FormatException($"route endpoint '{route.Endpoint}' is not a parseable IP endpoint");
+            }
+            m_endpoint = initialEndpoint;
+            m_definition = route.Definition;
+            m_authority = route.Entity.Authority;
+            m_lastObservedTickBits = unchecked((long)route.Tick);
+        }
         m_link = new WorldFederatedServerLink(authority: this);
     }
 
     public string Endpoint => m_endpoint.ToString();
     public WorldDefinition Definition => Volatile.Read(ref m_definition);
     public IServerLink Link => m_link;
+    public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(ref m_lastObservedTickBits)) + 1UL);
+    public string Authority => Volatile.Read(ref m_authority);
 
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
         var frame = RoundTrip(sourceAuthority: request.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Reserve, body: WorldFederationWireFormat.EncodeReservation(request: request));
@@ -104,7 +121,13 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         return lease;
     }
 
-    public void Dispose() => m_lifetime.Cancel();
+    public void Dispose() {
+        m_lifetime.Cancel();
+        foreach (var pump in m_intentPumps.Values) {
+            pump.Dispose();
+        }
+        m_intentPumps.Clear();
+    }
 
     internal bool TryCredential(int bodyIndex, out string sourceAuthority, out ulong transferId, out int ordinal) {
         if (m_submissionAuthority is { } upstream) {
@@ -138,30 +161,26 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         }
 
         var stamped = submission with { EntityIndex = bodyIndex };
-        var response = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Intent, body: WorldFederationWireFormat.EncodeIntent(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, submission: in stamped));
-        if (response.Kind != WorldFederationWireFormat.ResponseKind.Ack) {
-            reason = DecodeRefusal(response);
-            return false;
-        }
+        var pump = m_intentPumps.GetOrAdd(key: sourceAuthority, valueFactory: authority => new FederatedIntentPump(owner: this, sourceAuthority: authority));
+        pump.Publish(transferId: transferId, ordinal: ordinal, submission: in stamped);
 
         reason = string.Empty;
         return true;
     }
 
-    internal bool TryDescribeRoute(int bodyIndex, out string endpoint, out int routedBodyIndex, out string reason) {
+    internal bool TryDescribeRoute(int bodyIndex, out WorldAuthorityRouteDescription route, out string reason) {
         if (m_submissionAuthority is { } upstream) {
-            return upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, endpoint: out endpoint, routedBodyIndex: out routedBodyIndex, reason: out reason);
+            return upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, route: out route, reason: out reason);
         }
 
-        endpoint = string.Empty;
-        routedBodyIndex = -1;
+        route = default;
         if (!TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
             reason = $"forwarded body:{bodyIndex} has no committed destination credential";
             return false;
         }
 
         var response = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Route, body: WorldFederationWireFormat.EncodeRouteCredential(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal));
-        if ((response.Kind != WorldFederationWireFormat.ResponseKind.Route) || !WorldFederationWireFormat.TryDecodeRoute(body: response.Body, endpoint: out endpoint, bodyIndex: out routedBodyIndex)) {
+        if ((response.Kind != WorldFederationWireFormat.ResponseKind.Route) || !WorldFederationWireFormat.TryDecodeRoute(body: response.Body, route: out route)) {
             reason = DecodeRefusal(response);
             return false;
         }
@@ -242,9 +261,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     internal (WorldFederationWireFormat.ResponseKind Kind, byte[] Body) RoundTrip(string sourceAuthority, WorldFederationWireFormat.RequestKind kind, byte[] body) {
         if (m_submissionAuthority is { } upstream) {
-            var response = upstream.RoundTrip(sourceAuthority: sourceAuthority, kind: kind, body: body);
-            _ = RefreshObservedRoute();
-            return response;
+            return upstream.RoundTrip(sourceAuthority: sourceAuthority, kind: kind, body: body);
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(m_lifetime.Token);
@@ -267,7 +284,9 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     private async Task ObserveUntilCancelledAsync(IClientSink sink, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             try {
-                await ObserveSessionAsync(sink: sink, ct: ct).ConfigureAwait(false);
+                if (await ObserveSessionAsync(sink: sink, ct: ct).ConfigureAwait(false)) {
+                    continue;
+                }
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
             } catch (Exception exception) when (exception is IOException or SocketException or OperationCanceledException) {
@@ -282,10 +301,11 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         }
     }
 
-    private async Task ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
+    private async Task<bool> ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
             using var client = new TcpClient();
             client.NoDelay = true;
             var observedEndpoint = m_endpoint;
+            var observedRouteRevision = Volatile.Read(ref m_routeRevision);
             await client.ConnectAsync(remoteEP: observedEndpoint, cancellationToken: ct).ConfigureAwait(false);
             using var stream = client.GetStream();
             await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: ct).ConfigureAwait(false);
@@ -295,7 +315,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             while (!ct.IsCancellationRequested) {
                 var frame = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
                 if (frame is null) {
-                    return;
+                    return false;
                 }
 
                 switch ((WorldFederationWireFormat.ResponseKind)frame.Value.Kind) {
@@ -307,30 +327,59 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                         }
                     case WorldFederationWireFormat.ResponseKind.Snapshot: {
                             var snapshot = WorldFederationWireFormat.DecodeSnapshot(body: frame.Value.Body);
-                            sink.DeliverSnapshot(snapshot: in snapshot);
-                            if ((m_submissionAuthority is { } upstream) && ((snapshot.Tick - m_lastRouteProbeTick) >= 15UL)) {
-                                m_lastRouteProbeTick = snapshot.Tick;
-                                if (RefreshObservedRoute()) {
-                                    return;
-                                }
+                            var containsObservedEntity = SnapshotContainsObservedEntity(snapshot: in snapshot);
+                            if ((Volatile.Read(ref m_routeRevision) != observedRouteRevision) ||
+                                (!containsObservedEntity && RefreshObservedRoute())) {
+                                // The route callback seeded the new authority's committed image. Publishing this
+                                // old authority's missing-body snapshot first would create an avoidable inactive
+                                // frame between two committed writers—the camera hitch the route seed exists to
+                                // eliminate. Reconnect directly to the new head instead.
+                                return true;
                             }
+                            _ = Interlocked.Exchange(location1: ref m_lastObservedTickBits, value: unchecked((long)snapshot.Tick));
+                            Volatile.Write(ref m_authority, snapshot.Authority);
+                            sink.DeliverSnapshot(snapshot: in snapshot);
                             break;
                         }
                 }
             }
+            return false;
+    }
+
+    private bool SnapshotContainsObservedEntity(in WorldSnapshot snapshot) {
+        var bodyIndex = (m_observedRoute?.Entity.Index ?? m_submissionBodyIndex);
+        foreach (ref readonly var entry in snapshot.Entries.Span) {
+            if ((entry.Index == bodyIndex) && entry.Active) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private bool RefreshObservedRoute() {
         if ((m_submissionAuthority is not { } upstream) ||
-            !upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, endpoint: out var endpoint, routedBodyIndex: out var bodyIndex, reason: out _) ||
-            !IPEndPoint.TryParse(endpoint, out var routedEndpoint) ||
-            (routedEndpoint.Equals(m_endpoint) && (bodyIndex == m_observedBodyIndex))) {
+            !upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, route: out var route, reason: out _) ||
+            !IPEndPoint.TryParse(route.Endpoint, out var routedEndpoint)) {
+            return false;
+        }
+
+        if ((m_observedRoute is { } observed) &&
+            string.Equals(a: observed.Endpoint, b: route.Endpoint, comparisonType: StringComparison.Ordinal) &&
+            (observed.Entity == route.Entity)) {
+            m_observedRoute = route;
             return false;
         }
 
         m_endpoint = routedEndpoint;
-        m_observedBodyIndex = bodyIndex;
-        m_routeChanged?.Invoke(obj: bodyIndex);
+        m_observedRoute = route;
+        foreach (var pump in m_intentPumps.Values) {
+            pump.InvalidateAcknowledgements();
+        }
+        Volatile.Write(ref m_definition, route.Definition);
+        Volatile.Write(ref m_authority, route.Entity.Authority);
+        _ = Interlocked.Exchange(location1: ref m_lastObservedTickBits, value: unchecked((long)route.Tick));
+        _ = Interlocked.Increment(ref m_routeRevision);
+        m_routeChanged?.Invoke(obj: route);
         return true;
     }
 
@@ -351,5 +400,153 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         if ((verdict is null) || (verdict.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
             throw new IOException(verdict is null ? "remote authority closed during federation authentication" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)verdict.Value.Kind, verdict.Value.Body)));
         }
+    }
+
+    // One authenticated, persistent control lane per source namespace. SubmitIntent only updates this pump's
+    // bounded latest-value table and returns to the local simulation immediately; the background lane pays connect
+    // and authentication once, then preserves request/ack ordering without making rendering or the boot clock wait
+    // on a network round trip. A key has one pending value, so a slow WAN coalesces intermediate stick samples rather
+    // than building latency or an unbounded queue.
+    private sealed class FederatedIntentPump : IDisposable {
+        private readonly WorldRemoteAuthority m_owner;
+        private readonly string m_sourceAuthority;
+        private readonly ConcurrentDictionary<IntentKey, IntentSubmission> m_pending = new();
+        private readonly ConcurrentDictionary<IntentKey, AcknowledgedIntent> m_acknowledged = new();
+        private readonly SemaphoreSlim m_signal = new(initialCount: 0, maxCount: 1);
+        private readonly CancellationTokenSource m_lifetime;
+        private readonly Task m_worker;
+        private int m_unavailable;
+
+        public FederatedIntentPump(WorldRemoteAuthority owner, string sourceAuthority) {
+            m_owner = owner;
+            m_sourceAuthority = sourceAuthority;
+            m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(owner.m_lifetime.Token);
+            m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
+        }
+
+        public void Publish(ulong transferId, int ordinal, in IntentSubmission submission) {
+            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+            if (m_acknowledged.TryGetValue(key: key, value: out var acknowledged) &&
+                (acknowledged.Submission == submission) &&
+                (Stopwatch.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < TimeSpan.FromSeconds(1))) {
+                return;
+            }
+            m_pending[key] = submission;
+            try {
+                _ = m_signal.Release();
+            } catch (SemaphoreFullException) {
+                // One wake already covers every latest-value row in the bounded table.
+            }
+        }
+
+        public void InvalidateAcknowledgements() {
+            foreach (var pair in m_acknowledged.ToArray()) {
+                m_pending[pair.Key] = pair.Value.Submission;
+            }
+            m_acknowledged.Clear();
+            try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
+        }
+
+        public void Dispose() {
+            m_lifetime.Cancel();
+            try { m_worker.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
+            m_lifetime.Dispose();
+            m_signal.Dispose();
+        }
+
+        private async Task RunAsync(CancellationToken ct) {
+            while (!ct.IsCancellationRequested) {
+                try {
+                    await m_signal.WaitAsync(cancellationToken: ct).ConfigureAwait(false);
+                    await RunConnectionAsync(ct: ct).ConfigureAwait(false);
+                    _ = Interlocked.Exchange(location1: ref m_unavailable, value: 0);
+                } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                    return;
+                } catch (Exception exception) when (exception is IOException or SocketException or OperationCanceledException) {
+                    if (ct.IsCancellationRequested) {
+                        return;
+                    }
+                    if (Interlocked.Exchange(location1: ref m_unavailable, value: 1) == 0) {
+                        Console.Error.WriteLine(value: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]");
+                    }
+                    try {
+                        await Task.Delay(delay: TimeSpan.FromMilliseconds(100), cancellationToken: ct).ConfigureAwait(false);
+                    } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                        return;
+                    }
+                    if (!m_pending.IsEmpty) {
+                        try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
+                    }
+                }
+            }
+        }
+
+        private async Task RunConnectionAsync(CancellationToken ct) {
+            using var client = new TcpClient();
+            client.NoDelay = true;
+            await client.ConnectAsync(remoteEP: m_owner.m_endpoint, cancellationToken: ct).ConfigureAwait(false);
+            var connectedEndpoint = m_owner.Endpoint;
+            using var stream = client.GetStream();
+            await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: ct).ConfigureAwait(false);
+            await m_owner.AuthenticateAsync(stream: stream, sourceAuthority: m_sourceAuthority, ct: ct).ConfigureAwait(false);
+            await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.IntentStream, body: [], ct: ct).ConfigureAwait(false);
+            var opening = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+            if ((opening is null) || (opening.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
+                throw new IOException(opening is null ? "remote authority closed while opening intent stream" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)opening.Value.Kind, opening.Value.Body)));
+            }
+
+            while (!ct.IsCancellationRequested) {
+                if (m_pending.IsEmpty) {
+                    await m_signal.WaitAsync(cancellationToken: ct).ConfigureAwait(false);
+                }
+
+                foreach (var pair in m_pending.ToArray()) {
+                    if (!string.Equals(a: connectedEndpoint, b: m_owner.Endpoint, comparisonType: StringComparison.Ordinal)) {
+                        await HandoffAsync(stream: stream, ct: ct).ConfigureAwait(false);
+                        return;
+                    }
+                    var sent = pair.Value;
+                    var body = WorldFederationWireFormat.EncodeIntent(sourceAuthority: m_sourceAuthority, transferId: pair.Key.TransferId, ordinal: pair.Key.Ordinal, submission: in sent);
+                    await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Intent, body: body, ct: ct).ConfigureAwait(false);
+                    var response = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+                    if ((response is null) || (response.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
+                        throw new IOException(response is null ? "remote authority closed its intent stream without a verdict" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)response.Value.Kind, response.Value.Body)));
+                    }
+
+                    if (!string.Equals(a: connectedEndpoint, b: m_owner.Endpoint, comparisonType: StringComparison.Ordinal)) {
+                        await HandoffAsync(stream: stream, ct: ct).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (m_pending.TryGetValue(key: pair.Key, value: out var current) && (current == sent)) {
+                        m_acknowledged[pair.Key] = new AcknowledgedIntent(Submission: sent, Timestamp: Stopwatch.GetTimestamp());
+                        _ = m_pending.TryRemove(key: pair.Key, value: out _);
+                    }
+
+                    // Covers the route revision moving between the pre-ack check and publication of the acknowledged
+                    // row. Restore the exact sent state to pending before closing the older lane.
+                    if (!string.Equals(a: connectedEndpoint, b: m_owner.Endpoint, comparisonType: StringComparison.Ordinal)) {
+                        m_pending[pair.Key] = sent;
+                        _ = m_acknowledged.TryRemove(key: pair.Key, value: out _);
+                        await HandoffAsync(stream: stream, ct: ct).ConfigureAwait(false);
+                        return;
+                    }
+                }
+            }
+        }
+
+        private async Task HandoffAsync(NetworkStream stream, CancellationToken ct) {
+            // This is an intentional route handoff, not a dropped client. Tell the older authority not to
+            // synthesize a neutral release: the new lane will seed the same current held state.
+            await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.IntentStreamHandoff, body: [], ct: ct).ConfigureAwait(false);
+            var handoff = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
+            if ((handoff is null) || (handoff.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
+                throw new IOException(handoff is null ? "remote authority closed during intent stream handoff" : DecodeRefusal(((WorldFederationWireFormat.ResponseKind)handoff.Value.Kind, handoff.Value.Body)));
+            }
+            try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
+        }
+
+        private readonly record struct IntentKey(ulong TransferId, int Ordinal);
+        private readonly record struct AcknowledgedIntent(IntentSubmission Submission, long Timestamp);
     }
 }

@@ -59,7 +59,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
-            description: "Synthesizes one raw input signal into the router — the scripted twin of a physical control, so chords and bindings are drivable over the pipe: player.signal <source> <press|release|value> — <source> a provider-neutral input source id (e.g. gamepad.leftTrigger, gamepad.buttonSouth); press/release = a digital edge; a number = an analog Active sample (a trigger sweep — 0.9 latches a modifier, 0 releases it through hysteresis). The signal folds into the NEXT simulation tick's snapshot exactly like device input (it rides the seat the device-neutral lane resolves to — seat 1). Replay streams shift, like any live input.",
+            description: "Synthesizes one raw input signal into the router — the scripted twin of a physical control, so chords, sticks, and bindings are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick). The signal folds into the NEXT simulation tick's snapshot exactly like device input and remains carried until a release/zero sample, matching the physical backend rather than bypassing its binding.",
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );
@@ -231,8 +231,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         return new CommandResult(Output: $"[player.bind: seat {seat} '{source}' → '{destinationLabel}' (unsaved — identity.bindings.save to persist)]");
     }
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.signal: expected <source> <press|release|value>]");
+        if (args.Count is not (2 or 3)) {
+            return CommandResult.Error(output: "[player.signal: expected <source> <press|release|value> or <source> <x> <y>]");
         }
 
         var source = args[0].ToString();
@@ -244,7 +244,16 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         CommandPhase phase;
         CommandValue value;
 
-        if (args.Is(index: 1, value: "press")) {
+        if (args.Count == 3) {
+            if (!args.TryFloat(index: 1, value: out var x) || !args.TryFloat(index: 2, value: out var y) ||
+                !float.IsFinite(f: x) || !float.IsFinite(f: y)) {
+                return CommandResult.Error(output: "[player.signal: axis values must be finite numbers]");
+            }
+            phase = CommandPhase.Active;
+            value = CommandValue.Axis(value: new System.Numerics.Vector2(
+                x: Math.Clamp(value: x, min: -1f, max: 1f),
+                y: Math.Clamp(value: y, min: -1f, max: 1f)));
+        } else if (args.Is(index: 1, value: "press")) {
             phase = CommandPhase.Started;
             value = CommandValue.Digital(active: true);
         } else if (args.Is(index: 1, value: "release")) {
@@ -265,7 +274,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             Value: value
         ));
 
-        return new CommandResult(Output: $"[player.signal: {source} {args[1].ToString().ToLowerInvariant()}]");
+        var describedSample = ((args.Count == 3) ? $"{args[1].ToString().ToLowerInvariant()} {args[2].ToString().ToLowerInvariant()}" : args[1].ToString().ToLowerInvariant());
+        return new CommandResult(Output: $"[player.signal: {source} {describedSample}]");
     }
     private CommandResult BindingsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {

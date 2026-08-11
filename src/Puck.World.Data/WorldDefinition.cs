@@ -3091,7 +3091,8 @@ public abstract record WorldLookSource {
 
     /// <summary>The procedural humanoid catalog (<c>WorldAvatarCatalog</c>) — one look source among others.</summary>
     /// <param name="Index">The procedural renderer catalog rig to pin, or
-    /// <see langword="null"/> for the index-derived pick.</param>
+    /// <see langword="null"/> for the occupant-owned pick. A fresh occupant seeds that pick from its first local
+    /// slot; authority transfer carries it thereafter, so admission into another slot does not restyle the body.</param>
     public sealed record Catalog(int? Index) : WorldLookSource {
         /// <summary>The procedural renderer's fixed rig count.</summary>
         public const int RigCount = 128;
@@ -3122,7 +3123,7 @@ public readonly record struct WorldLookMotion(float GaitAmplitude, bool ReplayFr
 /// <param name="Motion">How the look animates with the body (see <see cref="WorldLookMotion"/>).</param>
 public sealed record WorldLook(string Name, WorldLookSource Source, float Scale, WorldLookMotion Motion) {
     /// <summary>Gets the implicit single look every body wears when a world authors no <c>looks</c> section — the
-    /// index-derived catalog pick at full gait, so an empty <c>looks</c> list is the pre-arc runtime exactly.</summary>
+    /// occupant-owned catalog pick at full gait.</summary>
     public static WorldLook Implicit { get; } = new WorldLook(Name: "catalog", Source: new WorldLookSource.Catalog(Index: null), Scale: 1f, Motion: WorldLookMotion.Default);
 }
 
@@ -3312,8 +3313,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// <param name="DerivedFaceScreens">Boot-consumed. The derived screen slots the binder reserves at boot for creation
 /// faces (a face declared by a placement's creation, lit by a feed), registered at
 /// <c>[<c>Client.WorldCreationFacets.DerivedFaceBase</c>, DerivedFaceBase + this)</c>. Bounded so the range
-/// stays below <see cref="WorldPlacementPolicy.AwaySeatScreenBase"/>, where traveler-follow presentation owns the
-/// engine table's final local-seat-sized band.</param>
+/// stays inside the engine screen table.</param>
 public sealed record WorldAuthoringDefaults(
     int AuthoringHeadroomScreens,
     int AuthoringHeadroomPlacements,
@@ -3675,7 +3675,7 @@ public sealed record WorldDefinition(
     WorldCollision Collision,
     WorldHostDefaults Host,
     WorldViewDefaults Views,
-    // An empty Looks list resolves every entity to WorldLook.Implicit (the index-derived catalog pick at full gait);
+    // An empty Looks list resolves every entity to WorldLook.Implicit (the occupant-owned catalog pick at full gait);
     // NO branch special-cases "the author authored none".
     IReadOnlyList<WorldLook> Looks,
     WorldRowAssignment LookAssignment,

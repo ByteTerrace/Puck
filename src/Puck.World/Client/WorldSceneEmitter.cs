@@ -412,7 +412,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
                 castsSoftShadow: castsSoftShadow,
                 transforms: avatars,
-                rig: LookRig(look: look),
+                rig: LookRig(look: look, catalogRig: m_client.CatalogRig(index: index)),
                 scale: look.Scale
             );
         }
@@ -469,13 +469,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             WorldScreenStamper.Emit(builder: builder, screen: screen);
         }
 
-        // The traveler-follow stage-1 away-seat quads (WorldAwaySeatQuad): four reserved, always-emitted, STATIC
-        // screen surfaces — the SAME "emitted every build, no probe branch" shape as the declared/derived screens
-        // above, since they never vary with population or authoring state.
-        for (var seat = 0; (seat < WorldAwaySeatQuad.Count); seat++) {
-            WorldAwaySeatQuad.EmitQuad(builder: builder, slot: seat);
-        }
-
         // The placement stamps: the construction probe reserves (boot static instances + the authoring headroom)
         // worst-case stamps, and the APPLY-TIME MEASURE charges a candidate's static placements at that same
         // worst-case unit — max(candidate instances, the reservation) — so the placement term stays CONSTANT between
@@ -521,7 +514,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             accentMaterials: avatarAccentMaterials,
             probeWorstCase: probeWorstCase,
             slotBase: slotBase,
-            rigFor: (probeWorstCase ? null : index => LookRig(look: m_client.Look(index: index))),
+            rigFor: (probeWorstCase ? null : index => LookRig(look: m_client.Look(index: index), catalogRig: m_client.CatalogRig(index: index))),
             scaleFor: (probeWorstCase ? null : index => m_client.Look(index: index).Scale)
         );
     }
@@ -549,7 +542,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var authored = used.Count;
 
         for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            if (WorldCreationFacets.IsReservedFaceIndex(index: index, derivedFaceScreens: m_derivedFaceScreens) || WorldAwaySeatQuad.IsReservedIndex(index: index)) {
+            if (WorldCreationFacets.IsReservedFaceIndex(index: index, derivedFaceScreens: m_derivedFaceScreens)) {
                 _ = used.Add(item: index);
             }
         }
@@ -577,7 +570,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         if (added < m_authoringHeadroomScreens) {
-            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {m_authoringHeadroomScreens} reserved screen slot(s), but only {added} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authored} carry an authored screen, {m_derivedFaceScreens} are reserved for derived creation faces at indices {WorldCreationFacets.DerivedFaceBase}..{((WorldCreationFacets.DerivedFaceBase + m_derivedFaceScreens) - 1)}, and {WorldAwaySeatQuad.Count} are reserved for the traveler-follow away-seat quads at indices {WorldAwaySeatQuad.Base}..{((WorldAwaySeatQuad.Base + WorldAwaySeatQuad.Count) - 1)}. Lower authoring.authoringHeadroomScreens by {(m_authoringHeadroomScreens - added)}, lower authoring.derivedFaceScreens, or author fewer screens.");
+            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {m_authoringHeadroomScreens} reserved screen slot(s), but only {added} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authored} carry an authored screen and {m_derivedFaceScreens} are reserved for derived creation faces at indices {WorldCreationFacets.DerivedFaceBase}..{((WorldCreationFacets.DerivedFaceBase + m_derivedFaceScreens) - 1)}. Lower authoring.authoringHeadroomScreens by {(m_authoringHeadroomScreens - added)}, lower authoring.derivedFaceScreens, or author fewer screens.");
         }
 
         return padded;
@@ -640,9 +633,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return null;
     }
 
-    // The catalog geometry-source rig for a look: a Catalog(Index) pin, or -1 (the entity's own index-derived rig) for
-    // an unpinned catalog OR a Creation look. A Creation look's body renders through the stamp pool (its catalog avatar
+    // The catalog geometry-source rig for a look: an authored Catalog(Index) pin, or the occupant-owned carried rig
+    // for an unpinned catalog OR a Creation look. A Creation look's body renders through the stamp pool (its catalog avatar
     // parks below the floor via HiddenAvatar), so this catalog rig is reached only as the pool-pressure fallback — a
     // body a full stamp pool starved renders as a catalog avatar rather than vanishing.
-    private static int LookRig(WorldLook look) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : -1);
+    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : catalogRig);
 }

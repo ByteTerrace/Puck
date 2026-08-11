@@ -179,56 +179,49 @@ resolution even when they do not share presentation or transfer.
   view's engine while its last image keeps serving, and rebuilds at current capacity next frame.
   Only the boot world still owns the complete client, editor, replay, machine and network
   composition.
-- Traveler-follow stage 1 landed: a `WorldSeatInstanceRouter` (`Client/`) tracks, per local seat,
-  which running instance (and which of that instance's own local seats) it presents from —
-  `WorldInstanceHost` is its one writer: `ApplyTransfer` publishes a landed member's new location
-  unconditional across boot↔anywhere and anywhere↔anywhere, while the unified roster-leave transaction
-  resets a vacated traveler to its boot default only after the routed instance accepts the body departure.
-  Every non-boot instance now
-  carries its own `LoopbackTransport` uniformly (`WorldInstanceHost.TryGetLink`), and a followed
-  seat's device intent submits at THAT instance's own next-tick coordinate —
-  `WorldInstanceHost.StepInstancesBesideBoot`'s per-instance loop, never boot's clock — so input
-  genuinely follows the traveler rather than going silent at the door. A followed seat's local
-  participant no longer vacates on departure (it relocates, which the router records) so its device
-  stays bound for the whole trip; `world.view`/`world.view <n>` echo the router live. The render
-  fill landed too: an away-routed seat's own viewport region shows the followed instance's OWN
-  geometry, camera chasing the traveler's body, via `WorldAwaySeatViews` (`Client/`) — one
-  `WorldSessionMirror`/`AwaySeatSceneEmitter`/`WorldSessionView` per FOLLOWED INSTANCE, refcounted
-  (never per seat), registered into its own `ViewStack` and composited through the SAME textured-quad
-  technique a jumbotron session screen uses (`WorldScreenBinder.RegisterSessionView`'s own pattern) —
-  four reserved, always-emitted `WorldAwaySeatQuad` screen surfaces (one per local seat, parked well
-  outside the play area) each framed by a FIXED "periscope" camera and bound to that seat's away view.
-  The away emitter also derives and emits that followed instance's own screen faces. A global session
-  source on one of those faces resolves through the same `WorldSessionResolver` generation as entry,
-  registers a child projection in the away view's stack, and supplies its handle to the parent render;
-  the child projection deliberately emits no screens of its own, so recursion stops at the documented
-  depth-one boundary. This is what makes Studio's return archway show live Play after the traveler has
-  crossed, instead of degrading to the creation's static/no-signal plane.
-  `WorldRenderEnvelope.Configure` now returns one disposable constraint registration per followed
-  instance (owned by `WorldAwaySeatViews`) AND per ordinary jumbotron session (owned by its
-  `SessionFeed`), so several simultaneous consumers all constrain admission and releasing the last
-  view removes its stale ceiling. The registrations are created in the away-view construction and
-  in `RegisterSessionView`, closing a gap where a rendered destination's own document mutations were
-  never capacity-checked at all. Both use a candidate-aware offscreen composition measure; returning
-  the frozen probe size for every candidate would make the capacity check a comparison of the ceiling
-  to itself. Away views participate in device-loss recovery and container teardown through their own
-  `ViewStack`, and `world.instance.stop` refuses an instance while a local router still presents a
-  traveler from it rather than stranding that seat on a retired name. Four residues are named, not
-  silently absent: (1) the chase camera
-  is a FIXED offset behind the tracked body, not the destination's own authored `views.seatRig`
-  resolution — full seat-rig parity for an away view is follow-on work; (2) the periscope's own
-  `WorldSessionView` renders at its fixed small panel resolution (the jumbotron's own native size),
-  so a full-viewport away render reads visibly blocky up close — a higher-resolution away view is
-  follow-on work, not a correctness gap; (3) a CLAIMED (co-drive) seat away from boot is refused,
-  narrated on stderr — claim resolution reads boot's own grant table, which a cross-instance claim
-  cannot honor yet; (4) HUD position bindings and the audio listener both guard on the router (never
-  showing a departed seat's stale boot-side body or letting it become the spatial listener) but draw
-  NEUTRAL for an away seat rather than a real cross-instance read — full HUD widening and
-  per-instance spatial audio mixing remain unbuilt. The reserved away-seat quad screen indices live
-  in the shared `WorldPlacementPolicy`: document validation rejects authored collisions, caps the
-  derived-face range below them, and proves requested authoring headroom still fits before boot.
-- TCP carries request completions, not the document/snapshot/submission or frame projection needed to
-  observe another world. Its hello now proves BOTH protocol compatibility and identity (2026-08-09):
+- One `WorldSeatAuthorityRouter` now publishes each local seat's complete authority claim—endpoint,
+  generation-addressed entity, and epoch—with CAS. Input, camera, rendering, HUD, audio, bindings, and read-backs all
+  consume that same immutable claim. A stale forwarding callback cannot overwrite a newer handoff.
+  `WorldAuthorityEndpoint` abstracts local, federated, relayed, and direct-player worlds behind the
+  same observation and submission capabilities; no consumer branches on hosting topology. A committed
+  route answer carries the final writer's address, tick, exact pose, complete appearance image, and definition. The endpoint seeds that
+  complete epoch before the route CAS becomes visible, so presentation and input cannot observe an owner
+  change without the state needed to follow it. An onward transfer restarts observation on the first source
+  snapshot that no longer contains that generation, rather than polling after the camera has lost its body.
+- A transferred seat's device state crosses federation on one authenticated, persistent request/ack lane per
+  source authority. The destination latches the latest state under the transfer principal and reapplies it on
+  every one of its own ticks; a faster destination therefore cannot manufacture stick releases between slower
+  source samples. A bounded latest-value table coalesces superseded samples without blocking the source simulation,
+  acknowledged repeats become a one-second liveness heartbeat, and a route epoch change invalidates the
+  acknowledgement so the current state is seeded immediately at the new writer. An intentional route change closes
+  the older stream with a distinct handoff frame: it releases the old local latch without forwarding a synthetic
+  neutral that could race the new lane's held state. An unannounced disconnect still forwards neutral through the
+  committed chain, so disconnect cannot leave a body moving. Socket ingress arriving in the detach-to-route-publication
+  interval retains and briefly retries its state instead of manufacturing a control-lane outage. There is no
+  one-request intent compatibility path.
+- There is no traveler-specific render system. `WorldContinuum` maps the routed body's pose back into
+  the boot presentation frame, and the ordinary authored seat rig resolves once against that pose.
+  `WorldAdjacencySceneEmitter` composes direct neighbours and compiler-derived corner peers into the
+  same scene, so avatars, terrain, HUD positions, spatial audio, and the camera share the transform.
+  Camera clearance may shorten the authored boom along that same ray, but it never changes its azimuth
+  or elevation; only the seat's explicit look input steers the camera.
+  Portals remain intentional authored composition surfaces; invisible adjacency boundaries allocate
+  no screen, offscreen view, periscope camera, or reserved placement slot.
+- An entity's implicit procedural catalog rig belongs to the occupant, not the authority-local population slot.
+  Reservation, ordered replay, the immediate route seed, ordinary snapshots, observation mirrors, and adjacency
+  images all carry that rig. Crossing into a slot with another index is therefore presentation-inert. Authors retain
+  control through the ordinary look table: an explicit catalog or creation look deliberately overrides the carried
+  implicit rig while that world assigns it; omitting such a rule preserves the traveler by default.
+- Adjacency entity images are frozen at the beginning of an authority tick through a coherent
+  seqlock copy. Collision and rendering read that pinned record even if a newer socket delivery lands
+  mid-step. Rendering interpolates each neighbour against that neighbour's own authored step and delivery clock;
+  avatar gait advances from interpolated distance under the ordinary authored look amplitude, so crossing does
+  not switch a traveler to raw snapshot motion or a permanently zero animation phase. Cross-authority body contact
+  uses durable `WorldEntityAddress` pairs: a stable pair hash
+  chooses exactly one owner as responder for the lifetime of those generations, preventing both
+  double-yield and host-scheduling bias while preserving the one-writer rule.
+- TCP carries authenticated requests, submissions, definitions, and snapshot observation. Its hello
+  proves BOTH protocol compatibility and identity (2026-08-09):
   a version check, then a challenge-response over a signed-carriage claim verified against the
   document's own authored `admission` trust list, mapping the verified identity to its OWN authored
   grants rather than admitting every connection as `Control`/`all`. What the hello still does NOT prove
@@ -618,9 +611,9 @@ Local completion means, in one uninterrupted run:
 
 #### Campaign 2 — remote and federated
 
-The local session-screen landing changes none of this campaign. Federated authentication,
-unembodied remote authority, remote projection/wire semantics and committed cross-host handoff remain
-untouched and wholly open.
+Federated authentication and committed cross-host handoff are now exercised by the Four Corners
+proof. Unembodied session authority and the broader federation policy algebra remain open; world
+continuum presentation deliberately has no separate remote-projection subsystem.
 
 1. Authenticate issuer-qualified authority/document/user/group claims and create an unembodied session
    authority before projection. Implement the target-document admission/capability door and its policy
