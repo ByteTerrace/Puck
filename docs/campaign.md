@@ -186,14 +186,28 @@ work; like everything here, verify a row is still open before scheduling it.
 image per screen index cannot serve split-screen viewers two destinations); a destination-clock
 interpolation ease (poses stage at snapshot boundaries); multi-authority replay — a boot-side
 departure is taped but a destination-side arrival is not, so `replay.verify` has no defined crossing
-meaning; bounded queues/backpressure and projection/query redaction on the observation feed;
+meaning; bounded queues/backpressure and query redaction on the observation feed;
 derived-band read-back and a long-run remainder-drift demonstration for authored per-world time.
+
+**Disclosure is decided at the door, in three tiers.** An authority hands out `frames` (pixels, no
+document), `presentation` (`puck.world.projection.v1` — a separate document type carrying what a
+visitor renders and is embodied from, with the logic and authority sections having no member to
+carry them), or `replica` (the whole `puck.world.def.v1`, the sanctioned download). The tier is an
+`admission` row's `disclosure`, decided once at admission and read by every remote egress; absent
+resolves to `presentation`, so a world authored before the field existed hands out no replica. A
+traveler crossing a seam discloses an identity projection — appearance and the two motion rates —
+never its owned document. A counterpart proves a border with a signed
+`puck.world.counterpart.v1` attestation rather than by handing over its world; a derived corner is a
+claim about a third authority and still needs the documents. Snapshot delivery carries a per-observer
+`population.disclosure` policy applied at the output hub's sink boundary, defaulting to disclose-all.
+Read them back with `world.projection`, `world.peers`, and `world.admission`.
 
 **The wire admits too early.** The hello proves protocol compatibility, then identity against the
 document's authored `admission` trust list — but a verified peer is then admitted straight to a
 population body. Still open, in order: destination/session resolution on the wire, an unembodied
-session authority (no session principal exists for observation without embodiment), projection
-authorization, and only then optional body reservation/allocation. With them: issuer-qualified
+session authority (no session principal exists for observation without embodiment — which is also
+why a narrowed `population.disclosure` delivers a remote observer nothing until one of its travelers
+lands), and only then optional body reservation/allocation. With them: issuer-qualified
 GROUP/document claims (only per-identity entries exist), entry reservations and idempotent handoff
 tokens over the wire fenced by epochs/leases and durable commit records, hydrate/suspend/migrate for
 persisted worlds without changing identity, and durable recovery when an authority dies
@@ -217,7 +231,7 @@ target policy must express as enforceable admission semantics before allocation)
 | Extensions validate their own configuration; cartridges become pinned content (address + hash, store wired to the machine host); renderers become extensions; renderer ceilings leave the world document | extension registry |
 | Sinks become first-class (viewport, quadrants, recordings, streams); render extent moves from camera to sink; one view/sink compositor for split-screen, multi-viewer and diegetic screens | sinks |
 | Screen row collapses into a placement facet; screen identity becomes a string id; links stop addressing by index; camera binding as an authored mode (fixed camera = TV, viewer-eye camera = window) | screen/placement collapse |
-| World as a screen source with target-selected fidelity (full, redacted, frames) and admission/disclosure enforcement; a specified client wire (the seam exists, the format is internal); replication — full simulation state, catch-up, resynchronisation, a downstream codec, version agreement | the wire order above |
+| World as a screen source at a target-selected tier (the tier vocabulary and its enforcement exist; what does not is a SCREEN choosing one); a specified client wire (the seam exists, the format is internal); replication — full simulation state, catch-up, resynchronisation, a downstream codec, version agreement | the wire order above |
 | Proximity co-location on the document's interaction flag, bound preemptively while people walk; occlusion-aware candidacy DERIVED from whether every declared interaction respects cover; transfer stability (asymmetric hysteresis + deterministic tie-break); co-location acceptance (a standing declaration in the body's own document, asymmetric, fails closed); junction headroom; contention facts with authored responses — a refusal must carry a consequence, or declining becomes the dominant strategy; adjacency as scheduling affinity; tick health as an observable fact | seamless crossing (shipped) |
 | Contact-counterpart / region-occupant targets | a body-to-body contact seam |
 | Threat tables | a keyed-table primitive; slots are scalars |
