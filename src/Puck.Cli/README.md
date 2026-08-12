@@ -363,7 +363,7 @@ first; the tree-wide sweep is deliberately its own, separately-landed change.
 | `member-spacing` | blank-line grouping between type members. | yes |
 | `member-order` | a const block or property block (same kind + scope) sorted by name; non-const fields are never reordered. | yes |
 | `null-pattern` | `== null` / `!= null` → `is null` / `is not null`. | yes |
-| `paren-clarity` | explicit precedence parens (`((0 == a) \|\| (0 == b))`). | yes |
+| `paren-clarity` | explicit precedence parens (`((0 == a) \|\| (0 == b))`), casts included (`((uint)sets.Length)` — bare only under checked/unchecked and as a ternary branch). | yes |
 | `init-order` | object-initializer members alphabetized. | yes |
 | `trailing-comma` | trailing comma on a multi-line initializer's last element. | yes |
 | `decl-spacing` | one blank line between a local-declaration run and the next statement. | yes |
@@ -371,7 +371,7 @@ first; the tree-wide sweep is deliberately its own, separately-landed change.
 | `named-args` | call arguments named and alphabetized (semantic). | yes |
 | `logical-lines` | multi-operand `&&`/`\|\|` one operand per line, operator trailing. | `-Only` |
 | `arg-lines` | a call with >1 argument: one argument per line, hanging close paren. | `-Only` |
-| `ternary-lines` | `c ? t : f` across three lines, operators leading. | `-Only` |
+| `ternary-lines` | `c ? t : f` across three lines, operators leading; a statement-ending paren-wrapped ternary's trailing close parens hang at the root's indent. | `-Only` |
 
 The three vertical line-wrappers stay opt-in because their one-per-line layout
 is a deliberate choice, not a baseline. Required braces are `.editorconfig`'s
