@@ -1281,17 +1281,36 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             var transfer = pending.Transfer;
 
             try {
-                var status = pending.TargetAuthority.Status(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId);
+                // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
+                // next drain is the whole reconciliation loop already does for an unresolved status.
+                if (!pending.TargetAuthority.TryStatus(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, status: out var status)) {
+                    index++;
+                    continue;
+                }
 
                 if (status == WorldTransferStatus.Reserved) {
                     if (m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var source)
                         && ((source.Server.NextInputTick - 1UL) >= pending.SourceDeadlineTick)) {
                         pending.TargetAuthority.Abort(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId);
-                        status = pending.TargetAuthority.Status(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId);
-                    } else if (pending.TargetAuthority.Commit(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, members: pending.CommitMembers, reason: out _)) {
-                        status = WorldTransferStatus.Committed;
+
+                        if (!pending.TargetAuthority.TryStatus(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, status: out status)) {
+                            index++;
+                            continue;
+                        }
                     } else {
-                        status = pending.TargetAuthority.Status(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId);
+                        var step = pending.TargetAuthority.Commit(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, members: pending.CommitMembers, accepted: out var committed, reason: out _);
+
+                        if (step == WorldTransferStep.Pending) {
+                            index++;
+                            continue;
+                        }
+
+                        if ((step == WorldTransferStep.Answered) && committed) {
+                            status = WorldTransferStatus.Committed;
+                        } else if (!pending.TargetAuthority.TryStatus(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, status: out status)) {
+                            index++;
+                            continue;
+                        }
                     }
                 }
 
@@ -2116,10 +2135,30 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private readonly record struct TransferAuthority(WorldInstance? Local, WorldRemoteAuthority? Remote) {
         public bool IsRemote => (Remote is not null);
         public WorldDefinition Definition => (Local?.Server.Definition ?? Remote!.Definition);
-        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) =>
-            (Local is not null ? Local.Server.ReserveTransfer(request: request) : Remote!.Reserve(request: request with { PeerAdmission = true }));
-        public bool Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
-            (Local is not null ? Local.Server.CommitTransfer(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out reason) : Remote!.Commit(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out reason));
+
+        // A colocated row answers inline; a remote row answers when its persistent lane does. Returning false means
+        // "not yet" — the caller leaves its own state exactly where it was and asks again at its next tick boundary,
+        // so no transfer step ever waits on a socket from the simulation thread.
+        public bool TryReserve(WorldTransferReservationRequest request, out WorldTransferReservationReply reply) {
+            if (Local is not null) {
+                reply = Local.Server.ReserveTransfer(request: request);
+
+                return true;
+            }
+
+            return Remote!.TryReserve(request: request with { PeerAdmission = true }, reply: out reply);
+        }
+
+        public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
+            if (Local is not null) {
+                accepted = Local.Server.CommitTransfer(sourceAuthority: sourceAuthority, transferId: transferId, members: members, reason: out reason);
+
+                return WorldTransferStep.Answered;
+            }
+
+            return Remote!.Commit(sourceAuthority: sourceAuthority, transferId: transferId, members: members, accepted: out accepted, reason: out reason);
+        }
+
         public void Abort(string sourceAuthority, ulong transferId) {
             if (Local is not null) {
                 Local.Server.AbortTransfer(sourceAuthority: sourceAuthority, transferId: transferId);
@@ -2134,8 +2173,15 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 Remote!.Acknowledge(sourceAuthority: sourceAuthority, transferId: transferId);
             }
         }
-        public WorldTransferStatus Status(string sourceAuthority, ulong transferId) =>
-            (Local is not null ? Local.Server.TransferStatus(sourceAuthority: sourceAuthority, transferId: transferId) : Remote!.Status(sourceAuthority: sourceAuthority, transferId: transferId));
+        public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
+            if (Local is not null) {
+                status = Local.Server.TransferStatus(sourceAuthority: sourceAuthority, transferId: transferId);
+
+                return true;
+            }
+
+            return Remote!.TryStatus(sourceAuthority: sourceAuthority, transferId: transferId, status: out status);
+        }
     }
 
     private bool TryResolveTransferAuthority(in PendingTransfer transfer, WorldInstance source, out TransferAuthority authority, out string resolvedName, out bool spawned, out string reason) {
@@ -2459,12 +2505,21 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             PeerAdmission: reservationMembers.Any(predicate: static member => !member.Source.IsLive) || members.Any(predicate: static slot => slot >= WorldPopulation.LocalSeatCount),
             Members: reservationMembers
         );
-        WorldTransferReservationReply reservation;
+        if (!targetAuthority.TryReserve(request: reservationRequest, reply: out var reservation)) {
+            // The destination has not answered yet. Nothing has left the source, so roll this attempt's bookkeeping
+            // back to exactly where it started and re-ask at the next drain; the request is issued once and its
+            // answer is claimed by the same transfer id.
+            _ = m_appliedTransferIds.Remove(item: appliedKey);
 
-        try {
-            reservation = targetAuthority.Reserve(request: reservationRequest);
-        } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
-            reservation = WorldTransferReservationReply.Refused(reason: $"authority transport failed before reserve: {exception.Message}");
+            if (hadAppliedHighWater) {
+                m_appliedTransferHighWater[transfer.SourceInstance] = previousAppliedHighWater;
+            } else {
+                _ = m_appliedTransferHighWater.Remove(key: transfer.SourceInstance);
+            }
+
+            m_pendingTransfers.Enqueue(item: transfer);
+
+            return;
         }
 
         if (!reservation.Accepted) {
@@ -2716,15 +2771,13 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         }
 
         if (abortReason is null) {
-            try {
-                if (!targetAuthority.Commit(sourceAuthority: sourceAuthority, transferId: transfer.TransferId, members: commitMembers, reason: out var commitReason)) {
-                    abortReason = $"'{targetName}' refused reserved commit ({commitReason})";
-                }
-            } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+            var step = targetAuthority.Commit(sourceAuthority: sourceAuthority, transferId: transfer.TransferId, members: commitMembers, accepted: out var committed, reason: out var commitReason);
+
+            if (step != WorldTransferStep.Answered) {
                 // Preserve every source recovery record and the exact commit payload. Subsequent fixed-point drains
                 // query the destination's idempotent status and either publish the committed route, retry the live
-                // lease, or restore the source after a confirmed missing/expired reservation. Never infer from an
-                // I/O exception whether the destination applied the commit.
+                // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
+                // still-in-flight or failed transport whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
                     Transfer: transfer,
                     TargetAuthority: targetAuthority,
@@ -2736,8 +2789,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {exception.Message}) — recovery state retained for status reconciliation]");
+                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit is {(step == WorldTransferStep.Pending ? "still in flight" : $"unreachable: {commitReason}")}) — recovery state retained for status reconciliation]");
                 return;
+            }
+
+            if (!committed) {
+                abortReason = $"'{targetName}' refused reserved commit ({commitReason})";
             }
         }
 

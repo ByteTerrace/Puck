@@ -34,9 +34,9 @@ public sealed class FederationTransferLawTests {
                 ConsumedThroughEngineTick: 19_110,
                 BoundaryEvents: 3));
 
-        var encoded = WorldFederationWireFormat.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [expected]);
+        var encoded = WorldFederationCodec.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [expected]);
 
-        Assert.True(condition: WorldFederationWireFormat.TryDecodeCommit(body: encoded, sourceAuthority: out var sourceAuthority, transferId: out var transferId, members: out var members, reason: out var reason), userMessage: reason);
+        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, sourceAuthority: out var sourceAuthority, transferId: out var transferId, members: out var members, failure: out var failure), userMessage: failure.ToString());
         Assert.Equal(expected: "source/world", actual: sourceAuthority);
         Assert.Equal(expected: 7UL, actual: transferId);
         var member = Assert.Single(collection: members);
@@ -63,7 +63,7 @@ public sealed class FederationTransferLawTests {
             PlacementId: null);
         var snapshot = new WorldSnapshot(Tick: 17, Revision: 19, StepTicks: 210, Entries: new[] { expected }, Authority: "destination/world");
 
-        var decoded = WorldFederationWireFormat.DecodeSnapshot(body: WorldFederationWireFormat.EncodeSnapshot(snapshot: in snapshot));
+        Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot), snapshot: out var decoded, failure: out var failure), userMessage: failure.ToString());
         var actual = Assert.Single(collection: decoded.Entries.ToArray());
 
         Assert.Equal(expected: 91, actual: actual.Index);
@@ -91,9 +91,9 @@ public sealed class FederationTransferLawTests {
             PlacementId: "traveler-shell",
             Definition: Fixtures.BuildDocument());
 
-        var encoded = WorldFederationWireFormat.EncodeRoute(route: in expected);
+        var encoded = WorldFederationCodec.EncodeRoute(route: in expected);
 
-        Assert.True(condition: WorldFederationWireFormat.TryDecodeRoute(body: encoded, route: out var actual));
+        Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: encoded, route: out var actual, failure: out var failure), userMessage: failure.ToString());
         Assert.Equal(expected: expected.Endpoint, actual: actual.Endpoint);
         Assert.Equal(expected: expected.Entity, actual: actual.Entity);
         Assert.Equal(expected: expected.Tick, actual: actual.Tick);
@@ -173,31 +173,40 @@ public sealed class FederationTransferLawTests {
         using (var attacker = new TcpClient()) {
             await attacker.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = attacker.GetStream();
-            await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-            Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Challenge, actual: challenge.Kind);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Challenge, actual: challenge.Kind);
 
-            await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Authenticate, body: WorldFederationWireFormat.EncodeAuthentication(sourceAuthority: "machine-a/boot", proof: new byte[WorldFederationSecurity.ProofBytes]), ct: timeout.Token);
+            await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(sourceAuthority: "machine-a/boot", proof: new byte[WorldFederationSecurity.ProofBytes]), ct: timeout.Token);
             var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-            Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Refusal, actual: refusal.Kind);
-            Assert.Contains(expectedSubstring: "authentication failed", actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Refusal, actual: refusal.Kind);
+            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.AuthenticationFailed), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
         }
 
         using (var authenticated = new TcpClient()) {
             await authenticated.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
             var stream = authenticated.GetStream();
-            await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: timeout.Token);
+            await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
             var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
             var proof = security.Prove(sourceAuthority: "machine-a/boot", challenge: challenge.Body);
-            await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Authenticate, body: WorldFederationWireFormat.EncodeAuthentication(sourceAuthority: "machine-a/boot", proof: proof), ct: timeout.Token);
+            await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(sourceAuthority: "machine-a/boot", proof: proof), ct: timeout.Token);
             var accepted = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-            Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Ack, actual: accepted.Kind);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Ack, actual: accepted.Kind);
 
-            await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Status, body: WorldFederationWireFormat.EncodeTransferKey(sourceAuthority: "machine-b/boot", transferId: 17), ct: timeout.Token);
+            // The control leg: the same lane answers a well-formed status for its OWN namespace, and stays open.
+            await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Status, body: WorldFederationCodec.EncodeTransferKey(sourceAuthority: "machine-a/boot", transferId: 17), ct: timeout.Token);
+            var status = await RequireFrameAsync(stream: stream, ct: timeout.Token);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Status, actual: status.Kind);
+            Assert.Equal(expected: (byte)WorldTransferStatus.Missing, actual: Assert.Single(collection: status.Body));
+
+            await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Status, body: WorldFederationCodec.EncodeTransferKey(sourceAuthority: "machine-b/boot", transferId: 17), ct: timeout.Token);
             var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-            Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Refusal, actual: refusal.Kind);
-            Assert.Contains(expectedSubstring: "does not match", actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+            Assert.Equal(expected: (byte)WorldFederationResponse.Refusal, actual: refusal.Kind);
+            Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.SourceAuthorityMismatch), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
         }
+
+        Assert.Contains(collection: host.FederationRefusals, filter: row => (row.Refusal == WorldFederationRefusal.AuthenticationFailed) && (row.Count == 1));
+        Assert.Contains(collection: host.FederationRefusals, filter: row => (row.Refusal == WorldFederationRefusal.SourceAuthorityMismatch) && (row.Count == 1));
     }
 
     [Theory]
@@ -224,13 +233,13 @@ public sealed class FederationTransferLawTests {
         using var client = new TcpClient();
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
         var stream = client.GetStream();
-        await WorldFederationWireFormat.WriteHelloAsync(stream: stream, ct: timeout.Token);
+        await WorldFederationCodec.WriteHelloAsync(stream: stream, ct: timeout.Token);
         var challenge = await RequireFrameAsync(stream: stream, ct: timeout.Token);
         var proof = security.Prove(sourceAuthority: sourceAuthority, challenge: challenge.Body);
-        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Authenticate, body: WorldFederationWireFormat.EncodeAuthentication(sourceAuthority: sourceAuthority, proof: proof), ct: timeout.Token);
-        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
-        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.IntentStream, body: [], ct: timeout.Token);
-        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
+        await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Authenticate, body: WorldFederationCodec.EncodeAuthentication(sourceAuthority: sourceAuthority, proof: proof), ct: timeout.Token);
+        Assert.Equal(expected: (byte)WorldFederationResponse.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
+        await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.IntentStream, body: default, ct: timeout.Token);
+        Assert.Equal(expected: (byte)WorldFederationResponse.Ack, actual: (await RequireFrameAsync(stream: stream, ct: timeout.Token)).Kind);
 
         var submission = new IntentSubmission(Tick: 1, EntityIndex: 0, Intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One), Principal: WorldPrincipal.Console);
         var carriedAuthority = (rebindAuthority ? "forged-world/source" : sourceAuthority);
@@ -238,12 +247,13 @@ public sealed class FederationTransferLawTests {
         if (!rebindAuthority) {
             mobility = mobility with { Epoch = (mobility.Epoch + 99UL) };
         }
-        var body = WorldFederationWireFormat.EncodeIntent(sourceAuthority: carriedAuthority, mobility: in mobility, submission: in submission);
-        await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Intent, body: body, ct: timeout.Token);
+        var body = WorldFederationCodec.EncodeIntent(sourceAuthority: carriedAuthority, mobility: in mobility, submission: in submission);
+        await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Intent, body: body, ct: timeout.Token);
 
         var refusal = await RequireFrameAsync(stream: stream, ct: timeout.Token);
-        Assert.Equal(expected: (byte)WorldFederationWireFormat.ResponseKind.Refusal, actual: refusal.Kind);
-        Assert.Contains(expectedSubstring: "names no committed transfer body", actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
+        var expectedRefusal = (rebindAuthority ? WorldFederationRefusal.SourceAuthorityMismatch : WorldFederationRefusal.CredentialUnknown);
+        Assert.Equal(expected: (byte)WorldFederationResponse.Refusal, actual: refusal.Kind);
+        Assert.StartsWith(expectedStartString: expectedRefusal.ToString(), actualString: Encoding.UTF8.GetString(bytes: refusal.Body), comparisonType: StringComparison.Ordinal);
     }
 
     [Fact]
@@ -432,8 +442,8 @@ public sealed class FederationTransferLawTests {
             Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: source, BodyColor: color, CatalogRig: 73, Mobility: Mobility(index: 4))],
         };
 
-        var bytes = WorldFederationWireFormat.EncodeReservation(request: request);
-        Assert.True(condition: WorldFederationWireFormat.TryDecodeReservation(body: bytes, defaults: fixture.Server.Definition.PlayerDefaults, request: out var decoded, reason: out var reason), userMessage: reason);
+        var bytes = WorldFederationCodec.EncodeReservation(request: request);
+        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: bytes, defaults: fixture.Server.Definition.PlayerDefaults, request: out var decoded, failure: out var failure), userMessage: failure.ToString());
         var member = Assert.Single(collection: decoded!.Members);
         Assert.Null(@object: member.Identity);
         Assert.Equal(expected: source, actual: member.Source);
@@ -547,6 +557,90 @@ public sealed class FederationTransferLawTests {
         Assert.True(condition: (body.FixedPosition - start).Length > FixedQ4816.FromDouble(value: 0.75), userMessage: $"the held neutral device image masked the accepted tape segment: delta={(double)(body.FixedPosition - start).Length:0.###}, speed={body.PlanarSpeed:0.###}");
     }
 
+    [Fact]
+    public void SnapshotWire_RefusesAnEntryCountPastThePopulationCeilingByName() {
+        var writer = new WorldWireWriter();
+
+        writer.WriteUInt64(value: 17UL);
+        writer.WriteInt32(value: 19);
+        writer.WriteUInt64(value: 210UL);
+        writer.WriteString(value: "destination/world");
+        writer.WriteInt32(value: (WorldPopulationLimits.CapacityCeiling + 1));
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeSnapshot(body: writer.ToArray(), snapshot: out _, failure: out var failure));
+        Assert.Equal(expected: WorldWireRefusal.CountOutOfRange, actual: failure.Refusal);
+        Assert.Contains(expectedSubstring: "snapshot entry count", actualString: failure.Detail, comparisonType: StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SnapshotWire_RefusesATruncatedRecordByName() {
+        var snapshot = new WorldSnapshot(
+            Tick: 17,
+            Revision: 19,
+            StepTicks: 210,
+            Entries: new[] { new EntitySnapshot(Index: 3, Position: Vector3.Zero, Orientation: Quaternion.Identity, BodyColor: Vector3.One, Active: true, Kit: 0, Look: 0, CatalogRig: 2, Continuity: EntityContinuity.Continuous, Generation: 1, PlacementId: null) },
+            Authority: "destination/world");
+        var encoded = WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot);
+
+        // The control: the whole record decodes with no refusal at all.
+        Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: encoded, snapshot: out var whole, failure: out var control), userMessage: control.ToString());
+        Assert.Equal(expected: WorldWireRefusal.None, actual: control.Refusal);
+        Assert.Single(collection: whole.Entries.ToArray());
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeSnapshot(body: encoded.AsSpan(start: 0, length: (encoded.Length - 6)), snapshot: out _, failure: out var failure));
+        Assert.Equal(expected: WorldWireRefusal.PayloadTruncated, actual: failure.Refusal);
+    }
+
+    [Fact]
+    public void CommitWire_RefusesTrailingBytesAndAnOverCountedCohortByName() {
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var encoded = WorldFederationCodec.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [member]);
+
+        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, sourceAuthority: out _, transferId: out _, members: out _, failure: out var control), userMessage: control.ToString());
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: [.. encoded, 0], sourceAuthority: out _, transferId: out _, members: out _, failure: out var trailing));
+        Assert.Equal(expected: WorldWireRefusal.PayloadTrailingBytes, actual: trailing.Refusal);
+
+        var writer = new WorldWireWriter();
+        writer.WriteString(value: "source/world");
+        writer.WriteUInt64(value: 7UL);
+        writer.WriteInt32(value: (WorldPopulationLimits.CapacityCeiling + 1));
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: writer.ToArray(), sourceAuthority: out _, transferId: out _, members: out _, failure: out var overCounted));
+        Assert.Equal(expected: WorldWireRefusal.CountOutOfRange, actual: overCounted.Refusal);
+    }
+
+    [Fact]
+    public void ReservationWire_RefusesAnUndecodableTravelerDocumentByName() {
+        using var fixture = Fixtures.FreshServer();
+        var writer = new WorldWireWriter();
+
+        writer.WriteUInt64(value: 31UL);
+        writer.WriteString(value: "machine-a/boot");
+        writer.WriteInt32(value: 240);
+        writer.WriteUInt64(value: 0UL);
+        writer.WriteUInt64(value: 60UL);
+        writer.WriteString(value: "seam");
+        writer.WriteBoolean(value: false);
+        writer.WriteBoolean(value: true);
+        writer.WriteBoolean(value: true);
+        writer.WriteInt32(value: 1);
+        writer.WriteInt32(value: 0);
+        writer.WriteString(value: "origin/world");
+        writer.WriteInt32(value: 0);
+        writer.WriteInt32(value: 7);
+        writer.WriteUInt64(value: 0UL);
+        writer.WriteByte(value: 1);
+        writer.WriteVector(value: Vector3.Zero);
+        writer.WriteByte(value: 0);
+        writer.WriteBlock(value: "{ not a world document"u8);
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeReservation(body: writer.ToArray(), defaults: fixture.Server.Definition.PlayerDefaults, request: out var request, failure: out var failure));
+        Assert.Null(@object: request);
+        Assert.Equal(expected: WorldWireRefusal.PayloadMalformed, actual: failure.Refusal);
+        Assert.Contains(expectedSubstring: "identity document", actualString: failure.Detail, comparisonType: StringComparison.Ordinal);
+    }
+
     private static WorldTransferReservationRequest Reservation(string sourceAuthority, ulong transferId, string border) =>
         new(TransferId: transferId, SourceAuthority: sourceAuthority, SourceRateHz: 240, SourceTick: 0, DeadlineSourceTick: 60, Border: border, BorderCapacity: null, PartyAllOrNothing: true, PeerAdmission: false, Members: [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 0, Identity: null, Source: default, BodyColor: default, CatalogRig: 0, Mobility: Mobility(index: 0))]);
 
@@ -564,6 +658,9 @@ public sealed class FederationTransferLawTests {
         };
     }
 
-    private static async Task<(byte Kind, byte[] Body)> RequireFrameAsync(NetworkStream stream, CancellationToken ct) =>
-        (await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct)) ?? throw new Xunit.Sdk.XunitException("federation peer closed before its required response");
+    private static async Task<WorldWireFrameRead> RequireFrameAsync(NetworkStream stream, CancellationToken ct) {
+        var read = await WorldFederationCodec.ReadResponseAsync(stream: stream, ct: ct);
+
+        return (read.Ok ? read : throw new Xunit.Sdk.XunitException($"federation peer answered no response frame ({read.Failure})"));
+    }
 }

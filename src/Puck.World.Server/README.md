@@ -199,6 +199,46 @@ machine id is minted per installation, so `*` is what a document authors when
 it cannot know its neighbours' machine ids in advance. Such a row is skipped
 when the door builds its carriage trust list — it can never verify a claim —
 and a document authoring arrivals alone still admits no connecting peer.
+## Federation transport (`WorldFederationCodec.cs`)
+
+The same listener routes a second dialect off the first eight bytes:
+`WorldFederationCodec.WireKey` opens an authority-to-authority connection
+instead of a player connection. That connection is a persistent authenticated
+lane — challenge/proof once (`WorldFederationSecurity`), then framed requests
+in order, request-then-response, until `Observe` or `IntentStream` takes it
+over and streams on it. The frame grammar, the bounded reader/writer, and the
+refusal vocabulary are the shared ones in
+`Puck.World.Data/Protocol/WorldWireCodec.cs`, so this codec is not a second
+wire dialect: every leaf is Try-shaped and bounded before it allocates, and
+every refusal frame's text opens with a `WorldFederationRefusal` name.
+`WorldTcpHost.FederationRefusals` counts those names, so a refusal is read back
+by name rather than by sentence.
+
+Two ingress disciplines meet in this class, and which one applies is decided by
+what the frame is:
+
+- An ordinary admitted peer's admission, submissions, and disconnect marshal
+  onto the tick thread (`RunOnTickThreadAsync` → `DrainPending`).
+- An authenticated AUTHORITY operation — reserve, commit, abort, acknowledge,
+  status, route, forwarded submission, published intent — runs on its socket
+  worker inside `WorldServer.ExecuteAuthorityOperation`, which serializes it
+  against `Step` under the server's authority gate. It must NOT wait for this
+  host's next tick: two hosts crossing into one another at the same time would
+  deadlock on each other's tick.
+
+Whatever that gate protects is acquired and released under it.
+`WorldOutputHub`'s subscriber list carries no lock of its own, so
+`StreamProjectionAsync` disposes its projection lease inside
+`ExecuteAuthorityOperation` exactly as it attached. Any check-then-act over
+population state — is this transferred principal still live, then submit or
+describe on its behalf — is ONE gated operation, never two.
+
+The client half is `Puck.World.WorldRemoteAuthority`: one persistent request
+lane and one intent pump per source authority namespace, so connect, hello, and
+challenge are paid once per lane rather than once per operation. A lane that
+cannot reach its peer answers immediately with `LaneUnavailable` for a backoff
+window instead of waiting on a socket, which is what keeps a closed edge from
+stalling the source's tick.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
