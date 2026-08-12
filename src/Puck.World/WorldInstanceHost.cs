@@ -2443,7 +2443,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 var mobility = source.Server.Population.EnsureMobility(index: sourceSlot, authority: source.Server.AuthorityIdentity);
                 return (Identity: body?.Profile, Source: body?.Source ?? IntentSource.Idle, BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
-            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor, CatalogRig: traveler.CatalogRig, Mobility: traveler.Mobility);
+            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(server: source.Server, transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor, CatalogRig: traveler.CatalogRig, Mobility: traveler.Mobility);
         }
 
         var sourceAuthority = $"{m_machineId:N}/{transfer.SourceInstance}";
@@ -2552,13 +2552,17 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // today, a combat CC/death gate later) refuses the WHOLE party rather than letting the rest split off while
         // it strands at the source. One blocked member names itself and why.
         foreach (var slot in members) {
-            var standingPrincipal = MemberTravelPrincipal(transfer: in transfer, slot: slot);
+            var standingPrincipal = MemberTravelPrincipal(server: source.Server, transfer: in transfer, slot: slot);
 
-            var standing = source.Server.ExecuteAuthorityOperation(operation: () => source.Server.Grants.Allows(principal: standingPrincipal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)));
+            var standing = source.Server.ExecuteAuthorityOperation(operation: () => {
+                var allowed = AllowsLeave(server: source.Server, principal: standingPrincipal, slot: slot, denial: out var denial);
 
-            if (!standing.IsAllowed) {
+                return (Allowed: allowed, Denial: denial);
+            });
+
+            if (!standing.Allowed) {
                 targetAuthority.Abort(sourceAuthority: sourceAuthority, transferId: transfer.TransferId);
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({standingPrincipal.Describe()} cannot leave '{transfer.SourceInstance}' seat {(slot + 1)} — {standing.DescribeDenial()}); the whole transfer is held]");
+                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({standingPrincipal.Describe()} cannot leave '{transfer.SourceInstance}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]");
 
                 if (spawned) {
                     ReapIfEmpty(name: targetName);
@@ -2624,7 +2628,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         for (var index = 0; ((abortReason is null) && (index < members.Length)); index++) {
             var sourceSlot = members[index];
             var reservedSlot = reservedSlots[index];
-            var memberPrincipal = MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot);
+            var memberPrincipal = MemberTravelPrincipal(server: source.Server, transfer: in transfer, slot: sourceSlot);
 
             if (!TryDetachAndCaptureMember(source: source, sourceSlot: sourceSlot, sourceName: transfer.SourceInstance, actingPrincipal: memberPrincipal, profile: out var profile, bodyColor: out var bodyColor, position: out var position, yaw: out var yaw, dynamicState: out var dynamicState, designations: out var designations, peer: out var peer, admissionGrants: out var admissionGrants, sourceGrants: out var sourceGrants)) {
                 abortReason = $"source member seat {(sourceSlot + 1)} could not detach after reservation";
@@ -2947,15 +2951,39 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // covers them all), keep the original acting principal. Used for the reservation, the pre-leave
     // standing check, and the leave+join itself, so none of the three can ever disagree on who a member
     // travels as.
-    private static WorldPrincipal MemberTravelPrincipal(in PendingTransfer transfer, int slot) =>
+    private static WorldPrincipal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot) =>
         (((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot))
-            ? WorldPrincipal.Seat(slot: slot)
+            ? TravelPrincipal(server: server, slot: slot)
             : transfer.ActingPrincipal);
 
+    // A body that is neither a local seat nor an admitted peer has no external driver: the world's own authored
+    // program moves it, so it travels as WorldPrincipal.World, which holds no grant row at all. Console would also
+    // resolve here and would carry the table's only Drive/all — authority over every seat and peer besides.
     private static WorldPrincipal TravelPrincipal(WorldServer server, int slot) =>
         ((slot < WorldPopulation.LocalSeatCount)
             ? WorldPrincipal.Seat(slot: slot)
-            : (server.Population.IsAdmittedPeer(bodyIndex: slot) ? server.Population.PeerPrincipal(index: slot) : WorldPrincipal.Console));
+            : (server.Population.IsAdmittedPeer(bodyIndex: slot) ? server.Population.PeerPrincipal(index: slot) : WorldPrincipal.World));
+
+    // Whether the world's own program authors this body, the one pairing a World principal may leave a body under.
+    private static bool IsWorldAuthoredBody(WorldServer server, int slot) =>
+        ((slot >= WorldPopulation.LocalSeatCount) && !server.Population.IsAdmittedPeer(bodyIndex: slot));
+
+    // The one leave-standing predicate both the party pre-check and the detach itself ask. A World principal is
+    // admitted structurally over a body it authors — it holds no grant row by construction — and refused by name
+    // over any body a seat or an admitted peer drives.
+    private static bool AllowsLeave(WorldServer server, WorldPrincipal principal, int slot, out string denial) {
+        if (principal.Kind == PrincipalKind.World) {
+            denial = "that body is driven by a seat or an admitted peer, and the world's own program never travels on their behalf";
+
+            return IsWorldAuthoredBody(server: server, slot: slot);
+        }
+
+        var verdict = server.Grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot));
+
+        denial = (verdict.IsAllowed ? string.Empty : verdict.DescribeDenial());
+
+        return verdict.IsAllowed;
+    }
 
     // Leave(source) with its pose captured before the detach discards it — the abort-restoration half of an
     // atomic body transfer. Never player.leave <slot> instance:<name> / ReapIfEmpty / ApplySession(Leave):
@@ -3003,8 +3031,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
-        if (source.Server.Grants.Allows(principal: actingPrincipal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: sourceSlot)) is { IsAllowed: false } leaveVerdict) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveVerdict.DescribeDenial()})]");
+        if (!AllowsLeave(server: source.Server, principal: actingPrincipal, slot: sourceSlot, denial: out var leaveDenial)) {
+            Console.Error.WriteLine(value: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]");
 
             return false;
         }
@@ -3032,8 +3060,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
+        // The traveller gives up its own rows: it holds every one of them, so its own principal administers the
+        // revocation. Nothing here needs an administrative identity the caller does not already carry.
         foreach (var grant in sourceGrants) {
-            source.Server.Revoke(grant: grant, actor: WorldPrincipal.Console);
+            source.Server.Revoke(grant: grant, actor: actingPrincipal);
         }
 
         return true;
@@ -3046,6 +3076,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 : source.Server.Population.RestoreDetachedSeat(slot: member.SourceSlot, profile: member.Profile, position: member.Position, yawRadians: member.Yaw, dynamicState: member.DynamicState, designations: member.Designations);
             if (restored) {
                 source.Server.Population.SetBodyColor(slot: member.SourceSlot, color: member.BodyColor);
+
+                // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
+                // restored principal provably holds none of them at this moment and cannot administer its own
+                // restoration. The server administers it, exactly as it administers an admission mint.
                 foreach (var grant in member.SourceGrants) {
                     source.Server.Grant(grant: grant, actor: WorldPrincipal.Console);
                 }

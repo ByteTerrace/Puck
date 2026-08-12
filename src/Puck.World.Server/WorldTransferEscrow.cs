@@ -111,7 +111,7 @@ public sealed record WorldTransferCommitMember(
 /// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
 internal sealed class WorldTransferEscrow {
-    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition);
+    private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition, WorldAdmissionVerdict? Arrival);
     private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
@@ -195,6 +195,18 @@ internal sealed class WorldTransferEscrow {
         var remainingEngineTicks = checked(remainingSourceSteps * sourceStepTicks);
         var destinationSteps = checked((remainingEngineTicks + destinationStepTicks - 1UL) / destinationStepTicks);
         var deadline = checked((m_server.NextInputTick - 1UL) + destinationSteps);
+        // The admission decision runs once, here, against the authenticated source-authority namespace, and the
+        // lease carries its verdict to commit: reserve and commit can never disagree about what an arrival is
+        // authorized. A colocated request is produced in-process by the host that owns both authorities, so its
+        // namespace is as authenticated as a federated peer's completed handshake.
+        WorldAdmissionVerdict? arrival = null;
+
+        if (request.PeerAdmission) {
+            if (WorldAdmissionDoor.TryAdmitArrival(entries: m_server.Definition.Admission, sourceAuthority: request.SourceAuthority, verdict: out arrival) is { } arrivalRefusal) {
+                return WorldTransferReservationReply.Refused(reason: $"no admission entry authorizes arrivals from '{request.SourceAuthority}' ({arrivalRefusal})");
+            }
+        }
+
         PruneDepartedAdmissions();
         var firstSlot = (request.PeerAdmission ? WorldPopulation.LocalSeatCount : 0);
         var consumed = new bool[(request.PeerAdmission ? m_server.Population.Capacity : WorldPopulation.LocalSeatCount)];
@@ -230,10 +242,20 @@ internal sealed class WorldTransferEscrow {
                 return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for traveler {index + 1}; no queue was created");
             }
 
-            if (!request.PeerAdmission && m_server.Grants.Allows(principal: member.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)) is { IsAllowed: false } standing) {
-                return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
-            }
-            if (request.PeerAdmission && !member.Source.IsLive && !m_server.Population.SupportsSource(index: slot, source: member.Source, refusal: out var sourceRefusal)) {
+            // One question at reserve, asked of whichever authority will actually drive the body at commit: may it.
+            // A colocated traveler keeps its own live principal, so the live table answers. A peer arrival has no
+            // principal yet, so the arrival verdict's own templates answer — the same templates commit mints, so a
+            // reservation can never bind a body the mint would then fail to authorize. An autonomous traveler has no
+            // driver at all and is asked only whether the slot supports its authored source.
+            if (!request.PeerAdmission) {
+                if (m_server.Grants.Allows(principal: member.Principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot)) is { IsAllowed: false } standing) {
+                    return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
+                }
+            } else if (member.Source.IsLive) {
+                if (!ArrivalDrives(arrival: arrival, slot: slot)) {
+                    return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
+                }
+            } else if (!m_server.Population.SupportsSource(index: slot, source: member.Source, refusal: out var sourceRefusal)) {
                 return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} cannot enter body:{slot} — {sourceRefusal}");
             }
 
@@ -243,7 +265,7 @@ internal sealed class WorldTransferEscrow {
 
         var destinationDefinition = m_server.Definition;
 
-        m_leases.Add(key: key, value: new Lease(Request: request, DeadlineTick: deadline, Slots: slots, DestinationDefinition: destinationDefinition));
+        m_leases.Add(key: key, value: new Lease(Request: request, DeadlineTick: deadline, Slots: slots, DestinationDefinition: destinationDefinition, Arrival: arrival));
         foreach (var member in request.Members) {
             var mobility = member.Mobility!.Value;
             m_mobilityLeases.Add(key: mobility.Incarnation, value: new MobilityLease(Transfer: key, ExpectedEpoch: mobility.Epoch));
@@ -339,7 +361,7 @@ internal sealed class WorldTransferEscrow {
 
             if (lease.Request.PeerAdmission) {
                 reply = reservationMember.Source.IsLive
-                    ? m_server.AdmitTransferredPeer(slot: slot, identity: reservationMember.Identity)
+                    ? m_server.AdmitTransferredPeer(slot: slot, verdict: lease.Arrival)
                     : m_server.AdmitTransferredEntity(slot: slot, source: reservationMember.Source, identity: reservationMember.Identity);
             } else {
                 reply = m_server.ApplySession(request: new SessionRequest.Join(Principal: principal, Slot: slot, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
@@ -531,6 +553,28 @@ internal sealed class WorldTransferEscrow {
         foreach (var slot in m_borderAdmissions.Keys.Where(predicate: slot => !m_server.Population.IsActive(index: slot)).ToArray()) {
             _ = m_borderAdmissions.Remove(key: slot);
         }
+    }
+
+    // Whether the arrival verdict's own templates would mint Drive over the body a commit assigns. Resolved through
+    // WorldAdmissionGrant.SubjectFor, so this asks exactly what WorldServer.BuildAdmissionGrants will produce.
+    private static bool ArrivalDrives(WorldAdmissionVerdict? arrival, int slot) {
+        if (arrival is not { } verdict) {
+            return false;
+        }
+
+        foreach (var template in verdict.Templates) {
+            if (template.Capability != WorldCapability.Drive) {
+                continue;
+            }
+
+            var subject = template.SubjectFor(bodyIndex: slot);
+
+            if ((subject.Kind == GrantSubjectKind.All) || ((subject.Kind == GrantSubjectKind.Body) && (subject.Value == slot))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first) {

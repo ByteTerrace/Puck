@@ -16,6 +16,16 @@ public enum WorldAdmissionTrustMode : byte {
     /// <summary>The pinned key is a domain root that vouches for an issuing key, which vouches for the connecting
     /// peer's subject key — a two-hop chain travels with the claim.</summary>
     Vouches,
+
+    /// <summary><see cref="WorldAdmissionEntry.Domain"/> names an authenticated federation authority namespace (or
+    /// <see cref="WorldAdmissionEntry.AnyAuthority"/>), and the row says what a traveler that authority hands over is
+    /// minted. The proof behind it is <c>Server.WorldFederationSecurity</c>'s shared-secret handshake rather than a
+    /// carriage claim, so such a row carries no <see cref="WorldAdmissionEntry.Algorithm"/> and no
+    /// <see cref="WorldAdmissionEntry.PublicKey"/>, and <see cref="WorldAdmissionDoor"/> skips it when building its
+    /// trust list. An arriving traveler's body index, profile id, and display name are all supplied by the handing
+    /// authority; which authority is speaking is the only verified fact, so it is the only one trust is authored
+    /// against.</summary>
+    FederatedAuthority,
 }
 
 /// <summary>One capability a verified admission entry mints for the connecting peer once its identity checks out —
@@ -28,7 +38,9 @@ public enum WorldAdmissionTrustMode : byte {
 /// <c>Server.WorldServer.Grant</c> door the document's own <c>grants</c> section goes through — an admission-minted
 /// grant is subject to the identical budget/exclusivity rules a live <c>world.grant</c> row is.</summary>
 /// <param name="Capability">The capability minted.</param>
-/// <param name="Subject">The subject it scopes to.</param>
+/// <param name="Subject">The subject it scopes to; <see langword="null"/> means the body this admission assigns,
+/// resolved by <see cref="SubjectFor"/> once that index is known. An authored template cannot name a body index —
+/// the door runs before the population picks one — so a row that must follow the admitted body omits its subject.</param>
 /// <param name="Exclusive">Whether the mint is exclusive.</param>
 /// <param name="Budget">The untrusted-principal per-tick dispatch budget — required by the live grant door on a
 /// Drive/Observe row, and on an untrusted <c>Mutate</c>/<c>section:&lt;name&gt;</c> row, exactly as for any other
@@ -39,7 +51,32 @@ public enum WorldAdmissionTrustMode : byte {
 /// <param name="KindMask">The verb-scoped narrowing beneath a <c>Mutate</c>/<c>section:&lt;name&gt;</c> row —
 /// required by the live grant door on an untrusted principal's such a row (an absent mask there is refused rather
 /// than read as full reach).</param>
-public readonly record struct WorldAdmissionGrant(WorldCapability Capability, GrantSubject Subject, bool Exclusive = false, ushort? Budget = null, ushort? EventBudget = null, MutationKindMask? KindMask = null);
+public readonly record struct WorldAdmissionGrant(WorldCapability Capability, GrantSubject? Subject = null, bool Exclusive = false, ushort? Budget = null, ushort? EventBudget = null, MutationKindMask? KindMask = null) {
+    /// <summary>Returns the concrete subject this template mints over for a body index.</summary>
+    /// <param name="bodyIndex">The 0-based entity index admission assigned.</param>
+    public GrantSubject SubjectFor(int bodyIndex) => (Subject ?? GrantSubject.Body(index: bodyIndex));
+}
+
+/// <summary>What one admission decision authorizes. Only <see cref="WorldAdmissionDoor"/> produces one — from a
+/// verified carriage claim, from an already-verified identity re-matched against a candidate document, or from an
+/// authenticated federation authority's namespace — so no ingress can mint authority by assembling grant rows of its
+/// own.</summary>
+public sealed record WorldAdmissionVerdict {
+    internal WorldAdmissionVerdict(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates) {
+        IdentityDomain = identityDomain;
+        IdentitySubject = identitySubject;
+        Templates = templates;
+    }
+
+    /// <summary>Gets the verified identity's domain.</summary>
+    public string IdentityDomain { get; }
+
+    /// <summary>Gets the verified identity's subject; empty when the admitting entry pins none.</summary>
+    public string IdentitySubject { get; }
+
+    /// <summary>Gets the admitting entry's own authored grant templates.</summary>
+    public IReadOnlyList<WorldAdmissionGrant> Templates { get; }
+}
 
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world
 /// admits over its TCP socket, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live
@@ -50,7 +87,10 @@ public readonly record struct WorldAdmissionGrant(WorldCapability Capability, Gr
 /// <param name="Domain">The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For
 /// <see cref="WorldAdmissionTrustMode.Vouches"/> this must be <see cref="PublicKey"/>'s own fingerprint (a root is
 /// self-certifying). For <see cref="WorldAdmissionTrustMode.SignsDirectly"/> it names the domain namespace this
-/// individual is pinned under, which need not equal their own key's hash.</param>
+/// individual is pinned under, which need not equal their own key's hash. For
+/// <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> it is not a key id at all: it names the authenticated
+/// source-authority namespace, or <see cref="WorldAdmissionEntry.AnyAuthority"/> for any authority that completes the
+/// federation handshake.</param>
 /// <param name="Subject">The platform user id this entry pins, required for <see cref="WorldAdmissionTrustMode.SignsDirectly"/>
 /// and refused for <see cref="WorldAdmissionTrustMode.Vouches"/> (a root vouches for every subject its two-hop chain
 /// resolves, never one named here).</param>
@@ -64,4 +104,8 @@ public readonly record struct WorldAdmissionGrant(WorldCapability Capability, Gr
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate
 /// authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a
 /// socket open, but unable to submit anything the grant table would honor.</param>
-public sealed record WorldAdmissionEntry(string Domain, string? Subject, WorldAdmissionTrustMode Mode, string Algorithm, string PublicKey, IReadOnlyList<WorldAdmissionGrant> Grants);
+public sealed record WorldAdmissionEntry(string Domain, string? Subject, WorldAdmissionTrustMode Mode, string Algorithm, string PublicKey, IReadOnlyList<WorldAdmissionGrant> Grants) {
+    /// <summary>The <see cref="Domain"/> value a <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> row uses to
+    /// name every authority that completes the federation handshake rather than one namespace.</summary>
+    public const string AnyAuthority = "*";
+}

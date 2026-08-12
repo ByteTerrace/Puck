@@ -560,6 +560,7 @@ public sealed class FederationTransferLawTests {
                 Capacity = WorldPopulation.LocalSeatCount + 2,
                 NetworkPlayers = 2,
             },
+            Admission = [Fixtures.AnyAuthorityArrivals()],
         };
     }
 

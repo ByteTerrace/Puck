@@ -2868,7 +2868,7 @@ public sealed class WorldServer : IWorldServerHost {
             var revokedKeys = new HashSet<(WorldCapability Capability, GrantSubject Subject)>(collection: m_population.PeerAdmissionRevokedKeys(bodyIndex: index));
 
             foreach (var template in baselineTemplates) {
-                revokedKeys.Add(item: (template.Capability, template.Subject));
+                revokedKeys.Add(item: (template.Capability, template.SubjectFor(bodyIndex: index)));
             }
 
             foreach (var row in priorRows) {
@@ -2879,7 +2879,13 @@ public sealed class WorldServer : IWorldServerHost {
 
             m_population.SetPeerAdmissionRevokedKeys(bodyIndex: index, revokedKeys: revokedKeys);
 
-            if (!Protocol.WorldAdmissionDoor.TryMatchEntry(entries: candidate.Admission, domain: domain, subject: subject, grants: out var currentGrants)) {
+            // An arrival is re-authorized against its own authority row, a connection against its identity row: the
+            // same door decides both, from the candidate document rather than the connection-time policy.
+            var stillTrusted = m_population.PeerAuthorityTransferred(bodyIndex: index)
+                ? ((Protocol.WorldAdmissionDoor.TryAdmitArrival(entries: candidate.Admission, sourceAuthority: domain, verdict: out var arrivalVerdict) is null) ? arrivalVerdict : null)
+                : (Protocol.WorldAdmissionDoor.TryMatchEntry(entries: candidate.Admission, domain: domain, subject: subject, verdict: out var matchedVerdict) ? matchedVerdict : null);
+
+            if (stillTrusted is not { } current) {
                 m_population.SetPeerAdmissionInstalledGrantTemplates(bodyIndex: index, grantTemplates: []);
 
                 continue;
@@ -2887,12 +2893,12 @@ public sealed class WorldServer : IWorldServerHost {
 
             var installedTemplates = new List<WorldAdmissionGrant>();
 
-            foreach (var template in currentGrants) {
-                if (revokedKeys.Contains(item: (template.Capability, template.Subject))) {
+            foreach (var template in current.Templates) {
+                if (revokedKeys.Contains(item: (template.Capability, template.SubjectFor(bodyIndex: index)))) {
                     continue;
                 }
 
-                if (TryApplyGrant(grant: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.Subject, Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask), actor: WorldPrincipal.Console)) {
+                if (TryApplyGrant(grant: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.SubjectFor(bodyIndex: index), Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask), actor: WorldPrincipal.Console)) {
                     installedTemplates.Add(item: template);
                 }
             }
@@ -6184,15 +6190,11 @@ public sealed class WorldServer : IWorldServerHost {
     /// tick thread (the population/grant tables carry no lock), only after <see cref="Protocol.WorldAdmissionDoor"/>
     /// has already verified the connecting peer's identity off the tick thread. Refused by name on whichever
     /// capacity bound <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
-    /// <param name="grantTemplates">The verified admission entry's own grant templates
-    /// (<see cref="Protocol.WorldAdmissionDoor.AdmissionOutcome.Grants"/>), minted for the admitted body's
-    /// principal instead of a blanket <c>Control</c>/<c>all</c> grant. Empty (never null) mints nothing, which is a
-    /// legitimate authored outcome (see <see cref="Protocol.WorldAdmissionEntry.Grants"/>).</param>
-    /// <param name="identityDomain">The verified identity's own domain, stored on the admitted slot so
-    /// <see cref="RemintPeerAdmissionGrants"/> can re-authorize it later.</param>
-    /// <param name="identitySubject">The verified identity's own subject, stored the same way.</param>
+    /// <param name="verdict">What <see cref="Protocol.WorldAdmissionDoor"/> decided this identity is authorized —
+    /// the only shape this method accepts, so no ingress can hand it grant rows of its own. Empty templates mint
+    /// nothing, which is a legitimate authored outcome (see <see cref="Protocol.WorldAdmissionEntry.Grants"/>).</param>
     /// <param name="expectedAdmissionEntries">The <c>admission</c> section <c>Protocol.WorldAdmissionDoor.TryAdmit</c>
-    /// actually consulted to decide <paramref name="grantTemplates"/>, captured by the caller before crossing onto
+    /// actually consulted to decide <paramref name="verdict"/>, captured by the caller before crossing onto
     /// the tick thread. Identity verification runs off the tick thread against a snapshot of the document, but this
     /// method is where the decision commits, on the tick thread, single-threaded with every mutation and rebuild —
     /// the one place that can prove the policy has not moved in between. Compared by reference against the live
@@ -6204,9 +6206,7 @@ public sealed class WorldServer : IWorldServerHost {
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    internal bool TryAdmitPeerConnection(IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
-        ArgumentNullException.ThrowIfNull(argument: grantTemplates);
-
+    internal bool TryAdmitPeerConnection(WorldAdmissionVerdict? verdict, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
         if (!ReferenceEquals(objA: m_definition.Admission, objB: expectedAdmissionEntries)) {
             admitted = default;
             refusal = "the world's admission policy changed while this connection was verifying its identity — reconnect to be re-evaluated against the current policy";
@@ -6214,13 +6214,39 @@ public sealed class WorldServer : IWorldServerHost {
             return false;
         }
 
-        if (!m_population.TryAdmitRemotePeer(source: IntentSource.Live, grantTemplates: grantTemplates, identityDomain: identityDomain, identitySubject: identitySubject, admitted: out admitted, refusal: out refusal)) {
+        return TryAdmitVerifiedParticipant(verdict: verdict, reservedSlot: null, source: IntentSource.Live, authorityTransferred: false, admitted: out admitted, refusal: out refusal);
+    }
+
+    /// <summary>Admits one verified participant onto a population body and mints exactly what the admission door's
+    /// verdict authorizes — the single entry every authority-materializing ingress crosses.</summary>
+    /// <remarks>There is no arm that accepts grant rows. A caller with no verdict is refused by name rather than
+    /// admitted with a default seed: an ingress that cannot say who it admitted has nothing to authorize.</remarks>
+    /// <param name="verdict">The door's decision.</param>
+    /// <param name="reservedSlot">The body index a destination escrow already reserved, or <see langword="null"/> to
+    /// take the lowest free peer index.</param>
+    /// <param name="source">The admitted body's intent source.</param>
+    /// <param name="authorityTransferred">Whether this admission commits a transfer rather than opening a
+    /// connection.</param>
+    /// <param name="admitted">The admitted peer entry on success.</param>
+    /// <param name="refusal">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> on success.</returns>
+    internal bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal) {
+        if (verdict is not { } decision) {
+            admitted = default;
+            refusal = "admission carries no door verdict — nothing authorizes this ingress";
+
             return false;
         }
 
-        var minted = BuildAdmissionGrants(principal: admitted.Identity, templates: grantTemplates);
+        var admittedOk = (reservedSlot is { } slot)
+            ? m_population.TryAdmitRemotePeerAt(slot: slot, source: source, grantTemplates: decision.Templates, identityDomain: decision.IdentityDomain, identitySubject: decision.IdentitySubject, admitted: out admitted, refusal: out refusal, authorityTransferred: authorityTransferred)
+            : m_population.TryAdmitRemotePeer(source: source, grantTemplates: decision.Templates, identityDomain: decision.IdentityDomain, identitySubject: decision.IdentitySubject, admitted: out admitted, refusal: out refusal);
 
-        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true, overrideMintedGrants: minted);
+        if (!admittedOk) {
+            return false;
+        }
+
+        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true, mintedGrants: BuildAdmissionGrants(principal: admitted.Identity, bodyIndex: admitted.BodyIndex, templates: decision.Templates));
 
         return true;
     }
@@ -6236,18 +6262,14 @@ public sealed class WorldServer : IWorldServerHost {
     /// <summary>Commits a federated transfer into the peer body index destination escrow reserved. Admission assigns
     /// the ordinary <see cref="PrincipalKind.Peer"/> principal and body together; no transfer-only principal exists.</summary>
     /// <param name="slot">The reserved destination body index.</param>
-    /// <param name="identity">The attested traveler identity carried by the reservation.</param>
+    /// <param name="verdict">The arrival verdict the reservation's own admission decision produced. The traveler's
+    /// wire-supplied profile does not reach the identity columns: they name the authenticated authority the verdict
+    /// was decided against.</param>
     /// <returns>The admission verdict.</returns>
-    internal SessionReply AdmitTransferredPeer(int slot, WorldIdentity? identity) {
-        if (!m_population.TryAdmitRemotePeerAt(slot: slot, source: IntentSource.Live, grantTemplates: [], identityDomain: (identity?.Id ?? string.Empty), identitySubject: (identity?.Name ?? string.Empty), admitted: out var admitted, refusal: out var refusal, authorityTransferred: true)) {
+    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict) {
+        if (!TryAdmitVerifiedParticipant(verdict: verdict, reservedSlot: slot, source: IntentSource.Live, authorityTransferred: true, admitted: out _, refusal: out var refusal)) {
             return new SessionReply(Accepted: false, AssignedIndex: -1, RosterEcho: string.Empty, Reason: refusal);
         }
-
-        ApplyLifecycleEvents(admitted: [admitted], disconnected: [], ordered: true, overrideMintedGrants: [
-            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false),
-            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: admitted.BodyIndex), Exclusive: true, Budget: 64),
-            new WorldGrant(Principal: admitted.Identity, Capability: WorldCapability.Observe, Subject: GrantSubject.Body(index: admitted.BodyIndex), Exclusive: false, Budget: 64),
-        ]);
 
         return new SessionReply(Accepted: true, AssignedIndex: (slot + 1), RosterEcho: string.Empty, Reason: string.Empty);
     }
@@ -6281,20 +6303,20 @@ public sealed class WorldServer : IWorldServerHost {
         _ = m_population.TryDetachSeatForTransfer(slot: slot, profile: out _);
     }
 
-    // Builds the CONCRETE minted grant rows for one just-admitted peer from its verified admission templates — the
-    // Principal a template cannot carry (unknowable until TryAdmitRemotePeer assigns a body index/generation) is the
-    // ONE field this fills in; every other field passes through unchanged.
-    private static List<WorldGrant> BuildAdmissionGrants(WorldPrincipal principal, IReadOnlyList<WorldAdmissionGrant> templates) {
+    // Builds the concrete minted grant rows for one just-admitted peer from its verified admission templates. A
+    // template can carry neither the Principal nor a body subject — both are unknowable until admission assigns an
+    // index and generation — so those are the only fields this fills in; every other field passes through unchanged.
+    private static List<WorldGrant> BuildAdmissionGrants(WorldPrincipal principal, int bodyIndex, IReadOnlyList<WorldAdmissionGrant> templates) {
         var minted = new List<WorldGrant>(capacity: templates.Count);
 
         foreach (var template in templates) {
-            minted.Add(item: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.Subject, Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask));
+            minted.Add(item: new WorldGrant(Principal: principal, Capability: template.Capability, Subject: template.SubjectFor(bodyIndex: bodyIndex), Exclusive: template.Exclusive, Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask));
         }
 
         return minted;
     }
 
-    private void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered, IReadOnlyList<WorldGrant>? overrideMintedGrants = null) {
+    private void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered, IReadOnlyList<WorldGrant>? mintedGrants = null) {
         if (disconnected.Count > 0) {
             var revoked = new List<WorldGrant>();
 
@@ -6306,13 +6328,11 @@ public sealed class WorldServer : IWorldServerHost {
         }
 
         if (admitted.Count > 0) {
-            // overrideMintedGrants is supplied ONLY by TryAdmitPeerConnection (the actual remote-peer TCP door),
-            // built from the connecting identity's OWN verified admission templates. Every other admitted-list
-            // caller here (boot inhabitant reconciliation, world.population's SetSimulatedCount, a definition
-            // swap's post-Rebuild reconciliation) activates a body with no connecting identity to verify at all —
-            // those keep minting the historical Control/all seed, which is orthogonal to this task's admission-door
-            // scope (CLAUDE.md: the ADMISSION DOOR ONLY, never simulated/bot population housekeeping).
-            var minted = (overrideMintedGrants ?? BuildDefaultPeerControlGrants(admitted: admitted));
+            // mintedGrants is supplied only by TryAdmitVerifiedParticipant, built from the door's verdict. Every
+            // other admitted-list caller (boot inhabitant reconciliation, world.population's SetSimulatedCount, a
+            // definition swap's post-Rebuild reconciliation) activates a locally-simulated body with no connecting
+            // identity to verify, and mints the census Control/all seed instead.
+            var minted = (mintedGrants ?? BuildDefaultPeerControlGrants(admitted: admitted));
 
             DispatchServerEvent(serverEvent: new WorldServerEvent.PeerAdmitted(Entries: [.. admitted], MintedGrants: minted), ordered: ordered);
         }

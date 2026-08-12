@@ -286,7 +286,7 @@ public sealed class WorldTcpHost : IDisposable {
             // all — and RunOnTickThreadAsync's cancellation guard both releases the waiting socket at the deadline
             // and prevents the orphaned item from admitting later.
             var (admitted, admissionRefusal) = await RunOnTickThreadAsync(
-                work: () => m_server.TryAdmitPeerConnection(grantTemplates: (outcome.Grants ?? []), identityDomain: (outcome.Domain ?? string.Empty), identitySubject: (outcome.Subject ?? string.Empty), expectedAdmissionEntries: admissionEntriesAtVerify, admitted: out var entry, refusal: out var reason) ? (entry, (string?)null) : (default(WorldPeerEventEntry), reason),
+                work: () => m_server.TryAdmitPeerConnection(verdict: outcome.Verdict, expectedAdmissionEntries: admissionEntriesAtVerify, admitted: out var entry, refusal: out var reason) ? (entry, (string?)null) : (default(WorldPeerEventEntry), reason),
                 ct: handshakeCt
             ).ConfigureAwait(continueOnCapturedContext: false);
 

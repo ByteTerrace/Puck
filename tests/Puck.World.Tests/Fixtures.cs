@@ -33,6 +33,21 @@ internal static class Fixtures {
     /// any reserved derived-face band.</summary>
     public const int TestPatternScreenIndex = 0;
 
+    /// <summary>Builds the <c>admission</c> row that authorizes travelers from any authenticated federation
+    /// authority, minting the same three rows a driven arrival needs: <c>Control</c>/<c>all</c>, and exclusive
+    /// <c>Drive</c> plus <c>Observe</c> over the body admission assigns (an absent subject).</summary>
+    public static WorldAdmissionEntry AnyAuthorityArrivals() => new(
+        Domain: WorldAdmissionEntry.AnyAuthority,
+        Subject: null,
+        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+        Algorithm: string.Empty,
+        PublicKey: string.Empty,
+        Grants: [
+            new WorldAdmissionGrant(Capability: WorldCapability.Control, Subject: GrantSubject.All),
+            new WorldAdmissionGrant(Capability: WorldCapability.Drive, Exclusive: true, Budget: 64),
+            new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 64),
+        ]);
+
     /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
     /// section (see <c>WorldDefinitionValidator.RequireSections</c>), each populated with the smallest value shape
     /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the

@@ -2126,6 +2126,12 @@ public sealed class WorldPopulation {
     public (string Domain, string Subject) PeerIdentity(int bodyIndex) =>
         (((uint)bodyIndex < Capacity) ? (m_entries[bodyIndex].IdentityDomain, m_entries[bodyIndex].IdentitySubject) : (string.Empty, string.Empty));
 
+    /// <summary>Gets a value indicating whether the body at <paramref name="bodyIndex"/> arrived through an authority
+    /// transfer rather than a connection handshake, which decides which admission-door arm re-authorizes it.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    public bool PeerAuthorityTransferred(int bodyIndex) =>
+        (((uint)bodyIndex < Capacity) && m_entries[bodyIndex].IsAuthorityTransferred);
+
     /// <summary>Re-applies one recorded admission through the population door. A live event reaches this after the
     /// point of effect and is idempotent (<see cref="TryAdmitRemotePeer"/> already set every field this touches);
     /// replay reaches it before the effect and reconstructs the body — including the <see cref="Entry.IsRemoteHuman"/>

@@ -2137,10 +2137,20 @@ public static class WorldDefinitionValidator {
 
             byte[]? spki = null;
 
-            try {
-                spki = Convert.FromBase64String(s: (row.PublicKey ?? string.Empty));
-            } catch (FormatException) {
-                errors.Add(item: $"{path}.publicKey is not valid base64.");
+            if (row.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
+                if (string.IsNullOrWhiteSpace(value: row.Domain)) {
+                    errors.Add(item: $"{path}.domain is required for mode 'federatedAuthority' — it names the authenticated source-authority namespace, or '{WorldAdmissionEntry.AnyAuthority}' for any of them.");
+                }
+
+                if (!string.IsNullOrEmpty(value: row.Algorithm) || !string.IsNullOrEmpty(value: row.PublicKey)) {
+                    errors.Add(item: $"{path} carries a key for mode 'federatedAuthority' — an arrival row authorizes a namespace the federation handshake already authenticated and can never verify a claim; leave algorithm and publicKey empty.");
+                }
+            } else {
+                try {
+                    spki = Convert.FromBase64String(s: (row.PublicKey ?? string.Empty));
+                } catch (FormatException) {
+                    errors.Add(item: $"{path}.publicKey is not valid base64.");
+                }
             }
 
             if (spki is { Length: > 0 }) {
@@ -2175,16 +2185,24 @@ public static class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.subject must be absent for mode 'vouches' — a vouching root's chain resolves its own subject; it does not pin one here.");
             }
 
+            if ((row.Mode == WorldAdmissionTrustMode.FederatedAuthority) && (row.Subject is not null)) {
+                errors.Add(item: $"{path}.subject must be absent for mode 'federatedAuthority' — the row trusts an authority namespace, never one traveler it hands over.");
+            }
+
             var grants = (row.Grants ?? []);
 
             for (var grantIndex = 0; (grantIndex < grants.Count); grantIndex++) {
                 var grant = grants[grantIndex];
                 var grantPath = $"{path}.grants[{grantIndex}]";
 
-                ValidateGrantSubjectBounds(subject: grant.Subject, populationCapacity: populationCapacity, path: grantPath, errors: errors);
+                // An absent subject means the body this admission assigns, whose index the door cannot know; it is
+                // concrete by construction, so it needs neither a bounds check nor the exclusive-over-all rule.
+                if (grant.Subject is { } grantSubject) {
+                    ValidateGrantSubjectBounds(subject: grantSubject, populationCapacity: populationCapacity, path: grantPath, errors: errors);
 
-                if (grant.Exclusive && (grant.Subject.Kind == GrantSubjectKind.All)) {
-                    errors.Add(item: $"{grantPath} is exclusive over 'all' — an exclusive reservation must name a concrete subject.");
+                    if (grant.Exclusive && (grantSubject.Kind == GrantSubjectKind.All)) {
+                        errors.Add(item: $"{grantPath} is exclusive over 'all' — an exclusive reservation must name a concrete subject.");
+                    }
                 }
             }
         }
