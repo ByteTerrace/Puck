@@ -871,8 +871,10 @@ public sealed class WorldTcpHost : IDisposable {
         // than as this authority ending an ordinary session. A FIN gives it a clean end-of-stream instead.
         foreach (var federation in m_federationConnections.Keys) {
             try {
-                federation.Client.Shutdown(how: SocketShutdown.Send);
-            } catch (Exception ex) when (ex is SocketException or ObjectDisposedException) {
+                // A connection racing its own teardown has already dropped its socket: TcpClient.Client reads null
+                // once disposed, so this is a null-conditional call, not a defensive one.
+                federation.Client?.Shutdown(how: SocketShutdown.Send);
+            } catch (Exception ex) when (ex is SocketException or ObjectDisposedException or InvalidOperationException) {
                 // The lane is already gone; there is nothing left to end politely.
             }
         }
