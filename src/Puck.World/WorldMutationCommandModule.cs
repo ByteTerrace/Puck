@@ -263,7 +263,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return new CommandResult(Output: "[world.admission: none — no remote peer can verify and no traveller can arrive]");
                 }
 
-                var formatted = string.Join(separator: " | ", values: rows.Select(selector: row => $"{row.Mode.ToString().ToLowerInvariant()} domain:{row.Domain} subject:{(row.Subject ?? "(none)")} alg:{row.Algorithm} grants:{row.Grants.Count}"));
+                var formatted = string.Join(separator: " | ", values: rows.Select(selector: row => $"{row.Mode.ToString().ToLowerInvariant()} domain:{row.Domain} subject:{(row.Subject ?? "(none)")} alg:{row.Algorithm} grants:{row.Grants.Count} disclosure:{row.Tier.ToString().ToLowerInvariant()}{((row.Disclosure is null) ? " (default)" : string.Empty)}"));
 
                 return new CommandResult(Output: $"[world.admission: {formatted}]");
             }

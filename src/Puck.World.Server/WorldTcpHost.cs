@@ -14,7 +14,8 @@ namespace Puck.World.Server;
 /// <param name="RemoteEndpoint">The remote socket endpoint, as text.</param>
 /// <param name="IdentityDomain">The verified admission identity's domain (see <see cref="WorldAdmissionDoor"/>).</param>
 /// <param name="IdentitySubject">The verified admission identity's subject (empty for a Vouches root's chain-resolved subject).</param>
-public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int PeerIndex, int Generation, string RemoteEndpoint, string IdentityDomain, string IdentitySubject);
+/// <param name="Tier">How much of this world's document the admitting entry authorized this connection to receive.</param>
+public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int PeerIndex, int Generation, string RemoteEndpoint, string IdentityDomain, string IdentitySubject, WorldDisclosureTier Tier);
 
 /// <summary>
 /// The P7 socket door: a TCP listener admitting remote peers onto the same ordered domain a local script drives.
@@ -102,7 +103,7 @@ public sealed class WorldTcpHost : IDisposable {
     public IReadOnlyList<WorldPeerConnectionInfo> Connections {
         get {
             lock (m_connectionsLock) {
-                return [.. m_connections.Select(selector: static c => new WorldPeerConnectionInfo(ConnectionId: c.Id, PeerIndex: c.PeerIndex, Generation: c.Generation, RemoteEndpoint: c.RemoteEndpoint, IdentityDomain: c.IdentityDomain, IdentitySubject: c.IdentitySubject))];
+                return [.. m_connections.Select(selector: static c => new WorldPeerConnectionInfo(ConnectionId: c.Id, PeerIndex: c.PeerIndex, Generation: c.Generation, RemoteEndpoint: c.RemoteEndpoint, IdentityDomain: c.IdentityDomain, IdentitySubject: c.IdentitySubject, Tier: c.Tier))];
             }
         }
     }
@@ -317,7 +318,7 @@ public sealed class WorldTcpHost : IDisposable {
             }
 
             var connectionId = Interlocked.Increment(location: ref m_nextConnectionId);
-            var connection = new Connection(id: connectionId, peerIndex: admitted.BodyIndex, generation: admitted.Generation, client: client, stream: stream, remoteEndpoint: remoteEndpoint, identityDomain: (outcome.Domain ?? string.Empty), identitySubject: (outcome.Subject ?? string.Empty));
+            var connection = new Connection(id: connectionId, peerIndex: admitted.BodyIndex, generation: admitted.Generation, client: client, stream: stream, remoteEndpoint: remoteEndpoint, identityDomain: (outcome.Domain ?? string.Empty), identitySubject: (outcome.Subject ?? string.Empty), tier: outcome.Tier);
 
             lock (m_connectionsLock) {
                 m_connections.Add(item: connection);
@@ -939,7 +940,7 @@ public sealed class WorldTcpHost : IDisposable {
         m_cts?.Dispose();
     }
 
-    private sealed class Connection(int id, int peerIndex, int generation, TcpClient client, NetworkStream stream, string remoteEndpoint, string identityDomain, string identitySubject) {
+    private sealed class Connection(int id, int peerIndex, int generation, TcpClient client, NetworkStream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier) {
         private long m_sequence;
         private long m_correlationId;
 
@@ -951,6 +952,7 @@ public sealed class WorldTcpHost : IDisposable {
         public string RemoteEndpoint { get; } = remoteEndpoint;
         public string IdentityDomain { get; } = identityDomain;
         public string IdentitySubject { get; } = identitySubject;
+        public WorldDisclosureTier Tier { get; } = tier;
         public WorldPrincipal Principal => WorldPrincipal.Peer(index: PeerIndex, generation: Generation);
 
         public long NextSequence() => Interlocked.Increment(location: ref m_sequence);
