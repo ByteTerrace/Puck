@@ -66,6 +66,9 @@ public sealed class WorldTcpHost : IDisposable {
     // Indexed by WorldFederationRefusal; every federation refusal this door writes is counted here so the read-back
     // reports refusals by name rather than by sentence.
     private readonly int[] m_federationRefusals = new int[Enum.GetValues<WorldFederationRefusal>().Length];
+    // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
+    // tracked here only so shutdown can half-close them; the value is unused.
+    private readonly ConcurrentDictionary<TcpClient, byte> m_federationConnections = new();
     private readonly ConcurrentQueue<Action> m_pending = new();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
@@ -73,7 +76,6 @@ public sealed class WorldTcpHost : IDisposable {
     private CancellationTokenSource? m_cts;
     private Task? m_acceptLoop;
     private int m_nextConnectionId;
-    private long m_nextFederationIntentLease;
     private int m_pendingHandshakes;
     private bool m_disposed;
 
@@ -238,7 +240,14 @@ public sealed class WorldTcpHost : IDisposable {
                 await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Ack, body: default, ct: handshakeCt).ConfigureAwait(false);
                 handshakeSlotHeld = false;
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
-                await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, tier: DisclosureFor(sourceAuthority: federationAuthority), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                _ = m_federationConnections.TryAdd(key: client, value: 0);
+
+                try {
+                    await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, tier: DisclosureFor(sourceAuthority: federationAuthority), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                } finally {
+                    _ = m_federationConnections.TryRemove(key: client, value: out _);
+                }
+
                 return;
             }
 
@@ -539,7 +548,7 @@ public sealed class WorldTcpHost : IDisposable {
             return true;
         }
 
-        var (result, forwardReason) = await ResolveForwardedSubmissionAsync(principal: principal, mobility: mobility, payload: payload, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+        var (result, forwardReason) = await ResolveForwardedSubmissionAsync(sourceAuthority: sourceAuthority, mobility: mobility, payload: payload, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
         if (result is null) {
             await WriteFederationRefusal(stream: stream, refusal: WorldFederationRefusal.SubmissionRefused, detail: (forwardReason.Length > 0 ? forwardReason : "the submission names no live or forwarded transfer body"), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
@@ -560,32 +569,11 @@ public sealed class WorldTcpHost : IDisposable {
         return true;
     }
 
-    private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(WorldPrincipal principal, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, CancellationToken ct) {
-        // The liveness test and the submit it authorizes are one gated operation: a body that detaches between two
-        // separate gate acquisitions would let a submission apply to a slot its traveler no longer owns.
-        var applied = m_server.ExecuteAuthorityOperation(operation: () => {
-            if (!IsLiveTransferredPrincipal(principal: principal)) {
-                return (Live: false, Result: (WorldSubmissionResult?)null);
-            }
-
-            var stamped = StampPrincipal(payload: payload, principal: principal);
-
-            if ((stamped is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-                m_server.Population.TryCaptureTransferredPeer(index: principal.Index, peer: out var peer)) {
-                m_server.DisconnectPeerConnection(peer: peer);
-
-                return (Live: true, Result: (WorldSubmissionResult?)new WorldSubmissionResult.Session(new SessionReply(Accepted: true, AssignedIndex: (principal.Index + 1), RosterEcho: string.Empty, Reason: string.Empty)));
-            }
-
-            WorldSubmissionResult? captured = null;
-
-            m_server.Submit(envelope: new SubmissionEnvelope(ConnectionId: principal.Index, SessionGeneration: principal.Generation, Sequence: 0, CorrelationId: 0, Principal: principal, Payload: stamped), completion: value => captured = value);
-
-            return (Live: true, Result: captured);
-        });
-
-        if (applied.Live) {
-            return (applied.Result, string.Empty);
+    // sourceAuthority is the namespace THIS CONNECTION authenticated as, which is what the credential table is keyed
+    // by — never the traveller's origin authority carried inside its incarnation.
+    private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(string sourceAuthority, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, CancellationToken ct) {
+        if (WorldLocalForwardedAuthority.TryApplySubmission(server: m_server, sourceAuthority: sourceAuthority, mobility: in mobility, payload: payload, result: out var applied, reason: out _)) {
+            return (applied, string.Empty);
         }
 
         if (m_server.TransferForwarder is not { } forwarder) {
@@ -634,7 +622,7 @@ public sealed class WorldTcpHost : IDisposable {
         var declaredEndpoint = (m_server.Definition.Host.Authority ?? ListenEndpoint);
         // Read the body and its address inside the same gated operation that decided it is live.
         var local = ((declaredEndpoint is { } localEndpoint)
-            ? m_server.ExecuteAuthorityOperation(operation: () => (IsLiveTransferredPrincipal(principal: principal) ? DescribeLocalRoute(principal: principal, localEndpoint: localEndpoint) : (WorldAuthorityRouteDescription?)null))
+            ? m_server.ExecuteAuthorityOperation(operation: () => (WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server: m_server, principal: principal) ? WorldLocalForwardedAuthority.DescribeRoute(server: m_server, endpoint: localEndpoint, principal: principal) : (WorldAuthorityRouteDescription?)null))
             : null);
 
         WorldAuthorityRouteDescription route;
@@ -653,27 +641,6 @@ public sealed class WorldTcpHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Route, body: WorldFederationCodec.EncodeRoute(route: in route, tier: tier, authority: m_server.AuthorityIdentity, revision: m_server.Population.Revision), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
-    }
-
-    private WorldAuthorityRouteDescription DescribeLocalRoute(WorldPrincipal principal, string localEndpoint) {
-        var body = m_server.Population.EntryBody(index: principal.Index) ??
-            throw new InvalidOperationException(message: $"live transferred {principal.Describe()} has no body");
-
-        return new WorldAuthorityRouteDescription(
-            Endpoint: localEndpoint,
-            Entity: new WorldEntityAddress(
-                Authority: m_server.AuthorityIdentity,
-                Index: principal.Index,
-                Generation: m_server.Population.Generation(index: principal.Index)),
-            Tick: (m_server.NextInputTick - 1UL),
-            Position: body.FixedPosition,
-            Orientation: body.FixedOrientation,
-            BodyColor: m_server.Population.BodyColor(index: principal.Index),
-            Kit: m_server.Population.KitIndex(index: principal.Index),
-            Look: m_server.Population.LookIndex(index: principal.Index),
-            CatalogRig: m_server.Population.CatalogRig(index: principal.Index),
-            PlacementId: m_server.Population.InhabitantPlacementId(index: principal.Index),
-            Definition: m_server.Definition);
     }
 
     private Task WriteFederationRefusal(NetworkStream stream, WorldFederationRefusal refusal, string detail, CancellationToken ct) {
@@ -726,7 +693,7 @@ public sealed class WorldTcpHost : IDisposable {
     // finally releases its lease. Request/ack remains ordered, while connection setup and challenge authentication
     // are paid once rather than once per simulation tick.
     private async Task StreamFederatedIntentsAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
-        var leaseId = Interlocked.Increment(location: ref m_nextFederationIntentLease);
+        var leaseId = WorldFederatedIntentLease.Next();
         var touched = new Dictionary<WorldMobilityIdentity, (WorldPrincipal Principal, IntentSubmission Submission)>();
         var forwardRelease = true;
         await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Ack, body: default, ct: ct).ConfigureAwait(false);
@@ -775,7 +742,7 @@ public sealed class WorldTcpHost : IDisposable {
                 var reason = string.Empty;
 
                 if (m_server.ExecuteAuthorityOperation(operation: () => {
-                    if (!IsLiveTransferredPrincipal(principal: principal)) {
+                    if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server: m_server, principal: principal)) {
                         return false;
                     }
 
@@ -815,7 +782,7 @@ public sealed class WorldTcpHost : IDisposable {
                 if (!forwardRelease) {
                     break;
                 }
-                if (m_server.ExecuteAuthorityOperation(operation: () => IsLiveTransferredPrincipal(principal: pair.Value.Principal)) || (m_server.TransferForwarder is not { } forwarder)) {
+                if (m_server.ExecuteAuthorityOperation(operation: () => WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server: m_server, principal: pair.Value.Principal)) || (m_server.TransferForwarder is not { } forwarder)) {
                     continue;
                 }
 
@@ -852,7 +819,7 @@ public sealed class WorldTcpHost : IDisposable {
             // Principal (Command/Session/Mutation each read it directly rather than the envelope's copy — see
             // ApplyEnvelope's own remarks) — a handler reads the identity the door resolved, never the one the
             // client's bytes claimed.
-            var stamped = StampPrincipal(payload: payload, principal: connection.Principal);
+            var stamped = WorldLocalForwardedAuthority.StampPrincipal(payload: payload, principal: connection.Principal);
             var envelope = new SubmissionEnvelope(
                 ConnectionId: connection.Id,
                 SessionGeneration: connection.Generation,
@@ -877,21 +844,6 @@ public sealed class WorldTcpHost : IDisposable {
             }
         }
     }
-
-    private static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, WorldPrincipal principal) => payload switch {
-        WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: (command.Value with { Principal = principal })),
-        WorldSubmissionPayload.Session session => new WorldSubmissionPayload.Session(Value: (session.Value with { Principal = principal })),
-        WorldSubmissionPayload.Mutation mutation => new WorldSubmissionPayload.Mutation(Value: (mutation.Value with { Principal = principal })),
-        _ => payload,
-    };
-
-    // MUST be called inside WorldServer.ExecuteAuthorityOperation: it reads population state the tick thread writes,
-    // and every caller pairs that read with the act it authorizes inside one gated operation.
-    private bool IsLiveTransferredPrincipal(WorldPrincipal principal) =>
-        ((principal.Kind == PrincipalKind.Peer) &&
-         ((uint)principal.Index < (uint)m_server.Population.Capacity) &&
-         m_server.Population.IsActive(index: principal.Index) &&
-         (m_server.Population.PeerPrincipal(index: principal.Index) == principal));
 
     // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
     // between a connection's background read loop and the single-threaded server.
@@ -926,6 +878,20 @@ public sealed class WorldTcpHost : IDisposable {
         }
 
         m_disposed = true;
+
+        // Half-close every federation lane BEFORE cancelling its read: cancelling a pending socket read closes the
+        // handle abortively, and a peer blocked on that lane reads the abort (WSAECONNABORTED) as an outage rather
+        // than as this authority ending an ordinary session. A FIN gives it a clean end-of-stream instead.
+        foreach (var federation in m_federationConnections.Keys) {
+            try {
+                // A connection racing its own teardown has already dropped its socket: TcpClient.Client reads null
+                // once disposed, so this is a null-conditional call, not a defensive one.
+                federation.Client?.Shutdown(how: SocketShutdown.Send);
+            } catch (Exception ex) when (ex is SocketException or ObjectDisposedException or InvalidOperationException) {
+                // The lane is already gone; there is nothing left to end politely.
+            }
+        }
+
         m_cts?.Cancel();
         m_listener?.Stop();
 
