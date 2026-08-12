@@ -204,15 +204,14 @@ public static class WorldCounterpartCarriage {
             return false;
         }
 
-        var result = CarriageVerifier.VerifyChain(
+        var result = CarriageConformanceProfile.Base.VerifyChain(
             codec: codec,
             claim: claim,
             chain: chain,
             trustList: trustList!,
             now: now,
             expectedPurpose: Purpose,
-            expectedAudience: Audience,
-            sequenceStore: null);
+            expectedAudience: Audience);
 
         if (!result.Verified) {
             reason = (result.RefusalReason ?? "the counterpart attestation did not verify");

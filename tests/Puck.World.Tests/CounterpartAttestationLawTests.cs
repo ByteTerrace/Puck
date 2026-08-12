@@ -33,7 +33,7 @@ public sealed class CounterpartAttestationLawTests {
 
         Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out var composeReason), composeReason);
 
-        var codec = new FixedLayoutCarriageCodec();
+        var codec = new CborCarriageCodec();
 
         Assert.True(TryVerifySigned(codec: codec, key: key, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out var verified, reason: out var verifyReason), verifyReason);
         Assert.True(WorldDefinitionValidator.TryValidate(definition: west, reason: out var accepted, neighbours: new StubResolver(attestation: verified!)), accepted);
@@ -70,7 +70,7 @@ public sealed class CounterpartAttestationLawTests {
 
         Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out _));
 
-        var codec = new FixedLayoutCarriageCodec();
+        var codec = new CborCarriageCodec();
 
         Assert.False(TryVerifySigned(codec: codec, key: stranger, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out _, reason: out var strangerReason));
         Assert.NotEmpty(strangerReason);
