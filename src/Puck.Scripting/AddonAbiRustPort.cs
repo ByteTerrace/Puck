@@ -65,11 +65,31 @@ internal static class AddonAbiRustPort {
 
         """);
 
-        AppendByteEnum<AddonOutCellKind>(csharpTypeName: "AddonOutCellKind", rustName: "OutCellKind", sb: sb);
-        AppendByteEnum<AddonInCellKind>(csharpTypeName: "AddonInCellKind", rustName: "InCellKind", sb: sb);
-        AppendByteEnum<AddonChannelKind>(csharpTypeName: "AddonChannelKind", rustName: "ChannelKind", sb: sb);
-        AppendByteEnum<AddonSubjectKind>(csharpTypeName: "AddonSubjectKind", rustName: "SubjectKind", sb: sb);
-        AppendByteEnum<AddonVerdict>(csharpTypeName: "AddonVerdict", rustName: "Verdict", sb: sb);
+        AppendByteEnum<AddonOutCellKind>(
+            csharpTypeName: "AddonOutCellKind",
+            rustName: "OutCellKind",
+            sb: sb
+        );
+        AppendByteEnum<AddonInCellKind>(
+            csharpTypeName: "AddonInCellKind",
+            rustName: "InCellKind",
+            sb: sb
+        );
+        AppendByteEnum<AddonChannelKind>(
+            csharpTypeName: "AddonChannelKind",
+            rustName: "ChannelKind",
+            sb: sb
+        );
+        AppendByteEnum<AddonSubjectKind>(
+            csharpTypeName: "AddonSubjectKind",
+            rustName: "SubjectKind",
+            sb: sb
+        );
+        AppendByteEnum<AddonVerdict>(
+            csharpTypeName: "AddonVerdict",
+            rustName: "Verdict",
+            sb: sb
+        );
         AppendVerdictIsAllowed(sb: sb);
         AppendCapabilityMask(sb: sb);
         AppendAbiConstants(sb: sb);
@@ -88,7 +108,10 @@ internal static class AddonAbiRustPort {
 
         foreach (var value in Enum.GetValues<TEnum>()) {
             var name = value.ToString();
-            var raw = Convert.ToByte(value: value, provider: CultureInfo.InvariantCulture);
+            var raw = Convert.ToByte(
+                value: value,
+                provider: CultureInfo.InvariantCulture
+            );
 
             sb.Append(value: "    /// `Puck.Scripting.").Append(value: csharpTypeName).Append(value: '.').Append(value: name).Append(value: "` (`").Append(value: raw).Append(value: "`).\n");
             sb.Append(value: "    ").Append(value: name).Append(value: " = ").Append(value: raw).Append(value: ",\n");
@@ -107,7 +130,10 @@ internal static class AddonAbiRustPort {
         sb.Append(value: "impl Verdict {\n");
         sb.Append(value: "    /// Mirrors `Puck.Scripting.AddonVerdicts.IsAllowed`, generated from the live predicate.\n");
         sb.Append(value: "    pub fn is_allowed(self) -> bool {\n");
-        sb.Append(value: "        matches!(self, ").Append(value: string.Join(separator: " | ", values: allowedNames.Select(selector: static name => $"Verdict::{name}"))).Append(value: ")\n");
+        sb.Append(value: "        matches!(self, ").Append(value: string.Join(
+            separator: " | ",
+            values: allowedNames.Select(selector: static name => $"Verdict::{name}")
+        )).Append(value: ")\n");
         sb.Append(value: "    }\n");
         sb.Append(value: "}\n\n");
     }
@@ -174,15 +200,23 @@ internal static class AddonAbiRustPort {
         var fields = type
             .GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
             .Where(predicate: static field => field.IsLiteral)
-            .OrderBy(keySelector: static field => field.Name, comparer: StringComparer.Ordinal);
+            .OrderBy(
+            keySelector: static field => field.Name,
+            comparer: StringComparer.Ordinal
+        );
 
         sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
 
         foreach (var field in fields) {
-            var rustName = $"{((rustPrefix is null) ? string.Empty : $"{rustPrefix}_")}{ToScreamingSnakeCase(pascal: field.Name)}";
+            var rustName = $"{((rustPrefix is null)
+                ? string.Empty
+                : $"{rustPrefix}_")}{ToScreamingSnakeCase(pascal: field.Name)}";
             var rustType = RustTypeFor(field: field);
             var rawValue = field.GetRawConstantValue();
-            var valueText = Convert.ToString(value: rawValue, provider: CultureInfo.InvariantCulture);
+            var valueText = Convert.ToString(
+                value: rawValue,
+                provider: CultureInfo.InvariantCulture
+            );
 
             sb.Append(value: "/// `").Append(value: csharpTypeName).Append(value: '.').Append(value: field.Name).Append(value: "` (`").Append(value: valueText).Append(value: "`).\n");
             sb.Append(value: "pub const ").Append(value: rustName).Append(value: ": ").Append(value: rustType).Append(value: " = ").Append(value: valueText).Append(value: ";\n");
@@ -196,7 +230,11 @@ internal static class AddonAbiRustPort {
     // cross as `u64`; every other integral constant here is a byte count, offset, count, or cap, which this
     // crate always carries as `usize`.
     private static string RustTypeFor(FieldInfo field) {
-        if (string.Equals(a: field.Name, b: "AbiVersion", comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: field.Name,
+            b: "AbiVersion",
+            comparisonType: StringComparison.Ordinal
+        )) {
             return "i32";
         }
 
@@ -219,7 +257,10 @@ internal static class AddonAbiRustPort {
         for (var index = 0; (index < pascal.Length); ++index) {
             var current = pascal[index];
 
-            if ((index > 0) && char.IsUpper(c: current)) {
+            if (
+                (index > 0) &&
+                char.IsUpper(c: current)
+            ) {
                 sb.Append(value: '_');
             }
 

@@ -27,10 +27,10 @@ public static class GpuPixelFormats {
             SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
             SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
             _ => throw new ArgumentOutOfRangeException(
-                actualValue: format,
-                message: "The surface format has no GPU pixel format mapping.",
-                paramName: nameof(format)
-            ),
+            actualValue: format,
+            message: "The surface format has no GPU pixel format mapping.",
+            paramName: nameof(format)
+        ),
         };
     }
 }

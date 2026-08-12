@@ -61,9 +61,16 @@ public sealed record OverlayServices {
         var renderTargetFactory = Resolve<IGpuRenderTargetFactory>();
 
         return new OverlayServices {
-            BytecodeExtension = (hostsOnDirectX ? ".dxil" : ".spv"),
+            BytecodeExtension = (hostsOnDirectX
+            ? ".dxil"
+            : ".spv"),
             CommandRecorder = Resolve<IGpuCommandRecorder>(),
-            CreateRenderTarget = (width, height) => renderTargetFactory.Create(deviceContext: deviceContext, format: GpuPixelFormat.R8G8B8A8Unorm, height: height, width: width),
+            CreateRenderTarget = (width, height) => renderTargetFactory.Create(
+            deviceContext: deviceContext,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: height,
+            width: width
+        ),
             DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
             DeviceContext = deviceContext,
             PipelineFactory = Resolve<IGpuPipelineFactory>(),

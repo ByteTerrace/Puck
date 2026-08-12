@@ -11,7 +11,12 @@ namespace Puck.Abstractions.Lighting;
 /// <param name="Intensity">The intensity (brightness) channel, 0..255; defaults to fully lit.</param>
 public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte Intensity = 255) {
     /// <summary>Gets a fully-off lamp (all channels and intensity zero).</summary>
-    public static LampColor Off => new(Red: 0, Green: 0, Blue: 0, Intensity: 0);
+    public static LampColor Off => new(
+        Red: 0,
+        Green: 0,
+        Blue: 0,
+        Intensity: 0
+    );
 
     /// <summary>Creates a color from RGB with full intensity.</summary>
     /// <param name="red">The red channel, 0..255.</param>
@@ -19,7 +24,12 @@ public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte In
     /// <param name="blue">The blue channel, 0..255.</param>
     /// <returns>The color at full intensity.</returns>
     public static LampColor Rgb(byte red, byte green, byte blue) {
-        return new LampColor(Red: red, Green: green, Blue: blue, Intensity: 255);
+        return new LampColor(
+            Red: red,
+            Green: green,
+            Blue: blue,
+            Intensity: 255
+        );
     }
 
     /// <summary>
@@ -30,7 +40,11 @@ public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte In
     /// <param name="scale">The brightness multiplier, 0..1.</param>
     /// <returns>The dimmed color.</returns>
     public LampColor Scale(float scale) {
-        var clamped = ((scale < 0f) ? 0f : ((scale > 1f) ? 1f : scale));
+        var clamped = ((scale < 0f)
+            ? 0f
+            : ((scale > 1f)
+                ? 1f
+                : scale));
 
         return this with {
             Red = (byte)(Red * clamped),

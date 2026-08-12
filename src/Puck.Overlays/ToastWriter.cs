@@ -24,18 +24,20 @@ public sealed class ToastWriter {
     /// never silent) instead of quietly overrunning the reservation.</summary>
     public const int LabelChars = 2;
 
-    private const string OkLabel = "OK";
     private const string ErrorLabel = "ER";
+    private const string OkLabel = "OK";
     // Lifetime and fade in DETERMINISTIC engine ticks (content tick, never wall clock).
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
     private static readonly ulong FadeTicks = (ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond);
-
     private readonly IOverlayToastSource m_source;
     private ulong m_firstTicks;
     private int m_sequenceSeen;
 
     static ToastWriter() {
-        System.Diagnostics.Debug.Assert(condition: ((OkLabel.Length == LabelChars) && (ErrorLabel.Length == LabelChars)), message: "ToastWriter's OkLabel/ErrorLabel length drifted from LabelChars — update LabelChars (and OverlayChannelLeases' ToastTextWords, which reads it) to match.");
+        System.Diagnostics.Debug.Assert(
+            condition: ((OkLabel.Length == LabelChars) && (ErrorLabel.Length == LabelChars)),
+            message: "ToastWriter's OkLabel/ErrorLabel length drifted from LabelChars — update LabelChars (and OverlayChannelLeases' ToastTextWords, which reads it) to match."
+        );
     }
 
     /// <summary>Initializes a new instance of the <see cref="ToastWriter"/> class.</summary>
@@ -53,7 +55,10 @@ public sealed class ToastWriter {
     public void Emit(OverlayFrameBuilder builder, ulong renderTicks) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        if (!m_source.TrySnapshot(frame: out var toast) || (toast.Message.Length == 0)) {
+        if (
+            !m_source.TrySnapshot(frame: out var toast) ||
+            (toast.Message.Length == 0)
+        ) {
             return;
         }
 
@@ -70,29 +75,58 @@ public sealed class ToastWriter {
 
         // Opacity-only exit: full until the trailing dur.med window, then a linear fade.
         var remaining = (DurationTicks - age);
-        var alpha = ((remaining >= FadeTicks) ? 1f : ((float)remaining / FadeTicks));
-        var stateRole = (toast.IsError ? OverlayColorRole.Danger : OverlayColorRole.Positive);
+        var alpha = ((remaining >= FadeTicks)
+            ? 1f
+            : ((float)remaining / FadeTicks));
+        var stateRole = (toast.IsError
+            ? OverlayColorRole.Danger
+            : OverlayColorRole.Positive);
         var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
-        var message = toast.Message.AsSpan(start: 0, length: FirstLineLength(text: toast.Message));
+        var message = toast.Message.AsSpan(
+            start: 0,
+            length: FirstLineLength(text: toast.Message)
+        );
         Span<Range> wrapped = stackalloc Range[MaxMessageLines];
-        var lineCount = Wrap(text: message, lines: wrapped);
+        var lineCount = Wrap(
+            text: message,
+            lines: wrapped
+        );
         var messageChars = 0;
 
         for (var index = 0; (index < lineCount); index++) {
             var (_, length) = wrapped[index].GetOffsetAndLength(length: message.Length);
 
-            messageChars = Math.Max(val1: messageChars, val2: length);
+            messageChars = Math.Max(
+                val1: messageChars,
+                val2: length
+            );
         }
 
         var icon = DesignTokens.Space.HeightBadge;
         var textHeight = (lineCount * monoCell);
-        var panelHeight = MathF.Max(x: DesignTokens.Space.HeightChip, y: (textHeight + (2f * DesignTokens.Space.Space2)));
-        var panelWidth = ((((DesignTokens.Space.Space3 + icon) + DesignTokens.Space.Space2) + builder.TextWidth(chars: messageChars, cellHeight: monoCell)) + DesignTokens.Space.Space3);
+        var panelHeight = MathF.Max(
+            x: DesignTokens.Space.HeightChip,
+            y: (textHeight + (2f * DesignTokens.Space.Space2))
+        );
+        var panelWidth = ((((DesignTokens.Space.Space3 + icon) + DesignTokens.Space.Space2) + builder.TextWidth(
+            chars: messageChars,
+            cellHeight: monoCell
+        )) + DesignTokens.Space.Space3);
         var x = ((builder.Width - panelWidth) - DesignTokens.Space.Space8);
         var y = ((builder.Height * 0.5f) - (panelHeight * 0.5f));
 
-        builder.WritePanel(alpha: alpha, bandHeight: 0f, h: panelHeight, ringRole: stateRole, style: OverlayPanelStyle.Chip, titleBand: false, w: panelWidth, x: x, y: y);
+        builder.WritePanel(
+            alpha: alpha,
+            bandHeight: 0f,
+            h: panelHeight,
+            ringRole: stateRole,
+            style: OverlayPanelStyle.Chip,
+            titleBand: false,
+            w: panelWidth,
+            x: x,
+            y: y
+        );
         // The 2px state rail hugging the left edge, inset past the corner radius (the edge-width law's third
         // sanctioned 2px signal).
         builder.WriteRect(
@@ -108,9 +142,19 @@ public sealed class ToastWriter {
         var iconX = (x + DesignTokens.Space.Space3);
         var iconY = (y + ((panelHeight - icon) * 0.5f));
 
-        builder.WriteRect(alpha: alpha, h: icon, radius: DesignTokens.Radius.Radius1, role: OverlayColorRole.SurfaceInset, w: icon, x: iconX, y: iconY);
+        builder.WriteRect(
+            alpha: alpha,
+            h: icon,
+            radius: DesignTokens.Radius.Radius1,
+            role: OverlayColorRole.SurfaceInset,
+            w: icon,
+            x: iconX,
+            y: iconY
+        );
 
-        var label = (toast.IsError ? ErrorLabel : OkLabel);
+        var label = (toast.IsError
+            ? ErrorLabel
+            : OkLabel);
 
         builder.WriteText(
             alpha: alpha,
@@ -118,7 +162,10 @@ public sealed class ToastWriter {
             maxChars: LabelChars,
             role: stateRole,
             text: label,
-            x: (iconX + ((icon - builder.TextWidth(chars: label.Length, cellHeight: microCell)) * 0.5f)),
+            x: (iconX + ((icon - builder.TextWidth(
+                chars: label.Length,
+                cellHeight: microCell
+            )) * 0.5f)),
             y: (iconY + ((icon - microCell) * 0.5f))
         );
         var textX = ((iconX + icon) + DesignTokens.Space.Space2);
@@ -139,9 +186,14 @@ public sealed class ToastWriter {
 
     // The message's first-line length (a multi-line echo shows its head; no substring allocation).
     private static int FirstLineLength(string text) {
-        var newline = text.AsSpan().IndexOfAny(value0: '\r', value1: '\n');
+        var newline = text.AsSpan().IndexOfAny(
+            value0: '\r',
+            value1: '\n'
+        );
 
-        return ((newline >= 0) ? newline : text.Length);
+        return ((newline >= 0)
+            ? newline
+            : text.Length);
     }
 
     // Greedy word wrap into at most `lines.Length` ranges of MaxMessageChars: break at the last space that fits,
@@ -150,23 +202,40 @@ public sealed class ToastWriter {
         var count = 0;
         var start = 0;
 
-        while ((start < text.Length) && (count < lines.Length)) {
+        while (
+            (start < text.Length) &&
+            (count < lines.Length)
+        ) {
             var remaining = (text.Length - start);
 
             if (remaining <= MaxMessageChars) {
-                lines[count++] = new Range(start: start, end: text.Length);
+                lines[count++] = new Range(
+                    start: start,
+                    end: text.Length
+                );
 
                 return count;
             }
 
-            var window = text.Slice(start: start, length: (MaxMessageChars + 1));
+            var window = text.Slice(
+                start: start,
+                length: (MaxMessageChars + 1)
+            );
             var space = window.LastIndexOf(value: ' ');
-            var take = ((space > 0) ? space : MaxMessageChars);
+            var take = ((space > 0)
+                ? space
+                : MaxMessageChars);
 
-            lines[count++] = new Range(start: start, end: (start + take));
+            lines[count++] = new Range(
+                start: start,
+                end: (start + take)
+            );
             start += take;
 
-            while ((start < text.Length) && (text[start] == ' ')) {
+            while (
+                (start < text.Length) &&
+                (text[start] == ' ')
+            ) {
                 start++;
             }
         }

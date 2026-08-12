@@ -78,7 +78,8 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every enum reachable from a JsonSerializerContext's [JsonSerializable] roots through ordinary property serialization must declare how it crosses the wire. The default — no converter — is a silent numeric ordinal that tolerates any in-range integer on read, which is exactly the accepted-and-inert regression the strict-enum mechanism exists to prevent.");
+        description: "Every enum reachable from a JsonSerializerContext's [JsonSerializable] roots through ordinary property serialization must declare how it crosses the wire. The default — no converter — is a silent numeric ordinal that tolerates any in-range integer on read, which is exactly the accepted-and-inert regression the strict-enum mechanism exists to prevent."
+    );
 
     /// <summary>ENUM002: the walk reached a member shape it cannot classify without risking a false 'covered'.</summary>
     public static readonly DiagnosticDescriptor Enum002UnclassifiableJsonShape = new(
@@ -88,11 +89,15 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The reachability walk this gate runs on is only as good as its ability to name every type an enum could hide behind. An System.Object-typed member, or an interface with no [JsonPolymorphic]/[JsonDerivedType] family and no converter of its own, defeats that naming, so it is refused outright rather than silently treated as though nothing were there.");
+        description: "The reachability walk this gate runs on is only as good as its ability to name every type an enum could hide behind. An System.Object-typed member, or an interface with no [JsonPolymorphic]/[JsonDerivedType] family and no converter of its own, defeats that naming, so it is refused outright rather than silently treated as though nothing were there."
+    );
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(item1: Enum001EnumNotExplicitlyConverted, item2: Enum002UnclassifiableJsonShape);
+        ImmutableArray.Create(
+        item1: Enum001EnumNotExplicitlyConverted,
+        item2: Enum002UnclassifiableJsonShape
+    );
 
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context) {
@@ -113,13 +118,20 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
         }
 
         context.RegisterSymbolAction(
-            action: symbolContext => AnalyzeNamedType(symbolContext: symbolContext, knownTypes: knownTypes),
-            symbolKinds: ImmutableArray.Create(item: SymbolKind.NamedType));
+            action: symbolContext => AnalyzeNamedType(
+                symbolContext: symbolContext,
+                knownTypes: knownTypes
+            ),
+            symbolKinds: ImmutableArray.Create(item: SymbolKind.NamedType)
+        );
     }
     private static void AnalyzeNamedType(SymbolAnalysisContext symbolContext, StrictEnumKnownTypes knownTypes) {
         var candidate = (INamedTypeSymbol)symbolContext.Symbol;
 
-        if (!StrictEnumReachability.DerivesFromJsonSerializerContext(type: candidate, jsonSerializerContextType: knownTypes.JsonSerializerContextType)) {
+        if (!StrictEnumReachability.DerivesFromJsonSerializerContext(
+            type: candidate,
+            jsonSerializerContextType: knownTypes.JsonSerializerContextType
+        )) {
             return;
         }
 
@@ -131,10 +143,21 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
             return;
         }
 
-        var roots = StrictEnumReachability.CollectSerializableRoots(context: candidate, knownTypes: knownTypes);
-        var converters = StrictEnumReachability.CollectRegisteredConverters(context: candidate, knownTypes: knownTypes);
+        var roots = StrictEnumReachability.CollectSerializableRoots(
+            context: candidate,
+            knownTypes: knownTypes
+        );
+        var converters = StrictEnumReachability.CollectRegisteredConverters(
+            context: candidate,
+            knownTypes: knownTypes
+        );
 
-        var walker = new StrictEnumReachability(context: candidate, knownTypes: knownTypes, registeredConverterTargets: converters, symbolContext: symbolContext);
+        var walker = new StrictEnumReachability(
+            context: candidate,
+            knownTypes: knownTypes,
+            registeredConverterTargets: converters,
+            symbolContext: symbolContext
+        );
 
         foreach (var root in roots) {
             walker.Walk(type: root);

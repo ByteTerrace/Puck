@@ -23,16 +23,28 @@ public static class AddonOutCellReader {
         errorIndex = -1;
         error = "";
 
-        if ((count < 0) || (count > destination.Length) || ((count * AddonAbi.OutCellBytes) > source.Length)) {
+        if (
+            (count < 0) ||
+            (count > destination.Length) ||
+            ((count * AddonAbi.OutCellBytes) > source.Length)
+        ) {
             errorIndex = 0;
             error = "output batch truncated";
             return false;
         }
 
         for (var index = 0; (index < count); ++index) {
-            var cell = source.Slice(start: (index * AddonAbi.OutCellBytes), length: AddonAbi.OutCellBytes);
+            var cell = source.Slice(
+                start: (index * AddonAbi.OutCellBytes),
+                length: AddonAbi.OutCellBytes
+            );
 
-            if (!TryDecodeCell(channelCount: channelCount, cell: cell, decoded: out var decoded, error: out var cellError)) {
+            if (!TryDecodeCell(
+                channelCount: channelCount,
+                cell: cell,
+                decoded: out var decoded,
+                error: out var cellError
+            )) {
                 errorIndex = index;
                 error = $"cell {index}: {cellError}";
                 return false;

@@ -26,7 +26,10 @@ public static class DocumentExtensionsPolicy {
     public static bool IsReservedKey(string key) {
         ArgumentNullException.ThrowIfNull(argument: key);
 
-        return ((key.Length != 0) && ((key[0] == '$') || (key[0] == '_')));
+        return (
+            (key.Length != 0) &&
+            ((key[0] == '$') || (key[0] == '_'))
+        );
     }
 
     /// <summary>Runs the shared regime over a document's captured <c>Extensions</c> keys, invoking

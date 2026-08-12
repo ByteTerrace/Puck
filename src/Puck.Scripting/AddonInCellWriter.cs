@@ -20,14 +20,35 @@ public static class AddonInCellWriter {
 
         destination[AddonAbi.InCellOffsets.Kind] = (byte)cell.Kind;
         destination[AddonAbi.InCellOffsets.Channel] = cell.Channel;
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: destination[AddonAbi.InCellOffsets.Ordinal..], value: cell.Ordinal);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: destination[AddonAbi.InCellOffsets.HandleIndex..], value: cell.HandleIndex);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: destination[AddonAbi.InCellOffsets.HandleGeneration..], value: cell.HandleGeneration);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.Ordinal..],
+            value: cell.Ordinal
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.HandleIndex..],
+            value: cell.HandleIndex
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.HandleGeneration..],
+            value: cell.HandleGeneration
+        );
         destination[AddonAbi.InCellOffsets.Verdict] = (byte)cell.Verdict;
         destination[AddonAbi.InCellOffsets.Verb] = cell.Verb;
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: destination[AddonAbi.InCellOffsets.Reserved0..], value: 0);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: destination[AddonAbi.InCellOffsets.Reserved1..], value: 0u);
-        BinaryPrimitives.WriteInt64LittleEndian(destination: destination[AddonAbi.InCellOffsets.A..], value: cell.A);
-        BinaryPrimitives.WriteInt64LittleEndian(destination: destination[AddonAbi.InCellOffsets.B..], value: cell.B);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.Reserved0..],
+            value: 0
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.Reserved1..],
+            value: 0u
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.A..],
+            value: cell.A
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: destination[AddonAbi.InCellOffsets.B..],
+            value: cell.B
+        );
     }
 }

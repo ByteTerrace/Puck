@@ -94,46 +94,193 @@ public static class OverlayTokenBlock {
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="WordCount"/>.</exception>
     public static void Write(Span<uint> destination) {
         if (destination.Length < WordCount) {
-            throw new ArgumentException(message: $"The token block needs {WordCount} words; got {destination.Length}.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"The token block needs {WordCount} words; got {destination.Length}.",
+                paramName: nameof(destination)
+            );
         }
 
-        WriteColor(destination: destination, role: OverlayColorRole.TextPrimary, color: DesignTokens.Color.TextPrimary);
-        WriteColor(destination: destination, role: OverlayColorRole.TextDim, color: DesignTokens.Color.TextDim);
-        WriteColor(destination: destination, role: OverlayColorRole.TextMute, color: DesignTokens.Color.TextMute);
-        WriteColor(destination: destination, role: OverlayColorRole.Accent, color: DesignTokens.Color.Accent);
-        WriteColor(destination: destination, role: OverlayColorRole.Positive, color: DesignTokens.Color.Positive);
-        WriteColor(destination: destination, role: OverlayColorRole.Warning, color: DesignTokens.Color.Warning);
-        WriteColor(destination: destination, role: OverlayColorRole.Danger, color: DesignTokens.Color.Danger);
-        WriteColor(destination: destination, role: OverlayColorRole.Phosphor, color: DesignTokens.Color.Phosphor);
-        WriteColor(destination: destination, role: OverlayColorRole.AccentInk, color: DesignTokens.Color.AccentInk);
-        WriteColor(destination: destination, role: OverlayColorRole.SurfaceRaised, color: DesignTokens.Color.SurfaceRaised);
-        WriteColor(destination: destination, role: OverlayColorRole.SurfaceInset, color: DesignTokens.Color.SurfaceInset);
-        WriteColor(destination: destination, role: OverlayColorRole.AccentQuiet, color: DesignTokens.Color.AccentQuiet);
-        WriteColor(destination: destination, role: OverlayColorRole.PhosphorCyan, color: DesignTokens.Color.PhosphorCyan);
-        WriteColor(destination: destination, role: OverlayColorRole.SurfaceBase, color: DesignTokens.Color.SurfaceBase);
-        WriteColor(destination: destination, role: OverlayColorRole.BadgeDark, color: DesignTokens.Color.BadgeDark);
-        WriteColor(destination: destination, role: OverlayColorRole.BadgeLight, color: DesignTokens.Color.BadgeLight);
-        WriteColor(destination: destination, role: OverlayColorRole.LineHair, color: DesignTokens.Color.LineHair);
-        WriteColor(destination: destination, role: OverlayColorRole.LineSoft, color: DesignTokens.Color.LineSoft);
-        WriteColor(destination: destination, role: OverlayColorRole.ScrimPanel, color: DesignTokens.Color.ScrimPanel);
-        WriteColor(destination: destination, role: OverlayColorRole.ScrimStrip, color: DesignTokens.Color.ScrimStrip);
-        WriteColor(destination: destination, role: OverlayColorRole.ScrimChip, color: DesignTokens.Color.ScrimChip);
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.TextPrimary,
+            color: DesignTokens.Color.TextPrimary
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.TextDim,
+            color: DesignTokens.Color.TextDim
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.TextMute,
+            color: DesignTokens.Color.TextMute
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.Accent,
+            color: DesignTokens.Color.Accent
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.Positive,
+            color: DesignTokens.Color.Positive
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.Warning,
+            color: DesignTokens.Color.Warning
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.Danger,
+            color: DesignTokens.Color.Danger
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.Phosphor,
+            color: DesignTokens.Color.Phosphor
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.AccentInk,
+            color: DesignTokens.Color.AccentInk
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.SurfaceRaised,
+            color: DesignTokens.Color.SurfaceRaised
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.SurfaceInset,
+            color: DesignTokens.Color.SurfaceInset
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.AccentQuiet,
+            color: DesignTokens.Color.AccentQuiet
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.PhosphorCyan,
+            color: DesignTokens.Color.PhosphorCyan
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.SurfaceBase,
+            color: DesignTokens.Color.SurfaceBase
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.BadgeDark,
+            color: DesignTokens.Color.BadgeDark
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.BadgeLight,
+            color: DesignTokens.Color.BadgeLight
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.LineHair,
+            color: DesignTokens.Color.LineHair
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.LineSoft,
+            color: DesignTokens.Color.LineSoft
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.ScrimPanel,
+            color: DesignTokens.Color.ScrimPanel
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.ScrimStrip,
+            color: DesignTokens.Color.ScrimStrip
+        );
+        WriteColor(
+            destination: destination,
+            role: OverlayColorRole.ScrimChip,
+            color: DesignTokens.Color.ScrimChip
+        );
 
-        WriteScalar(destination: destination, scalar: Scalar.Radius1, value: DesignTokens.Radius.Radius1);
-        WriteScalar(destination: destination, scalar: Scalar.Radius2, value: DesignTokens.Radius.Radius2);
-        WriteScalar(destination: destination, scalar: Scalar.Radius3, value: DesignTokens.Radius.Radius3);
-        WriteScalar(destination: destination, scalar: Scalar.EdgeHairlineWidth, value: DesignTokens.Elevation.EdgeHairlineWidth);
-        WriteScalar(destination: destination, scalar: Scalar.RingStatusWidth, value: DesignTokens.Elevation.RingStatusWidth);
-        WriteScalar(destination: destination, scalar: Scalar.BloomHaloBlur, value: DesignTokens.Elevation.BloomHaloBlur);
-        WriteScalar(destination: destination, scalar: Scalar.BloomRingAlpha, value: DesignTokens.Elevation.BloomRingAlpha);
-        WriteScalar(destination: destination, scalar: Scalar.BloomHaloAlpha, value: DesignTokens.Elevation.BloomHaloAlpha);
-        WriteScalar(destination: destination, scalar: Scalar.BloomNeutralRingAlpha, value: DesignTokens.Elevation.BloomNeutralRingAlpha);
-        WriteScalar(destination: destination, scalar: Scalar.BloomNeutralHaloAlpha, value: DesignTokens.Elevation.BloomNeutralHaloAlpha);
-        WriteScalar(destination: destination, scalar: Scalar.EdgeAa, value: DesignTokens.Icon.EdgeAaRamp);
-        WriteScalar(destination: destination, scalar: Scalar.ChipRestOpacity, value: DesignTokens.Elevation.ChipRestOpacity);
-        WriteScalar(destination: destination, scalar: Scalar.GlyphStroke, value: DesignTokens.Icon.StrokeHalfWidth);
-        WriteScalar(destination: destination, scalar: Scalar.GlyphAa, value: DesignTokens.Icon.AaRamp);
-        WriteScalar(destination: destination, scalar: Scalar.ReferenceChipHalf, value: (DesignTokens.Space.HeightChip * 0.5f));
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.Radius1,
+            value: DesignTokens.Radius.Radius1
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.Radius2,
+            value: DesignTokens.Radius.Radius2
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.Radius3,
+            value: DesignTokens.Radius.Radius3
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.EdgeHairlineWidth,
+            value: DesignTokens.Elevation.EdgeHairlineWidth
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.RingStatusWidth,
+            value: DesignTokens.Elevation.RingStatusWidth
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.BloomHaloBlur,
+            value: DesignTokens.Elevation.BloomHaloBlur
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.BloomRingAlpha,
+            value: DesignTokens.Elevation.BloomRingAlpha
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.BloomHaloAlpha,
+            value: DesignTokens.Elevation.BloomHaloAlpha
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.BloomNeutralRingAlpha,
+            value: DesignTokens.Elevation.BloomNeutralRingAlpha
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.BloomNeutralHaloAlpha,
+            value: DesignTokens.Elevation.BloomNeutralHaloAlpha
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.EdgeAa,
+            value: DesignTokens.Icon.EdgeAaRamp
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.ChipRestOpacity,
+            value: DesignTokens.Elevation.ChipRestOpacity
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.GlyphStroke,
+            value: DesignTokens.Icon.StrokeHalfWidth
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.GlyphAa,
+            value: DesignTokens.Icon.AaRamp
+        );
+        WriteScalar(
+            destination: destination,
+            scalar: Scalar.ReferenceChipHalf,
+            value: (DesignTokens.Space.HeightChip * 0.5f)
+        );
     }
 
     private static void WriteColor(Span<uint> destination, OverlayColorRole role, RgbaColor color) {

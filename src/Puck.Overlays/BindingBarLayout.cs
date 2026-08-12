@@ -70,7 +70,10 @@ public static class BindingBarLayout {
     /// <param name="anchorOffsetY">The anchor's lift above the bottom edge, as a fraction of the height.</param>
     /// <returns>The anchor point.</returns>
     public static Vector2 BarAnchor(float aspect, float anchorOffsetY) =>
-        new(x: (aspect * 0.5f), y: (1f - anchorOffsetY));
+        new(
+        x: (aspect * 0.5f),
+        y: (1f - anchorOffsetY)
+    );
 
     /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
     /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's
@@ -91,12 +94,21 @@ public static class BindingBarLayout {
                 GlyphOffsetRatio: options.GlyphOffsetRatio
             )
         );
-        var anchor = BarAnchor(aspect: aspect, anchorOffsetY: options.AnchorOffsetY);
-        var center = new Vector2(x: (anchor.X + slot.X), y: (anchor.Y - slot.YUp));
+        var anchor = BarAnchor(
+            aspect: aspect,
+            anchorOffsetY: options.AnchorOffsetY
+        );
+        var center = new Vector2(
+            x: (anchor.X + slot.X),
+            y: (anchor.Y - slot.YUp)
+        );
 
         return new BindingSlotPlacement(
             Center: center,
-            GlyphCenter: new Vector2(x: (center.X + slot.GlyphX), y: (center.Y - slot.GlyphYUp)),
+            GlyphCenter: new Vector2(
+                x: (center.X + slot.GlyphX),
+                y: (center.Y - slot.GlyphYUp)
+            ),
             GlyphHalfSize: ((buttonSize * options.GlyphSizeRatio) * 0.5f),
             HalfSize: (buttonSize * 0.5f)
         );

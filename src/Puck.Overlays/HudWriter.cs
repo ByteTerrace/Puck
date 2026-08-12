@@ -70,15 +70,24 @@ public sealed class HudWriter {
 
     /// <summary>Emits every under-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
-    public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Under);
+    public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(
+        builder: builder,
+        band: OverlayHudBand.Under
+    );
 
     /// <summary>Emits every replace-band panel, in document order — the base slot when <see cref="HasReplace"/>.</summary>
     /// <param name="builder">The frame builder.</param>
-    public void EmitReplace(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Replace);
+    public void EmitReplace(OverlayFrameBuilder builder) => EmitBand(
+        builder: builder,
+        band: OverlayHudBand.Replace
+    );
 
     /// <summary>Emits every over-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
-    public void EmitOver(OverlayFrameBuilder builder) => EmitBand(builder: builder, band: OverlayHudBand.Over);
+    public void EmitOver(OverlayFrameBuilder builder) => EmitBand(
+        builder: builder,
+        band: OverlayHudBand.Over
+    );
 
     /// <summary>Emits every player-scope (per-seat) panel — the EditorHud per-seat precedent: each panel is confined
     /// to its owning seat's viewport via one <see cref="OverlayFrameBuilder.BeginClip"/> scope (clip scopes do not
@@ -97,17 +106,26 @@ public sealed class HudWriter {
 
         var seats = m_frame.SeatPanels.Span;
 
-        OverlayChannelLeases.EnsureSeatCapacity(seatCount: seats.Length, writerName: nameof(HudWriter));
+        OverlayChannelLeases.EnsureSeatCapacity(
+            seatCount: seats.Length,
+            writerName: nameof(HudWriter)
+        );
 
         for (var index = 0; (index < seats.Length); index++) {
-            EmitSeatPanel(builder: builder, seat: in seats[index]);
+            EmitSeatPanel(
+                builder: builder,
+                seat: in seats[index]
+            );
         }
     }
 
     private void EmitSeatPanel(OverlayFrameBuilder builder, in OverlayHudSeatPanel seat) {
         var viewport = seat.Viewport;
 
-        if ((viewport.Width <= 0f) || (viewport.Height <= 0f)) {
+        if (
+            (viewport.Width <= 0f) ||
+            (viewport.Height <= 0f)
+        ) {
             return;
         }
 
@@ -116,29 +134,53 @@ public sealed class HudWriter {
         var vw = (viewport.Width * builder.Width);
         var vh = (viewport.Height * builder.Height);
 
-        builder.BeginClip(x: vx, y: vy, w: vw, h: vh);
+        builder.BeginClip(
+            x: vx,
+            y: vy,
+            w: vw,
+            h: vh
+        );
 
         var panel = seat.Panel;
         var rect = panel.Rect;
 
-        if ((rect.Width > 0f) && (rect.Height > 0f)) {
+        if (
+            (rect.Width > 0f) &&
+            (rect.Height > 0f)
+        ) {
             var x = (vx + (rect.X * vw));
             var y = (vy + (rect.Y * vh));
             var w = (rect.Width * vw);
             var h = (rect.Height * vh);
 
-            builder.WritePanel(x: x, y: y, w: w, h: h, titleBand: false, bandHeight: 0f, style: panel.Style, ringRole: null, alpha: 1f);
+            builder.WritePanel(
+                x: x,
+                y: y,
+                w: w,
+                h: h,
+                titleBand: false,
+                bandHeight: 0f,
+                style: panel.Style,
+                ringRole: null,
+                alpha: 1f
+            );
 
             var elements = panel.Elements.Span;
 
             for (var index = 0; (index < elements.Length); index++) {
-                EmitElement(builder: builder, element: in elements[index], panelX: x, panelY: y, panelW: w, panelH: h);
+                EmitElement(
+                    builder: builder,
+                    element: in elements[index],
+                    panelX: x,
+                    panelY: y,
+                    panelW: w,
+                    panelH: h
+                );
             }
         }
 
         builder.EndClip();
     }
-
     private void EmitBand(OverlayFrameBuilder builder, OverlayHudBand band) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
@@ -150,15 +192,20 @@ public sealed class HudWriter {
 
         for (var index = 0; (index < panels.Length); index++) {
             if (panels[index].Band == band) {
-                EmitPanel(builder: builder, panel: in panels[index]);
+                EmitPanel(
+                    builder: builder,
+                    panel: in panels[index]
+                );
             }
         }
     }
-
     private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
         var rect = panel.Rect;
 
-        if ((rect.Width <= 0f) || (rect.Height <= 0f)) {
+        if (
+            (rect.Width <= 0f) ||
+            (rect.Height <= 0f)
+        ) {
             return;
         }
 
@@ -167,22 +214,46 @@ public sealed class HudWriter {
         var w = (rect.Width * builder.Width);
         var h = (rect.Height * builder.Height);
 
-        builder.BeginClip(x: x, y: y, w: w, h: h);
-        builder.WritePanel(x: x, y: y, w: w, h: h, titleBand: false, bandHeight: 0f, style: panel.Style, ringRole: null, alpha: 1f);
+        builder.BeginClip(
+            x: x,
+            y: y,
+            w: w,
+            h: h
+        );
+        builder.WritePanel(
+            x: x,
+            y: y,
+            w: w,
+            h: h,
+            titleBand: false,
+            bandHeight: 0f,
+            style: panel.Style,
+            ringRole: null,
+            alpha: 1f
+        );
 
         var elements = panel.Elements.Span;
 
         for (var index = 0; (index < elements.Length); index++) {
-            EmitElement(builder: builder, element: in elements[index], panelX: x, panelY: y, panelW: w, panelH: h);
+            EmitElement(
+                builder: builder,
+                element: in elements[index],
+                panelX: x,
+                panelY: y,
+                panelW: w,
+                panelH: h
+            );
         }
 
         builder.EndClip();
     }
-
     private void EmitElement(OverlayFrameBuilder builder, in OverlayHudElement element, float panelX, float panelY, float panelW, float panelH) {
         var rect = element.Rect;
 
-        if ((rect.Width <= 0f) || (rect.Height <= 0f)) {
+        if (
+            (rect.Width <= 0f) ||
+            (rect.Height <= 0f)
+        ) {
             return;
         }
 
@@ -193,26 +264,53 @@ public sealed class HudWriter {
 
         switch (element.Kind) {
             case OverlayHudElementKind.Rect:
-                builder.WriteRect(x: x, y: y, w: w, h: h, role: element.Role, radius: 0f, alpha: 1f);
+                builder.WriteRect(
+                    x: x,
+                    y: y,
+                    w: w,
+                    h: h,
+                    role: element.Role,
+                    radius: 0f,
+                    alpha: 1f
+                );
 
                 break;
             case OverlayHudElementKind.Text:
-                EmitText(builder: builder, element: in element, x: x, y: y, h: h);
+                EmitText(
+                    builder: builder,
+                    element: in element,
+                    x: x,
+                    y: y,
+                    h: h
+                );
 
                 break;
             case OverlayHudElementKind.Gauge:
-                EmitGauge(builder: builder, element: in element, x: x, y: y, w: w, h: h);
+                EmitGauge(
+                    builder: builder,
+                    element: in element,
+                    x: x,
+                    y: y,
+                    w: w,
+                    h: h
+                );
 
                 break;
         }
     }
-
     private void EmitText(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float h) {
-        var text = element.Text ?? string.Empty;
+        var text = (element.Text ?? string.Empty);
 
         if (!element.Template.IsEmpty) {
             text = ComposeTemplate(segments: element.Template.Span);
-        } else if ((element.Binding is { Length: > 0 } binding) && m_bindings.TryResolve(binding: binding, fraction: out _, text: out var resolved)) {
+        } else if (
+            (element.Binding is { Length: > 0 } binding) &&
+            m_bindings.TryResolve(
+            binding: binding,
+            fraction: out _,
+            text: out var resolved
+        )
+        ) {
             text = resolved;
         }
 
@@ -222,7 +320,15 @@ public sealed class HudWriter {
 
         var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: h);
 
-        builder.WriteText(x: x, y: y, text: text, cellHeight: cellHeight, role: element.Role, alpha: 1f, maxChars: TextRunChars);
+        builder.WriteText(
+            x: x,
+            y: y,
+            text: text,
+            cellHeight: cellHeight,
+            role: element.Role,
+            alpha: 1f,
+            maxChars: TextRunChars
+        );
     }
 
     // Substitution only — the brace/escape GRAMMAR is parsed once by Puck.World.Data's HudTemplate and arrives here
@@ -242,32 +348,70 @@ public sealed class HudWriter {
                 continue;
             }
 
-            if (m_bindings.TryResolve(binding: segment.Text, fraction: out _, text: out var resolved)) {
+            if (m_bindings.TryResolve(
+                binding: segment.Text,
+                fraction: out _,
+                text: out var resolved
+            )) {
                 builder.Append(value: resolved);
             }
         }
 
         return builder.ToString();
     }
-
     private void EmitGauge(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
         var fraction = 0f;
         var label = string.Empty;
 
-        if ((element.Binding is { Length: > 0 } binding) && m_bindings.TryResolve(binding: binding, fraction: out var resolved, text: out var text)) {
-            fraction = Math.Clamp(value: resolved, min: 0f, max: 1f);
+        if (
+            (element.Binding is { Length: > 0 } binding) &&
+            m_bindings.TryResolve(
+            binding: binding,
+            fraction: out var resolved,
+            text: out var text
+        )
+        ) {
+            fraction = Math.Clamp(
+                value: resolved,
+                min: 0f,
+                max: 1f
+            );
             label = text;
         }
 
         // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the 3
         // render elements WorldHudCapacity.GaugeElementCost reserves.
-        builder.WriteRect(x: x, y: y, w: w, h: h, role: OverlayColorRole.SurfaceInset, radius: 0f, alpha: GaugeTrackAlpha);
-        builder.WriteRect(x: x, y: y, w: (w * fraction), h: h, role: element.Role, radius: 0f, alpha: 1f);
+        builder.WriteRect(
+            x: x,
+            y: y,
+            w: w,
+            h: h,
+            role: OverlayColorRole.SurfaceInset,
+            radius: 0f,
+            alpha: GaugeTrackAlpha
+        );
+        builder.WriteRect(
+            x: x,
+            y: y,
+            w: (w * fraction),
+            h: h,
+            role: element.Role,
+            radius: 0f,
+            alpha: 1f
+        );
 
         if (label.Length > 0) {
             var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: h);
 
-            builder.WriteText(x: x, y: y, text: label, cellHeight: cellHeight, role: OverlayColorRole.TextPrimary, alpha: 1f, maxChars: GaugeLabelChars);
+            builder.WriteText(
+                x: x,
+                y: y,
+                text: label,
+                cellHeight: cellHeight,
+                role: OverlayColorRole.TextPrimary,
+                alpha: 1f,
+                maxChars: GaugeLabelChars
+            );
         }
     }
 }

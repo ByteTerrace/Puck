@@ -27,11 +27,11 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
     // The same emptied-viewport guard the cursor writer applies before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
-    private const float RingAlpha = 0.55f;
     private const float ActiveRingAlpha = 0.95f;
-    private const float LabelAlpha = 1f;
     private const float HubDotHalf = 3f;
+    private const float LabelAlpha = 1f;
     private const float MarkerHalf = 3.5f;
+    private const float RingAlpha = 0.55f;
 
     private readonly IWheelSource m_source;
 
@@ -55,18 +55,29 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             return;
         }
 
-        OverlaySeatLoop.Emit(builder: builder, seats: frame.Seats.Span, writerName: nameof(WheelWriter), writer: this);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: frame.Seats.Span,
+            writerName: nameof(WheelWriter),
+            writer: this
+        );
     }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
         var region = seat.Viewport;
 
-        if ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
+        if (
+            (region.Width < MinRegionExtent) ||
+            (region.Height < MinRegionExtent)
+        ) {
             return;
         }
 
         var rings = seat.Rings.Span;
-        var ringCount = Math.Min(val1: rings.Length, val2: MaxRings);
+        var ringCount = Math.Min(
+            val1: rings.Length,
+            val2: MaxRings
+        );
 
         if (ringCount == 0) {
             return;
@@ -97,11 +108,15 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             var centerline = (seat.InnerRadius + ((ringIndex + 0.5f) * seat.RingWidth));
 
             builder.WriteRing(
-                alpha: (isActive ? ActiveRingAlpha : RingAlpha),
+                alpha: (isActive
+                ? ActiveRingAlpha
+                : RingAlpha),
                 centerX: seat.CenterX,
                 centerY: seat.CenterY,
                 radius: centerline,
-                role: (isActive ? OverlayColorRole.TextPrimary : OverlayColorRole.TextDim)
+                role: (isActive
+                ? OverlayColorRole.TextPrimary
+                : OverlayColorRole.TextDim)
             );
 
             if (isActive) {
@@ -116,7 +131,10 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             }
 
             var sectors = rings[ringIndex].Sectors.Span;
-            var sectorCount = Math.Min(val1: sectors.Length, val2: MaxSectorsPerRing);
+            var sectorCount = Math.Min(
+                val1: sectors.Length,
+                val2: MaxSectorsPerRing
+            );
 
             if (sectorCount == 0) {
                 continue;
@@ -126,12 +144,20 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
             for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                 // Layout policy is authored with the radial. The host uses the identical transform for selection.
-                var angle = (seat.RotationRadians + ((seat.Clockwise ? 1f : -1f) * sectorIndex * span));
+                var angle = (seat.RotationRadians + (((seat.Clockwise
+                    ? 1f
+                    : -1f) * sectorIndex) * span));
                 var labelX = (seat.CenterX + (MathF.Sin(x: angle) * centerline));
                 var labelY = (seat.CenterY - (MathF.Cos(x: angle) * centerline));
                 var label = sectors[sectorIndex];
                 var isHovered = (isActive && (sectorIndex == seat.HoveredSector));
-                var width = builder.TextWidth(chars: Math.Min(val1: label.Length, val2: MaxSectorLabelChars), cellHeight: cellHeight);
+                var width = builder.TextWidth(
+                    chars: Math.Min(
+                        val1: label.Length,
+                        val2: MaxSectorLabelChars
+                    ),
+                    cellHeight: cellHeight
+                );
 
                 if (isHovered) {
                     builder.WriteRect(
@@ -146,10 +172,16 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 }
 
                 builder.WriteText(
-                    alpha: (isActive ? LabelAlpha : RingAlpha),
+                    alpha: (isActive
+                    ? LabelAlpha
+                    : RingAlpha),
                     cellHeight: cellHeight,
                     maxChars: MaxSectorLabelChars,
-                    role: (isHovered ? OverlayColorRole.Accent : (isActive ? OverlayColorRole.TextPrimary : OverlayColorRole.TextDim)),
+                    role: (isHovered
+                    ? OverlayColorRole.Accent
+                    : (isActive
+                        ? OverlayColorRole.TextPrimary
+                        : OverlayColorRole.TextDim)),
                     text: label,
                     x: (labelX - (width * 0.5f)),
                     y: (labelY - (cellHeight * 0.5f))
@@ -158,10 +190,20 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         }
 
         // The active ring's label under the hub — which shell the wheel is cycling within, without hunting.
-        var activeLabel = rings[Math.Clamp(value: seat.ActiveRing, min: 0, max: (ringCount - 1))].Label;
+        var activeLabel = rings[Math.Clamp(
+            value: seat.ActiveRing,
+            min: 0,
+            max: (ringCount - 1)
+        )].Label;
 
         if (activeLabel.Length > 0) {
-            var activeWidth = builder.TextWidth(chars: Math.Min(val1: activeLabel.Length, val2: MaxRingLabelChars), cellHeight: cellHeight);
+            var activeWidth = builder.TextWidth(
+                chars: Math.Min(
+                    val1: activeLabel.Length,
+                    val2: MaxRingLabelChars
+                ),
+                cellHeight: cellHeight
+            );
 
             builder.WriteText(
                 alpha: LabelAlpha,
@@ -170,7 +212,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 role: OverlayColorRole.TextPrimary,
                 text: activeLabel,
                 x: (seat.CenterX - (activeWidth * 0.5f)),
-                y: (seat.CenterY + (HubDotHalf * 2f) + 2f)
+                y: ((seat.CenterY + (HubDotHalf * 2f)) + 2f)
             );
         }
 
@@ -178,5 +220,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     }
 
     void IOverlaySeatEmitter<OverlayWheelSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) =>
-        EmitSeat(builder: builder, seat: in seat);
+        EmitSeat(
+        builder: builder,
+        seat: in seat
+    );
 }

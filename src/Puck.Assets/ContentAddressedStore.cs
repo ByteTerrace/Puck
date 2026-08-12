@@ -37,9 +37,19 @@ public sealed class ContentAddressedStore {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: root);
 
         Root = Path.GetFullPath(path: root);
-        m_objectsDirectory = Path.Combine(path1: Root, path2: "objects", path3: "sha256");
-        m_refsDirectory = Path.Combine(path1: Root, path2: "refs");
-        m_tmpDirectory = Path.Combine(path1: Root, path2: "tmp");
+        m_objectsDirectory = Path.Combine(
+            path1: Root,
+            path2: "objects",
+            path3: "sha256"
+        );
+        m_refsDirectory = Path.Combine(
+            path1: Root,
+            path2: "refs"
+        );
+        m_tmpDirectory = Path.Combine(
+            path1: Root,
+            path2: "tmp"
+        );
 
         _ = Directory.CreateDirectory(path: m_objectsDirectory);
         _ = Directory.CreateDirectory(path: m_refsDirectory);
@@ -73,13 +83,23 @@ public sealed class ContentAddressedStore {
         var objectPath = ObjectPath(hash: hex);
 
         if (!File.Exists(path: objectPath)) {
-            var tmpPath = Path.Combine(path1: m_tmpDirectory, path2: $"{Guid.NewGuid():n}.tmp");
+            var tmpPath = Path.Combine(
+                path1: m_tmpDirectory,
+                path2: $"{Guid.NewGuid():n}.tmp"
+            );
 
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: objectPath)!);
-            File.WriteAllBytes(path: tmpPath, bytes: content.ToArray());
+            File.WriteAllBytes(
+                path: tmpPath,
+                bytes: content.ToArray()
+            );
 
             try {
-                File.Move(sourceFileName: tmpPath, destFileName: objectPath, overwrite: false);
+                File.Move(
+                    sourceFileName: tmpPath,
+                    destFileName: objectPath,
+                    overwrite: false
+                );
             } catch (IOException) when (File.Exists(path: objectPath)) {
                 // Lost a race with a concurrent identical Put — the object already landed; discard our temp copy.
                 File.Delete(path: tmpPath);
@@ -114,12 +134,25 @@ public sealed class ContentAddressedStore {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
 
         var hex = NormalizeToHex(hash: hash);
-        var refPath = RefPath(category: category, name: name);
-        var tmpPath = Path.Combine(path1: m_tmpDirectory, path2: $"{Guid.NewGuid():n}.tmp");
+        var refPath = RefPath(
+            category: category,
+            name: name
+        );
+        var tmpPath = Path.Combine(
+            path1: m_tmpDirectory,
+            path2: $"{Guid.NewGuid():n}.tmp"
+        );
 
         _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: refPath)!);
-        File.WriteAllText(path: tmpPath, contents: $"{Sha256Prefix}{hex}");
-        File.Move(sourceFileName: tmpPath, destFileName: refPath, overwrite: true);
+        File.WriteAllText(
+            path: tmpPath,
+            contents: $"{Sha256Prefix}{hex}"
+        );
+        File.Move(
+            sourceFileName: tmpPath,
+            destFileName: refPath,
+            overwrite: true
+        );
     }
 
     /// <summary>Attempts to resolve a named ref to its target object hash.</summary>
@@ -131,7 +164,10 @@ public sealed class ContentAddressedStore {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
 
-        var refPath = RefPath(category: category, name: name);
+        var refPath = RefPath(
+            category: category,
+            name: name
+        );
 
         if (!File.Exists(path: refPath)) {
             hash = "";
@@ -140,7 +176,13 @@ public sealed class ContentAddressedStore {
 
         var text = File.ReadAllText(path: refPath).Trim();
 
-        if (!text.StartsWith(value: Sha256Prefix, comparisonType: StringComparison.Ordinal) || (text.Length != (Sha256Prefix.Length + 64))) {
+        if (
+            !text.StartsWith(
+            value: Sha256Prefix,
+            comparisonType: StringComparison.Ordinal
+        ) ||
+            (text.Length != (Sha256Prefix.Length + 64))
+        ) {
             hash = "";
             return false;
         }
@@ -155,7 +197,10 @@ public sealed class ContentAddressedStore {
     public IReadOnlyList<string> ListRefs(string category) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
 
-        var categoryDirectory = Path.Combine(path1: m_refsDirectory, path2: category);
+        var categoryDirectory = Path.Combine(
+            path1: m_refsDirectory,
+            path2: category
+        );
 
         if (!Directory.Exists(path: categoryDirectory)) {
             return [];
@@ -181,7 +226,11 @@ public sealed class ContentAddressedStore {
     public bool TryResolveDerived(string kind, string inputHash, out string hash) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: kind);
 
-        return TryResolveRef(category: $"derived/{kind}", name: NormalizeToHex(hash: inputHash), hash: out hash);
+        return TryResolveRef(
+            category: $"derived/{kind}",
+            name: NormalizeToHex(hash: inputHash),
+            hash: out hash
+        );
     }
 
     /// <summary>Records a derived-cache entry: points <c>derived/&lt;kind&gt;/&lt;inputHash&gt;</c> at
@@ -192,25 +241,45 @@ public sealed class ContentAddressedStore {
     public void SetDerived(string kind, string inputHash, string outputHash) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: kind);
 
-        SetRef(category: $"derived/{kind}", name: NormalizeToHex(hash: inputHash), hash: outputHash);
+        SetRef(
+            category: $"derived/{kind}",
+            name: NormalizeToHex(hash: inputHash),
+            hash: outputHash
+        );
     }
 
     private string ObjectPath(string hash) {
         var hex = NormalizeToHex(hash: hash);
 
-        return Path.Combine(path1: m_objectsDirectory, path2: hex[..2], path3: hex);
+        return Path.Combine(
+            path1: m_objectsDirectory,
+            path2: hex[..2],
+            path3: hex
+        );
     }
     private string RefPath(string category, string name) =>
-        Path.Combine(path1: m_refsDirectory, path2: category, path3: name);
+        Path.Combine(
+        path1: m_refsDirectory,
+        path2: category,
+        path3: name
+    );
 
     // Accepts either "sha256/<hex64>" or a bare "<hex64>" and returns the lowercase hex64 form.
     private static string NormalizeToHex(string hash) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: hash);
 
-        var hex = (hash.StartsWith(value: Sha256Prefix, comparisonType: StringComparison.Ordinal) ? hash[Sha256Prefix.Length..] : hash);
+        var hex = (hash.StartsWith(
+            value: Sha256Prefix,
+            comparisonType: StringComparison.Ordinal
+        )
+            ? hash[Sha256Prefix.Length..]
+            : hash);
 
         if (hex.Length != 64) {
-            throw new ArgumentException(message: $"'{hash}' is not a well-formed sha256 hash (expected 64 hex characters).", paramName: nameof(hash));
+            throw new ArgumentException(
+                message: $"'{hash}' is not a well-formed sha256 hash (expected 64 hex characters).",
+                paramName: nameof(hash)
+            );
         }
 
         return hex.ToLowerInvariant();

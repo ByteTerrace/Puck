@@ -22,7 +22,10 @@ public sealed class DeviceLostException : Exception {
     /// <param name="reasonCode">A backend-specific reason code for diagnostics, or <c>0</c> when unavailable.</param>
     /// <param name="innerException">The native exception that surfaced the loss, if any.</param>
     public DeviceLostException(string message, long reasonCode = 0, Exception? innerException = null)
-        : base(message: message, innerException: innerException) {
+        : base(
+        message: message,
+        innerException: innerException
+    ) {
         ReasonCode = reasonCode;
     }
 }

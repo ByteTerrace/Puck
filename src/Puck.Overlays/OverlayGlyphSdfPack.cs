@@ -64,7 +64,13 @@ public sealed class OverlayGlyphSdfPack {
         FontAtlasBounds? probed = null;
 
         for (var unicode = FirstChar; ((unicode < (FirstChar + GlyphCount)) && (probed is null)); unicode++) {
-            if (font.TryGetGlyph(unicode: unicode, glyph: out var probe) && (probe.AtlasBounds is { } bounds)) {
+            if (
+                font.TryGetGlyph(
+                unicode: unicode,
+                glyph: out var probe
+            ) &&
+                (probe.AtlasBounds is { } bounds)
+            ) {
                 probed = bounds;
             }
         }
@@ -73,8 +79,14 @@ public sealed class OverlayGlyphSdfPack {
             return null;
         }
 
-        var atlasCellWidth = Math.Max(val1: 1, val2: (int)MathF.Round(x: (probeBounds.Right - probeBounds.Left)));
-        var atlasCellHeight = Math.Max(val1: 1, val2: (int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)));
+        var atlasCellWidth = Math.Max(
+            val1: 1,
+            val2: (int)MathF.Round(x: (probeBounds.Right - probeBounds.Left))
+        );
+        var atlasCellHeight = Math.Max(
+            val1: 1,
+            val2: (int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top))
+        );
         var cellStride = (atlasCellWidth * atlasCellHeight);
         var packedSdf = new uint[(GlyphCount * cellStride)];
         var pixels = image.RgbaPixels;
@@ -82,8 +94,13 @@ public sealed class OverlayGlyphSdfPack {
         var imageHeight = image.Height;
 
         for (var index = 0; (index < GlyphCount); index++) {
-            if ((!font.TryGetGlyph(unicode: (FirstChar + index), glyph: out var glyph)) ||
-                (glyph.AtlasBounds is not { } bounds)) {
+            if (
+                (!font.TryGetGlyph(
+                unicode: (FirstChar + index),
+                glyph: out var glyph
+            )) ||
+                (glyph.AtlasBounds is not { } bounds)
+            ) {
                 continue;
             }
 
@@ -92,10 +109,18 @@ public sealed class OverlayGlyphSdfPack {
             var glyphBase = (index * cellStride);
 
             for (var y = 0; (y < atlasCellHeight); y++) {
-                var sourceY = Math.Clamp(value: (top + y), max: (imageHeight - 1), min: 0);
+                var sourceY = Math.Clamp(
+                    value: (top + y),
+                    max: (imageHeight - 1),
+                    min: 0
+                );
 
                 for (var x = 0; (x < atlasCellWidth); x++) {
-                    var sourceX = Math.Clamp(value: (left + x), max: (imageWidth - 1), min: 0);
+                    var sourceX = Math.Clamp(
+                        value: (left + x),
+                        max: (imageWidth - 1),
+                        min: 0
+                    );
                     var sourceBase = (((sourceY * imageWidth) + sourceX) * 4);
 
                     // All four channels ride along (little-endian R|G|B|A): the overlays median RGB at shade time,
@@ -122,8 +147,8 @@ public sealed class OverlayGlyphSdfPack {
     /// range.</summary>
     public static int GlyphIndex(int codePoint) =>
         (((codePoint >= FirstChar) && (codePoint < (FirstChar + GlyphCount)))
-            ? (codePoint - FirstChar)
-            : -1);
+        ? (codePoint - FirstChar)
+        : -1);
 
     // ---- the prepacked artifact ---------------------------------------------------------------------------------
     // The pack is ~1.4 MiB of already-flattened cells, but building it from the atlas decodes the WHOLE combined
@@ -134,9 +159,9 @@ public sealed class OverlayGlyphSdfPack {
 
     // 'P','O','G','P' + format version. Bump the version on any layout change — the key check then misses cleanly.
     private const uint PackMagic = 0x50474F50u;
-    private const uint PackVersion = 1u;
     private const int PackHashBytes = 32;
-    private const int PackHeaderBytes = ((sizeof(uint) * 5) + sizeof(float) + (PackHashBytes * 2));
+    private const int PackHeaderBytes = (((sizeof(uint) * 5) + sizeof(float)) + (PackHashBytes * 2));
+    private const uint PackVersion = 1u;
 
     /// <summary>Reads a prepacked artifact, returning <see langword="null"/> when the file is absent, malformed, a
     /// different format version, or keyed to different source bytes (a rebaked atlas).</summary>
@@ -164,8 +189,10 @@ public sealed class OverlayGlyphSdfPack {
 
         var span = bytes.AsSpan();
 
-        if ((BinaryPrimitives.ReadUInt32LittleEndian(source: span) != PackMagic) ||
-            (BinaryPrimitives.ReadUInt32LittleEndian(source: span[4..]) != PackVersion)) {
+        if (
+            (BinaryPrimitives.ReadUInt32LittleEndian(source: span) != PackMagic) ||
+            (BinaryPrimitives.ReadUInt32LittleEndian(source: span[4..]) != PackVersion)
+        ) {
             return null;
         }
 
@@ -174,14 +201,25 @@ public sealed class OverlayGlyphSdfPack {
         var distanceRange = BinaryPrimitives.ReadSingleLittleEndian(source: span[16..]);
         var wordCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[20..]);
 
-        if (!span.Slice(start: 24, length: PackHashBytes).SequenceEqual(other: pngHash) ||
-            !span.Slice(start: (24 + PackHashBytes), length: PackHashBytes).SequenceEqual(other: jsonHash)) {
+        if (
+            !span.Slice(
+            start: 24,
+            length: PackHashBytes
+        ).SequenceEqual(other: pngHash) ||
+            !span.Slice(
+            start: (24 + PackHashBytes),
+            length: PackHashBytes
+        ).SequenceEqual(other: jsonHash)
+        ) {
             return null;
         }
 
-        if ((cellWidth <= 0) || (cellHeight <= 0) ||
-            (wordCount != (GlyphCount * cellWidth * cellHeight)) ||
-            (bytes.Length != (PackHeaderBytes + (wordCount * sizeof(uint))))) {
+        if (
+            (cellWidth <= 0) ||
+            (cellHeight <= 0) ||
+            (wordCount != ((GlyphCount * cellWidth) * cellHeight)) ||
+            (bytes.Length != (PackHeaderBytes + (wordCount * sizeof(uint))))
+        ) {
             return null;
         }
 
@@ -209,27 +247,61 @@ public sealed class OverlayGlyphSdfPack {
         var bytes = new byte[(PackHeaderBytes + (m_packedSdf.Length * sizeof(uint)))];
         var span = bytes.AsSpan();
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span, value: PackMagic);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[4..], value: PackVersion);
-        BinaryPrimitives.WriteInt32LittleEndian(destination: span[8..], value: AtlasCellWidth);
-        BinaryPrimitives.WriteInt32LittleEndian(destination: span[12..], value: AtlasCellHeight);
-        BinaryPrimitives.WriteSingleLittleEndian(destination: span[16..], value: DistanceRange);
-        BinaryPrimitives.WriteInt32LittleEndian(destination: span[20..], value: m_packedSdf.Length);
-        pngHash.CopyTo(destination: span.Slice(start: 24, length: PackHashBytes));
-        jsonHash.CopyTo(destination: span.Slice(start: (24 + PackHashBytes), length: PackHashBytes));
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span,
+            value: PackMagic
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[4..],
+            value: PackVersion
+        );
+        BinaryPrimitives.WriteInt32LittleEndian(
+            destination: span[8..],
+            value: AtlasCellWidth
+        );
+        BinaryPrimitives.WriteInt32LittleEndian(
+            destination: span[12..],
+            value: AtlasCellHeight
+        );
+        BinaryPrimitives.WriteSingleLittleEndian(
+            destination: span[16..],
+            value: DistanceRange
+        );
+        BinaryPrimitives.WriteInt32LittleEndian(
+            destination: span[20..],
+            value: m_packedSdf.Length
+        );
+        pngHash.CopyTo(destination: span.Slice(
+            start: 24,
+            length: PackHashBytes
+        ));
+        jsonHash.CopyTo(destination: span.Slice(
+            start: (24 + PackHashBytes),
+            length: PackHashBytes
+        ));
 
         var payload = span[PackHeaderBytes..];
 
         for (var index = 0; (index < m_packedSdf.Length); index++) {
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: payload[(index * sizeof(uint))..], value: m_packedSdf[index]);
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                destination: payload[(index * sizeof(uint))..],
+                value: m_packedSdf[index]
+            );
         }
 
         try {
             var temporary = (path + $".{Environment.ProcessId}.tmp");
 
-            File.WriteAllBytes(path: temporary, bytes: bytes);
-            File.Move(sourceFileName: temporary, destFileName: path, overwrite: true);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            File.WriteAllBytes(
+                path: temporary,
+                bytes: bytes
+            );
+            File.Move(
+                sourceFileName: temporary,
+                destFileName: path,
+                overwrite: true
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] could not persist the overlay glyph pack '{path}' ({exception.Message}); the next start decodes the full atlas again.");
         }
     }

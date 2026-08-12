@@ -148,7 +148,10 @@ public sealed class AddonInstance : IDisposable {
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The instance is already admitted.</exception>
     public void Admit() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         if (m_state != AddonState.Enabled) {
             return;
@@ -174,7 +177,10 @@ public sealed class AddonInstance : IDisposable {
             var kind = Classify(code: trap.Type);
 
             m_lastFuelConsumed = FuelConsumed();
-            SetFault(kind: kind, reason: $"{kind} during puck_init ({trap.Type})");
+            SetFault(
+                kind: kind,
+                reason: $"{kind} during puck_init ({trap.Type})"
+            );
             return;
         }
 
@@ -187,9 +193,15 @@ public sealed class AddonInstance : IDisposable {
     /// gates and calls <see cref="Admit"/> again). A load-faulted addon (no module) stays faulted.</summary>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     public void Enable() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
-        if ((m_engine is null) || (m_module is null)) {
+        if (
+            (m_engine is null) ||
+            (m_module is null)
+        ) {
             return;
         }
 
@@ -199,7 +211,10 @@ public sealed class AddonInstance : IDisposable {
     /// <summary>Administratively disables the addon; it is skipped every tick until re-enabled.</summary>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     public void Disable() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         m_lastCount = 0;
         m_state = AddonState.Disabled;
@@ -211,9 +226,15 @@ public sealed class AddonInstance : IDisposable {
     /// <param name="reason">The refusal reason, naming the offending cell ordinal.</param>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     public void FaultProtocol(string reason) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
-        SetFault(kind: AddonFaultKind.DecodeError, reason: $"DecodeError — {reason}");
+        SetFault(
+            kind: AddonFaultKind.DecodeError,
+            reason: $"DecodeError — {reason}"
+        );
     }
 
     /// <summary>Drives the addon once: writes the input-cell batch into the guest's input ring, sets the fuel
@@ -236,17 +257,26 @@ public sealed class AddonInstance : IDisposable {
         }
 
         if (input.Length > m_inCap) {
-            throw new ArgumentException(message: $"input batch {input.Length} exceeds the guest's declared capacity {m_inCap} — the caller owns the budget rule", paramName: nameof(input));
+            throw new ArgumentException(
+                message: $"input batch {input.Length} exceeds the guest's declared capacity {m_inCap} — the caller owns the budget rule",
+                paramName: nameof(input)
+            );
         }
 
         var memory = m_memory!;
         var onTick = m_onTick!;
         var store = m_store!;
-        var inRegion = memory.GetSpan(address: m_inPtr, length: (input.Length * AddonAbi.InCellBytes));
+        var inRegion = memory.GetSpan(
+            address: m_inPtr,
+            length: (input.Length * AddonAbi.InCellBytes)
+        );
 
         for (var index = 0; (index < input.Length); ++index) {
             AddonInCellWriter.Write(
-                destination: inRegion.Slice(length: AddonAbi.InCellBytes, start: (index * AddonAbi.InCellBytes)),
+                destination: inRegion.Slice(
+                    length: AddonAbi.InCellBytes,
+                    start: (index * AddonAbi.InCellBytes)
+                ),
                 cell: in input[index]
             );
         }
@@ -254,7 +284,10 @@ public sealed class AddonInstance : IDisposable {
         // Zeroed before every tick so a guest that under-writes its returned count can only ever replay an all-zero
         // cell — which Kind = 0 makes MALFORMED under this ABI, so a lying count faults instead of replaying a
         // benign stale record. Nothing else clears this region.
-        memory.GetSpan(address: m_outPtr, length: (m_outCap * AddonAbi.OutCellBytes)).Clear();
+        memory.GetSpan(
+            address: m_outPtr,
+            length: (m_outCap * AddonAbi.OutCellBytes)
+        ).Clear();
         store.Fuel = (ulong)m_fuelPerTick;
 
         int count;
@@ -268,10 +301,16 @@ public sealed class AddonInstance : IDisposable {
             m_lastFuelConsumed = consumed;
             SetFault(
                 kind: kind,
-                reason: TrapReason(kind: kind, trap: trap)
+                reason: TrapReason(
+                    kind: kind,
+                    trap: trap
+                )
             );
             GC.KeepAlive(obj: store);
-            return AddonTickResult.Faulted(fault: m_fault, fuelConsumed: consumed);
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: consumed
+            );
         }
 
         GC.KeepAlive(obj: store);
@@ -281,19 +320,44 @@ public sealed class AddonInstance : IDisposable {
         m_lastFuelConsumed = fuelConsumed;
 
         if ((uint)count > (uint)m_outCap) {
-            SetFault(kind: AddonFaultKind.DecodeError, reason: $"DecodeError — puck_on_tick returned {count}, cap {m_outCap}");
-            return AddonTickResult.Faulted(fault: m_fault, fuelConsumed: fuelConsumed);
+            SetFault(
+                kind: AddonFaultKind.DecodeError,
+                reason: $"DecodeError — puck_on_tick returned {count}, cap {m_outCap}"
+            );
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: fuelConsumed
+            );
         }
 
-        var cells = memory.GetSpan(address: m_outPtr, length: (count * AddonAbi.OutCellBytes));
+        var cells = memory.GetSpan(
+            address: m_outPtr,
+            length: (count * AddonAbi.OutCellBytes)
+        );
 
-        if (!AddonOutCellReader.TryDecode(source: cells, count: count, channelCount: m_channelCount, destination: m_decoded, errorIndex: out var errorIndex, error: out var decodeError)) {
-            SetFault(kind: AddonFaultKind.DecodeError, reason: $"DecodeError — cell {errorIndex} {decodeError}");
-            return AddonTickResult.Faulted(fault: m_fault, fuelConsumed: fuelConsumed);
+        if (!AddonOutCellReader.TryDecode(
+            source: cells,
+            count: count,
+            channelCount: m_channelCount,
+            destination: m_decoded,
+            errorIndex: out var errorIndex,
+            error: out var decodeError
+        )) {
+            SetFault(
+                kind: AddonFaultKind.DecodeError,
+                reason: $"DecodeError — cell {errorIndex} {decodeError}"
+            );
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: fuelConsumed
+            );
         }
 
         m_lastCount = count;
-        return AddonTickResult.Ok(cellCount: count, fuelConsumed: fuelConsumed);
+        return AddonTickResult.Ok(
+            cellCount: count,
+            fuelConsumed: fuelConsumed
+        );
     }
 
     /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
@@ -311,14 +375,23 @@ public sealed class AddonInstance : IDisposable {
     /// <returns><see langword="true"/> when the whole range was in bounds and copied.</returns>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     public bool TryCopyMemory(long pointer, long length, Span<byte> destination, out string error) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
-        if ((pointer < 0L) || (pointer > uint.MaxValue)) {
+        if (
+            (pointer < 0L) ||
+            (pointer > uint.MaxValue)
+        ) {
             error = $"pointer {pointer} is outside the guest's addressable range";
             return false;
         }
 
-        if ((length < 0L) || (length > destination.Length)) {
+        if (
+            (length < 0L) ||
+            (length > destination.Length)
+        ) {
             error = $"length {length} exceeds the destination capacity {destination.Length}";
             return false;
         }
@@ -339,7 +412,10 @@ public sealed class AddonInstance : IDisposable {
             return false;
         }
 
-        memory.GetSpan(address: (int)pointer, length: (int)length).CopyTo(destination: destination[..(int)length]);
+        memory.GetSpan(
+            address: (int)pointer,
+            length: (int)length
+        ).CopyTo(destination: destination[..(int)length]);
         error = "";
         return true;
     }
@@ -368,7 +444,10 @@ public sealed class AddonInstance : IDisposable {
     private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {
         var end = ((long)start + length);
 
-        if ((start < 0) || (end > memoryLength)) {
+        if (
+            (start < 0) ||
+            (end > memoryLength)
+        ) {
             error = $"{name} region [{start}, {end}) exceeds memory {memoryLength}";
             return false;
         }
@@ -388,7 +467,10 @@ public sealed class AddonInstance : IDisposable {
         }
     }
     private void SetFault(AddonFaultKind kind, string reason) {
-        m_fault = new AddonFault(Detail: $"addon {m_name}: {reason}", Kind: kind);
+        m_fault = new AddonFault(
+            Detail: $"addon {m_name}: {reason}",
+            Kind: kind
+        );
         m_lastCount = 0;
         m_state = AddonState.Faulted;
     }
@@ -396,7 +478,9 @@ public sealed class AddonInstance : IDisposable {
         var budget = (ulong)m_fuelPerTick;
         var remaining = (m_store?.Fuel ?? budget);
 
-        return ((budget >= remaining) ? (budget - remaining) : 0UL);
+        return ((budget >= remaining)
+            ? (budget - remaining)
+            : 0UL);
     }
     private void Instantiate() {
         ++m_generation;
@@ -408,12 +492,21 @@ public sealed class AddonInstance : IDisposable {
         m_lastCount = 0;
         m_lastFuelConsumed = 0UL;
 
-        if ((m_engine is null) || (m_module is null)) {
+        if (
+            (m_engine is null) ||
+            (m_module is null)
+        ) {
             return;
         }
 
-        if (!AddonModuleValidator.TryValidate(error: out var exportError, module: m_module)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {exportError}");
+        if (!AddonModuleValidator.TryValidate(
+            error: out var exportError,
+            module: m_module
+        )) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {exportError}"
+            );
             return;
         }
 
@@ -425,9 +518,15 @@ public sealed class AddonInstance : IDisposable {
             store.SetLimits(memorySize: MaxMemoryBytes);
             store.Fuel = (ulong)m_fuelPerTick;
 
-            var instance = new Instance(store: store, module: m_module);
+            var instance = new Instance(
+                store: store,
+                module: m_module
+            );
 
-            if (!TryHandshake(instance: instance, store: store)) {
+            if (!TryHandshake(
+                instance: instance,
+                store: store
+            )) {
                 store.Dispose();
                 return;
             }
@@ -439,10 +538,16 @@ public sealed class AddonInstance : IDisposable {
             var kind = Classify(code: trap.Type);
 
             store?.Dispose();
-            SetFault(kind: kind, reason: $"{kind} during instantiation ({trap.Type})");
+            SetFault(
+                kind: kind,
+                reason: $"{kind} during instantiation ({trap.Type})"
+            );
         } catch (WasmtimeException error) {
             store?.Dispose();
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {error.Message}");
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {error.Message}"
+            );
         }
     }
     // The handshake: version, geometry, channel table, channel-name table, bounds — everything EXCEPT
@@ -453,7 +558,10 @@ public sealed class AddonInstance : IDisposable {
         GC.KeepAlive(obj: store);
 
         if (version != AddonAbi.AbiVersion) {
-            SetFault(kind: AddonFaultKind.AbiMismatch, reason: $"AbiMismatch — guest ABI {version}, host speaks ABI {AddonAbi.AbiVersion}");
+            SetFault(
+                kind: AddonFaultKind.AbiMismatch,
+                reason: $"AbiMismatch — guest ABI {version}, host speaks ABI {AddonAbi.AbiVersion}"
+            );
             return false;
         }
 
@@ -466,18 +574,36 @@ public sealed class AddonInstance : IDisposable {
 
         GC.KeepAlive(obj: store);
 
-        if ((channelsCount < 1) || (channelsCount > AddonAbi.MaxChannels)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — puck_channels_count {channelsCount} out of range [1, {AddonAbi.MaxChannels}]");
+        if (
+            (channelsCount < 1) ||
+            (channelsCount > AddonAbi.MaxChannels)
+        ) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — puck_channels_count {channelsCount} out of range [1, {AddonAbi.MaxChannels}]"
+            );
             return false;
         }
 
-        if ((outCap < 0) || (outCap > AddonAbi.MaxOutCells)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — puck_out_cap {outCap} out of range [0, {AddonAbi.MaxOutCells}]");
+        if (
+            (outCap < 0) ||
+            (outCap > AddonAbi.MaxOutCells)
+        ) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — puck_out_cap {outCap} out of range [0, {AddonAbi.MaxOutCells}]"
+            );
             return false;
         }
 
-        if ((inCap < 1) || (inCap > AddonAbi.MaxInCells)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — puck_in_cap {inCap} out of range [1, {AddonAbi.MaxInCells}]");
+        if (
+            (inCap < 1) ||
+            (inCap > AddonAbi.MaxInCells)
+        ) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — puck_in_cap {inCap} out of range [1, {AddonAbi.MaxInCells}]"
+            );
             return false;
         }
 
@@ -485,7 +611,10 @@ public sealed class AddonInstance : IDisposable {
         // declared input capacity, so a guest's out-cap must never outrun (in-cap - 1) — the budget MergeAnswers
         // charges disclosures and answers against.
         if ((inCap - 1) < outCap) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — puck_in_cap {inCap} - 1 must be >= puck_out_cap {outCap} (every refusable act needs a same-tick verdict slot)");
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — puck_in_cap {inCap} - 1 must be >= puck_out_cap {outCap} (every refusable act needs a same-tick verdict slot)"
+            );
             return false;
         }
 
@@ -493,15 +622,35 @@ public sealed class AddonInstance : IDisposable {
         var memoryLength = memory.GetLength();
         var channelsLength = ((long)channelsCount * AddonAbi.ChannelDescriptorBytes);
 
-        if (!RangeFits(error: out var boundsError, length: channelsLength, memoryLength: memoryLength, name: "channels", start: channelsPtr)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {boundsError}");
+        if (!RangeFits(
+            error: out var boundsError,
+            length: channelsLength,
+            memoryLength: memoryLength,
+            name: "channels",
+            start: channelsPtr
+        )) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {boundsError}"
+            );
             return false;
         }
 
-        var channelTable = memory.GetSpan(address: channelsPtr, length: (int)channelsLength);
+        var channelTable = memory.GetSpan(
+            address: channelsPtr,
+            length: (int)channelsLength
+        );
 
-        if (!AddonChannelTableReader.TryDecode(source: channelTable, count: channelsCount, destination: m_channels, error: out var channelError)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {channelError}");
+        if (!AddonChannelTableReader.TryDecode(
+            source: channelTable,
+            count: channelsCount,
+            destination: m_channels,
+            error: out var channelError
+        )) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {channelError}"
+            );
             return false;
         }
 
@@ -517,8 +666,17 @@ public sealed class AddonInstance : IDisposable {
 
         var outLength = ((long)outCap * AddonAbi.OutCellBytes);
 
-        if (!RangeFits(error: out boundsError, length: outLength, memoryLength: memoryLength, name: "out ring", start: outPtr)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {boundsError}");
+        if (!RangeFits(
+            error: out boundsError,
+            length: outLength,
+            memoryLength: memoryLength,
+            name: "out ring",
+            start: outPtr
+        )) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {boundsError}"
+            );
             return false;
         }
 
@@ -526,8 +684,17 @@ public sealed class AddonInstance : IDisposable {
 
         var inLength = ((long)inCap * AddonAbi.InCellBytes);
 
-        if (!RangeFits(error: out boundsError, length: inLength, memoryLength: memoryLength, name: "in ring", start: inPtr)) {
-            SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {boundsError}");
+        if (!RangeFits(
+            error: out boundsError,
+            length: inLength,
+            memoryLength: memoryLength,
+            name: "in ring",
+            start: inPtr
+        )) {
+            SetFault(
+                kind: AddonFaultKind.BadExport,
+                reason: $"BadExport — {boundsError}"
+            );
             return false;
         }
 
@@ -546,15 +713,38 @@ public sealed class AddonInstance : IDisposable {
                 continue;
             }
 
-            if (!RangeFits(error: out boundsError, length: 0, memoryLength: memoryLength, name: "channel names", start: (int)channel.VerbTablePtr)) {
-                SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {boundsError}");
+            if (!RangeFits(
+                error: out boundsError,
+                length: 0,
+                memoryLength: memoryLength,
+                name: "channel names",
+                start: (int)channel.VerbTablePtr
+            )) {
+                SetFault(
+                    kind: AddonFaultKind.BadExport,
+                    reason: $"BadExport — {boundsError}"
+                );
                 return false;
             }
 
-            var nameTableSpan = memory.GetSpan(address: (int)channel.VerbTablePtr, length: (int)(memoryLength - channel.VerbTablePtr));
+            var nameTableSpan = memory.GetSpan(
+                address: (int)channel.VerbTablePtr,
+                length: (int)(memoryLength - channel.VerbTablePtr)
+            );
 
-            if (!AddonChannelNameTableReader.TryDecode(consumedBytes: out var consumedBytes, count: channel.VerbCount, destination: m_channelBindings, error: out var channelNameError, errorIndex: out _, resolver: m_channelResolver!, source: nameTableSpan)) {
-                SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {channelNameError}");
+            if (!AddonChannelNameTableReader.TryDecode(
+                consumedBytes: out var consumedBytes,
+                count: channel.VerbCount,
+                destination: m_channelBindings,
+                error: out var channelNameError,
+                errorIndex: out _,
+                resolver: m_channelResolver!,
+                source: nameTableSpan
+            )) {
+                SetFault(
+                    kind: AddonFaultKind.BadExport,
+                    reason: $"BadExport — {channelNameError}"
+                );
                 return false;
             }
 
@@ -565,8 +755,14 @@ public sealed class AddonInstance : IDisposable {
 
         for (var first = 0; (first < regionCount); ++first) {
             for (var second = (first + 1); (second < regionCount); ++second) {
-                if ((regions[first].Start < regions[second].End) && (regions[second].Start < regions[first].End)) {
-                    SetFault(kind: AddonFaultKind.BadExport, reason: $"BadExport — {regions[first].Name} region [{regions[first].Start}, {regions[first].End}) overlaps {regions[second].Name} region [{regions[second].Start}, {regions[second].End})");
+                if (
+                    (regions[first].Start < regions[second].End) &&
+                    (regions[second].Start < regions[first].End)
+                ) {
+                    SetFault(
+                        kind: AddonFaultKind.BadExport,
+                        reason: $"BadExport — {regions[first].Name} region [{regions[first].Start}, {regions[first].End}) overlaps {regions[second].Name} region [{regions[second].Start}, {regions[second].End})"
+                    );
                     return false;
                 }
             }
