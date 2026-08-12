@@ -144,6 +144,33 @@
         }
       },
       "additionalProperties": false
+    },
+    "disclosure": {
+      "description": "The per-observer snapshot disclosure policy (default null = Default, disclose-all) \u2014 read through ObserverDisclosure. Applied at the output hub\u0027s sink boundary, never inside the tick, so it changes what an observer is told and never what the simulation computes.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "mode": {
+          "description": "Which bodies an observer is delivered.",
+          "enum": [
+            "All",
+            "Radius",
+            "SelfOnly"
+          ],
+          "default": "All"
+        },
+        "radius": {
+          "description": "The disclosure radius in metres for Radius; authored only for that mode.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

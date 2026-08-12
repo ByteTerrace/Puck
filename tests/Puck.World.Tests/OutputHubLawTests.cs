@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// section): a typed-lane subscription is independently
 /// disposable, a late attach's non-consuming primer never steals a one-shot continuity hint an already-attached sink
 /// is due to observe, and a faulting sink is isolated rather than taking the tick down with it. All three exercise
-/// <see cref="Puck.World.Server.WorldServer.AttachSink"/>/<see cref="Puck.World.Server.WorldOutputHub"/> directly
+/// <see cref="Puck.World.Server.WorldServer.AttachSink(Puck.World.Protocol.IClientSink)"/>/<see cref="Puck.World.Server.WorldOutputHub"/> directly
 /// against a fresh in-process server — no console, no transport.
 /// </summary>
 public sealed class OutputHubLawTests {

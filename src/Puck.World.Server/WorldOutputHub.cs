@@ -1,6 +1,21 @@
+using System.Numerics;
+
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
+
+/// <summary>What one output-hub sink's observer is delivered of each tick's snapshot.</summary>
+/// <param name="Policy">The world's authored per-observer disclosure policy.</param>
+/// <param name="ObserverBodyIndex">The observer's own 0-based body index, or a negative value when the observer has
+/// no body in this world.</param>
+public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy, int ObserverBodyIndex) {
+    /// <summary>Gets the unfiltered delivery — every active body, with no per-sink copy taken at all. Local and
+    /// colocated sinks attach with this: colocated trust is home trust.</summary>
+    public static WorldSinkDisclosure Full { get; } = new(Policy: WorldObserverDisclosure.Default, ObserverBodyIndex: -1);
+
+    /// <summary>Gets a value indicating whether this sink receives every active body unfiltered.</summary>
+    public bool IsFull => (Policy.Mode == WorldObserverDisclosureMode.All);
+}
 
 /// <summary>
 /// The server's multi-subscriber output publication point — two lanes. The typed lane fans a
@@ -16,9 +31,9 @@ namespace Puck.World.Server;
 /// <see cref="SubscribeEncoded"/> remain unused.
 /// </summary>
 /// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every
-/// <see cref="Subscribe"/> call adds a subscriber; it never displaces one already attached.</para>
+/// <see cref="Subscribe(IClientSink)"/> call adds a subscriber; it never displaces one already attached.</para>
 /// <para><b>Threading contract.</b> This hub carries no lock, so it is safe only when every call — every
-/// <see cref="Subscribe"/>, every disposal of the lease it returns, and every <c>Deliver*</c> — is mutually exclusive
+/// <see cref="Subscribe(IClientSink)"/>, every disposal of the lease it returns, and every <c>Deliver*</c> — is mutually exclusive
 /// with the tick thread's own activity: no such call may ever be in flight at the same time as a <c>Deliver*</c> call
 /// or the tick work that leads to one. That is the actual invariant, stated in terms of exclusion rather than thread
 /// identity, because two windows legitimately satisfy it without the call literally running on the tick thread while
@@ -33,10 +48,10 @@ namespace Puck.World.Server;
 /// case — a portal observer detaching once its view closes), and is also safe from within a <c>Deliver*</c> call — a
 /// sink disposing its own lease mid-callback, or a fault a few slots back detaching a different one, never corrupts
 /// the in-flight fan-out (each <c>Deliver*</c> walks by index and re-checks <c>Active</c> rather than using an
-/// enumerator, so no "collection was modified" exception is possible). <see cref="Subscribe"/> is the one member with
+/// enumerator, so no "collection was modified" exception is possible). <see cref="Subscribe(IClientSink)"/> is the one member with
 /// a reentrancy rule on top of this: calling it from within a <c>Deliver*</c> callback throws, because the new
 /// subscriber's primer would be built into the same borrowed backing array the in-flight snapshot wraps (see
-/// <see cref="Subscribe"/>).</para>
+/// <see cref="Subscribe(IClientSink)"/>).</para>
 /// <para><b>Exception isolation.</b> A typed subscriber that throws out of any <c>Deliver*</c> call is caught,
 /// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
 /// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
@@ -46,8 +61,13 @@ public sealed class WorldOutputHub {
     // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
     // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
     // this object; Dispose closes over it directly rather than needing a separate handle/index to invalidate.
-    private sealed class Subscription(WorldOutputHub hub, IClientSink sink) : IDisposable {
+    private sealed class Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) : IDisposable {
         public readonly IClientSink Sink = sink;
+        public WorldSinkDisclosure Disclosure = disclosure;
+        public ref WorldSinkDisclosure DisclosureRef => ref Disclosure;
+        // Per-sink redaction scratch, grown once to the widest snapshot this sink ever saw. Never shared with the
+        // server's own borrowed backing array, which the redacted delivery must not write into.
+        public EntitySnapshot[] Redacted = [];
         public bool Active = true;
 
         public void Dispose() {
@@ -88,14 +108,26 @@ public sealed class WorldOutputHub {
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Called from within a <c>Deliver*</c> callback — see the class
     /// remarks' threading contract.</exception>
-    public IDisposable Subscribe(IClientSink sink) {
+    public IDisposable Subscribe(IClientSink sink) =>
+        Subscribe(sink: sink, disclosure: WorldSinkDisclosure.Full);
+
+    /// <summary>Adds a typed-lane subscriber whose snapshot deliveries are filtered by
+    /// <paramref name="disclosure"/> — see <see cref="Subscribe(IClientSink)"/> for the lifetime and threading
+    /// contract, which is identical.</summary>
+    /// <param name="sink">The subscriber to add.</param>
+    /// <param name="disclosure">What this sink's observer is delivered. <see cref="WorldSinkDisclosure.Full"/> is
+    /// the unfiltered path, and takes no per-delivery copy at all.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Called from within a <c>Deliver*</c> callback.</exception>
+    public IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
         if (m_deliveryDepth != 0) {
             throw new InvalidOperationException(message: "WorldOutputHub.Subscribe was called from within a Deliver* fan-out; attaching mid-delivery would build the new sink's primer into the borrowed snapshot other subscribers are still consuming. Attach before or after a tick's delivery, never during.");
         }
 
-        var subscription = new Subscription(hub: this, sink: sink);
+        var subscription = new Subscription(hub: this, sink: sink, disclosure: disclosure);
 
         m_typed.Add(item: subscription);
         m_activeCount++;
@@ -130,7 +162,13 @@ public sealed class WorldOutputHub {
                 }
 
                 try {
-                    subscription.Sink.DeliverSnapshot(snapshot: in snapshot);
+                    if (subscription.Disclosure.IsFull) {
+                        subscription.Sink.DeliverSnapshot(snapshot: in snapshot);
+                    } else {
+                        var redacted = Redact(subscription: subscription, snapshot: in snapshot);
+
+                        subscription.Sink.DeliverSnapshot(snapshot: in redacted);
+                    }
                 } catch (Exception exception) {
                     Detach(subscription: subscription, callSite: nameof(DeliverSnapshot), exception: exception);
                     continue;
@@ -281,6 +319,44 @@ public sealed class WorldOutputHub {
         } finally {
             m_deliveryDepth--;
         }
+    }
+
+    private static WorldSnapshot Redact(Subscription subscription, in WorldSnapshot snapshot) =>
+        Redact(disclosure: in subscription.DisclosureRef, snapshot: in snapshot, scratch: ref subscription.Redacted);
+
+    /// <summary>Builds one observer's own view of a tick. The observer's position is read from the same snapshot, so
+    /// a radius test answers against the tick being delivered rather than a pose the hub kept.</summary>
+    /// <param name="disclosure">What the observer is delivered.</param>
+    /// <param name="snapshot">The tick's full snapshot.</param>
+    /// <param name="scratch">The caller-owned destination array, grown as needed. Never the server's own borrowed
+    /// backing array — the redacted delivery writes into this.</param>
+    /// <returns>The redacted snapshot, wrapping <paramref name="scratch"/>.</returns>
+    public static WorldSnapshot Redact(in WorldSinkDisclosure disclosure, in WorldSnapshot snapshot, ref EntitySnapshot[] scratch) {
+        var entries = snapshot.Entries.Span;
+        var observerIndex = disclosure.ObserverBodyIndex;
+        var observerPosition = Vector3.Zero;
+
+        for (var index = 0; (index < entries.Length); index++) {
+            if (entries[index].Index == observerIndex) {
+                observerPosition = entries[index].Position;
+
+                break;
+            }
+        }
+
+        if (scratch.Length < entries.Length) {
+            scratch = new EntitySnapshot[entries.Length];
+        }
+
+        var count = 0;
+
+        for (var index = 0; (index < entries.Length); index++) {
+            if (disclosure.Policy.Discloses(entry: in entries[index], observerIndex: observerIndex, observerPosition: observerPosition)) {
+                scratch[count++] = entries[index];
+            }
+        }
+
+        return (snapshot with { Entries = scratch.AsMemory(start: 0, length: count) });
     }
 
     // Narrates a faulting sink loudly (naming its concrete type, never swallowed silently) and detaches it — a

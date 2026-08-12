@@ -187,6 +187,7 @@ public static class WorldDefinitionValidator {
         ValidateDistribution(distribution: definition.Population.Distribution, path: "population.distribution", spawnPointIds: spawnPointIds, allowDisc: true, allowPoints: true, allowLattice: false, allowZeroDisc: false, errors: errors);
         ValidatePopulationVariation(variation: definition.Population.PeerVariation, path: "population.peerVariation", minIndex: WorldPopulationLimits.LocalSeatCount, errors: errors);
         ValidatePopulationVariation(variation: definition.Population.SeatVariation, path: "population.seatVariation", minIndex: 0, errors: errors);
+        ValidateObserverDisclosure(disclosure: definition.Population.Disclosure, errors: errors);
         ValidateSequence(sequence: definition.Population.PeerColors, path: "population.peerColors", minIndex: WorldPopulationLimits.LocalSeatCount, errors: errors, WorldSequence.Additive, WorldSequence.R1);
 
         // State validates BEFORE Kits and Hud: the rows-by-name map it returns is what a kit's own `generate` effect
@@ -1062,6 +1063,28 @@ public static class WorldDefinitionValidator {
             if (string.IsNullOrWhiteSpace(value: seatSpawns[index]) || !spawnPointIds.Contains(item: seatSpawns[index])) {
                 errors.Add(item: $"population.seatSpawns[{index}] '{seatSpawns[index]}' names no spawn point.");
             }
+        }
+    }
+
+    private static void ValidateObserverDisclosure(WorldObserverDisclosure? disclosure, List<string> errors) {
+        if (disclosure is not { } row) {
+            return;
+        }
+
+        if (!Enum.IsDefined(value: row.Mode)) {
+            errors.Add(item: $"population.disclosure.mode '{row.Mode}' is not defined.");
+
+            return;
+        }
+
+        if (row.Mode == WorldObserverDisclosureMode.Radius) {
+            if (row.Radius is not { } radius) {
+                errors.Add(item: "population.disclosure.radius is required for mode 'radius'.");
+            } else if (!float.IsFinite(f: radius) || (radius <= 0f)) {
+                errors.Add(item: $"population.disclosure.radius {radius} must be finite and positive.");
+            }
+        } else if (row.Radius is not null) {
+            errors.Add(item: $"population.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
         }
     }
 

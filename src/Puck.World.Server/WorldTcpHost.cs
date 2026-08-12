@@ -683,7 +683,10 @@ public sealed class WorldTcpHost : IDisposable {
 
     private async Task StreamProjectionAsync(NetworkStream stream, WorldDisclosureTier tier, CancellationToken ct) {
         var sink = new FederationProjectionSink(tier: tier, authority: m_server.AuthorityIdentity, revision: () => m_server.Population.Revision);
-        var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink));
+        // A remote observer is not embodied here, so a policy narrower than disclose-all delivers it nothing until
+        // one of its travelers lands. That is the safe direction for an authored perception limit.
+        var disclosure = new WorldSinkDisclosure(Policy: m_server.Definition.Population.ObserverDisclosure, ObserverBodyIndex: -1);
+        var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink, disclosure: in disclosure));
 
         try {
             await foreach (var item in sink.Frames.ReadAllAsync(cancellationToken: ct).ConfigureAwait(false)) {
