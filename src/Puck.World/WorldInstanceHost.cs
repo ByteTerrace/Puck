@@ -3117,10 +3117,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
-        // The traveller gives up its own rows: it holds every one of them, so its own principal administers the
-        // revocation. Nothing here needs an administrative identity the caller does not already carry.
+        // Dissolving a departing member's rows is administration, symmetric with the admission mint and the
+        // rollback re-grant below: the rows may belong to a peer principal while the member travels under a
+        // different one (an autonomous body travels as World), so the departing principal cannot be assumed to
+        // hold them. The transfer itself was already authorized against the acting principal (AllowsLeave).
         foreach (var grant in sourceGrants) {
-            source.Server.Revoke(grant: grant, actor: actingPrincipal);
+            source.Server.Revoke(grant: grant, actor: WorldPrincipal.Console);
         }
 
         return true;
