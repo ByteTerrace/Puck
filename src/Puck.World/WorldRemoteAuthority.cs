@@ -46,16 +46,11 @@ internal readonly record struct WorldFederationAnswer(WorldFederationResponse Ki
 /// <para>Every request rides a persistent authenticated lane per source authority namespace
 /// (<see cref="FederatedRequestLane"/>): connect, hello, and challenge are paid once for the lane's lifetime, never
 /// once per operation.</para>
-/// <para><b>Transfer steps never block the simulation thread.</b> <c>TryReserve</c>, <c>Commit</c> and
-/// <c>TryStatus</c> issue their request once, key it by (source authority, transfer id, step), and report
-/// <see cref="WorldTransferStep.Pending"/> until the lane has an answer. The caller re-asks at its next tick
-/// boundary; the second ask consumes the landed answer. A lane that cannot reach its peer completes those same keys
-/// with a named refusal rather than leaving them pending, so a dead neighbour resolves the transfer instead of
-/// stalling the tick.</para>
-/// <para><b>The routed-input path waits, bounded.</b> <c>TryDescribeRoute</c> and <c>TryForwardSubmission</c> serve a
-/// caller that must return a typed answer inline (<see cref="IServerLink"/> is synchronous), so they wait on the lane
-/// for at most <see cref="RoutedRequestDeadline"/> and short-circuit immediately while the lane is known
-/// unreachable.</para>
+/// <para><b>No caller ever waits on a connection handshake, and no caller waits on a peer it already knows is
+/// gone.</b> Each request is issued once, keyed so a repeat ask claims the same answer, and bounded by
+/// <see cref="RoutedRequestDeadline"/>; a lane inside its unreachable backoff answers immediately with a named
+/// refusal instead of waiting at all. That is what keeps a dead neighbour from stalling the tick, and what turns a
+/// closed edge into a refusal the transfer path can act on.</para>
 /// </remarks>
 internal sealed class WorldRemoteAuthority : IDisposable {
     /// <summary>The ceiling on how long a routed submission or route lookup waits for its answer. This bounds
@@ -64,7 +59,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     /// <summary>How long a lane that failed to reach its peer answers immediately with
     /// <see cref="WorldWireRefusal.LaneUnavailable"/> before trying to connect again.</summary>
-    private static readonly TimeSpan LaneBackoff = TimeSpan.FromMilliseconds(value: 250);
+    private static readonly TimeSpan LaneBackoff = TimeSpan.FromSeconds(value: 1);
 
     private IPEndPoint m_endpoint;
     private readonly CancellationTokenSource m_lifetime;
@@ -437,10 +432,26 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return upstream.TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: kind, body: body, answer: out answer);
         }
 
-        var key = new TransferStepKey(SourceAuthority: sourceAuthority, TransferId: transferId, Kind: kind);
-        var task = m_transferSteps.GetOrAdd(key: key, valueFactory: _ => LaneFor(sourceAuthority: sourceAuthority).Enqueue(kind: kind, body: body()));
+        var lane = LaneFor(sourceAuthority: sourceAuthority);
 
-        if (!task.IsCompleted) {
+        if (!lane.IsAvailable) {
+            // Already known unreachable. Answering here — without a socket attempt and without waiting — is what
+            // keeps a closed edge costing the tick nothing while the neighbour is away.
+            answer = WorldFederationAnswer.Refused(refusal: WorldWireRefusal.LaneUnavailable, detail: $"the federation lane to '{Endpoint}' is reconnecting");
+
+            return true;
+        }
+
+        var key = new TransferStepKey(SourceAuthority: sourceAuthority, TransferId: transferId, Kind: kind);
+        var task = m_transferSteps.GetOrAdd(key: key, valueFactory: _ => lane.Enqueue(kind: kind, body: body()));
+
+        // A transfer step is a transaction the caller cannot split: the adjacency scan that produced this crossing
+        // re-fires every tick the traveler is still at the seam, so answering "not yet" here mints a second crossing
+        // rather than resuming this one. Wait on the lane instead — bounded, and short-circuited to an immediate
+        // named refusal whenever the lane already knows it cannot reach its peer, which is what keeps a dead
+        // neighbour from stalling the tick. The step key survives an unclaimed answer, so a caller that does stop
+        // early (a source that shut down mid-transaction) still finds it rather than re-sending.
+        if (!task.IsCompleted && !task.Wait(timeout: RoutedRequestDeadline)) {
             return false;
         }
 
@@ -465,7 +476,11 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return;
         }
 
-        _ = LaneFor(sourceAuthority: sourceAuthority).Enqueue(kind: kind, body: body);
+        var lane = LaneFor(sourceAuthority: sourceAuthority);
+
+        if (lane.IsAvailable) {
+            _ = lane.Enqueue(kind: kind, body: body);
+        }
     }
 
     private FederatedRequestLane LaneFor(string sourceAuthority) =>
@@ -694,13 +709,16 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
         }
 
-        // Two attempts: a lane idle long enough for the peer to have recycled its socket must not turn one healthy
-        // reconnect into a caller-visible refusal.
+        // Two attempts, but only while a connection was already open: a lane idle long enough for the peer to have
+        // recycled its socket must not turn one healthy reconnect into a caller-visible refusal. A lane with no
+        // connection at all gets exactly one attempt, so an absent peer costs one connect, never two.
         private async Task<WorldFederationAnswer> ServeAsync(PendingRequest request, CancellationToken ct) {
             for (var attempt = 0; attempt < 2; attempt++) {
                 if (ct.IsCancellationRequested) {
                     break;
                 }
+
+                var reconnecting = (m_stream is null);
 
                 try {
                     await EnsureConnectedAsync(ct: ct).ConfigureAwait(false);
@@ -727,7 +745,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                         break;
                     }
 
-                    if (attempt == 1) {
+                    if (reconnecting || (attempt == 1)) {
                         return Unreachable(exception: exception);
                     }
                 }
