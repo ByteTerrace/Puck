@@ -231,15 +231,19 @@ public sealed class WorldServer : IWorldServerHost {
     private string m_baseOrigin = "the boot document";
     // The multi-subscriber output hub — supports a local sink plus N future connections. See WorldOutputHub's own remarks.
     private readonly WorldOutputHub m_output = new();
-    // The ONE ordered domain for every non-intent submission — command, grant, revoke, session,
+    // The one ordered domain for every non-intent submission — command, grant, revoke, session,
     // definition, mutation, undo, composition, lever, and query all enqueue here, never a per-kind queue. A local
-    // caller (LoopbackTransport) enqueues and immediately drains inline (see Submit/DrainOrdered), so this queue
-    // never holds more than the single in-flight envelope for loopback; it exists as the ONE front door a future
-    // fair-merged remote submission stream drains through identically.
+    // caller (LoopbackTransport) enqueues and immediately drains inline (see EnqueueOrdered/DrainOrdered), so this
+    // queue never holds more than the single in-flight envelope for loopback; it exists as the one front door a
+    // future fair-merged remote submission stream drains through identically.
+    // Guarded by m_authorityGate — reached from the tick thread and from socket workers' authority operations alike;
+    // this is a plain Queue<T> only because EnqueueOrdered is its single door and holds that gate.
     private readonly Queue<OrderedEntry> m_ordered = new();
-    // Reentrancy guard: DrainOrdered dequeues and applies until empty; nothing today re-enters Submit from inside an
-    // apply, but the guard makes that a defined no-op (re-enqueue, return to the outer drain) instead of a
-    // stack-recursive double-drain if a future caller ever does.
+    // Reentrancy guard, guarded by m_authorityGate with m_ordered: DrainOrdered dequeues and applies until empty, so
+    // a re-entrant enqueue from inside an apply is a defined no-op (re-enqueue, return to the outer drain) instead
+    // of a stack-recursive double-drain. Because the gate is held across every drain, this flag is never set by one
+    // thread and read by another — a drain skipped on that reading would strand an applied population change without
+    // the grant rows its own queued event carries.
     private bool m_drainingOrdered;
     // The mounted Simulation-lane guests, attached once at composition (see AttachAddons) and pumped at the three
     // pinned points of Step. Null until then, and null for the whole life of a server nobody mounts addons into (the
@@ -6107,15 +6111,26 @@ public sealed class WorldServer : IWorldServerHost {
     /// <c>WorldTcpHost</c> submits each admitted socket peer under its own per-connection id.</summary>
     /// <param name="envelope">The envelope to submit.</param>
     /// <param name="completion">Invoked once with the envelope's typed result, or <see langword="null"/>.</param>
-    public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
-        m_ordered.Enqueue(item: new OrderedEntry.Submission(Envelope: envelope, Completion: completion));
-        DrainOrdered();
+    public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
+        EnqueueOrdered(entry: new OrderedEntry.Submission(Envelope: envelope, Completion: completion));
+
+    // The one door into the ordered domain. The authority gate is held across both the enqueue and the drain, which
+    // is what makes m_ordered and m_drainingOrdered single-threaded state rather than shared state: a tick-thread
+    // Submit and a socket worker's gated authority operation both reach this queue, and a drain skipped because a
+    // different thread held the guard would leave an already-applied population change (an admitted arrival)
+    // standing without the grant rows its own event carries. lock is reentrant, so an authority operation that
+    // dispatches from inside the gate re-enters here without deadlocking.
+    private void EnqueueOrdered(OrderedEntry entry) {
+        lock (m_authorityGate) {
+            m_ordered.Enqueue(item: entry);
+            DrainOrdered();
+        }
     }
 
-    // Drains the ordered domain FIFO until empty, applying each envelope through the SAME per-kind apply methods the
-    // old per-kind IServerLink surface called directly, and invoking that entry's completion with the typed result.
-    // The reentrancy guard makes a (currently impossible) re-entrant Submit-from-inside-an-apply a defined no-op —
-    // the re-enqueued entry is picked up by the OUTER drain's own loop instead of recursing.
+    // Drains the ordered domain FIFO until empty, applying each envelope through the same per-kind apply methods the
+    // per-kind IServerLink surface called directly, and invoking that entry's completion with the typed result.
+    // Callers hold the authority gate. The reentrancy guard therefore only ever sees this thread's own drain: a
+    // re-entrant Submit-from-inside-an-apply re-enqueues and returns to the outer drain's loop instead of recursing.
     private void DrainOrdered() {
         if (m_drainingOrdered) {
             return;
@@ -6371,8 +6386,7 @@ public sealed class WorldServer : IWorldServerHost {
 
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
         if (ordered) {
-            m_ordered.Enqueue(item: new OrderedEntry.ServerEvent(Value: serverEvent));
-            DrainOrdered();
+            EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
         } else {
             ApplyServerEvent(serverEvent: serverEvent);
         }

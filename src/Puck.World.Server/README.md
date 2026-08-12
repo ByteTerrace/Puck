@@ -28,6 +28,12 @@ advance every body → resolve the guests' reads
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit` — a single ordered domain, drained in submission order.
+Enqueue and drain both run under the same authority gate `Step` and every
+federation operation hold (`WorldServer.EnqueueOrdered` is the one door), so the
+queue and its reentrancy guard are single-threaded state. A drain reached
+without that gate can be skipped by another thread's in-flight drain, which
+would leave an already-applied population change — an admitted arrival — standing
+without the grant rows its own queued event carries.
 The same queue also carries the server-authored `PeerAdmitted` and
 `PeerDisconnected` entries; clients cannot submit those events. They apply
 through the population/grant doors and are exposed to the replay tape only
