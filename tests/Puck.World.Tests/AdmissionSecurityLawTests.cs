@@ -97,9 +97,7 @@ public sealed class AdmissionSecurityLawTests {
 
             try {
                 // CONTROL — an ordinary prompt handshake against this SAME host is admitted, not refused.
-                using (var promptCts = CancellationTokenSource.CreateLinkedTokenSource(testCt)) {
-                    promptCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 5));
-
+                using (var promptCts = Laws.SocketDeadline()) {
                     var admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: promptCts.Token);
 
                     admitted.Client.Dispose();
@@ -126,9 +124,8 @@ public sealed class AdmissionSecurityLawTests {
                 var probe = new byte[1];
 
                 try {
-                    using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(testCt);
-
-                    waitCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 20));
+                    // Longer than WorldTcpHost.HandshakeDeadline: this read is waiting for that deadline to fire.
+                    using var waitCts = Laws.SocketDeadline();
 
                     var read = await stallingStream.ReadAsync(buffer: probe, cancellationToken: waitCts.Token);
 
@@ -167,10 +164,8 @@ public sealed class AdmissionSecurityLawTests {
             host.Start(listen: "127.0.0.1:0");
 
             using var client = new TcpClient();
-            using var testCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-
-            testCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 20));
-
+            // Longer than WorldTcpHost.HandshakeDeadline: the close this law waits for is that deadline firing.
+            using var testCts = Laws.SocketDeadline();
             var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
             await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: testCts.Token);
@@ -214,10 +209,7 @@ public sealed class AdmissionSecurityLawTests {
 
         host.Start(listen: "127.0.0.1:0");
 
-        using var testCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-
-        testCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 5));
-
+        using var testCts = Laws.SocketDeadline();
         var testCt = testCts.Token;
         var marker = "ATTACKER-SUPPLIED-MARKER-3ee19c";
         var malformedBody = new byte[] { 5 }.Concat(second: System.Text.Encoding.UTF8.GetBytes(s: marker)).ToArray();
@@ -248,10 +240,7 @@ public sealed class AdmissionSecurityLawTests {
 
         host.Start(listen: "127.0.0.1:0");
 
-        using var testCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-
-        testCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 5));
-
+        using var testCts = Laws.SocketDeadline();
         var testCt = testCts.Token;
         var claim = new byte[] { 1, 2, 3, 4 };
         var claimEnvelope = new byte[sizeof(uint) + claim.Length];
@@ -283,10 +272,7 @@ public sealed class AdmissionSecurityLawTests {
 
         host.Start(listen: "127.0.0.1:0");
 
-        using var testCts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-
-        testCts.CancelAfter(delay: TimeSpan.FromSeconds(value: 5));
-
+        using var testCts = Laws.SocketDeadline();
         var testCt = testCts.Token;
 
         using var client = new TcpClient();
@@ -320,7 +306,7 @@ public sealed class AdmissionSecurityLawTests {
             AdmittedPeer admitted;
 
             try {
-                using var connectCts = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+                using var connectCts = Laws.SocketDeadline();
 
                 admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: connectCts.Token);
             } finally {
@@ -380,7 +366,7 @@ public sealed class AdmissionSecurityLawTests {
             AdmittedPeer admitted;
 
             try {
-                using var connectCts = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+                using var connectCts = Laws.SocketDeadline();
 
                 admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: connectCts.Token);
             } finally {
@@ -433,7 +419,7 @@ public sealed class AdmissionSecurityLawTests {
             AdmittedPeer admitted;
 
             try {
-                using var connectCts = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+                using var connectCts = Laws.SocketDeadline();
 
                 admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: connectCts.Token);
             } finally {
@@ -487,7 +473,7 @@ public sealed class AdmissionSecurityLawTests {
             var pumpTask = RunPumpAsync(fixture: fixture, host: host, ct: pumpCts.Token);
 
             try {
-                using var requestCts = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+                using var requestCts = Laws.SocketDeadline();
                 var admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: requestCts.Token);
 
                 using (admitted.Client) {
@@ -698,7 +684,7 @@ public sealed class AdmissionSecurityLawTests {
             AdmittedPeer admitted;
 
             try {
-                using var connectCts = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+                using var connectCts = Laws.SocketDeadline();
 
                 admitted = await ConnectAndAdmitAsync(host: host, identity: identity, ct: connectCts.Token).ConfigureAwait(continueOnCapturedContext: false);
             } finally {

@@ -175,7 +175,7 @@ public sealed class FederationTransferLawTests {
         using var host = new WorldTcpHost(server: fixture.Server, federationSecurity: security);
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+        using var timeout = Laws.SocketDeadline();
 
         using (var attacker = new TcpClient()) {
             await attacker.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
@@ -236,7 +236,7 @@ public sealed class FederationTransferLawTests {
         using var host = new WorldTcpHost(server: fixture.Server, federationSecurity: security);
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(value: 5));
+        using var timeout = Laws.SocketDeadline();
         using var client = new TcpClient();
         await client.ConnectAsync(address: endpoint.Address, port: endpoint.Port, cancellationToken: timeout.Token);
         var stream = client.GetStream();
@@ -668,8 +668,16 @@ public sealed class FederationTransferLawTests {
         };
     }
 
+    // A budget expiry and a refusal must never read alike: the first says the machine never scheduled this exchange
+    // within Laws.SocketBudget, the second is the law's own subject matter.
     private static async Task<WorldWireFrameRead> RequireFrameAsync(NetworkStream stream, CancellationToken ct) {
-        var read = await WorldFederationCodec.ReadResponseAsync(stream: stream, ct: ct);
+        WorldWireFrameRead read;
+
+        try {
+            read = await WorldFederationCodec.ReadResponseAsync(stream: stream, ct: ct);
+        } catch (OperationCanceledException) {
+            throw new Xunit.Sdk.XunitException($"no federation response frame arrived within the {Laws.SocketBudget.TotalSeconds:0}s socket budget");
+        }
 
         return (read.Ok ? read : throw new Xunit.Sdk.XunitException($"federation peer answered no response frame ({read.Failure})"));
     }
