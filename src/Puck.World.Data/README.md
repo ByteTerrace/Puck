@@ -1,7 +1,10 @@
 # Puck.World.Data — the document model and the wire protocol
 
-This project holds the SHAPE of the world game: the two versioned JSON document
-families that describe a world and a player, and the protocol vocabulary
+This project holds the SHAPE of the world game: the versioned JSON document
+families that describe a world and a player — plus the two egress families,
+`puck.world.projection.v1` (`WorldProjection.cs`) and `puck.world.counterpart.v1`
+(`WorldCounterpartAttestation.cs`), which are what a world hands a peer instead
+of itself — and the protocol vocabulary
 (`Protocol/`) that every submission into — and every delivery out of — the
 authoritative server travels as. It contains no rendering, no input handling,
 and no server logic; it exists so the data the simulation runs on cannot
@@ -635,6 +638,38 @@ mutation (`UpsertWorldRule`/`RemoveWorldRule`, `Mutate`/`section:rules`); a
 rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
 predicate exempts STRUCTURALLY — the same standing a per-body `ActionEffect`
 always had.
+
+## The egress documents — what leaves an authority
+
+`WorldDisclosureTier` (`Protocol/WorldAdmission.cs`) has three members:
+`frames` (no document), `presentation`, `replica` (the world document verbatim,
+hash-identical). An `admission` row authors it as `disclosure`; absent resolves
+to `presentation` through `WorldAdmissionEntry.Tier`, and the door carries the
+decision on `WorldAdmissionVerdict.Tier`. A `frames` row that mints grants
+refuses by name — a peer with nothing to address them against.
+
+`WorldProjection.Compose` is the one egress composer, answering `null` outside
+`presentation` so a replica caller serializes the definition itself.
+`WorldProjectionDocument` is not a `WorldDefinition` with holes: it is its own
+record, and its member list IS the disclosure decision. It has no member for
+`rules`, `grants`, `state`, `market`, `admission`, `generation`, `generators`,
+`groups`, `properties`, `addons`, `storage`, `host`, `authoring`, `identity`,
+`inputHold`, `targetRegisters`, `bodyMotionPrograms`, or `portals`, and its
+`WorldProjectedKit` has none for a kit's `producers`/`actions`.
+`ToDefinition` hydrates one back into a `WorldDefinition` with neutral defaults
+for what was withheld, so no receiving consumer changed type.
+
+`WorldCounterpartAttestation` is a neighbour's signed statement of its seam
+edges plus the five `WorldOverlapTerms` the overlap derivation reads from its
+side. `WorldCounterpartCarriage` signs and verifies it against the reading
+world's own `admission` keys, and `WorldNeighbourResolution.Attested` is how a
+resolver hands one to `WorldDefinitionValidator`.
+
+`WorldIdentityProjection` (`WorldIdentity.cs`) is what an identity discloses
+when it walks into another authority: id, name, colour, and the two motion
+rates. `WorldObserverDisclosure` (`population.disclosure`) is the per-observer
+snapshot policy, applied at the output hub's sink boundary and defaulting to
+disclose-all.
 
 ## `Protocol/` — the wire vocabulary
 

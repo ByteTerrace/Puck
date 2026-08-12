@@ -442,25 +442,83 @@ public static class WorldFederationCodec {
         return Finish(reader: ref reader, failure: out failure);
     }
 
-    /// <summary>Encodes the destination's canonical definition revision.</summary>
-    /// <param name="definition">The definition.</param>
+    /// <summary>Encodes what <paramref name="tier"/> authorizes a peer to receive of the authority's document: a
+    /// <c>puck.world.projection.v1</c> document at <see cref="WorldDisclosureTier.Presentation"/>, the definition
+    /// verbatim at <see cref="WorldDisclosureTier.Replica"/>. The leading byte is the tier, so a receiver names what
+    /// it was handed rather than inferring it from the content.</summary>
+    /// <param name="definition">The authority's live document.</param>
+    /// <param name="tier">The tier the admission door decided for this peer.</param>
+    /// <param name="authority">The composing authority's addressable namespace.</param>
+    /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeDefinition(WorldDefinition definition) => WorldDefinitionSerialization.Serialize(definition: definition);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tier"/> is
+    /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
+    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision) {
+        var payload = ((WorldProjection.Compose(definition: definition, tier: tier, authority: authority, revision: revision) is { } projection)
+            ? WorldProjection.Serialize(projection: projection)
+            : ((tier == WorldDisclosureTier.Replica)
+                ? WorldDefinitionSerialization.Serialize(definition: definition)
+                : throw new ArgumentOutOfRangeException(paramName: nameof(tier), actualValue: tier, message: "a frames-tier peer receives no document")));
+        var bytes = new byte[payload.Length + 1];
 
-    /// <summary>Decodes a canonical definition revision.</summary>
+        bytes[0] = (byte)tier;
+        payload.CopyTo(array: bytes, index: 1);
+
+        return bytes;
+    }
+
+    /// <summary>Decodes a tier-tagged document leaf, hydrating a projection into a locally-valid definition.</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="definition">The definition on success.</param>
+    /// <param name="tier">The tier the leaf declared.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeDefinition(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldWireFailure failure) {
-        if (body.Length > WorldWireLimits.MaxDocumentBytes) {
-            definition = null;
-            failure = new WorldWireFailure(Refusal: WorldWireRefusal.PayloadTooLarge, Detail: $"definition is {body.Length} bytes; cap is {WorldWireLimits.MaxDocumentBytes}");
+    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDisclosureTier tier, out WorldWireFailure failure) {
+        definition = null;
+        tier = WorldDisclosureTier.Frames;
+
+        if (body.Length < 1) {
+            failure = new WorldWireFailure(Refusal: WorldWireRefusal.PayloadTruncated, Detail: "a document leaf carries no disclosure tier byte");
 
             return false;
         }
 
-        return TryDeserializeDefinition(bytes: body.ToArray(), field: "definition", definition: out definition, failure: out failure);
+        if (body.Length > (WorldWireLimits.MaxDocumentBytes + 1)) {
+            failure = new WorldWireFailure(Refusal: WorldWireRefusal.PayloadTooLarge, Detail: $"document is {body.Length} bytes; cap is {WorldWireLimits.MaxDocumentBytes + 1}");
+
+            return false;
+        }
+
+        tier = (WorldDisclosureTier)body[0];
+
+        if (!Enum.IsDefined(value: tier)) {
+            failure = new WorldWireFailure(Refusal: WorldWireRefusal.EnumValueUnknown, Detail: $"document disclosure tier {body[0]} is not declared");
+
+            return false;
+        }
+
+        var payload = body[1..];
+
+        if (tier == WorldDisclosureTier.Replica) {
+            return TryDeserializeDefinition(bytes: payload.ToArray(), field: "definition", definition: out definition, failure: out failure);
+        }
+
+        if (tier == WorldDisclosureTier.Frames) {
+            failure = new WorldWireFailure(Refusal: WorldWireRefusal.PayloadMalformed, Detail: "a frames-tier leaf carries a document body");
+
+            return false;
+        }
+
+        if (!WorldProjection.TryDeserialize(utf8Json: payload, projection: out var projection, reason: out var reason) || (projection is null)) {
+            failure = new WorldWireFailure(Refusal: WorldWireRefusal.PayloadMalformed, Detail: reason);
+
+            return false;
+        }
+
+        definition = WorldProjection.ToDefinition(projection: projection);
+        failure = default;
+
+        return true;
     }
 
     /// <summary>Encodes one per-tick projection record.</summary>
@@ -553,10 +611,14 @@ public static class WorldFederationCodec {
         return Finish(reader: ref reader, failure: out failure);
     }
 
-    /// <summary>Encodes the final observable authority epoch for one traveler.</summary>
+    /// <summary>Encodes the final observable authority epoch for one traveler, disclosing the carried document at
+    /// <paramref name="tier"/>.</summary>
     /// <param name="route">The route description.</param>
+    /// <param name="tier">The tier the admission door decided for the asking peer.</param>
+    /// <param name="authority">The composing authority's addressable namespace.</param>
+    /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route) {
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision) {
         var writer = new WorldWireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
@@ -569,7 +631,7 @@ public static class WorldFederationCodec {
         writer.WriteByte(value: route.Look);
         writer.WriteByte(value: route.CatalogRig);
         writer.WriteNullableString(value: route.PlacementId);
-        writer.WriteBlock(value: EncodeDefinition(definition: route.Definition));
+        writer.WriteBlock(value: EncodeDocument(definition: route.Definition, tier: tier, authority: authority, revision: revision));
 
         return writer.ToArray();
     }
@@ -594,13 +656,13 @@ public static class WorldFederationCodec {
         var look = reader.ReadByte();
         var catalogRig = reader.ReadByte();
         var placementId = reader.ReadNullableString(field: "route placement id");
-        var definitionBytes = reader.ReadBlock(field: "route definition", maxBytes: WorldWireLimits.MaxDocumentBytes);
+        var definitionBytes = reader.ReadBlock(field: "route document", maxBytes: (WorldWireLimits.MaxDocumentBytes + 1));
 
         if (reader.Failed) {
             return Finish(reader: ref reader, failure: out failure);
         }
 
-        if (!TryDeserializeDefinition(bytes: definitionBytes, field: "route definition", definition: out var definition, failure: out failure) || (definition is null)) {
+        if (!TryDecodeDocument(body: definitionBytes, definition: out var definition, tier: out _, failure: out failure) || (definition is null)) {
             return false;
         }
 
@@ -626,7 +688,8 @@ public static class WorldFederationCodec {
         return Finish(reader: ref reader, failure: out failure);
     }
 
-    /// <summary>Encodes a reservation including each traveler's attested owned-world document.</summary>
+    /// <summary>Encodes a reservation including each traveler's identity projection — appearance and motion-envelope
+    /// claims alone, never the owned-world document behind them (see <see cref="WorldIdentityProjection"/>).</summary>
     /// <param name="request">The reservation request.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
@@ -664,7 +727,17 @@ public static class WorldFederationCodec {
             WriteIntentSource(writer: writer, source: member.Source);
             writer.WriteVector(value: member.BodyColor);
             writer.WriteByte(value: member.CatalogRig);
-            writer.WriteBlock(value: ((member.Identity?.Document is { } document) ? WorldDefinitionSerialization.Serialize(definition: document) : []));
+            writer.WriteBoolean(value: (member.Identity is not null));
+
+            if (member.Identity is { } identity) {
+                var projected = identity.Project();
+
+                writer.WriteString(value: projected.Id);
+                writer.WriteString(value: projected.Name);
+                writer.WriteString(value: projected.ColorHex);
+                writer.WriteFixed(value: projected.MoveSpeed);
+                writer.WriteFixed(value: projected.TurnSpeed);
+            }
         }
 
         return writer.ToArray();
@@ -709,11 +782,14 @@ public static class WorldFederationCodec {
         return Finish(reader: ref reader, failure: out failure);
     }
 
-    /// <summary>Encodes a reservation verdict.</summary>
+    /// <summary>Encodes a reservation verdict, disclosing the destination document at <paramref name="tier"/>.</summary>
     /// <param name="reply">The verdict.</param>
+    /// <param name="tier">The tier the admission door decided for the reserving peer.</param>
+    /// <param name="authority">The composing authority's addressable namespace.</param>
+    /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reply"/> is <see langword="null"/>.</exception>
-    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply) {
+    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply, WorldDisclosureTier tier, string authority, int revision) {
         ArgumentNullException.ThrowIfNull(argument: reply);
 
         var writer = new WorldWireWriter(capacity: 4096);
@@ -727,7 +803,7 @@ public static class WorldFederationCodec {
             writer.WriteInt32(value: slot);
         }
 
-        writer.WriteBlock(value: ((reply.DestinationDefinition is { } definition) ? WorldDefinitionSerialization.Serialize(definition: definition) : []));
+        writer.WriteBlock(value: ((reply.DestinationDefinition is { } definition) ? EncodeDocument(definition: definition, tier: tier, authority: authority, revision: revision) : []));
 
         return writer.ToArray();
     }
@@ -757,7 +833,7 @@ public static class WorldFederationCodec {
             slots[index] = reader.ReadInt32();
         }
 
-        var definitionBytes = reader.ReadBlock(field: "reservation reply definition", maxBytes: WorldWireLimits.MaxDocumentBytes);
+        var definitionBytes = reader.ReadBlock(field: "reservation reply document", maxBytes: (WorldWireLimits.MaxDocumentBytes + 1));
 
         if (reader.Failed) {
             return Finish(reader: ref reader, failure: out failure);
@@ -765,7 +841,7 @@ public static class WorldFederationCodec {
 
         WorldDefinition? definition = null;
 
-        if ((definitionBytes.Length > 0) && !TryDeserializeDefinition(bytes: definitionBytes, field: "reservation reply definition", definition: out definition, failure: out failure)) {
+        if ((definitionBytes.Length > 0) && !TryDecodeDocument(body: definitionBytes, definition: out definition, tier: out _, failure: out failure)) {
             return false;
         }
 
@@ -840,22 +916,25 @@ public static class WorldFederationCodec {
         var source = ReadIntentSource(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: $"traveler {ordinal + 1} body color");
         var catalogRig = reader.ReadByte();
-        var identityBytes = reader.ReadBlock(field: $"traveler {ordinal + 1} identity document", maxBytes: WorldWireLimits.MaxDocumentBytes);
+        WorldIdentity? identity = null;
+
+        if (reader.ReadBoolean()) {
+            var projection = new WorldIdentityProjection(
+                Id: reader.ReadRequiredString(field: $"traveler {ordinal + 1} identity id"),
+                Name: reader.ReadString(field: $"traveler {ordinal + 1} identity name"),
+                ColorHex: reader.ReadString(field: $"traveler {ordinal + 1} identity color"),
+                MoveSpeed: reader.ReadFixed(),
+                TurnSpeed: reader.ReadFixed());
+
+            if (!reader.Failed) {
+                identity = WorldIdentity.FromProjection(projection: in projection, defaults: defaults);
+            }
+        }
 
         if (reader.Failed) {
             failure = reader.Failure;
 
             return false;
-        }
-
-        WorldIdentity? identity = null;
-
-        if (identityBytes.Length > 0) {
-            if (!TryDeserializeDefinition(bytes: identityBytes, field: $"traveler {ordinal + 1} identity document", definition: out var definition, failure: out failure) || (definition is null)) {
-                return false;
-            }
-
-            identity = new WorldIdentity(document: definition, defaults: defaults);
         }
 
         member = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor, CatalogRig: catalogRig, Mobility: mobility);

@@ -2933,6 +2933,10 @@ public enum SeatActivationPolicy : byte {
 /// both-declared: <see cref="WorldPopulationDefaults"/> is a struct, so an authored <c>capacity: 128</c> and the C#
 /// default 128 are indistinguishable once parsed. When both are present the draw simply wins — a stated limitation,
 /// not a silent guess.</para></param>
+/// <param name="Disclosure">The per-observer snapshot disclosure policy (default null =
+/// <see cref="WorldObserverDisclosure.Default"/>, disclose-all) — read through <see cref="ObserverDisclosure"/>.
+/// Applied at the output hub's sink boundary, never inside the tick, so it changes what an observer is told and
+/// never what the simulation computes.</param>
 public readonly record struct WorldPopulationDefaults(
     IReadOnlyList<SeatActivationPolicy> SeatActivation,
     int NetworkPlayers,
@@ -2945,8 +2949,16 @@ public readonly record struct WorldPopulationDefaults(
     int Capacity = 128,
     float ReconnectGraceSeconds = 3.0f,
     // OPTIONAL — the authored-randomness facet over Capacity above (see the param docs).
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? CapacityDraw = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? CapacityDraw = null,
+    // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
+    // which is what every world authoring none delivers.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null
+) {
+    /// <summary>Gets the resolved per-observer snapshot disclosure policy — <see cref="Disclosure"/>, or
+    /// <see cref="WorldObserverDisclosure.Default"/> when this world authors none.</summary>
+    [JsonIgnore]
+    public WorldObserverDisclosure ObserverDisclosure => (Disclosure ?? WorldObserverDisclosure.Default);
+}
 
 /// <summary>One participant-specific input-hold override. An omitted body uses the section defaults. The compiled
 /// shape — <see cref="Ticks"/> is simulation ticks, the unit the runtime actually consumes. The document and the

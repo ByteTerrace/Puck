@@ -745,13 +745,24 @@ public sealed class WorldServer : IWorldServerHost {
     /// subscribing), so a second call adds a second subscriber rather than displacing the first.</summary>
     /// <param name="sink">The sink to deliver snapshots to.</param>
     /// <returns>A lease that detaches <paramref name="sink"/> when disposed — see
-    /// <see cref="WorldOutputHub.Subscribe"/> for the threading/idempotency contract. Disposal takes the sink out of
+    /// <see cref="WorldOutputHub.Subscribe(IClientSink)"/> for the threading/idempotency contract. Disposal takes the sink out of
     /// every future delivery; it never retracts what the primer or an earlier tick already delivered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    public IDisposable AttachSink(IClientSink sink) {
+    public IDisposable AttachSink(IClientSink sink) =>
+        AttachSink(sink: sink, disclosure: WorldSinkDisclosure.Full);
+
+    /// <summary>Attaches a sink whose snapshot deliveries are filtered by <paramref name="disclosure"/> — see
+    /// <see cref="AttachSink(IClientSink)"/> for the lifetime contract, which is identical. The attach primer is
+    /// filtered the same way an ordinary tick's delivery is, so a redacted sink never sees an unredacted first
+    /// frame.</summary>
+    /// <param name="sink">The sink to deliver snapshots to.</param>
+    /// <param name="disclosure">What this sink's observer is delivered.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
+    public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
-        var lease = m_output.Subscribe(sink: sink);
+        var lease = m_output.Subscribe(sink: sink, disclosure: in disclosure);
 
         // Both the definition and the primer go to the NEWLY attached sink only (not a hub-wide broadcast) — an
         // already-attached sink must not replay a stale definition/snapshot every time a later sink joins. Isolated
@@ -760,7 +771,17 @@ public sealed class WorldServer : IWorldServerHost {
         // reaches an ordinary tick delivery.
         try {
             sink.DeliverDefinition(definition: m_definition);
-            sink.DeliverSnapshot(snapshot: BuildPrimerSnapshot());
+
+            var primer = BuildPrimerSnapshot();
+
+            if (disclosure.IsFull) {
+                sink.DeliverSnapshot(snapshot: in primer);
+            } else {
+                var scratch = Array.Empty<EntitySnapshot>();
+                var redacted = WorldOutputHub.Redact(disclosure: in disclosure, snapshot: in primer, scratch: ref scratch);
+
+                sink.DeliverSnapshot(snapshot: in redacted);
+            }
         } catch (Exception exception) {
             Console.Error.WriteLine(value: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
             lease.Dispose();

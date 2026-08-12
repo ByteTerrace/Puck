@@ -5,6 +5,11 @@ public enum WorldNeighbourResolutionKind {
     /// <summary>The neighbour's document was reached and parsed.</summary>
     Resolved,
 
+    /// <summary>The neighbour did not hand over its document, but did attest what it declares at the shared seam —
+    /// enough to prove reciprocity, extents, frame, and overlap, and nothing else. A derived corner needs the
+    /// documents themselves and is not proven through an attested neighbour.</summary>
+    Attested,
+
     /// <summary>The neighbour could not be reached — not found, no permission, an unreachable endpoint, or any other
     /// transport fact. A first-class outcome rather than a thrown exception, because a zone is a separate authority
     /// that may run on a different host: unreachable is an ordinary answer, never a bug the caller works around.</summary>
@@ -15,10 +20,26 @@ public enum WorldNeighbourResolutionKind {
 /// storage type: a caller in <c>Puck.World.Data</c> knows only that a neighbour was reached (with its parsed
 /// document) or was not (with a named reason), never HOW the attempt was made.</summary>
 public readonly record struct WorldNeighbourResolution {
-    private WorldNeighbourResolution(WorldNeighbourResolutionKind kind, WorldDefinition? definition, string reason) {
+    private WorldNeighbourResolution(WorldNeighbourResolutionKind kind, WorldDefinition? definition, WorldCounterpartAttestation? attestation, string reason) {
         Kind = kind;
         Definition = definition;
+        Attestation = attestation;
         Reason = reason;
+    }
+
+    /// <summary>Gets the neighbour's signed seam attestation when <see cref="Kind"/> is
+    /// <see cref="WorldNeighbourResolutionKind.Attested"/>; otherwise <see langword="null"/>.</summary>
+    public WorldCounterpartAttestation? Attestation { get; }
+
+    /// <summary>Builds an attested outcome — the neighbour proved its half of the seam without handing over its
+    /// document.</summary>
+    /// <param name="attestation">The neighbour's verified attestation.</param>
+    /// <returns>The outcome.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="attestation"/> is <see langword="null"/>.</exception>
+    public static WorldNeighbourResolution Attested(WorldCounterpartAttestation attestation) {
+        ArgumentNullException.ThrowIfNull(argument: attestation);
+
+        return new WorldNeighbourResolution(kind: WorldNeighbourResolutionKind.Attested, definition: null, attestation: attestation, reason: string.Empty);
     }
 
     /// <summary>Gets whether the neighbour was reached.</summary>
@@ -38,7 +59,7 @@ public readonly record struct WorldNeighbourResolution {
     public static WorldNeighbourResolution Resolved(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return new WorldNeighbourResolution(kind: WorldNeighbourResolutionKind.Resolved, definition: definition, reason: string.Empty);
+        return new WorldNeighbourResolution(kind: WorldNeighbourResolutionKind.Resolved, definition: definition, attestation: null, reason: string.Empty);
     }
 
     /// <summary>Builds an unavailable outcome.</summary>
@@ -47,7 +68,7 @@ public readonly record struct WorldNeighbourResolution {
     public static WorldNeighbourResolution Unavailable(string reason) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: reason);
 
-        return new WorldNeighbourResolution(kind: WorldNeighbourResolutionKind.Unavailable, definition: null, reason: reason);
+        return new WorldNeighbourResolution(kind: WorldNeighbourResolutionKind.Unavailable, definition: null, attestation: null, reason: reason);
     }
 }
 

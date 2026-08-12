@@ -187,6 +187,7 @@ public static class WorldDefinitionValidator {
         ValidateDistribution(distribution: definition.Population.Distribution, path: "population.distribution", spawnPointIds: spawnPointIds, allowDisc: true, allowPoints: true, allowLattice: false, allowZeroDisc: false, errors: errors);
         ValidatePopulationVariation(variation: definition.Population.PeerVariation, path: "population.peerVariation", minIndex: WorldPopulationLimits.LocalSeatCount, errors: errors);
         ValidatePopulationVariation(variation: definition.Population.SeatVariation, path: "population.seatVariation", minIndex: 0, errors: errors);
+        ValidateObserverDisclosure(disclosure: definition.Population.Disclosure, errors: errors);
         ValidateSequence(sequence: definition.Population.PeerColors, path: "population.peerColors", minIndex: WorldPopulationLimits.LocalSeatCount, errors: errors, WorldSequence.Additive, WorldSequence.R1);
 
         // State validates BEFORE Kits and Hud: the rows-by-name map it returns is what a kit's own `generate` effect
@@ -1062,6 +1063,28 @@ public static class WorldDefinitionValidator {
             if (string.IsNullOrWhiteSpace(value: seatSpawns[index]) || !spawnPointIds.Contains(item: seatSpawns[index])) {
                 errors.Add(item: $"population.seatSpawns[{index}] '{seatSpawns[index]}' names no spawn point.");
             }
+        }
+    }
+
+    private static void ValidateObserverDisclosure(WorldObserverDisclosure? disclosure, List<string> errors) {
+        if (disclosure is not { } row) {
+            return;
+        }
+
+        if (!Enum.IsDefined(value: row.Mode)) {
+            errors.Add(item: $"population.disclosure.mode '{row.Mode}' is not defined.");
+
+            return;
+        }
+
+        if (row.Mode == WorldObserverDisclosureMode.Radius) {
+            if (row.Radius is not { } radius) {
+                errors.Add(item: "population.disclosure.radius is required for mode 'radius'.");
+            } else if (!float.IsFinite(f: radius) || (radius <= 0f)) {
+                errors.Add(item: $"population.disclosure.radius {radius} must be finite and positive.");
+            }
+        } else if (row.Radius is not null) {
+            errors.Add(item: $"population.disclosure.radius must be absent for mode '{row.Mode}' — only 'radius' reads one.");
         }
     }
 
@@ -2187,6 +2210,17 @@ public static class WorldDefinitionValidator {
 
             if ((row.Mode == WorldAdmissionTrustMode.FederatedAuthority) && (row.Subject is not null)) {
                 errors.Add(item: $"{path}.subject must be absent for mode 'federatedAuthority' — the row trusts an authority namespace, never one traveler it hands over.");
+            }
+
+            if ((row.Disclosure is { } disclosure) && !Enum.IsDefined(value: disclosure)) {
+                errors.Add(item: $"{path}.disclosure '{disclosure}' is not defined.");
+            }
+
+            // Frames is a legitimate authored tier for an observer that only ever receives pixels, but a peer that
+            // is minted anything it must act through needs at least the presentation document to resolve what it is
+            // acting on — a grant with nothing to address is a grant that can only fail at use.
+            if ((row.Disclosure == WorldDisclosureTier.Frames) && ((row.Grants ?? []).Count > 0)) {
+                errors.Add(item: $"{path}.disclosure 'frames' mints {(row.Grants ?? []).Count} grant(s) — a frames-tier peer receives no document to address them against.");
             }
 
             var grants = (row.Grants ?? []);
@@ -3598,6 +3632,11 @@ public static class WorldDefinitionValidator {
                 resolution = neighbours.Resolve(document: reference.Document);
                 resolutions[reference.Document] = resolution;
             }
+            if (resolution.Kind == WorldNeighbourResolutionKind.Attested) {
+                ValidateAttestedCounterpart(path: path, definition: definition, adjacency: adjacency, document: reference.Document, attestation: resolution.Attestation!, boundary: boundary, errors: errors);
+                continue;
+            }
+
             if (resolution.Kind != WorldNeighbourResolutionKind.Resolved) {
                 errors.Add(item: $"{path} cannot reach neighbour '{reference.Document}' — {resolution.Reason}.");
                 continue;
@@ -3635,6 +3674,50 @@ public static class WorldDefinitionValidator {
 
         if (proveNeighbours && (neighbours is not null)) {
             ValidateDerivedAdjacencyCorners(definition: definition, neighbours: neighbours, resolutions: resolutions, errors: errors);
+        }
+    }
+
+    // The same four per-fact proofs the resolved-document arm makes, from the counterpart's attested edges alone.
+    // A derived corner is deliberately not proven here: a corner is a claim about a THIRD authority, which this
+    // counterpart cannot attest on that authority's behalf.
+    private static void ValidateAttestedCounterpart(
+        string path,
+        WorldDefinition definition,
+        WorldAdjacency adjacency,
+        string document,
+        WorldCounterpartAttestation attestation,
+        WorldAdjacencyBoundary boundary,
+        List<string> errors
+    ) {
+        if (!string.Equals(a: attestation.Document, b: document, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"{path} attestation names document '{attestation.Document}', not '{document}'.");
+            return;
+        }
+
+        if (attestation.FindEdge(name: adjacency.Counterpart) is not { } counterpart) {
+            errors.Add(item: $"{path}.counterpart '{adjacency.Counterpart}' names no adjacency in neighbour '{document}'.");
+            return;
+        }
+
+        if (!string.Equals(a: counterpart.Counterpart, b: adjacency.Name.Value, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"{path} is not reciprocal — neighbour '{document}'/'{counterpart.Name}' points to '{counterpart.Counterpart}', not '{adjacency.Name}'.");
+        }
+
+        var localFrame = boundary.CompileFrame();
+        var neighbourFrame = counterpart.Boundary.CompileFrame();
+
+        if ((localFrame.HalfWidth != neighbourFrame.HalfWidth) || (localFrame.HalfHeight != neighbourFrame.HalfHeight)) {
+            errors.Add(item: $"{path}.boundary is {(double)localFrame.HalfWidth * 2:0.#####}x{(double)localFrame.HalfHeight * 2:0.#####}, but neighbour '{document}'/'{counterpart.Name}' is {(double)neighbourFrame.HalfWidth * 2:0.#####}x{(double)neighbourFrame.HalfHeight * 2:0.#####}.");
+        }
+
+        var worldUp = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+
+        if (WorldFrameIsometry.MapVector(value: worldUp, source: localFrame, destination: neighbourFrame) != worldUp) {
+            errors.Add(item: $"{path}.boundary and neighbour '{document}'/'{counterpart.Name}' do not preserve world up — body yaw/vertical state cannot cross this frame pair without loss.");
+        }
+
+        if (!WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: attestation.Overlap, depth: out _, reason: out var overlapReason)) {
+            errors.Add(item: $"{path} overlap cannot be derived — {overlapReason}.");
         }
     }
 

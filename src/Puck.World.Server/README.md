@@ -244,6 +244,21 @@ changes lane state. A lane inside its backoff window answers `LaneUnavailable`
 without touching a socket, which is what keeps a closed edge from stalling the
 source's tick.
 
+Every document this codec writes goes out at the connection's disclosure tier.
+`DisclosureFor` resolves it once per federation connection, through the same
+`WorldAdmissionDoor.TryAdmitArrival` arm that decides what an arriving traveler
+is minted; a namespace no `admission` row names gets `presentation`.
+`EncodeDocument` writes `[tier byte][document bytes]` — a projection below
+replica, the definition verbatim at replica — and `TryDecodeDocument` hydrates
+the projection back into a `WorldDefinition` so the route answer, the
+reservation reply, and the observation lane's `Definition` frame all keep their
+existing shapes. The reservation leaf carries a `WorldIdentityProjection`
+instead of the traveler's owned document.
+
+`StreamProjectionAsync` attaches its sink with the world's authored
+`population.disclosure` and no observer body index, so a narrowed policy
+delivers a remote observer nothing until one of its travelers lands here.
+
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
 silently reassign or deactivate a connected human's body — see "The entity

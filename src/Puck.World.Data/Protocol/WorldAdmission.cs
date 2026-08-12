@@ -28,6 +28,23 @@ public enum WorldAdmissionTrustMode : byte {
     FederatedAuthority,
 }
 
+/// <summary>How much of an authority's document a peer is authorized to receive. Decided once, at the admission
+/// door, and carried on <see cref="WorldAdmissionVerdict.Tier"/>; every remote egress reads it and nothing else
+/// decides disclosure.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldDisclosureTier>))]
+public enum WorldDisclosureTier : byte {
+    /// <summary>Pixels only. No document of any kind crosses.</summary>
+    Frames,
+
+    /// <summary>A <c>puck.world.projection.v1</c> document — what a visitor's client needs to render and be embodied.
+    /// The wire default: a peer whose admission entry authors no tier receives this.</summary>
+    Presentation,
+
+    /// <summary>The whole <c>puck.world.def.v1</c> document, verbatim — the sanctioned download. Authored
+    /// explicitly, never defaulted into.</summary>
+    Replica,
+}
+
 /// <summary>One capability a verified admission entry mints for the connecting peer once its identity checks out —
 /// the same fields <see cref="WorldGrant"/> carries for a Peer principal, minus <see cref="WorldGrant.Principal"/>
 /// itself (unknowable until <c>Server.WorldPopulation.TryAdmitRemotePeer</c> assigns the connection's body index and
@@ -62,10 +79,11 @@ public readonly record struct WorldAdmissionGrant(WorldCapability Capability, Gr
 /// authenticated federation authority's namespace — so no ingress can mint authority by assembling grant rows of its
 /// own.</summary>
 public sealed record WorldAdmissionVerdict {
-    internal WorldAdmissionVerdict(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates) {
+    internal WorldAdmissionVerdict(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier) {
         IdentityDomain = identityDomain;
         IdentitySubject = identitySubject;
         Templates = templates;
+        Tier = tier;
     }
 
     /// <summary>Gets the verified identity's domain.</summary>
@@ -76,6 +94,9 @@ public sealed record WorldAdmissionVerdict {
 
     /// <summary>Gets the admitting entry's own authored grant templates.</summary>
     public IReadOnlyList<WorldAdmissionGrant> Templates { get; }
+
+    /// <summary>Gets how much of this authority's document the admitted peer receives.</summary>
+    public WorldDisclosureTier Tier { get; }
 }
 
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world
@@ -104,7 +125,16 @@ public sealed record WorldAdmissionVerdict {
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate
 /// authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a
 /// socket open, but unable to submit anything the grant table would honor.</param>
-public sealed record WorldAdmissionEntry(string Domain, string? Subject, WorldAdmissionTrustMode Mode, string Algorithm, string PublicKey, IReadOnlyList<WorldAdmissionGrant> Grants) {
+/// <param name="Disclosure">How much of this world's document a peer verified under this entry receives (see
+/// <see cref="WorldDisclosureTier"/>). Absent resolves to <see cref="WorldDisclosureTier.Presentation"/>, so an
+/// entry authored before this field existed keeps a projection-only wire and nothing has to be edited to stay
+/// closed. <see cref="WorldDisclosureTier.Replica"/> is reachable only by authoring it.</param>
+public sealed record WorldAdmissionEntry(string Domain, string? Subject, WorldAdmissionTrustMode Mode, string Algorithm, string PublicKey, IReadOnlyList<WorldAdmissionGrant> Grants, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null) {
+    /// <summary>Gets the tier this entry mints — <see cref="Disclosure"/>, or
+    /// <see cref="WorldDisclosureTier.Presentation"/> when it authors none.</summary>
+    [JsonIgnore]
+    public WorldDisclosureTier Tier => (Disclosure ?? WorldDisclosureTier.Presentation);
+
     /// <summary>The <see cref="Domain"/> value a <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> row uses to
     /// name every authority that completes the federation handshake rather than one namespace.</summary>
     public const string AnyAuthority = "*";

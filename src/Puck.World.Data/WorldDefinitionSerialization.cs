@@ -38,6 +38,10 @@ namespace Puck.World;
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
 [JsonSerializable(typeof(WorldDefinition))]
+// puck.world.projection.v1 — the egress document (see WorldProjection). It rides this same context deliberately:
+// one strictness policy, one enum regime, one Vector3 spelling for both document families.
+[JsonSerializable(typeof(WorldProjectionDocument))]
+[JsonSerializable(typeof(WorldProjectedKit))]
 // The row shapes the runtime mutation verbs parse as ONE inline-JSON argument — the same wire shape as the document
 // section, so an editor/agent speaks one grammar. Every one is reachable from WorldDefinition already; these entries
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
@@ -150,6 +154,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldInteraction))]
 [JsonSerializable(typeof(WorldAdjacency))]
 [JsonSerializable(typeof(WorldAdjacencyBoundary))]
+// The signed border claim's payload shape — a separate document family, sharing this context's strictness and
+// Vector3/enum spellings so a boundary reads identically here and in the world document.
+[JsonSerializable(typeof(WorldCounterpartAttestation))]
 [JsonSourceGenerationOptions(
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>

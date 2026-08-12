@@ -46,13 +46,28 @@ closes. Authors declare topology and physical envelopes, not safety margins.
 
 `WorldAdjacencyPolicy.TryDeriveOverlap` derives a symmetric overlap from both
 worlds' body reach, interaction/target reach, closing-speed ceilings, and two
-periods of the slower simulation rate, rounding outward in fixed point.
+periods of the slower simulation rate, rounding outward in fixed point. Those
+five inputs are `WorldOverlapTerms`, and the overload taking them derives the
+same depth from a neighbour that never handed over its document.
 `WorldFrameIsometry` is the one point/vector/orientation mapping used by
 crossing, contact, transfer, and presentation. `MapArrival` is the one arrival
 function portal furniture and invisible borders share: it anchors on the two
 frames' own origins, so an off-centre crossing lands at its counterpart point by
 the isometry rather than by a seam carried beside the traveler, and it adds one
 wrapped yaw delta to the traveler's own unbounded accumulator.
+
+An `IWorldNeighbourResolver` may answer `Resolved` (the whole document),
+`Attested` (a `WorldCounterpartAttestation` — the neighbour's seam edges plus
+its overlap terms, signed through `WorldCounterpartCarriage` and verified
+against the reading world's own `admission` keys), or `Unavailable`. The
+attested arm proves the same four per-fact refusals the document arm does:
+missing reverse edge, non-reciprocal counterpart, mismatched extents, and a
+frame pair that loses world up. A DERIVED CORNER is a claim about a third
+authority a counterpart cannot make on its behalf, so the corner walk still
+requires resolved documents and simply skips an attested neighbour.
+`WorldStorageNeighbourResolver` reduces the fetched cloud copy to an
+attestation before answering; the local composite resolver still resolves
+documents, which is what keeps the quilt's corner derivation provable.
 
 The five quilt documents are the worked stress example: four coloured ground
 worlds meet at one corner and `quilt-island` is vertically adjacent to all

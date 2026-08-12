@@ -83,6 +83,10 @@ public static class WorldAdmissionDoor {
         /// <summary>Gets the admitting entry's own authored grant templates, when admitted.</summary>
         public IReadOnlyList<WorldAdmissionGrant>? Grants => Verdict?.Templates;
 
+        /// <summary>Gets how much of this world's document the admitted peer receives; on refusal,
+        /// <see cref="WorldDisclosureTier.Frames"/> — a refused peer receives no document at all.</summary>
+        public WorldDisclosureTier Tier => (Verdict?.Tier ?? WorldDisclosureTier.Frames);
+
         /// <summary>Builds a refusal outcome.</summary>
         public static AdmissionOutcome Refuse(WorldAdmissionRefusal refusal, string detail) => new(Admitted: false, Refusal: refusal, Detail: detail, Verdict: null);
 
@@ -118,22 +122,18 @@ public static class WorldAdmissionDoor {
             return AdmissionOutcome.Refuse(WorldAdmissionRefusal.NoAdmissionEntries, "this world authors no key-bearing admission entries; no remote peer can ever verify");
         }
 
-        TrustList trustList;
-
-        try {
-            trustList = BuildTrustList(entries: rows);
-        } catch (Exception exception) when (exception is FormatException or ArgumentException or CryptographicException) {
-            // The document validator already refuses a malformed admission row at load (base64 shape, algorithm,
-            // self-certification), so this is a defensive backstop against a document that somehow reached this
-            // door without crossing that gate — but a backstop that throws past its own caller is not one.
-            return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChainRefused, $"this world's authored admission entries do not form a valid trust list: {exception.Message}");
+        // The document validator already refuses a malformed admission row at load (base64 shape, algorithm,
+        // self-certification), so a build failure here is a backstop against a document that somehow reached this
+        // door without crossing that gate — and a backstop that throws past its own caller is not one.
+        if (!TryBuildTrustList(entries: rows, trustList: out var trustList, reason: out var trustReason)) {
+            return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChainRefused, trustReason);
         }
 
         var result = CarriageVerifier.VerifyChain(
             codec: codec,
             claim: claim,
             chain: chain,
-            trustList: trustList,
+            trustList: trustList!,
             now: now,
             expectedPurpose: Purpose,
             expectedAudience: Audience,
@@ -182,7 +182,7 @@ public static class WorldAdmissionDoor {
             }
 
             if (string.Equals(a: entry.Domain, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: entry.Grants);
+                verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: entry.Grants, tier: entry.Tier);
 
                 return null;
             }
@@ -192,7 +192,7 @@ public static class WorldAdmissionDoor {
         }
 
         if (wildcard is { } any) {
-            verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: any.Grants);
+            verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: any.Grants, tier: any.Tier);
 
             return null;
         }
@@ -221,7 +221,7 @@ public static class WorldAdmissionDoor {
                 var matchesVouching = ((entry.Mode == WorldAdmissionTrustMode.Vouches) && string.Equals(a: entry.Domain, b: domain, comparisonType: StringComparison.Ordinal));
 
                 if (matchesDirect || matchesVouching) {
-                    verdict = new WorldAdmissionVerdict(identityDomain: (domain ?? string.Empty), identitySubject: (subject ?? string.Empty), templates: entry.Grants);
+                    verdict = new WorldAdmissionVerdict(identityDomain: (domain ?? string.Empty), identitySubject: (subject ?? string.Empty), templates: entry.Grants, tier: entry.Tier);
 
                     return true;
                 }
@@ -239,6 +239,35 @@ public static class WorldAdmissionDoor {
     // WorldAdmissionEntry.Grants, resolved directly into WorldGrant rows once a peer is admitted. Reusing Reach for
     // that would be the SAME decision expressed twice in two different string vocabularies, free to drift apart.
     private static readonly IReadOnlySet<string> s_noReach = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+    /// <summary>Builds the trust list this world's key-bearing admission entries form, refusing by name rather than
+    /// throwing. The seam a second consumer of the same trust decision uses — a counterpart's border attestation is
+    /// believed on the same keys a connection is.</summary>
+    /// <param name="entries">The document's <c>admission</c> rows.</param>
+    /// <param name="trustList">The trust list on success.</param>
+    /// <param name="reason">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the entries form a valid trust list with at least one key-bearing row.</returns>
+    public static bool TryBuildTrustList(IReadOnlyList<WorldAdmissionEntry>? entries, out TrustList? trustList, out string reason) {
+        trustList = null;
+
+        if ((entries is not { Count: > 0 } rows) || !rows.Any(predicate: static entry => (entry.Mode != WorldAdmissionTrustMode.FederatedAuthority))) {
+            reason = "this world authors no key-bearing admission entries; no signed claim can ever verify";
+
+            return false;
+        }
+
+        try {
+            trustList = BuildTrustList(entries: rows);
+        } catch (Exception exception) when (exception is FormatException or ArgumentException or CryptographicException) {
+            reason = $"this world's authored admission entries do not form a valid trust list: {exception.Message}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
 
     private static TrustList BuildTrustList(IReadOnlyList<WorldAdmissionEntry> entries) {
         var list = new List<TrustListEntry>(capacity: entries.Count);

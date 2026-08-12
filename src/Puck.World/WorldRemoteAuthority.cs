@@ -90,6 +90,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     private long m_lastObservedTickBits;
     private string m_authority = string.Empty;
     private WorldDefinition m_definition;
+    // Frames is the "nothing observed yet" value, so the first delivered document always narrates its tier once.
+    private WorldDisclosureTier m_observedTier = WorldDisclosureTier.Frames;
 
     public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
         if (!IPEndPoint.TryParse(endpoint, out var parsed)) {
@@ -529,10 +531,15 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
             switch ((WorldFederationResponse)frame.Kind) {
                 case WorldFederationResponse.Definition: {
-                        if (!WorldFederationCodec.TryDecodeDefinition(body: frame.Body, definition: out var definition, failure: out var definitionFailure) || (definition is null)) {
+                        if (!WorldFederationCodec.TryDecodeDocument(body: frame.Body, definition: out var definition, tier: out var definitionTier, failure: out var definitionFailure) || (definition is null)) {
                             Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]");
 
                             return false;
+                        }
+
+                        if (definitionTier != m_observedTier) {
+                            m_observedTier = definitionTier;
+                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]");
                         }
 
                         Volatile.Write(ref m_definition, definition);

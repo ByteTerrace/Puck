@@ -98,7 +98,7 @@ public sealed class FederationTransferLawTests {
             PlacementId: "traveler-shell",
             Definition: Fixtures.BuildDocument());
 
-        var encoded = WorldFederationCodec.EncodeRoute(route: in expected);
+        var encoded = WorldFederationCodec.EncodeRoute(route: in expected, tier: WorldDisclosureTier.Replica, authority: "world/corner-sw", revision: 0);
 
         Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: encoded, route: out var actual, failure: out var failure), userMessage: failure.ToString());
         Assert.Equal(expected: expected.Endpoint, actual: actual.Endpoint);
@@ -620,7 +620,7 @@ public sealed class FederationTransferLawTests {
     }
 
     [Fact]
-    public void ReservationWire_RefusesAnUndecodableTravelerDocumentByName() {
+    public void ReservationWire_RefusesAnUndecodableTravelerIdentityByName() {
         using var fixture = Fixtures.FreshServer();
         var writer = new WorldWireWriter();
 
@@ -642,12 +642,13 @@ public sealed class FederationTransferLawTests {
         writer.WriteByte(value: 1);
         writer.WriteVector(value: Vector3.Zero);
         writer.WriteByte(value: 0);
-        writer.WriteBlock(value: "{ not a world document"u8);
+        // The traveler declares an identity and then supplies no id for it.
+        writer.WriteBoolean(value: true);
+        writer.WriteString(value: string.Empty);
 
         Assert.False(condition: WorldFederationCodec.TryDecodeReservation(body: writer.ToArray(), defaults: fixture.Server.Definition.PlayerDefaults, request: out var request, failure: out var failure));
         Assert.Null(@object: request);
-        Assert.Equal(expected: WorldWireRefusal.PayloadMalformed, actual: failure.Refusal);
-        Assert.Contains(expectedSubstring: "identity document", actualString: failure.Detail, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "identity id", actualString: failure.Detail, comparisonType: StringComparison.Ordinal);
     }
 
     private static WorldTransferReservationRequest Reservation(string sourceAuthority, ulong transferId, string border) =>

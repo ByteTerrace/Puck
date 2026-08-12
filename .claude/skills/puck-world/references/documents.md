@@ -1,14 +1,55 @@
 # The document families
 
-One versioned JSON family, owned by `src/Puck.World.Data`: `puck.world.def.v1`
-(`WorldDefinition.cs`) describes a world. An identity is not a separate
-schema — it is an ordinary `WorldDefinition` document carrying an `identity`
-section, one file per owned world (see "Owned-world identities" below). Every
-instance carries a root `Extensions` bag under
+Three versioned JSON families, all owned by `src/Puck.World.Data`.
+`puck.world.def.v1` (`WorldDefinition.cs`) describes a world. An identity is not
+a separate schema — it is an ordinary `WorldDefinition` document carrying an
+`identity` section, one file per owned world (see "Owned-world identities"
+below). The other two are EGRESS documents, never authored by hand and never
+loaded as a world: `puck.world.projection.v1` (`WorldProjection.cs`) and
+`puck.world.counterpart.v1` (`WorldCounterpartAttestation.cs`) — see
+"Disclosure" below. All three carry a root `Extensions` bag under
 `Puck.Abstractions.Documents.DocumentExtensionsPolicy`.
+
+## Disclosure — what leaves an authority
+
+`WorldDisclosureTier` (`Protocol/WorldAdmission.cs`) is the whole vocabulary:
+`frames` (no document), `presentation` (a `puck.world.projection.v1`
+document), `replica` (the `puck.world.def.v1` document verbatim, hash-identical
+— the sanctioned download). The tier is authored per `admission` row as
+`disclosure` and decided ONCE at the admission door; `WorldAdmissionVerdict.Tier`
+carries it, and every remote egress reads it and nothing else. An absent
+`disclosure` resolves to `presentation`
+(`WorldAdmissionEntry.Tier`), so no world already checked in hands out a
+replica. A `frames` row that also mints grants refuses by name.
+
+`WorldProjection.Compose(definition, tier, authority, revision)` is the one
+egress composer, answering `null` at `replica`/`frames` so the caller sends the
+definition verbatim or nothing. `WorldProjectionDocument`'s MEMBER LIST is the
+disclosure decision: it has no member for `rules`, `grants`, `state`, `market`,
+`admission`, `generation`, `generators`, `groups`, `properties`, `addons`,
+`storage`, `host`, `authoring`, `identity`, `inputHold`, `targetRegisters`,
+`bodyMotionPrograms`, or `portals`, and its `WorldProjectedKit` row has none for
+a kit's `producers`/`actions`. `adjacencies`/`destinations`/`references`/
+`interactions` DO cross: `WorldAdjacencyPolicy.TryDeriveOverlap` reads them from
+both sides of a seam and must derive the same depth on each.
+`WorldProjection.ToDefinition` hydrates a received projection back into a
+`WorldDefinition` (undisclosed sections take their neutral built-in defaults) so
+no downstream consumer changed type; a hydrated document is never saved,
+journaled, or an authority.
+
+On the wire a document leaf is `[tier byte][document bytes]`
+(`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), so a receiver names
+what it was handed rather than sniffing it — the observation lane narrates it
+once per tier change on stderr. A traveler's reservation carries a
+`WorldIdentityProjection` (id, name, colour, move/turn rate), never its owned
+document. `population.disclosure` (`WorldObserverDisclosure` — `all` (the
+unauthored default), `radius`, `selfOnly`) redacts snapshot ENTRIES per sink at
+`WorldOutputHub`, never inside the tick. Read back with `world.projection`,
+`world.peers`' tier column, and `world.admission`'s disclosure column.
 
 ## Contents
 
+- Disclosure — what leaves an authority
 - `puck.world.def.v1`
   - Authored randomness — SOURCE x SITE x MOMENT
 - The validator — the one thick gate

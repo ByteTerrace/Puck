@@ -5,6 +5,19 @@ using Puck.Maths;
 
 namespace Puck.World;
 
+/// <summary>
+/// What travels with an identity across a federation seam: the appearance a destination renders it with and the
+/// motion-envelope rates it claims. Everything else an owned world carries — chat allow-list grants, controller
+/// history, cross-game state rows, bindings, the private HUD panel — stays at home, so walking into a stranger's
+/// world discloses none of it.
+/// </summary>
+/// <param name="Id">The stable identity id.</param>
+/// <param name="Name">The display name.</param>
+/// <param name="ColorHex">The authored body color.</param>
+/// <param name="MoveSpeed">The claimed locomotion rate; the destination clamps it against its own kit envelope.</param>
+/// <param name="TurnSpeed">The claimed turn rate, clamped the same way.</param>
+public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
+
 /// <summary>A live identity backed by one owned <see cref="WorldDefinition"/>.</summary>
 public sealed class WorldIdentity {
     private readonly float m_noseFactor;
@@ -37,11 +50,11 @@ public sealed class WorldIdentity {
         m_neutralColor = defaults.NeutralColor;
     }
 
-    private WorldIdentity(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults) {
-        Id = name;
+    private WorldIdentity(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
+        Id = (id ?? name);
         Name = name;
-        ColorHex = defaults.NeutralColor;
-        Color = ParseColor(hex: ColorHex, fallbackHex: ColorHex);
+        ColorHex = (string.IsNullOrWhiteSpace(value: colorHex) ? defaults.NeutralColor : colorHex);
+        Color = ParseColor(hex: ColorHex, fallbackHex: defaults.NeutralColor);
         m_moveSpeed = moveSpeed;
         m_turnSpeed = turnSpeed;
         m_noseFactor = defaults.NoseFactor;
@@ -106,6 +119,30 @@ public sealed class WorldIdentity {
     /// <returns>The detached identity.</returns>
     public static WorldIdentity Pinned(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults) =>
         new(name: name, moveSpeed: moveSpeed, turnSpeed: turnSpeed, defaults: defaults);
+
+    /// <summary>Returns this identity as the projection that crosses a federation seam.</summary>
+    /// <returns>The projection.</returns>
+    public WorldIdentityProjection Project() =>
+        new(Id: Id, Name: Name, ColorHex: ColorHex, MoveSpeed: m_moveSpeed, TurnSpeed: m_turnSpeed);
+
+    /// <summary>Rebuilds an arriving traveler's identity from its projection alone — no owned document, so
+    /// <see cref="Document"/> is null and every durable read answers as it does for a
+    /// <see cref="Pinned"/> identity.</summary>
+    /// <param name="projection">The projection the wire carried.</param>
+    /// <param name="defaults">The destination's player defaults.</param>
+    /// <returns>The arriving identity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="defaults"/> is <see langword="null"/>.</exception>
+    public static WorldIdentity FromProjection(in WorldIdentityProjection projection, WorldPlayerDefaults defaults) {
+        ArgumentNullException.ThrowIfNull(argument: defaults);
+
+        return new WorldIdentity(
+            name: projection.Name,
+            moveSpeed: projection.MoveSpeed,
+            turnSpeed: projection.TurnSpeed,
+            defaults: defaults,
+            id: projection.Id,
+            colorHex: projection.ColorHex);
+    }
 
     /// <summary>Reads a durable value from the owned world's state section.</summary>
     /// <remarks>The row FIND is the shared <see cref="WorldDefinitionRows.FindStateRow"/>. The VALUE read stays here

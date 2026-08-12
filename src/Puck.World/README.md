@@ -50,9 +50,12 @@ namespace or `*`); `--connect-identity-dir <dir>`
 supplies the connecting client's own identity, and omitting it signs with a
 freshly minted, unregistered key so the door's refusal path is exercisable
 without a pre-arranged identity. `world.peers` echoes each connection's
-verified identity and mapped principal, plus an `arrivals:` group naming each
-transferred body and the authority its verdict was decided against;
-`world.admission` echoes the document's own authored entries.
+verified identity and mapped principal and disclosure tier, plus an `arrivals:`
+group naming each transferred body and the authority its verdict was decided
+against; `world.admission` echoes the document's own authored entries and each
+one's `disclosure`. `world.projection` echoes what this authority would hand a
+peer at each tier — the byte size and the section inventory — or at the tier a
+named federation namespace resolves to.
 
 Authority-to-authority projection and transfer additionally require
 `--federation-key-file <path>` on both processes. The file contains exactly 32

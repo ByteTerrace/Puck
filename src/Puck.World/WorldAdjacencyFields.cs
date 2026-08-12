@@ -6,7 +6,7 @@ namespace Puck.World;
 /// <summary>
 /// The composition root's <see cref="IWorldAdjacencySource"/>: resolves an authored adjacency over
 /// the same wire-shaped seam a picture-frame session screen already observes a destination through
-/// (<see cref="WorldInstanceHost.TryResolveObservedDestination"/> then <see cref="WorldServer.AttachSink"/>) — data a
+/// (<see cref="WorldInstanceHost.TryResolveObservedDestination"/> then <see cref="WorldServer.AttachSink(Protocol.IClientSink)"/>) — data a
 /// real network peer could equally have delivered, never a same-process shortcut into the neighbour's live server
 /// objects. One instance-bound source is consumed by both that authority's contact resolution
 /// (<see cref="WorldServer.Adjacencies"/>) and its boot-or-away render composition

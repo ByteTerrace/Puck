@@ -91,6 +91,10 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
         }
 
-        return WorldNeighbourResolution.Resolved(definition: WorldDefinitionMigrations.Apply(definition: parsed));
+        // The neighbour's document is reduced to its seam facts here and never handed to the validator: a cloud copy
+        // is fetched to prove a border, not to read a world.
+        return (WorldCounterpartAttestation.TryCompose(definition: WorldDefinitionMigrations.Apply(definition: parsed), document: document, attestation: out var attestation, reason: out var attestReason) && (attestation is not null)
+            ? WorldNeighbourResolution.Attested(attestation: attestation)
+            : WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' declares no attestable seam — {attestReason}"));
     }
 }

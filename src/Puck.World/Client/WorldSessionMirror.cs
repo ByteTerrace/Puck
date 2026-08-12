@@ -9,7 +9,7 @@ namespace Puck.World.Client;
 /// <summary>
 /// The session projection's client-side mirror — the "minimal client-side pose/state mirror" docs/vision.md's
 /// "Observation and display" names, attached to a destination instance's <c>WorldServer</c> under an
-/// <see cref="Server.WorldServer.AttachSink"/> lease exactly like any other client. It is deliberately not
+/// <see cref="Server.WorldServer.AttachSink(Protocol.IClientSink)"/> lease exactly like any other client. It is deliberately not
 /// <see cref="WorldClient"/>: that type also carries a <c>PlayerRoster</c>/seat table this observation-only mirror
 /// has no use for (the destination owns any arrived bodies; this observer owns no local seat table),
 /// grants/machine/action state it never
