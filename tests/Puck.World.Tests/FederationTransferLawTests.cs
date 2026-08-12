@@ -14,9 +14,14 @@ namespace Puck.World.Tests;
 /// <summary>Adversarial laws for the authority boundary and source-scoped transfer escrow.</summary>
 public sealed class FederationTransferLawTests {
     [Fact]
-    public void CommitWire_PreservesTheSelectedMotionProgram() {
+    public void CommitWire_PreservesTheSelectedMotionProgramAndTheCommitTimeProfile() {
+        using var fixture = Fixtures.FreshServer();
+        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to
+        // the destination, so a codec that never writes it gives federated crossings different semantics from
+        // colocated ones for the same transfer.
+        var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
-            Profile: null,
+            Profile: profile,
             HasMappedArrival: true,
             BodyMotionProgramName: "free",
             Position: new FixedVector3(FixedQ4816.One, FixedQ4816.FromInteger(value: 8), -FixedQ4816.One),
@@ -36,11 +41,13 @@ public sealed class FederationTransferLawTests {
 
         var encoded = WorldFederationCodec.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [expected]);
 
-        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, sourceAuthority: out var sourceAuthority, transferId: out var transferId, members: out var members, failure: out var failure), userMessage: failure.ToString());
+        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, defaults: fixture.Server.Definition.PlayerDefaults, sourceAuthority: out var sourceAuthority, transferId: out var transferId, members: out var members, failure: out var failure), userMessage: failure.ToString());
         Assert.Equal(expected: "source/world", actual: sourceAuthority);
         Assert.Equal(expected: 7UL, actual: transferId);
         var member = Assert.Single(collection: members);
         Assert.Equal(expected: "free", actual: member.BodyMotionProgramName);
+        Assert.Equal(expected: profile.Id, actual: member.Profile?.Id);
+        Assert.Equal(expected: profile.Name, actual: member.Profile?.Name);
         Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
         Assert.Equal(expected: FixedQ4816.One, actual: Assert.Single(collection: member.ActionContinuity.Channels).HeldValue);
         Assert.Equal(expected: FixedQ4816.One, actual: Assert.Single(collection: member.ActionContinuity.Registers).Value);
@@ -593,12 +600,14 @@ public sealed class FederationTransferLawTests {
 
     [Fact]
     public void CommitWire_RefusesTrailingBytesAndAnOverCountedCohortByName() {
+        using var fixture = Fixtures.FreshServer();
+        var defaults = fixture.Server.Definition.PlayerDefaults;
         var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
         var encoded = WorldFederationCodec.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [member]);
 
-        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, sourceAuthority: out _, transferId: out _, members: out _, failure: out var control), userMessage: control.ToString());
+        Assert.True(condition: WorldFederationCodec.TryDecodeCommit(body: encoded, defaults: defaults, sourceAuthority: out _, transferId: out _, members: out _, failure: out var control), userMessage: control.ToString());
 
-        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: [.. encoded, 0], sourceAuthority: out _, transferId: out _, members: out _, failure: out var trailing));
+        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: [.. encoded, 0], defaults: defaults, sourceAuthority: out _, transferId: out _, members: out _, failure: out var trailing));
         Assert.Equal(expected: WorldWireRefusal.PayloadTrailingBytes, actual: trailing.Refusal);
 
         var writer = new WorldWireWriter();
@@ -606,7 +615,7 @@ public sealed class FederationTransferLawTests {
         writer.WriteUInt64(value: 7UL);
         writer.WriteInt32(value: (WorldPopulationLimits.CapacityCeiling + 1));
 
-        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: writer.ToArray(), sourceAuthority: out _, transferId: out _, members: out _, failure: out var overCounted));
+        Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: writer.ToArray(), defaults: defaults, sourceAuthority: out _, transferId: out _, members: out _, failure: out var overCounted));
         Assert.Equal(expected: WorldWireRefusal.CountOutOfRange, actual: overCounted.Refusal);
     }
 

@@ -1107,6 +1107,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <param name="Border">The stable source border identity used by destination admission.</param>
     /// <param name="ScopeProofAlreadyVerified">Internal split-party marker: the parent already re-verified the
     /// frozen cohort's membership proof before creating one-member transactions against its one resolved target.</param>
+    /// <param name="Attempt">How many times a retryable capacity refusal has already re-queued this crossing.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -1130,8 +1131,14 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         bool PartyAllOrNothing,
         int? BorderCapacity,
         string Border,
-        bool ScopeProofAlreadyVerified = false
+        bool ScopeProofAlreadyVerified = false,
+        int Attempt = 0
     );
+
+    // How many times one crossing may be re-queued after a retryable (capacity) refusal before the refusal is
+    // treated as terminal. A work ceiling, not an authored feel parameter: an unbounded retry is a per-tick
+    // reservation attempt against a destination that has already said no.
+    private const int TransferRetryCeiling = 8;
 
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
@@ -1307,6 +1314,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     Console.Error.WriteLine(value: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]");
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
                     NoteResolvedTransferOutcome(transfer: in transfer, sourceName: pending.Transfer.SourceInstance, targetName: pending.TargetName, outcome: "aborted:in-doubt-resolved-missing");
+                    CloseAdjacencyAfterRefusal(transfer: in transfer, reason: $"'{pending.TargetName}' has no record of the reservation this crossing was committed against");
                     continue;
                 }
             } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
@@ -1579,6 +1587,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             sourceCrossingPoint: seamPosition,
             sourceFrame: hit.Frame,
             continuum: continuum,
+            fullPolicy: WorldTransferFullPolicy.Retry,
+            borderCapacity: hit.Adjacency.Capacity,
             border: $"adjacency/{hit.Adjacency.Name.Value}"
         );
 
@@ -1586,21 +1596,64 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     }
 
     private static void CloseAdjacency(WorldInstance instance, in AdjacencyEdgeHit hit, string reason) {
-        if (instance.Server.Population.EntryBody(index: hit.Seat) is not { } body) {
+        CloseAdjacencyEdge(
+            instance: instance,
+            adjacencyName: hit.Adjacency.Name.Value,
+            onUnavailable: hit.Adjacency.OnUnavailable,
+            seat: hit.Seat,
+            frame: hit.Frame,
+            boundaryPoint: hit.Frame.PointAt(u: hit.SeamU, v: hit.SeamV),
+            reason: reason);
+    }
+
+    // The authored `unavailable: closed` treatment, applied wherever a crossing fails for good: clamp the body one
+    // raw fixed-point unit inside the boundary it tried to leave through, drop outward velocity, press the authored
+    // channel once, and name the refusal. Clamping is what makes the refusal terminal — a body left standing beyond
+    // the ownership threshold re-satisfies the same edge on the very next scan (WorldAdjacencyRegion.Sweep answers
+    // Crossed for a body already outside), so a refusal that does not move it is a refusal per tick.
+    private static void CloseAdjacencyEdge(WorldInstance instance, string adjacencyName, string? onUnavailable, int seat, in WorldFaceFrame frame, FixedVector3 boundaryPoint, string reason) {
+        if (instance.Server.Population.EntryBody(index: seat) is not { } body) {
             return;
         }
 
         var inward = FixedQ4816.FromRawBits(value: 1L);
-        var closedPosition = (hit.Frame.PointAt(u: hit.SeamU, v: hit.SeamV) - (hit.Frame.Normal * inward));
-        body.Pose(position: closedPosition, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
+        body.Pose(position: (boundaryPoint - (frame.Normal * inward)), yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
         body.SetArrivalVelocity(planarVelocity: FixedVector3.Zero, verticalVelocity: FixedQ4816.Zero);
+        body.ClearPendingContinuum();
         var binding = "engine-only";
-        if ((hit.Adjacency.OnUnavailable is { } channel) &&
+        if ((onUnavailable is { } channel) &&
             instance.Server.Population.Channels.TryGetOrdinal(name: channel, ordinal: out var ordinal)) {
             body.PressChannel(ordinal: ordinal, value: FixedQ4816.One);
             binding = $"channel:{channel}";
         }
-        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{hit.Adjacency.Name}' seat {(hit.Seat + 1)} CLOSED ({reason}); response={binding}]");
+        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]");
+    }
+
+    // A drain-time refusal against an adjacency border, routed back to that border's own authored treatment. Portal
+    // furniture has no such treatment: a refused portal crossing leaves the traveler standing where it was, and the
+    // occupancy latch already stops the same door firing again.
+    private void CloseAdjacencyAfterRefusal(in PendingTransfer transfer, string reason) {
+        if ((transfer.AdjacencyCounterpart is null) ||
+            (transfer.SourceFrame is not { } frame) ||
+            !m_instances.TryGetValue(key: transfer.SourceInstance, value: out var instance) ||
+            (instance is null)) {
+            return;
+        }
+
+        const string prefix = "adjacency/";
+        var adjacencyName = (transfer.Border.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) ? transfer.Border[prefix.Length..] : transfer.Border);
+        var onUnavailable = WorldDefinitionRows.FindAdjacency(adjacencies: instance.Server.Definition.Adjacencies, name: adjacencyName)?.OnUnavailable;
+
+        foreach (var slot in (transfer.FrozenCohortSlots ?? [transfer.SourceSlot])) {
+            CloseAdjacencyEdge(
+                instance: instance,
+                adjacencyName: adjacencyName,
+                onUnavailable: onUnavailable,
+                seat: slot,
+                frame: in frame,
+                boundaryPoint: transfer.SourceCrossingPoint,
+                reason: reason);
+        }
     }
 
     // One edge-triggered portal hit, collected during a scan rather than acted on immediately — see
@@ -2459,6 +2512,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             }
 
             NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: string.Empty, outcome: $"refused-destination:{destinationReason}");
+            CloseAdjacencyAfterRefusal(transfer: in transfer, reason: destinationReason);
 
             return;
         }
@@ -2510,8 +2564,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         if (!reservation.Accepted) {
             var capacityRefusal = reservation.Reason.Contains(value: " is full ", comparisonType: StringComparison.Ordinal)
                 || reservation.Reason.Contains(value: "no free body index", comparisonType: StringComparison.Ordinal);
-            var willRetry = (capacityRefusal && (transfer.FullPolicy == WorldTransferFullPolicy.Retry));
-            var retryText = (willRetry ? "client will retry; no destination queue was created" : "terminal refusal; no queue was created");
+            var willRetry = (capacityRefusal && (transfer.FullPolicy == WorldTransferFullPolicy.Retry) && (transfer.Attempt < TransferRetryCeiling));
+            var retryText = (willRetry ? $"client will retry (attempt {(transfer.Attempt + 1)}/{TransferRetryCeiling}); no destination queue was created" : "terminal refusal; no queue was created");
             var reserveReason = $"'{targetName}' refused reservation ({reservation.Reason}; {retryText})";
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]");
 
@@ -2528,7 +2582,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 } else {
                     _ = m_appliedTransferHighWater.Remove(key: transfer.SourceInstance);
                 }
-                m_pendingTransfers.Enqueue(item: transfer);
+                m_pendingTransfers.Enqueue(item: (transfer with { Attempt = (transfer.Attempt + 1) }));
+            } else {
+                CloseAdjacencyAfterRefusal(transfer: in transfer, reason: reserveReason);
             }
 
             return;
@@ -2546,6 +2602,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({malformedReason}) — every source member remains attached]");
             if (spawned) { ReapIfEmpty(name: targetName); }
             NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: targetName, outcome: $"refused-reservation:{malformedReason}");
+            CloseAdjacencyAfterRefusal(transfer: in transfer, reason: malformedReason);
             return;
         }
 
@@ -2603,6 +2660,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 }
 
                 NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: targetName, outcome: $"refused-source-standing:{standingPrincipal.Describe()}");
+                CloseAdjacencyAfterRefusal(transfer: in transfer, reason: $"{standingPrincipal.Describe()} cannot leave — {standing.Denial}");
 
                 return;
             }
@@ -2757,6 +2815,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             }
 
             NoteResolvedTransferOutcome(transfer: in transfer, sourceName: transfer.SourceInstance, targetName: targetName, outcome: $"aborted:{abortReason}");
+            // The abort above already restored every member to its exact source pose — the party-atomicity contract.
+            // A crossing abort then clamps inside on top of that restore, because the restored pose is the pose that
+            // just left through the boundary.
+            CloseAdjacencyAfterRefusal(transfer: in transfer, reason: abortReason);
 
             return;
         }

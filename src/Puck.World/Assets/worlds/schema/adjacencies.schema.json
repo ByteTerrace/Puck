@@ -70,6 +70,14 @@
           "null"
         ],
         "default": null
+      },
+      "capacity": {
+        "description": "The maximum number of live bodies and outstanding reservations admitted through this border at once, or null to use the destination population\u0027s remaining capacity \u2014 the same policy Capacity gives portal furniture. A full border refuses the current attempt immediately; it never queues.",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [

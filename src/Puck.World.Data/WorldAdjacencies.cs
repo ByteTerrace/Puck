@@ -123,13 +123,18 @@ public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegr
 /// <param name="OnUnavailable">Optional declared channel pressed once on the body after the engine applies the
 /// failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback;
 /// ownership safety never depends on the binding.</param>
+/// <param name="Capacity">The maximum number of live bodies and outstanding reservations admitted through this
+/// border at once, or <see langword="null"/> to use the destination population's remaining capacity — the same
+/// policy <see cref="WorldPlacementPortal.Capacity"/> gives portal furniture. A full border refuses the current
+/// attempt immediately; it never queues.</param>
 public sealed record WorldAdjacency(
     WorldSafeName Name,
     string Destination,
     string Counterpart,
     WorldAdjacencyBoundary Boundary,
     WorldAdjacencyUnavailable Unavailable = WorldAdjacencyUnavailable.Closed,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
 );
 
 /// <summary>One body's deterministic sweep through an invisible ownership boundary.</summary>

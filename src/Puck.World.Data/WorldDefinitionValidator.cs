@@ -3581,6 +3581,9 @@ public static class WorldDefinitionValidator {
                 (string.IsNullOrWhiteSpace(value: onUnavailable) || !channels.TryGetOrdinal(name: onUnavailable, ordinal: out _))) {
                 errors.Add(item: $"{path}.onUnavailable '{onUnavailable}' names no declared channel.");
             }
+            if (adjacency.Capacity is { } borderCapacity) {
+                RequireIntRange(value: borderCapacity, min: 1, max: WorldPopulationLimits.CapacityCeiling, name: $"{path}.capacity", errors: errors);
+            }
             if (!proveNeighbours) {
                 continue;
             }

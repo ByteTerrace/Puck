@@ -800,10 +800,11 @@ public static class WorldFederationCodec {
     /// <param name="body">The leaf bytes.</param>
     /// <param name="sourceAuthority">The claimed source namespace.</param>
     /// <param name="transferId">The transfer id.</param>
+    /// <param name="defaults">The destination's own player defaults, applied to each carried identity document.</param>
     /// <param name="members">The landing cohort.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out WorldWireFailure failure) {
+    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, WorldPlayerDefaults defaults, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out WorldWireFailure failure) {
         var reader = new WorldWireReader(bytes: body);
 
         sourceAuthority = reader.ReadRequiredString(field: "commit source authority");
@@ -819,7 +820,7 @@ public static class WorldFederationCodec {
         members = new WorldTransferCommitMember[count];
 
         for (var index = 0; (index < count); index++) {
-            members[index] = ReadCommitMember(reader: ref reader);
+            members[index] = ReadCommitMember(reader: ref reader, defaults: defaults, ordinal: index);
         }
 
         return Finish(reader: ref reader, failure: out failure);
@@ -864,6 +865,7 @@ public static class WorldFederationCodec {
     }
 
     private static void WriteCommitMember(WorldWireWriter writer, WorldTransferCommitMember member) {
+        writer.WriteBlock(value: ((member.Profile?.Document is { } profileDocument) ? WorldDefinitionSerialization.Serialize(definition: profileDocument) : []));
         writer.WriteBoolean(value: member.HasMappedArrival);
         writer.WriteString(value: member.BodyMotionProgramName);
         writer.WriteFixedVector(value: member.Position);
@@ -902,7 +904,18 @@ public static class WorldFederationCodec {
         }
     }
 
-    private static WorldTransferCommitMember ReadCommitMember(ref WorldWireReader reader) {
+    private static WorldTransferCommitMember ReadCommitMember(ref WorldWireReader reader, WorldPlayerDefaults defaults, int ordinal) {
+        var profileBytes = reader.ReadBlock(field: $"commit traveler {ordinal + 1} identity document", maxBytes: WorldWireLimits.MaxDocumentBytes);
+        WorldIdentity? profile = null;
+
+        if (!reader.Failed && (profileBytes.Length > 0)) {
+            if (TryDeserializeDefinition(bytes: profileBytes, field: $"commit traveler {ordinal + 1} identity document", definition: out var profileDocument, failure: out _) && (profileDocument is not null)) {
+                profile = new WorldIdentity(document: profileDocument, defaults: defaults);
+            } else {
+                reader.Fail(refusal: WorldWireRefusal.PayloadMalformed, detail: $"commit traveler {ordinal + 1} identity document did not parse");
+            }
+        }
+
         var mapped = reader.ReadBoolean();
         var program = reader.ReadString(field: "commit body motion program");
         var position = reader.ReadFixedVector();
@@ -936,7 +949,7 @@ public static class WorldFederationCodec {
             continuum = ReadContinuum(reader: ref reader);
         }
 
-        return new WorldTransferCommitMember(null, mapped, program, position, yaw, planar, vertical, new WorldTransferActionContinuity(Channels: channels, Registers: registers), continuum);
+        return new WorldTransferCommitMember(profile, mapped, program, position, yaw, planar, vertical, new WorldTransferActionContinuity(Channels: channels, Registers: registers), continuum);
     }
 
     private static WorldContinuumTrajectory ReadContinuum(ref WorldWireReader reader) {

@@ -453,7 +453,7 @@ public sealed class WorldTcpHost : IDisposable {
     }
 
     private async Task<bool> ServeCommitAsync(NetworkStream stream, string sourceAuthority, byte[] body, CancellationToken ct) {
-        if (!WorldFederationCodec.TryDecodeCommit(body: body, sourceAuthority: out var carriedAuthority, transferId: out var transferId, members: out var members, failure: out var failure)) {
+        if (!WorldFederationCodec.TryDecodeCommit(body: body, defaults: m_server.Definition.PlayerDefaults, sourceAuthority: out var carriedAuthority, transferId: out var transferId, members: out var members, failure: out var failure)) {
             await WriteFederationRefusal(stream: stream, refusal: WorldFederationRefusal.FrameMalformed, detail: $"commit — {failure}", ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
             return true;
