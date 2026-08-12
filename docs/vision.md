@@ -241,6 +241,16 @@ derives one symmetric overlap depth from both bodies' reach, interaction/targeti
 slower-side delivery periods of closing speed, rounding outward — so weapon reach reaches topology
 at author time rather than in production.
 
+Ownership changes at the far side of a derived deadband, never at the authored plane, so an arrival
+starts that far inside its new writer and the reciprocal pair closes. The deadband is derived from
+whichever envelope the boundary's own geometry closes against — a wall against two body reaches plus
+contact skin, a floor or ceiling against one authority step of the vertical descent envelope plus
+contact skin, which is centimetre-scale and leaves ascent headroom intact. Neither is authored: a
+safety margin a world could set is a safety margin a world could set wrong. The floor case's
+separating property is that the deadband is larger than any descent nobody commanded and smaller
+than any descent somebody did, so a body settling onto ground just past a seam stays put while a
+body flown back down still crosses.
+
 Crossing maps a traveler through the pair's one isometry, which carries the exact in-plane point its
 swept segment crossed onto the counterpart's corresponding point — a property of the map, not of a
 seam plumbed beside the traveler — so an off-center crossing lands where it should and contiguous

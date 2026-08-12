@@ -210,16 +210,100 @@ public static class WorldAdjacencyPolicy {
     public const int DeliveryPeriods = 2;
 
     /// <summary>Returns the ownership threshold appropriate to a boundary's traversal geometry. A vertical wall
-    /// (world-up in its plane) can carry the full reciprocal deadband without obstructing ordinary grounded travel.
-    /// A floor/ceiling boundary must transfer at its authored plane: offsetting that threshold would delay ownership
-    /// until after an ascent has crossed solid destination terrain or exhausted its held traversal input.</summary>
+    /// (world-up in its plane) carries the full reciprocal contact hysteresis: ordinary grounded travel is horizontal,
+    /// so a deadband that wide costs nothing. A floor/ceiling boundary cannot carry that much — one body radius of
+    /// delayed ownership would put handoff after solid destination terrain, or past the end of a held ascent — so it
+    /// carries the much smaller <paramref name="verticalSettleDeadband"/> instead.</summary>
     /// <param name="frame">The compiled local boundary frame.</param>
     /// <param name="reciprocalHysteresis">The non-negative two-body contact hysteresis.</param>
-    /// <returns><paramref name="reciprocalHysteresis"/> for a vertical wall; zero for a floor/ceiling boundary.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="reciprocalHysteresis"/> is negative.</exception>
-    public static FixedQ4816 OwnershipThreshold(in WorldFaceFrame frame, FixedQ4816 reciprocalHysteresis) {
+    /// <param name="verticalSettleDeadband">The non-negative vertical settle deadband
+    /// (<see cref="TryVerticalSettleDeadband"/>).</param>
+    /// <returns><paramref name="reciprocalHysteresis"/> for a vertical wall;
+    /// <paramref name="verticalSettleDeadband"/> for a floor/ceiling boundary.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Either depth is negative.</exception>
+    public static FixedQ4816 OwnershipThreshold(in WorldFaceFrame frame, FixedQ4816 reciprocalHysteresis, FixedQ4816 verticalSettleDeadband) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: reciprocalHysteresis.Value);
-        return (frame.IsYawOnly ? reciprocalHysteresis : FixedQ4816.Zero);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: verticalSettleDeadband.Value);
+        return (frame.IsYawOnly ? reciprocalHysteresis : verticalSettleDeadband);
+    }
+
+    /// <summary>Derives the settle deadband a floor/ceiling ownership boundary must carry: strictly more than the
+    /// distance a body at rest can fall back through the authored plane in one of its own authority steps, plus the
+    /// contact skin the solver keeps between that body and every surface.</summary>
+    /// <remarks>
+    /// <para>The separating invariant: the deadband is larger than any uncommanded descent and smaller than any
+    /// commanded one. A settling body sags at most one step of gravity from rest and therefore never re-crosses; a
+    /// body driven or already falling downward clears the deadband inside one step and transfers. The two-body
+    /// contact envelope <see cref="TryReciprocalHysteresis"/> derives for a wall breaks the second half.</para>
+    /// <para>Per kit: the arm's gravity over one step, capped by its own terminal speed (a swimming arm declares no
+    /// acceleration, so its sink speed is the cap directly), carried over one more step to a distance. Every quotient
+    /// rounds outward and one raw unit is added last, so the result strictly exceeds the sag.</para>
+    /// </remarks>
+    /// <param name="definition">The document whose kits, contact skin, and authority rate bound the sag.</param>
+    /// <param name="depth">The derived deadband; zero when this returns <see langword="false"/>.</param>
+    /// <param name="reason">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the deadband is representable.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static bool TryVerticalSettleDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        depth = FixedQ4816.Zero;
+        var rate = Math.Max(val1: definition.SimulationRateHz, val2: 1);
+        var sagRaw = 0L;
+
+        foreach (var kit in definition.Kits) {
+            if (kit?.Motion is not { } motion) {
+                continue;
+            }
+
+            var (acceleration, terminalSpeed) = motion switch {
+                WorldMotionModel.Grounded grounded => (CeilingFixed(value: MathF.Abs(x: grounded.FallGravity)), CeilingFixed(value: MathF.Abs(x: grounded.MaxFallSpeed))),
+                WorldMotionModel.Vehicle vehicle => (CeilingFixed(value: MathF.Abs(x: vehicle.FallGravity)), CeilingFixed(value: MathF.Abs(x: vehicle.MaxFallSpeed))),
+                WorldMotionModel.Swim swim => (FixedQ4816.Zero, CeilingFixed(value: MathF.Abs(x: swim.MaxSinkSpeed))),
+                _ => (FixedQ4816.Zero, FixedQ4816.Zero),
+            };
+
+            // A swimming arm declares no acceleration, so its terminal sink speed IS the one-step speed.
+            var stepSpeed = terminalSpeed;
+
+            if (acceleration > FixedQ4816.Zero) {
+                if (!FixedDirectedRounding.TryCeilingQuotient(
+                    numerator: acceleration.Value,
+                    fractionBitsNumerator: FixedQ4816.FractionBitCount,
+                    denominator: rate,
+                    fractionBitsDenominator: 0,
+                    fractionBitsOut: FixedQ4816.FractionBitCount,
+                    result: out var acceleratedRaw)) {
+                    reason = $"kit '{kit.Name}' vertical acceleration exceeds the fixed-point range at {rate}Hz";
+                    return false;
+                }
+
+                stepSpeed = FixedQ4816.Min(x: terminalSpeed, y: new FixedQ4816(Value: acceleratedRaw));
+            }
+
+            if (!FixedDirectedRounding.TryCeilingQuotient(
+                numerator: stepSpeed.Value,
+                fractionBitsNumerator: FixedQ4816.FractionBitCount,
+                denominator: rate,
+                fractionBitsDenominator: 0,
+                fractionBitsOut: FixedQ4816.FractionBitCount,
+                result: out var kitSagRaw)) {
+                reason = $"kit '{kit.Name}' one-step vertical sag exceeds the fixed-point range at {rate}Hz";
+                return false;
+            }
+
+            sagRaw = Math.Max(val1: sagRaw, val2: kitSagRaw);
+        }
+
+        try {
+            var skin = CeilingFixed(value: MathF.Abs(x: definition.Collision.ContactSkin));
+            depth = new FixedQ4816(Value: checked(sagRaw + skin.Value + 1L));
+            reason = string.Empty;
+            return true;
+        } catch (OverflowException) {
+            reason = "the vertical settle deadband exceeds the fixed-point range";
+            return false;
+        }
     }
 
     /// <summary>Finds the diagonal document shared by two direct neighbours at a junction. Both neighbours must
@@ -330,16 +414,20 @@ public static class WorldAdjacencyPolicy {
         }
 
         if (!TryReciprocalHysteresis(definition: local, depth: out var localHysteresis, reason: out reason) ||
-            !TryReciprocalHysteresis(definition: neighbour, depth: out var neighbourHysteresis, reason: out reason)) {
+            !TryReciprocalHysteresis(definition: neighbour, depth: out var neighbourHysteresis, reason: out reason) ||
+            !TryVerticalSettleDeadband(definition: local, depth: out var localSettle, reason: out reason) ||
+            !TryVerticalSettleDeadband(definition: neighbour, depth: out var neighbourSettle, reason: out reason)) {
             return false;
         }
 
-        // Handoff occurs at the far side of this deadband, not at the authored plane. Contact and observation must
-        // therefore cover at least the larger side's threshold even when both worlds have low speed/reach settings
-        // whose delivery-latency term alone would derive a shallower overlap.
+        // Handoff occurs at the far side of whichever threshold the boundary's geometry selects, not at the authored
+        // plane. Contact and observation must therefore cover the larger side's threshold even when both worlds have
+        // low speed/reach settings whose delivery-latency term alone would derive a shallower overlap.
         depth = FixedQ4816.Max(
             x: new FixedQ4816(Value: depthRaw),
-            y: FixedQ4816.Max(x: localHysteresis, y: neighbourHysteresis));
+            y: FixedQ4816.Max(
+                x: FixedQ4816.Max(x: localHysteresis, y: neighbourHysteresis),
+                y: FixedQ4816.Max(x: localSettle, y: neighbourSettle)));
         reason = string.Empty;
         return true;
     }

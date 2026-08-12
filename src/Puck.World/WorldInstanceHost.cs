@@ -1377,6 +1377,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         var candidates = new List<AdjacencyEdgeHit>[population.Capacity];
         var heldSeats = HeldCrossingSeats(instance: instance);
         _ = WorldAdjacencyPolicy.TryReciprocalHysteresis(definition: instance.Server.Definition, depth: out var reciprocalHysteresis, reason: out _);
+        _ = WorldAdjacencyPolicy.TryVerticalSettleDeadband(definition: instance.Server.Definition, depth: out var verticalSettleDeadband, reason: out _);
 
         for (var seat = 0; !resolveOnly && (seat < population.Capacity); seat++) {
             var announced = m_announcedCrossingHolds.TryGetValue(key: (instance.Name, seat), value: out var announcedTransferId);
@@ -1401,7 +1402,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             }
 
             var frame = adjacency.Boundary.CompileFrame();
-            var ownershipThreshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in frame, reciprocalHysteresis: reciprocalHysteresis);
+            var ownershipThreshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in frame, reciprocalHysteresis: reciprocalHysteresis, verticalSettleDeadband: verticalSettleDeadband);
             for (var seat = 0; seat < population.Capacity; seat++) {
                 if (!population.IsActive(index: seat) || (population.EntryBody(index: seat) is not { } body)) {
                     continue;
@@ -1414,15 +1415,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 }
 
                 // A remotely committed arrival bypasses this host's FinalizeCommittedTransfer path, but escrow
-                // retains the authenticated source border on the destination authority. Handoff now occurs at the
-                // FAR side of the reciprocal hysteresis, so a mapped arrival starts at least this far inside the new
-                // owner. A floor/ceiling adjacency transfers at its authored plane because offsetting the threshold
-                // would put an ascent beyond its usable traversal interval; its zero threshold also re-arms the
-                // reciprocal edge from the mapped arrival point. Test both ends of this step: a genuine reversal
-                // may cross the whole deadband in one tick and must not be stranded outside its owner merely because
-                // its settled endpoint is outward again.
-                // On a wall, the positive threshold itself prevents the strongest legal contact correction from
-                // manufacturing a return; a plane-based boundary clears from its mapped inside arrival point.
+                // retains the authenticated source border on the destination authority. Handoff occurs at the far
+                // side of the boundary's own ownership threshold, so a mapped arrival starts at least that far
+                // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the much
+                // smaller vertical settle deadband. Test both ends of this step: a genuine reversal may cross the
+                // whole deadband in one tick and must not be stranded outside its owner merely because its settled
+                // endpoint is outward again.
                 if (instance.Server.TryTransferArrivalBorder(bodyIndex: seat, border: out var arrivalBorder) &&
                     string.Equals(a: arrivalBorder, b: $"adjacency/{adjacency.Counterpart}", comparisonType: StringComparison.Ordinal)) {
                     var previousOutward = FixedVector3.Dot(left: (body.FixedPreviousPosition - frame.Origin), right: frame.Normal);

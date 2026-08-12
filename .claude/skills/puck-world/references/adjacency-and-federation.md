@@ -84,24 +84,38 @@ input, audio, HUD, targeting, and read-backs consume that one route.
 `WorldContinuum` and adjacency presentation compare the full address; an
 authority string plus a recyclable index is not an identity.
 
-Reciprocal handoff across a vertical wall uses a true ownership deadband rather
-than transferring at the authored plane and merely suppressing the return edge
-afterward. A body remains with its current writer until its center reaches the
-far side of the overlap; the mapped arrival is therefore already fully inside
-the destination. The threshold comes from two maximum body reaches plus contact
-skin, so a legal cross-authority melee correction cannot manufacture an
-immediate return. Because that threshold moves a vertical ownership face
-outward, the runtime expands its horizontal half-width by the same threshold;
-otherwise two perpendicular faces leave an unowned threshold-by-threshold
-square at their corner and a diagonal traveler can escape both writers. The
-authored vertical aperture remains exact. A floor/ceiling adjacency transfers
-at its authored plane:
-offsetting that boundary would consume ascent headroom and can place handoff
-after solid destination terrain. Its mapped arrival immediately re-arms the
-zero-threshold reciprocal edge. The arrival-border latch remains a defense for
-federated delivery and observes both ends of the first destination step, so a
-genuine rapid reversal cannot run outside its owner while the reciprocal edge
-is disabled. Other edges remain eligible, including deterministic forwarding
+Every reciprocal handoff uses a true ownership deadband rather than transferring
+at the authored plane and merely suppressing the return edge afterward. A body
+remains with its current writer until its center reaches the far side of that
+deadband, so the mapped arrival is already that far inside the destination and
+the pair closes. The boundary's geometry selects which deadband
+(`WorldAdjacencyPolicy.OwnershipThreshold`):
+
+- A **vertical wall** carries the reciprocal contact hysteresis — two maximum
+  body reaches plus contact skin — so a legal cross-authority melee correction
+  cannot manufacture an immediate return. Because that threshold moves a
+  vertical ownership face outward, the runtime expands its horizontal half-width
+  by the same threshold; otherwise two perpendicular faces leave an unowned
+  threshold-by-threshold square at their corner and a diagonal traveler can
+  escape both writers. The authored vertical aperture remains exact.
+- A **floor/ceiling** boundary cannot carry that much: one body radius of delayed
+  ownership would consume ascent headroom and can place handoff after solid
+  destination terrain. It carries `TryVerticalSettleDeadband` instead — derived
+  per document from each kit's downward envelope (gravity over one authority
+  step, capped by terminal fall or sink speed) carried over one more step, plus
+  the contact skin, plus one raw unit, every quotient rounded outward. It is a
+  centimetre-scale distance, not a body radius. The separating invariant: larger
+  than any uncommanded descent, smaller than any commanded one — a settling
+  arrival never re-crosses its own reciprocal edge under gravity alone, and a
+  body driven or already falling downward clears the deadband inside one step
+  and transfers. A zero threshold there reads a settle as a departure and
+  oscillates the traveler across the seam.
+
+`TryDeriveOverlap` covers whichever threshold is larger, so contact and
+observation always reach as far as ownership does. The arrival-border latch
+remains a defense for federated delivery and observes both ends of the first
+destination step, so a genuine rapid reversal cannot run outside its owner while
+the reciprocal edge is disabled. Other edges remain eligible, including deterministic forwarding
 at a multi-world corner. One already-evaluated source step carries its mapped
 geometric cursor, exact engine-time interval, consumed-through watermark, and
 bounded face count through every onward owner. Each destination sweeps its own
