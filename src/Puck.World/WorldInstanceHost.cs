@@ -1145,6 +1145,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // The transfer id a seat's crossing hold has already been announced under, so the held-crossing line prints
     // once per traversal rather than once per suppressed scan.
     private readonly Dictionary<(string Instance, int Seat), ulong> m_announcedCrossingHolds = [];
+    // The escrow border a seat's arrival occupancy was already seeded for, so one arrival seeds once.
+    private readonly Dictionary<(string Instance, int Seat), string> m_seededArrivals = [];
     // Every transfer id this host has drained (committed or aborted). A pure function of enqueue/drain
     // order, never wall-clock or RNG — checked first in ApplyTransfer so a retry-shaped duplicate (the same
     // id resubmitted, e.g. world.transfer's transfer:<id> token) refuses by name rather than double-landing.
@@ -1677,6 +1679,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // with one merged cohort. ResolveAndEnqueueCoalescedTransfers does the grouping once the whole scan is
     // in hand.
     private void ScanInstancePortals(WorldInstance instance) {
+        SeedFederatedArrivalOccupancy(instance: instance);
+
         var definition = instance.Server.Definition;
         var population = instance.Server.Population;
         var catalog = WorldFaceCatalog.For(definition: definition);
@@ -1756,6 +1760,29 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // body did not walk in, so its first scan there must not read as an entry edge. A degenerate segment
     // (the landing collapses previous to current — WorldBody.Pose) makes the swept test the point test, so
     // the region's own Inside answer is exactly what the next scan would latch.
+    // The same seed for an arrival this host did not itself land: a traveler committed into one of this process's
+    // instances over the wire reaches the destination through the escrow, never through FinalizeCommittedTransfer,
+    // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
+    // the destination for both topologies, which is what makes this reachable at all.
+    private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
+        for (var seat = 0; (seat < WorldPopulation.LocalSeatCount); seat++) {
+            var key = (instance.Name, seat);
+
+            if (!instance.Server.TryTransferArrivalBorder(bodyIndex: seat, border: out var border)) {
+                _ = m_seededArrivals.Remove(key: key);
+
+                continue;
+            }
+
+            if (m_seededArrivals.TryGetValue(key: key, value: out var seeded) && string.Equals(a: seeded, b: border, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            m_seededArrivals[key] = border;
+            SeedArrivalOccupancy(instance: instance, seat: seat);
+        }
+    }
+
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
         if ((seat < 0) || (seat >= WorldPopulation.LocalSeatCount) || (instance.Server.Population.EntryBody(index: seat) is not { } body)) {
             return;
