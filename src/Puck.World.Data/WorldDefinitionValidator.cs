@@ -3629,6 +3629,11 @@ public static class WorldDefinitionValidator {
                 resolution = neighbours.Resolve(document: reference.Document);
                 resolutions[reference.Document] = resolution;
             }
+            if (resolution.Kind == WorldNeighbourResolutionKind.Attested) {
+                ValidateAttestedCounterpart(path: path, definition: definition, adjacency: adjacency, document: reference.Document, attestation: resolution.Attestation!, boundary: boundary, errors: errors);
+                continue;
+            }
+
             if (resolution.Kind != WorldNeighbourResolutionKind.Resolved) {
                 errors.Add(item: $"{path} cannot reach neighbour '{reference.Document}' — {resolution.Reason}.");
                 continue;
@@ -3666,6 +3671,50 @@ public static class WorldDefinitionValidator {
 
         if (proveNeighbours && (neighbours is not null)) {
             ValidateDerivedAdjacencyCorners(definition: definition, neighbours: neighbours, resolutions: resolutions, errors: errors);
+        }
+    }
+
+    // The same four per-fact proofs the resolved-document arm makes, from the counterpart's attested edges alone.
+    // A derived corner is deliberately not proven here: a corner is a claim about a THIRD authority, which this
+    // counterpart cannot attest on that authority's behalf.
+    private static void ValidateAttestedCounterpart(
+        string path,
+        WorldDefinition definition,
+        WorldAdjacency adjacency,
+        string document,
+        WorldCounterpartAttestation attestation,
+        WorldAdjacencyBoundary boundary,
+        List<string> errors
+    ) {
+        if (!string.Equals(a: attestation.Document, b: document, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"{path} attestation names document '{attestation.Document}', not '{document}'.");
+            return;
+        }
+
+        if (attestation.FindEdge(name: adjacency.Counterpart) is not { } counterpart) {
+            errors.Add(item: $"{path}.counterpart '{adjacency.Counterpart}' names no adjacency in neighbour '{document}'.");
+            return;
+        }
+
+        if (!string.Equals(a: counterpart.Counterpart, b: adjacency.Name.Value, comparisonType: StringComparison.Ordinal)) {
+            errors.Add(item: $"{path} is not reciprocal — neighbour '{document}'/'{counterpart.Name}' points to '{counterpart.Counterpart}', not '{adjacency.Name}'.");
+        }
+
+        var localFrame = boundary.CompileFrame();
+        var neighbourFrame = counterpart.Boundary.CompileFrame();
+
+        if ((localFrame.HalfWidth != neighbourFrame.HalfWidth) || (localFrame.HalfHeight != neighbourFrame.HalfHeight)) {
+            errors.Add(item: $"{path}.boundary is {(double)localFrame.HalfWidth * 2:0.#####}x{(double)localFrame.HalfHeight * 2:0.#####}, but neighbour '{document}'/'{counterpart.Name}' is {(double)neighbourFrame.HalfWidth * 2:0.#####}x{(double)neighbourFrame.HalfHeight * 2:0.#####}.");
+        }
+
+        var worldUp = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+
+        if (WorldFrameIsometry.MapVector(value: worldUp, source: localFrame, destination: neighbourFrame) != worldUp) {
+            errors.Add(item: $"{path}.boundary and neighbour '{document}'/'{counterpart.Name}' do not preserve world up — body yaw/vertical state cannot cross this frame pair without loss.");
+        }
+
+        if (!WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: attestation.Overlap, depth: out _, reason: out var overlapReason)) {
+            errors.Add(item: $"{path} overlap cannot be derived — {overlapReason}.");
         }
     }
 

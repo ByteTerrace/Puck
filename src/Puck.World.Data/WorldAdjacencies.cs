@@ -290,19 +290,37 @@ public static class WorldAdjacencyPolicy {
     /// <summary>Derives the overlap depth both sides must retain. The result is symmetric in the two documents and
     /// rounds every authored lower bound upward.</summary>
     public static bool TryDeriveOverlap(WorldDefinition local, WorldDefinition neighbour, out FixedQ4816 depth, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: neighbour);
+
+        depth = FixedQ4816.Zero;
+
+        return (WorldOverlapTerms.TryDerive(definition: neighbour, terms: out var terms, reason: out reason)
+            && TryDeriveOverlap(local: local, neighbour: terms!, depth: out depth, reason: out reason));
+    }
+
+    /// <summary>Derives the overlap depth from a neighbour's attested terms rather than its whole document — the
+    /// same arithmetic, over the only facts it needs, so a neighbour across a trust boundary can prove a seam
+    /// without handing over what it is made of. Symmetric in the two sides, exactly as the document overload
+    /// is.</summary>
+    /// <param name="local">This authority's document.</param>
+    /// <param name="neighbour">The neighbour's attested overlap terms.</param>
+    /// <param name="depth">The derived depth on success.</param>
+    /// <param name="reason">The named reason on failure.</param>
+    /// <returns><see langword="true"/> when the depth derives.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="local"/> or <paramref name="neighbour"/> is <see langword="null"/>.</exception>
+    public static bool TryDeriveOverlap(WorldDefinition local, WorldOverlapTerms neighbour, out FixedQ4816 depth, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: neighbour);
 
         depth = FixedQ4816.Zero;
-        if (!TryBodyReach(definition: local, reach: out var localBody, reason: out reason) ||
-            !TryBodyReach(definition: neighbour, reach: out var neighbourBody, reason: out reason)) {
+        if (!WorldOverlapTerms.TryDerive(definition: local, terms: out var localTerms, reason: out reason) || (localTerms is null)) {
             return false;
         }
 
-        var bodyReach = FixedQ4816.Max(x: localBody, y: neighbourBody);
-        var interactionReach = FixedQ4816.Max(x: InteractionReach(definition: local), y: InteractionReach(definition: neighbour));
-        var closingSpeed = (WorldFacePortalPolicy.SpeedCeiling(definition: local) + WorldFacePortalPolicy.SpeedCeiling(definition: neighbour));
-        var slowestRate = Math.Min(val1: Math.Max(val1: local.SimulationRateHz, val2: 1), val2: Math.Max(val1: neighbour.SimulationRateHz, val2: 1));
+        var bodyReach = FixedQ4816.Max(x: localTerms.BodyReach, y: neighbour.BodyReach);
+        var interactionReach = FixedQ4816.Max(x: localTerms.InteractionReach, y: neighbour.InteractionReach);
+        var closingSpeed = (localTerms.SpeedCeiling + neighbour.SpeedCeiling);
+        var slowestRate = Math.Min(val1: Math.Max(val1: localTerms.SimulationRateHz, val2: 1), val2: Math.Max(val1: neighbour.SimulationRateHz, val2: 1));
 
         if (!FixedDirectedRounding.TryCeilingQuotient(
             numerator: (FixedQ4816.One.Value * DeliveryPeriods),
@@ -324,22 +342,23 @@ public static class WorldAdjacencyPolicy {
             return false;
         }
 
-        if (!TryReciprocalHysteresis(definition: local, depth: out var localHysteresis, reason: out reason) ||
-            !TryReciprocalHysteresis(definition: neighbour, depth: out var neighbourHysteresis, reason: out reason)) {
-            return false;
-        }
-
         // Handoff occurs at the far side of this deadband, not at the authored plane. Contact and observation must
         // therefore cover at least the larger side's threshold even when both worlds have low speed/reach settings
         // whose delivery-latency term alone would derive a shallower overlap.
         depth = FixedQ4816.Max(
             x: new FixedQ4816(Value: depthRaw),
-            y: FixedQ4816.Max(x: localHysteresis, y: neighbourHysteresis));
+            y: FixedQ4816.Max(x: localTerms.Hysteresis, y: neighbour.Hysteresis));
         reason = string.Empty;
         return true;
     }
 
-    private static FixedQ4816 InteractionReach(WorldDefinition definition) {
+    /// <summary>Derives the greatest interaction/targeting reach a document declares — one of the overlap terms.</summary>
+    /// <param name="definition">The document.</param>
+    /// <returns>The reach.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static FixedQ4816 InteractionReach(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
         var reach = FixedQ4816.Zero;
         foreach (var interaction in (definition.Interactions ?? WorldInteractionsSection.Empty).Interactions) {
             if ((interaction is not null) && (interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)) {

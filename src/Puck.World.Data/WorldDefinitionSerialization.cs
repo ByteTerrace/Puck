@@ -154,6 +154,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldInteraction))]
 [JsonSerializable(typeof(WorldAdjacency))]
 [JsonSerializable(typeof(WorldAdjacencyBoundary))]
+// The signed border claim's payload shape — a separate document family, sharing this context's strictness and
+// Vector3/enum spellings so a boundary reads identically here and in the world document.
+[JsonSerializable(typeof(WorldCounterpartAttestation))]
 [JsonSourceGenerationOptions(
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>

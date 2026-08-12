@@ -50,7 +50,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <c>bodyMotionPrograms</c>, <c>portals</c>, and every kit's <c>producers</c>/<c>actions</c> (see
 /// <see cref="WorldProjectedKit"/>).</para>
 /// <para><see cref="Adjacencies"/>, <see cref="Destinations"/>, <see cref="References"/>, and
-/// <see cref="Interactions"/> cross because <see cref="WorldAdjacencyPolicy.TryDeriveOverlap"/> reads them from both
+/// <see cref="Interactions"/> cross because <see cref="WorldAdjacencyPolicy.TryDeriveOverlap(WorldDefinition, WorldDefinition, out Puck.Maths.FixedQ4816, out string)"/> reads them from both
 /// sides of a seam and must derive the same depth on each; withholding one side's inputs desymmetrizes it silently.</para>
 /// </summary>
 /// <param name="Provenance">Who composed this, from what, at which revision and tier.</param>
