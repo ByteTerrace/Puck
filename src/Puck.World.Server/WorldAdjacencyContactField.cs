@@ -26,7 +26,6 @@ namespace Puck.World.Server;
 /// implied simulation guarantee.</para>
 /// </remarks>
 internal sealed class WorldAdjacencyContactField : IEntityContactField {
-    private static readonly FixedVector3 s_upAxis = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
 
     private readonly IContactField m_inner;
     private readonly WorldDefinition m_definition;
@@ -81,21 +80,9 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
 
             var neighbourFrame = neighbour.CounterpartFrame;
-            // deltaYaw alone: feeding a zero traveler yaw makes the returned YawRadians exactly the isometry's own
-            // delta, which both maps a full 3D orientation (below) and inverts cleanly by swapping source/destination.
-            var toNeighbour = WorldPortalArrivalMath.ComputeArrival(
-                travelerPosition: position,
-                travelerYawRadians: FixedQ4816.Zero,
-                travelerPlanarVelocity: new FixedVector3(X: velocity.X, Y: FixedQ4816.Zero, Z: velocity.Z),
-                travelerVerticalVelocity: velocity.Y,
-                sourcePosition: band.Frame.Origin,
-                sourceYawRadians: band.Frame.PlanarYawRadians,
-                destinationPosition: neighbourFrame.Origin,
-                destinationYawRadians: neighbourFrame.PlanarYawRadians
-            );
-            var deltaRotation = FixedQuaternion.FromAxisAngle(axis: s_upAxis, angle: toNeighbour.YawRadians);
-            var neighbourPosition = toNeighbour.Position;
-            var neighbourVelocity = new FixedVector3(X: toNeighbour.PlanarVelocity.X, Y: toNeighbour.VerticalVelocity, Z: toNeighbour.PlanarVelocity.Z);
+            var deltaRotation = WorldFrameIsometry.Rotation(source: band.Frame, destination: neighbourFrame);
+            var neighbourPosition = WorldFrameIsometry.MapPoint(point: position, source: band.Frame, destination: neighbourFrame);
+            var neighbourVelocity = WorldFrameIsometry.MapVector(value: velocity, source: band.Frame, destination: neighbourFrame);
             var neighbourOrientation = (deltaRotation * orientation).Normalize();
 
             var dynamicObstruction = FixedVector3.Zero;
@@ -141,20 +128,10 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
             // Map the neighbour's depenetrated answer back through the INVERSE isometry (source/destination
             // swapped — the same shape a return crossing's own arrival would compute).
-            var back = WorldPortalArrivalMath.ComputeArrival(
-                travelerPosition: neighbourPosition,
-                travelerYawRadians: FixedQ4816.Zero,
-                travelerPlanarVelocity: new FixedVector3(X: neighbourVelocity.X, Y: FixedQ4816.Zero, Z: neighbourVelocity.Z),
-                travelerVerticalVelocity: neighbourVelocity.Y,
-                sourcePosition: neighbourFrame.Origin,
-                sourceYawRadians: neighbourFrame.PlanarYawRadians,
-                destinationPosition: band.Frame.Origin,
-                destinationYawRadians: band.Frame.PlanarYawRadians
-            );
-            var backRotation = FixedQuaternion.FromAxisAngle(axis: s_upAxis, angle: back.YawRadians);
+            var backRotation = WorldFrameIsometry.Rotation(source: neighbourFrame, destination: band.Frame);
 
-            position = back.Position;
-            velocity = new FixedVector3(X: back.PlanarVelocity.X, Y: back.VerticalVelocity, Z: back.PlanarVelocity.Z);
+            position = WorldFrameIsometry.MapPoint(point: neighbourPosition, source: neighbourFrame, destination: band.Frame);
+            velocity = WorldFrameIsometry.MapVector(value: neighbourVelocity, source: neighbourFrame, destination: band.Frame);
 
             var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
                 ? neighbourResolution.ObstructionNormal

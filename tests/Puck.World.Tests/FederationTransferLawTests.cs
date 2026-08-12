@@ -14,6 +14,31 @@ namespace Puck.World.Tests;
 /// <summary>Adversarial laws for the authority boundary and source-scoped transfer escrow.</summary>
 public sealed class FederationTransferLawTests {
     [Fact]
+    public void CommitWire_PreservesTheSelectedMotionProgram() {
+        var expected = new WorldTransferCommitMember(
+            Profile: null,
+            HasMappedArrival: true,
+            BodyMotionProgramName: "free",
+            Position: new FixedVector3(FixedQ4816.One, FixedQ4816.FromInteger(value: 8), -FixedQ4816.One),
+            YawRadians: FixedQ4816.FromDouble(value: 0.75),
+            PlanarVelocity: new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.One),
+            VerticalVelocity: FixedQ4816.FromInteger(value: 3),
+            ActionContinuity: new WorldTransferActionContinuity(
+                Channels: [new WorldTransferChannelEdge(Name: "jump", PreviousBit: true)],
+                Registers: [new WorldTransferActionRegister(Name: "jumpUses", Kind: ActionStateKind.Counter, Value: FixedQ4816.One, TimerTicks: 0)]));
+
+        var encoded = WorldFederationWireFormat.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [expected]);
+
+        Assert.True(condition: WorldFederationWireFormat.TryDecodeCommit(body: encoded, sourceAuthority: out var sourceAuthority, transferId: out var transferId, members: out var members, reason: out var reason), userMessage: reason);
+        Assert.Equal(expected: "source/world", actual: sourceAuthority);
+        Assert.Equal(expected: 7UL, actual: transferId);
+        var member = Assert.Single(collection: members);
+        Assert.Equal(expected: "free", actual: member.BodyMotionProgramName);
+        Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
+        Assert.Equal(expected: FixedQ4816.One, actual: Assert.Single(collection: member.ActionContinuity.Registers).Value);
+    }
+
+    [Fact]
     public void SnapshotWire_PreservesOccupantRigIndependentlyOfAuthoritySlot() {
         var expected = new EntitySnapshot(
             Index: 91,
@@ -108,6 +133,22 @@ public sealed class FederationTransferLawTests {
     }
 
     [Fact]
+    public void MappedCommit_RefusesAMotionProgramTheDestinationDoesNotDeclare() {
+        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        var request = Reservation(sourceAuthority: "source/world", transferId: 19, border: "up") with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live, BodyColor: default, CatalogRig: 4)],
+        };
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: true, BodyMotionProgramName: "not-declared", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+
+        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.False(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason));
+        Assert.Contains(expectedSubstring: "unavailable destination motion program 'not-declared'", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: fixture.Server.Population.IsActive(index: Assert.Single(collection: reservation.BodyIndices)));
+    }
+
+    [Fact]
     public async Task FederationDoor_RejectsBadProof_AndAuthorityRebinding() {
         using var fixture = Fixtures.FreshServer();
         var secret = Enumerable.Range(start: 0, count: WorldFederationSecurity.SecretBytes).Select(selector: value => checked((byte)value)).ToArray();
@@ -158,7 +199,7 @@ public sealed class FederationTransferLawTests {
             Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live, BodyColor: default, CatalogRig: 4)],
         };
         var reservation = fixture.Server.ReserveTransfer(request: request);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: sourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);
 
@@ -195,7 +236,7 @@ public sealed class FederationTransferLawTests {
         using var fixture = Fixtures.FreshServer();
         var request = Reservation(sourceAuthority: "machine-a/boot", transferId: 29, border: "east");
         var reservation = fixture.Server.ReserveTransfer(request: request);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.True(condition: reservation.Accepted);
         Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var firstReason), userMessage: firstReason);
@@ -239,7 +280,7 @@ public sealed class FederationTransferLawTests {
             Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Idle, BodyColor: new Vector3(x: 0.2f, y: 0.4f, z: 0.6f), CatalogRig: 73)],
         };
         var reservation = fixture.Server.ReserveTransfer(request: request);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);
@@ -280,7 +321,7 @@ public sealed class FederationTransferLawTests {
             Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live, BodyColor: default, CatalogRig: 4)],
         };
         var reservation = fixture.Server.ReserveTransfer(request: request);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);
@@ -316,7 +357,7 @@ public sealed class FederationTransferLawTests {
             Members = [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 4, Identity: null, Source: IntentSource.Live, BodyColor: default, CatalogRig: 4)],
         };
         var reservation = fixture.Server.ReserveTransfer(request: request);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, members: [member], reason: out var reason), userMessage: reason);

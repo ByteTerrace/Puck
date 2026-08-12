@@ -3550,9 +3550,10 @@ public static class WorldDefinitionValidator {
             }
             if ((adjacency.Boundary is not { } boundary) || !IsFinite(value: boundary.Center) ||
                 !float.IsFinite(f: boundary.OutwardYawDegrees) ||
+                !float.IsFinite(f: boundary.OutwardPitchDegrees) ||
                 !float.IsFinite(f: boundary.Width) || (boundary.Width <= 0f) ||
                 !float.IsFinite(f: boundary.Height) || (boundary.Height <= 0f)) {
-                errors.Add(item: $"{path}.boundary must have a finite center/yaw and positive finite width/height.");
+                errors.Add(item: $"{path}.boundary must have a finite center/yaw/pitch and positive finite width/height.");
                 continue;
             }
             if (!Enum.IsDefined(value: adjacency.Unavailable)) {
@@ -3601,6 +3602,10 @@ public static class WorldDefinitionValidator {
             var neighbourFrame = counterpartBoundary.CompileFrame();
             if ((localFrame.HalfWidth != neighbourFrame.HalfWidth) || (localFrame.HalfHeight != neighbourFrame.HalfHeight)) {
                 errors.Add(item: $"{path}.boundary is {(double)localFrame.HalfWidth * 2:0.#####}x{(double)localFrame.HalfHeight * 2:0.#####}, but neighbour '{reference.Document}'/'{counterpart.Name}' is {(double)neighbourFrame.HalfWidth * 2:0.#####}x{(double)neighbourFrame.HalfHeight * 2:0.#####}.");
+            }
+            var worldUp = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+            if (WorldFrameIsometry.MapVector(value: worldUp, source: localFrame, destination: neighbourFrame) != worldUp) {
+                errors.Add(item: $"{path}.boundary and neighbour '{reference.Document}'/'{counterpart.Name}' do not preserve world up — body yaw/vertical state cannot cross this frame pair without loss.");
             }
             if (!WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour, depth: out _, reason: out var overlapReason)) {
                 errors.Add(item: $"{path} overlap cannot be derived — {overlapReason}.");

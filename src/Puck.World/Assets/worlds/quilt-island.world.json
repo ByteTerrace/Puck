@@ -12,43 +12,43 @@
     {
       "id": "seat-1",
       "position": [
-        12,
         0,
-        12
+        1,
+        0
       ]
     },
     {
       "id": "seat-2",
       "position": [
-        14,
-        0,
-        12
+        2,
+        1,
+        0
       ]
     },
     {
       "id": "seat-3",
       "position": [
-        12,
         0,
-        14
+        1,
+        2
       ]
     },
     {
       "id": "seat-4",
       "position": [
-        14,
-        0,
-        14
+        2,
+        1,
+        2
       ]
     },
     {
       "id": "npc-spawn",
       "position": [
-        18,
         0,
-        8
+        1,
+        -4
       ],
-      "yawDegrees": 90
+      "yawDegrees": 0
     }
   ],
   "render": {
@@ -82,18 +82,18 @@
         "motion": {
           "$type": "static",
           "position": [
-            12,
+            -12,
             22,
-            36
+            12
           ],
           "worldAxes": true
         },
         "aim": {
           "$type": "worldPoint",
           "target": [
-            12,
+            -12,
             2,
-            12
+            -12
           ]
         },
         "lens": {
@@ -111,18 +111,18 @@
         "motion": {
           "$type": "static",
           "position": [
-            7.5,
+            -10,
             8,
-            10
+            -7.5
           ],
           "worldAxes": true
         },
         "aim": {
           "$type": "worldPoint",
           "target": [
-            7.5,
+            0.5,
             1,
-            -0.5
+            -7.5
           ]
         },
         "lens": {
@@ -140,18 +140,18 @@
         "motion": {
           "$type": "static",
           "position": [
-            10,
+            -7.5,
             8,
-            7.5
+            -10
           ],
           "worldAxes": true
         },
         "aim": {
           "$type": "worldPoint",
           "target": [
-            -0.5,
+            -7.5,
             1,
-            7.5
+            0.5
           ]
         },
         "lens": {
@@ -169,18 +169,18 @@
         "motion": {
           "$type": "static",
           "position": [
-            4,
+            -7.5,
             1.3,
-            7.5
+            -4
           ],
           "worldAxes": true
         },
         "aim": {
           "$type": "worldPoint",
           "target": [
-            -6,
+            -7.5,
             1.1,
-            7.5
+            6
           ]
         },
         "lens": {
@@ -720,18 +720,18 @@
   },
   "creations": [
     {
-      "id": "ground",
+      "id": "island",
       "document": {
         "schema": "puck.creation.v1",
-        "name": "ground",
+        "name": "floating-island",
         "intent": "Object",
         "bakeStyle": "classic",
         "palette": [
           {
             "albedo": {
-              "x": 0.64,
-              "y": 0.35,
-              "z": 0.84
+              "x": 0.92,
+              "y": 0.92,
+              "z": 0.92
             },
             "emissive": 0,
             "specular": 0,
@@ -741,7 +741,7 @@
         "shapes": [
           {
             "id": 0,
-            "name": "ground",
+            "name": "island",
             "type": "Box",
             "position": {
               "x": 0,
@@ -756,9 +756,9 @@
               "w": 1
             },
             "scale": {
-              "x": 24,
-              "y": 0.1,
-              "z": 24
+              "x": 21,
+              "y": 0.5,
+              "z": 21
             },
             "material": 0,
             "blend": "Union",
@@ -776,108 +776,17 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "18de20f17ec3fd840da799c867aea8d025a9956f81ffc26931bfcca70065163d"
-    },
-    {
-      "id": "wall",
-      "document": {
-        "schema": "puck.creation.v1",
-        "name": "wall",
-        "intent": "Object",
-        "bakeStyle": "classic",
-        "palette": [
-          {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.53,
-              "z": 0.5
-            },
-            "emissive": 0,
-            "specular": 0.1,
-            "shininess": 8
-          }
-        ],
-        "shapes": [
-          {
-            "id": 0,
-            "name": "slab",
-            "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 2,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 73.4,
-              "y": 5.7647,
-              "z": 1.3529
-            },
-            "material": 0,
-            "blend": "Union",
-            "smooth": 0,
-            "group": 0,
-            "mirror": false,
-            "twist": 0,
-            "onion": 0,
-            "bend": 0,
-            "dilate": 0
-          }
-        ],
-        "frames": null,
-        "chains": null,
-        "cameras": null,
-        "behavior": null
-      },
-      "hash": "3d8c8c45f805fb556ecd841abc43832b7dd4b114209921d9b1ddd7a79b451ac7"
+      "hash": "28e8ac3b72f02fe69ab7554d825c763dc5f87249483011d2f149f6b2d7ae617a"
     }
   ],
   "placements": [
     {
-      "id": "ground",
-      "creationId": "ground",
+      "id": "island",
+      "creationId": "island",
       "position": [
-        12,
         0,
-        12
-      ],
-      "yawDegrees": 0,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-east",
-      "creationId": "wall",
-      "position": [
-        24,
         0,
-        12
-      ],
-      "yawDegrees": 90,
-      "scale": 1,
-      "distribution": null,
-      "mirror": null,
-      "solid": {
-        "margin": 0
-      }
-    },
-    {
-      "id": "wall-south",
-      "creationId": "wall",
-      "position": [
-        12,
-        0,
-        24
+        0
       ],
       "yawDegrees": 0,
       "scale": 1,
@@ -911,9 +820,7 @@
     "cues": []
   },
   "collision": {
-    "requirements": [
-      "SmoothUnionContact"
-    ],
+    "requirements": [],
     "contactSkin": 0.02,
     "maxIterations": 4,
     "maxSlopeDegrees": 60,
@@ -993,7 +900,7 @@
   },
   "state": [],
   "schema": "puck.world.def.v1",
-  "documentId": "quilt-se",
+  "documentId": "quilt-island",
   "playerDefaults": {
     "identities": [
       {
@@ -1041,26 +948,38 @@
   },
   "references": [
     {
-      "name": "ne",
-      "document": "quilt-ne.world.json"
-    },
-    {
-      "name": "sw",
-      "document": "quilt-sw.world.json"
-    },
-    {
       "name": "nw",
       "document": "quilt-nw.world.json"
     },
     {
-      "name": "island",
-      "document": "quilt-island.world.json"
+      "name": "ne",
+      "document": "quilt-ne.world.json"
+    },
+    {
+      "name": "se",
+      "document": "quilt-se.world.json"
+    },
+    {
+      "name": "sw",
+      "document": "quilt-sw.world.json"
     }
   ],
   "destinations": [
     {
+      "name": "nw",
+      "reference": "nw",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
       "name": "ne",
       "reference": "ne",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "se",
+      "reference": "se",
       "durability": "persisted",
       "scope": "global"
     },
@@ -1069,63 +988,72 @@
       "reference": "sw",
       "durability": "persisted",
       "scope": "global"
-    },
-    {
-      "name": "nw",
-      "reference": "nw",
-      "durability": "persisted",
-      "scope": "global"
-    },
-    {
-      "name": "island",
-      "reference": "island",
-      "durability": "persisted",
-      "scope": "global"
     }
   ],
   "adjacencies": [
     {
-      "name": "north",
+      "name": "down-nw",
+      "destination": "nw",
+      "counterpart": "up",
+      "boundary": {
+        "center": [
+          -12,
+          -4,
+          -12
+        ],
+        "outwardYawDegrees": 180,
+        "outwardPitchDegrees": -90,
+        "width": 24,
+        "height": 24
+      },
+      "unavailable": "closed"
+    },
+    {
+      "name": "down-ne",
       "destination": "ne",
-      "counterpart": "south",
+      "counterpart": "up",
       "boundary": {
         "center": [
           12,
-          0,
-          0
+          -4,
+          -12
         ],
         "outwardYawDegrees": 180,
-        "outwardPitchDegrees": 0,
+        "outwardPitchDegrees": -90,
         "width": 24,
-        "height": 16
+        "height": 24
       },
       "unavailable": "closed"
     },
     {
-      "name": "west",
-      "destination": "sw",
-      "counterpart": "east",
+      "name": "down-se",
+      "destination": "se",
+      "counterpart": "up",
       "boundary": {
         "center": [
-          0,
-          0,
+          12,
+          -4,
           12
         ],
-        "outwardYawDegrees": -90,
-        "outwardPitchDegrees": 0,
+        "outwardYawDegrees": 180,
+        "outwardPitchDegrees": -90,
         "width": 24,
-        "height": 16
+        "height": 24
       },
       "unavailable": "closed"
     },
     {
-      "name": "up",
-      "destination": "island",
-      "counterpart": "down-se",
+      "name": "down-sw",
+      "destination": "sw",
+      "counterpart": "up",
       "boundary": {
-        "center": [12, 2, 12],
-        "outwardYawDegrees": 0,
-        "outwardPitchDegrees": 90,
+        "center": [
+          -12,
+          -4,
+          12
+        ],
+        "outwardYawDegrees": 180,
+        "outwardPitchDegrees": -90,
         "width": 24,
         "height": 24
       },

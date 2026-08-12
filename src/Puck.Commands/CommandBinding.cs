@@ -16,9 +16,11 @@ namespace Puck.Commands;
 /// <param name="Command">The name of the command to activate.</param>
 /// <param name="Value">The constant value to send, or <see langword="null"/> to pass the input's value through.</param>
 /// <param name="ActivateOn">The phase the input must be in for this binding to fire. <see langword="null"/>
-/// (the default) fires on a press or a continuous update (<see cref="CommandPhase.Started"/> or
-/// <see cref="CommandPhase.Active"/>) and ignores releases, so a key-release never re-fires a press-bound
-/// command; set it to a specific phase (such as <see cref="CommandPhase.Completed"/>) to bind that edge only.</param>
+/// (the default) fires an ordinary command on a press or continuous update (<see cref="CommandPhase.Started"/> or
+/// <see cref="CommandPhase.Active"/>) and ignores releases. A channel destination instead receives its matching
+/// <see cref="CommandPhase.Completed"/>/<see cref="CommandPhase.Canceled"/> edge automatically because a channel
+/// row describes one complete physical hold, not merely its opening edge. Set this member to a specific phase to
+/// author an edge-selective binding explicitly.</param>
 /// <param name="ChannelScale">The declared scale for a channel destination, or <see langword="null"/> for an
 /// ordinary command destination. Applied by the live signal's value kind, never guessed from nullability: a
 /// <see cref="CommandValueKind.Digital"/> source (a key has no magnitude) contributes this constant; a

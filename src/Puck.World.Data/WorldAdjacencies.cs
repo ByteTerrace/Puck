@@ -14,14 +14,15 @@ public enum WorldAdjacencyUnavailable : byte {
 }
 
 /// <summary>
-/// One invisible, rectangular ownership boundary. <paramref name="OutwardYawDegrees"/> points from this authority
-/// into its neighbour; the owned half-space is therefore on the non-positive side of the boundary plane.
+/// One invisible, rectangular ownership boundary. The authored yaw and pitch point from this authority into its
+/// neighbour; the owned half-space is therefore on the non-positive side of the boundary plane.
 /// </summary>
 /// <param name="Center">The boundary rectangle's center in this world's coordinates.</param>
-/// <param name="OutwardYawDegrees">The outward planar normal, in degrees (0 = +Z, 90 = +X).</param>
-/// <param name="Width">The full horizontal span of the boundary.</param>
-/// <param name="Height">The full vertical span of the boundary.</param>
-public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegrees, float Width, float Height) {
+/// <param name="OutwardYawDegrees">The outward heading, in degrees (0 = +Z, 90 = +X).</param>
+/// <param name="OutwardPitchDegrees">The outward elevation, in degrees (+90 = +Y, -90 = -Y).</param>
+/// <param name="Width">The full span along the boundary's local right axis.</param>
+/// <param name="Height">The full span along the boundary's local up axis.</param>
+public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegrees, float OutwardPitchDegrees, float Width, float Height) {
     private static readonly FixedVector3 s_x = new(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
     private static readonly FixedVector3 s_y = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
     private static readonly FixedVector3 s_z = new(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One);
@@ -65,10 +66,42 @@ public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegr
                 }
         }
 
+        var planarNormal = normal;
+        var pitch = FixedQ4816.FromDouble(value: OutwardPitchDegrees);
+        var pitchCardinal = (pitch.Value % fullTurn);
+        if (pitchCardinal < 0L) {
+            pitchCardinal += fullTurn;
+        }
+
+        FixedVector3 up;
+        switch (pitchCardinal) {
+            case 0L:
+                up = s_y;
+                break;
+            case quarterTurn:
+                normal = s_y;
+                up = -planarNormal;
+                break;
+            case (quarterTurn * 2L):
+                normal = -planarNormal;
+                up = -s_y;
+                break;
+            case (quarterTurn * 3L):
+                up = planarNormal;
+                normal = -s_y;
+                break;
+            default: {
+                    var rotation = FixedQuaternion.FromAxisAngle(axis: right, angle: (pitch * s_degreesToRadians));
+                    up = rotation.Rotate(vector: s_y).Normalize();
+                    normal = rotation.Rotate(vector: planarNormal).Normalize();
+                    break;
+                }
+        }
+
         return new WorldFaceFrame(
             Origin: FixedVector3.FromVector3(value: Center),
             Right: right,
-            Up: s_y,
+            Up: up,
             Normal: normal,
             HalfWidth: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: (Width * 0.5f))),
             HalfHeight: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: (Height * 0.5f))),
@@ -278,7 +311,10 @@ public static class WorldAdjacencyPolicy {
         return (((double)fixedValue < Math.Abs(value)) ? FixedQ4816.FromRawBits(value: checked(fixedValue.Value + 1L)) : fixedValue);
     }
 
-    private static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
+    /// <summary>Derives the greatest collider-center reach in a document. Besides overlap proof, the handoff scanner
+    /// uses this as the reciprocal-edge hysteresis width: a newly arrived body remains owned by its final writer
+    /// throughout the collider-sized seam overlap instead of being immediately handed back by contact jitter.</summary>
+    public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
         reach = FixedQ4816.Zero;
         foreach (var kit in definition.Kits) {
             if ((kit?.Collider) is not { } collider) {

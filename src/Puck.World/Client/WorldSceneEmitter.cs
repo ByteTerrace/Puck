@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Overlays;
 using Puck.SdfVm;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -81,6 +82,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     internal static readonly Vector3 HiddenAvatar = new(x: 0f, y: -1000f, z: 0f);
 
     private readonly WorldClient m_client;
+    private readonly WorldContinuum m_continuum;
     // The per-seat perception anchor: the crowd soft-shadow centers resolve each seat's body index through it, so a
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
@@ -96,6 +98,12 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldAvatarCatalog.Capacity];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldAvatarCatalog.Capacity];
+    // The live program's avatar geometry and its transform pack share this rebuild-latched appearance image. This
+    // closes the delivery-thread gap where a reused slot could otherwise pack a new rig into old compiled geometry.
+    private readonly int[] m_emittedAvatarRigs = new int[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_emittedAvatarScales = new float[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldAvatarCatalog.Capacity];
     // The creation-STAMP census, refreshed at each rebuild: the body-rooted stamps handed to the pool, plus the
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
@@ -122,8 +130,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="audio">The audio director the distance-driven footstep cue submits into while packing.</param>
     /// <param name="anchor">The per-seat perception anchor the crowd soft-shadow centers resolve their body indices
     /// through.</param>
+    /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
+    /// their original catalog slot across authority handoffs.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench, WorldStampPool animator, WorldAudioDirector audio, WorldPerceptionAnchor anchor) {
+    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench, WorldStampPool animator, WorldAudioDirector audio, WorldPerceptionAnchor anchor, WorldContinuum continuum) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: targeting);
@@ -132,8 +142,10 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: anchor);
+        ArgumentNullException.ThrowIfNull(argument: continuum);
 
         m_client = client;
+        m_continuum = continuum;
         m_anchor = anchor;
         m_settings = settings;
         m_targeting = targeting;
@@ -177,7 +189,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public bool OwnsMaterialScope => true;
 
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 4);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
 
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the editor's
@@ -198,6 +210,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 1)] = m_drag.Revision;
         destination[(WorldClient.RevisionComponentCount + 2)] = m_workbench.Revision;
         destination[(WorldClient.RevisionComponentCount + 3)] = m_shimmerRevision;
+        destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.Revision;
     }
 
     /// <summary>Advances this emitter's content clock and, while a change-shimmer pulse is live, bumps the shimmer
@@ -355,24 +368,23 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         for (var seat = 0; (seat < WorldPopulation.LocalSeatCount); seat++) {
             var body = m_anchor.PerceivedBody(slot: seat);
 
-            if (m_client.IsActive(index: body)) {
-                joinedSeats[joinedSeatCount++] = m_client.Position(index: body);
+            if (TryPresentedPose(index: body, position: out var joinedPosition, orientation: out _, address: out _)) {
+                joinedSeats[joinedSeatCount++] = joinedPosition;
             }
         }
 
         var crowdRadiusSquared = (m_settings.ShadowCrowdRadius * m_settings.ShadowCrowdRadius);
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
-            if (!m_client.IsActive(index: index)) {
+            if (!TryPresentedPose(index: index, position: out var position, orientation: out var orientation, address: out var address)) {
                 m_avatarPoseSeeded[index] = false;
 
                 continue;
             }
 
-            var position = m_client.Position(index: index);
             var castsSoftShadow = ((index < WorldPopulation.LocalSeatCount) || WithinCrowd(position: position, seats: joinedSeats[..joinedSeatCount], radiusSquared: crowdRadiusSquared));
 
-            if (m_avatarPoseSeeded[index]) {
+            if (m_avatarPoseSeeded[index] && (m_avatarMotionAddresses[index] == address)) {
                 // Phase advances by DISTANCE, not wall time: idle avatars hold their pose; walking speed controls cadence.
                 // Clamp a teleport/server snap so it cannot spin the limbs through dozens of cycles in one frame.
                 var travelled = MathF.Min(x: Vector3.Distance(value1: position, value2: m_avatarPreviousPositions[index]), y: 0.25f);
@@ -395,6 +407,8 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 }
             } else {
                 m_avatarPoseSeeded[index] = true;
+                m_avatarGaitPhases[index] = 0f;
+                m_avatarMotionAddresses[index] = address;
             }
 
             m_avatarPreviousPositions[index] = position;
@@ -403,17 +417,15 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
             // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
             // is gone: the body shows its actual creation geometry instead.
-            var look = m_client.Look(index: index);
-
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,
                 rootPosition: (m_rendersAsStamp[index] ? HiddenAvatar : position),
-                rootOrientation: m_client.Orientation(index: index),
-                gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
+                rootOrientation: orientation,
+                gaitPhase: (m_avatarGaitPhases[index] * m_emittedAvatarGaitAmplitudes[index]),
                 castsSoftShadow: castsSoftShadow,
                 transforms: avatars,
-                rig: LookRig(look: look, catalogRig: m_client.CatalogRig(index: index)),
-                scale: look.Scale
+                rig: m_emittedAvatarRigs[index],
+                scale: m_emittedAvatarScales[index]
             );
         }
 
@@ -440,7 +452,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarAccentMaterials = new int[WorldAvatarCatalog.Capacity];
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
-            var bodyColor = client.BodyColor(index: index);
+            var bodyColor = (TryPresentedAppearance(index: index, bodyColor: out var presentedColor, look: out _, catalogRig: out _)
+                ? presentedColor
+                : client.BodyColor(index: index));
 
             avatarBodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * m_noseFactor)));
@@ -507,15 +521,26 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // each. The probe emits every catalog range at unit scale (the frozen worst case); a live build emits only
         // active ranges, each sourcing its LOOK's pinned rig and uniform scale (both clamped so the frozen per-entity
         // slot capacity is never exceeded — see WorldAvatarCatalog.Emit's remarks).
+        if (!probeWorstCase) {
+            for (var index = 0; index < WorldAvatarCatalog.Capacity; index++) {
+                var hasPresented = TryPresentedAppearance(index: index, bodyColor: out _, look: out var presentedLook, catalogRig: out var presentedRig);
+                var look = (hasPresented ? presentedLook : m_client.Look(index: index));
+                var catalogRig = (hasPresented ? presentedRig : m_client.CatalogRig(index: index));
+                m_emittedAvatarRigs[index] = LookRig(look: look, catalogRig: catalogRig);
+                m_emittedAvatarScales[index] = look.Scale;
+                m_emittedAvatarGaitAmplitudes[index] = look.Motion.GaitAmplitude;
+            }
+        }
+
         WorldAvatarCatalog.Emit(
             builder: builder,
-            isActive: client.IsActive,
+            isActive: IsAvatarPresented,
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
             probeWorstCase: probeWorstCase,
             slotBase: slotBase,
-            rigFor: (probeWorstCase ? null : index => LookRig(look: m_client.Look(index: index), catalogRig: m_client.CatalogRig(index: index))),
-            scaleFor: (probeWorstCase ? null : index => m_client.Look(index: index).Scale)
+            rigFor: (probeWorstCase ? null : index => m_emittedAvatarRigs[index]),
+            scaleFor: (probeWorstCase ? null : index => m_emittedAvatarScales[index])
         );
     }
 
@@ -574,6 +599,67 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         return padded;
+    }
+
+    // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot
+    // authority this reads the ordinary client slot; after handoff the same frozen local-seat catalog range follows
+    // the route seed/continuum pose. Adjacency rendering suppresses that exact address, so a transfer cannot create
+    // a one-frame zero-avatar gap or a two-avatar overlap.
+    private bool IsAvatarPresented(int index) {
+        if (m_client.IsActive(index: index)) {
+            return true;
+        }
+        if (!TryTravelingRoute(index: index, route: out var route)) {
+            return false;
+        }
+        var entity = route.Entity;
+        return route.Endpoint.TryEntityPose(entity: in entity, position: out _, orientation: out _);
+    }
+
+    private bool TryPresentedPose(int index, out Vector3 position, out Quaternion orientation, out WorldEntityAddress address) {
+        if (m_client.IsActive(index: index)) {
+            position = m_client.Position(index: index);
+            orientation = m_client.Orientation(index: index);
+            address = m_client.EntityAddress(index: index);
+            return true;
+        }
+        if (TryTravelingRoute(index: index, route: out var route) &&
+            m_continuum.TryResolveSeatPose(slot: index, interpolationAlpha: 1f, position: out position, orientation: out orientation)) {
+            address = route.Entity;
+            return true;
+        }
+        position = default;
+        orientation = Quaternion.Identity;
+        address = default;
+        return false;
+    }
+
+    private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
+        if (m_client.IsActive(index: index)) {
+            bodyColor = m_client.BodyColor(index: index);
+            look = m_client.Look(index: index);
+            catalogRig = m_client.CatalogRig(index: index);
+            return true;
+        }
+        if (TryTravelingRoute(index: index, route: out var route)) {
+            var entity = route.Entity;
+            if (route.Endpoint.TryEntityAppearance(entity: in entity, bodyColor: out bodyColor, look: out look, catalogRig: out catalogRig)) {
+                return true;
+            }
+        }
+        bodyColor = default;
+        look = WorldLook.Implicit;
+        catalogRig = 0;
+        return false;
+    }
+
+    private bool TryTravelingRoute(int index, out WorldAuthorityRoute route) {
+        if (((uint)index < WorldPopulation.LocalSeatCount) && m_client.Roster.IsJoined(slot: index)) {
+            route = m_continuum.Route(slot: index);
+            return true;
+        }
+        route = null!;
+        return false;
     }
 
     // Whether `position` lies within the crowd radius of any joined local seat (the stand-in soft-shadow gate). With no

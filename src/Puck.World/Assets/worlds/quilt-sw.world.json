@@ -5,7 +5,7 @@
   },
   "motion": {
     "moveSpeed": 8,
-    "turnSpeed": 2.5,
+    "turnSpeed": 2.6,
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -40,6 +40,15 @@
         0,
         14
       ]
+    },
+    {
+      "id": "npc-spawn",
+      "position": [
+        -18,
+        0,
+        8
+      ],
+      "yawDegrees": -90
     }
   ],
   "render": {
@@ -205,14 +214,16 @@
     ],
     "distribution": {
       "region": {
-        "$type": "disc",
-        "radius": 18,
-        "sampleCount": 124
+        "$type": "points",
+        "names": [
+          "npc-spawn"
+        ],
+        "halfExtent": 1.5
       },
       "fill": {
-        "name": "additive",
+        "name": "r2",
         "offset": 0,
-        "step": 0.38196602
+        "step": 0
       }
     },
     "peerVariation": {
@@ -319,7 +330,7 @@
   ],
   "bodyMotionPrograms": [
     {
-      "name": "grounded",
+      "name": "traverse",
       "version": "puck.body-motion.v1",
       "kind": "Motion",
       "operations": [
@@ -329,20 +340,8 @@
         "SnapYawToPlanarIntent",
         "RunActionTriggers",
         "ApplyVerticalGravity",
+        "ApplyVerticalDrive",
         "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ]
-    },
-    {
-      "name": "free",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "IntegrateLocalAttitude",
-        "ComputeLocalTargetVelocity",
-        "RunActionTriggers",
-        "ApplyVerticalDecay",
-        "IntegrateScratchVelocity",
         "CommitPose"
       ]
     },
@@ -390,7 +389,7 @@
   "kits": [
     {
       "name": "vaulter",
-      "bodyMotionProgram": "grounded",
+      "bodyMotionProgram": "traverse",
       "motion": {
         "$type": "grounded",
         "moveSpeed": 8,
@@ -398,7 +397,7 @@
           "min": 8,
           "max": 8
         },
-        "turnSpeed": 2.5,
+        "turnSpeed": 2.6,
         "riseGravity": 28,
         "fallGravity": 46,
         "maxFallSpeed": 40,
@@ -427,13 +426,13 @@
         "sprintMultiplier": 1.6,
         "sprintChannel": "run",
         "moveFrame": "World",
-        "facingSnap": true
+        "facingSnap": false
       },
       "producers": {
         "wander": {
           "scalars": {
             "forward": 0.375,
-            "softRadius": 18,
+            "softRadius": 12,
             "weaveAmplitude": 0.5,
             "inwardGain": 1.6,
             "turnScale": 2.5,
@@ -556,6 +555,30 @@
             "page": {
               "id": "base",
               "entries": [
+                {
+                  "source": "gamepad.rightTrigger",
+                  "channel": "up",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Ascend",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftTrigger",
+                  "channel": "up",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Descend",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.rightStick.x",
+                  "channel": "turn",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Face camera",
+                  "icon": null
+                },
                 {
                   "source": "keyboard.space",
                   "channel": "jump",
@@ -1028,6 +1051,10 @@
     {
       "name": "ne",
       "document": "quilt-ne.world.json"
+    },
+    {
+      "name": "island",
+      "document": "quilt-island.world.json"
     }
   ],
   "destinations": [
@@ -1048,6 +1075,12 @@
       "reference": "ne",
       "durability": "persisted",
       "scope": "global"
+    },
+    {
+      "name": "island",
+      "reference": "island",
+      "durability": "persisted",
+      "scope": "global"
     }
   ],
   "adjacencies": [
@@ -1062,6 +1095,7 @@
           0
         ],
         "outwardYawDegrees": 180,
+        "outwardPitchDegrees": 0,
         "width": 24,
         "height": 16
       },
@@ -1078,8 +1112,22 @@
           12
         ],
         "outwardYawDegrees": 90,
+        "outwardPitchDegrees": 0,
         "width": 24,
         "height": 16
+      },
+      "unavailable": "closed"
+    },
+    {
+      "name": "up",
+      "destination": "island",
+      "counterpart": "down-sw",
+      "boundary": {
+        "center": [-12, 2, 12],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 90,
+        "width": 24,
+        "height": 24
       },
       "unavailable": "closed"
     }

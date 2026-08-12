@@ -31,21 +31,26 @@
             "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates."
           },
           "outwardYawDegrees": {
-            "description": "The outward planar normal, in degrees (0 = \u002BZ, 90 = \u002BX).",
+            "description": "The outward heading, in degrees (0 = \u002BZ, 90 = \u002BX).",
+            "type": "number"
+          },
+          "outwardPitchDegrees": {
+            "description": "The outward elevation, in degrees (\u002B90 = \u002BY, -90 = -Y).",
             "type": "number"
           },
           "width": {
-            "description": "The full horizontal span of the boundary.",
+            "description": "The full span along the boundary\u0027s local right axis.",
             "type": "number"
           },
           "height": {
-            "description": "The full vertical span of the boundary.",
+            "description": "The full span along the boundary\u0027s local up axis.",
             "type": "number"
           }
         },
         "required": [
           "center",
           "outwardYawDegrees",
+          "outwardPitchDegrees",
           "width",
           "height"
         ],

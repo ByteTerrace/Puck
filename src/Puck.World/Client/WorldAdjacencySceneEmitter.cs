@@ -40,6 +40,7 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
     private readonly Func<WorldDefinition> m_definition;
     private readonly IWorldAdjacencySource m_source;
+    private readonly Func<WorldEntityAddress, bool>? m_suppressEntity;
     private readonly int m_reservation;
     // The last-polled reachability/revision per band, keyed by (placementId, faceName) — WriteRevision's own poll
     // compares against this to decide whether a rebuild is owed, without ever emitting from inside WriteRevision
@@ -54,25 +55,43 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private readonly Vector3[] m_previousRenderPositions;
     private readonly WorldEntityAddress[] m_motionAddresses;
     private readonly bool[] m_motionSeeded;
+    // Geometry and transforms must use one appearance epoch. A socket delivery can replace a slot between the
+    // program rebuild and this frame's transform pack; latching the emitted rig/scale/gait here prevents the new
+    // occupant's skeleton from being packed into the old occupant's compiled geometry for even one frame.
+    private readonly int[] m_emittedRigs;
+    private readonly float[] m_emittedScales;
+    private readonly float[] m_emittedGaitAmplitudes;
+    // The emitted SDF program assigns one frozen transform range to each projection in order. Resolution can change
+    // between program emission and a later frame's transform pack; re-querying Visuals there would write a newly
+    // shifted direct/corner list into the old program's ranges, producing the border-riding flicker. WriteRevision
+    // still observes topology changes and requests a rebuild; until that rebuild lands, transforms follow exactly
+    // the projection image that compiled the current program.
+    private WorldAdjacencyProjection[] m_emittedProjections = [];
 
     /// <summary>Initializes the emitter over the boot definition's own adjacency rows.</summary>
     /// <param name="client">The snapshot-fed client view — this world's own definition (never re-read from the
     /// server directly, matching every other client-side emitter in this composition).</param>
     /// <param name="source">The injected neighbour resolver — the same wire-shaped seam
     /// <see cref="WorldAdjacencyContactField"/> reads for collision.</param>
+    /// <param name="suppressEntity">Optional exact-address predicate for entities whose primary presentation is
+    /// owned elsewhere (locally followed travelers).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldAdjacencySceneEmitter(WorldClient client, IWorldAdjacencySource source) {
+    public WorldAdjacencySceneEmitter(WorldClient client, IWorldAdjacencySource source, Func<WorldEntityAddress, bool>? suppressEntity = null) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_definition = () => client.Definition;
         m_source = source;
+        m_suppressEntity = suppressEntity;
         m_bandCount = WorldAdjacencyBands.ProjectionCapacity(definition: client.Definition);
         m_reservation = (m_bandCount * MaxInstancesPerBand);
         m_gaitPhases = new float[m_bandCount * WorldAvatarCatalog.Capacity];
         m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
         m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
         m_motionSeeded = new bool[m_gaitPhases.Length];
+        m_emittedRigs = new int[m_gaitPhases.Length];
+        m_emittedScales = new float[m_gaitPhases.Length];
+        m_emittedGaitAmplitudes = new float[m_gaitPhases.Length];
     }
 
     /// <summary>Initializes the same border renderer over a followed instance's delivered mirror.</summary>
@@ -88,6 +107,9 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
         m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
         m_motionSeeded = new bool[m_gaitPhases.Length];
+        m_emittedRigs = new int[m_gaitPhases.Length];
+        m_emittedScales = new float[m_gaitPhases.Length];
+        m_emittedGaitAmplitudes = new float[m_gaitPhases.Length];
     }
 
     /// <inheritdoc/>
@@ -148,8 +170,13 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     internal void EmitCurrent(SdfProgramBuilder builder, int slotBase = 0, bool includeEntities = false) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
+        var projections = m_source.Visuals().ToArray();
+        if (includeEntities) {
+            m_emittedProjections = projections;
+        }
+
         var bandIndex = 0;
-        foreach (var projection in m_source.Visuals()) {
+        foreach (var projection in projections) {
             var neighbour = projection.Neighbour;
             var selection = WorldAdjacencyGeometry.Select(definition: neighbour.Definition, frame: projection.Path[0].Neighbour, overlapDepth: projection.OverlapDepth);
             var transformed = selection.Placements
@@ -161,7 +188,7 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
 
             if (includeEntities) {
-                EmitEntities(builder: builder, neighbour: neighbour, slotBase: (slotBase + (bandIndex * WorldAvatarCatalog.DynamicTransformCapacity)));
+                EmitEntities(builder: builder, neighbour: neighbour, bandIndex: bandIndex, slotBase: (slotBase + (bandIndex * WorldAvatarCatalog.DynamicTransformCapacity)));
             }
             bandIndex++;
         }
@@ -170,13 +197,13 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
         var bandIndex = 0;
-        foreach (var projection in m_source.Visuals()) {
+        foreach (var projection in m_emittedProjections) {
             var neighbour = projection.Neighbour;
             var avatarSlots = slots.Slice(start: (context.SlotBase + (bandIndex * WorldAvatarCatalog.DynamicTransformCapacity)), length: WorldAvatarCatalog.DynamicTransformCapacity);
             var alpha = neighbour.InterpolationAlpha;
             for (var entity = 0; entity < neighbour.EntityCapacity; entity++) {
                 var motionIndex = ((bandIndex * WorldAvatarCatalog.Capacity) + entity);
-                if (!neighbour.IsEntityActive(index: entity)) {
+                if (!neighbour.IsEntityActive(index: entity) || IsSuppressed(neighbour: neighbour, index: entity)) {
                     m_motionSeeded[motionIndex] = false;
                     continue;
                 }
@@ -196,24 +223,32 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
                 m_previousRenderPositions[motionIndex] = position;
                 var mapped = MapPoseIntoSource(position: position, orientation: orientation, path: projection.Path);
-                var look = neighbour.Look(index: entity);
-                WorldAvatarCatalog.PackTransforms(avatar: entity, rootPosition: mapped.Position, rootOrientation: mapped.Orientation, gaitPhase: (m_gaitPhases[motionIndex] * look.Motion.GaitAmplitude), castsSoftShadow: true, transforms: avatarSlots, rig: LookRig(look: look, catalogRig: neighbour.CatalogRig(index: entity)), scale: look.Scale);
+                WorldAvatarCatalog.PackTransforms(avatar: entity, rootPosition: mapped.Position, rootOrientation: mapped.Orientation, gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]), castsSoftShadow: true, transforms: avatarSlots, rig: m_emittedRigs[motionIndex], scale: m_emittedScales[motionIndex]);
             }
             bandIndex++;
         }
     }
 
-    private static void EmitEntities(SdfProgramBuilder builder, IWorldAdjacencyNeighbour neighbour, int slotBase) {
+    private void EmitEntities(SdfProgramBuilder builder, IWorldAdjacencyNeighbour neighbour, int bandIndex, int slotBase) {
         var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
         var accentMaterials = new int[WorldAvatarCatalog.Capacity];
         var noseFactor = neighbour.Definition.PlayerDefaults.NoseFactor;
         for (var index = 0; index < WorldAvatarCatalog.Capacity; index++) {
             var color = neighbour.BodyColor(index: index);
+            var look = neighbour.Look(index: index);
+            var appearanceIndex = ((bandIndex * WorldAvatarCatalog.Capacity) + index);
+            m_emittedRigs[appearanceIndex] = LookRig(look: look, catalogRig: neighbour.CatalogRig(index: index));
+            m_emittedScales[appearanceIndex] = look.Scale;
+            m_emittedGaitAmplitudes[appearanceIndex] = look.Motion.GaitAmplitude;
             bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: color));
             accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (color * noseFactor)));
         }
-        WorldAvatarCatalog.Emit(builder: builder, isActive: neighbour.IsEntityActive, bodyMaterials: bodyMaterials, accentMaterials: accentMaterials, probeWorstCase: false, slotBase: slotBase, rigFor: index => LookRig(look: neighbour.Look(index: index), catalogRig: neighbour.CatalogRig(index: index)), scaleFor: index => neighbour.Look(index: index).Scale);
+        var appearanceBase = (bandIndex * WorldAvatarCatalog.Capacity);
+        WorldAvatarCatalog.Emit(builder: builder, isActive: index => neighbour.IsEntityActive(index: index) && !IsSuppressed(neighbour: neighbour, index: index), bodyMaterials: bodyMaterials, accentMaterials: accentMaterials, probeWorstCase: false, slotBase: slotBase, rigFor: index => m_emittedRigs[appearanceBase + index], scaleFor: index => m_emittedScales[appearanceBase + index]);
     }
+
+    private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>
+        (m_suppressEntity is { } suppress && suppress(neighbour.EntityAddress(index: index)));
 
     internal static (Vector3 Position, Quaternion Orientation) MapPoseIntoSource(Vector3 position, Quaternion orientation, IReadOnlyList<WorldAdjacencyFramePair> path) {
         var mappedPosition = position;
@@ -225,11 +260,9 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
 
     private static (Vector3 Position, Quaternion Orientation) MapPoseStage(Vector3 position, Quaternion orientation, WorldFaceFrame neighbourFrame, WorldFaceFrame sourceFrame) {
-        var yaw = MathF.Atan2((2f * ((orientation.W * orientation.Y) + (orientation.X * orientation.Z))), (1f - (2f * ((orientation.Y * orientation.Y) + (orientation.Z * orientation.Z)))));
-        var mapped = WorldPortalArrivalMath.ComputeArrival(travelerPosition: FixedVector3.FromVector3(value: position), travelerYawRadians: FixedQ4816.FromDouble(value: yaw), travelerPlanarVelocity: FixedVector3.Zero, travelerVerticalVelocity: FixedQ4816.Zero, sourcePosition: neighbourFrame.Origin, sourceYawRadians: neighbourFrame.PlanarYawRadians, destinationPosition: sourceFrame.Origin, destinationYawRadians: sourceFrame.PlanarYawRadians);
-        var yawDelta = ((float)(double)mapped.YawRadians - yaw);
-        var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: yawDelta);
-        return (mapped.Position.ToVector3(), Quaternion.Normalize(value: (rotation * orientation)));
+        var mappedPosition = WorldFrameIsometry.MapPoint(point: FixedVector3.FromVector3(value: position), source: neighbourFrame, destination: sourceFrame);
+        var rotation = WorldFrameIsometry.Rotation(source: neighbourFrame, destination: sourceFrame).ToQuaternion();
+        return (mappedPosition.ToVector3(), Quaternion.Normalize(value: (rotation * orientation)));
     }
 
     private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : catalogRig);
@@ -242,17 +275,14 @@ internal sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private static WorldPlacement MapIntoSource(WorldPlacement placement, IReadOnlyList<WorldAdjacencyFramePair> path) {
         var mapped = placement;
         foreach (var stage in path) {
-            var arrival = WorldPortalArrivalMath.ComputeArrival(
-            travelerPosition: FixedVector3.FromVector3(value: mapped.Position),
-            travelerYawRadians: FixedQ4816.FromDouble(value: (mapped.YawDegrees * (Math.PI / 180.0))),
-            travelerPlanarVelocity: FixedVector3.Zero,
-            travelerVerticalVelocity: FixedQ4816.Zero,
-            sourcePosition: stage.Neighbour.Origin,
-            sourceYawRadians: stage.Neighbour.PlanarYawRadians,
-            destinationPosition: stage.Source.Origin,
-            destinationYawRadians: stage.Source.PlanarYawRadians
-            );
-            mapped = mapped with { Position = arrival.Position.ToVector3(), YawDegrees = (float)((double)arrival.YawRadians * (180.0 / Math.PI)) };
+            var yaw = FixedQ4816.FromDouble(value: (mapped.YawDegrees * (Math.PI / 180.0)));
+            var forward = FixedQuaternion.FromAxisAngle(axis: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero), angle: yaw)
+                .Rotate(vector: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One));
+            var mappedForward = WorldFrameIsometry.MapVector(value: forward, source: stage.Neighbour, destination: stage.Source);
+            mapped = mapped with {
+                Position = WorldFrameIsometry.MapPoint(point: FixedVector3.FromVector3(value: mapped.Position), source: stage.Neighbour, destination: stage.Source).ToVector3(),
+                YawDegrees = (float)((double)FixedQ4816.Atan2(y: mappedForward.X, x: mappedForward.Z) * (180.0 / Math.PI)),
+            };
         }
         return mapped;
     }

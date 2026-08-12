@@ -13,8 +13,7 @@ internal static class WorldSeatCameraResolver {
     }
 
     internal sealed class SmoothingState {
-        public Vector3 Eye;
-        public Vector3 Target;
+        public Vector3 Boom;
         public bool Seeded;
     }
 
@@ -57,16 +56,18 @@ internal static class WorldSeatCameraResolver {
         }
 
         if (!state.Seeded) {
-            state.Eye = eye;
-            state.Target = target;
+            state.Boom = (eye - target);
             state.Seeded = true;
         } else {
             var alpha = 1f - MathF.Exp(x: -smoothRate * MathF.Max(x: deltaSeconds, y: 0f));
-            state.Eye = Vector3.Lerp(value1: state.Eye, value2: eye, amount: alpha);
-            state.Target = Vector3.Lerp(value1: state.Target, value2: target, amount: alpha);
+            state.Boom = Vector3.Lerp(value1: state.Boom, value2: (eye - target), amount: alpha);
         }
 
-        eye = state.Eye;
-        target = state.Target;
+        // Smooth only the authored orbit boom. The subject's translation is already the continuous render pose and
+        // must remain exact: smoothing absolute eye/target coordinates made a fast-rising player leave the camera
+        // physically below them (and made every authority handoff look like camera lag despite a continuous anchor).
+        // Keeping target live while easing its relative boom preserves authored orbit smoothing without inventing
+        // a second, delayed player trajectory in presentation.
+        eye = (target + state.Boom);
     }
 }

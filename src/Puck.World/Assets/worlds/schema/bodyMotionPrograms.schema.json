@@ -47,6 +47,7 @@
             "ApplyVerticalGravity",
             "ApplyVerticalDecay",
             "ApplyBuoyancyAndSurface",
+            "ApplyVerticalDrive",
             "IntegratePlanarAndVerticalVelocity",
             "IntegrateScratchVelocity",
             "CommitPose",

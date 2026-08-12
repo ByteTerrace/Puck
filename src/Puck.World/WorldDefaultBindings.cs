@@ -13,14 +13,13 @@ namespace Puck.World;
 /// per-seat <see cref="WorldSeatBindings.SetActiveGroup"/> pointer flip, never a recompose).
 /// </summary>
 /// <remarks>
-/// The play group is eight pages, one per ordered chord — the model every group in this document follows:
-/// <c>[]</c> base, <c>[lt]</c>, <c>[rt]</c>, <c>[lt, rt]</c>, <c>[rt, lt]</c>, <c>[ctrl-l]</c>, <c>[ctrl-r]</c>,
-/// <c>[tab]</c>.
+/// The play group is four pages: <c>[]</c> base, <c>[ctrl-l]</c>, <c>[ctrl-r]</c>, and <c>[tab]</c>.
 /// Holding the chord is the page turn: the binding bar re-renders the page the held chord selects, so the chord
-/// vocabulary is discoverable by squeezing (or pressing either Control key) rather than memorized. Pages 1..4 are
-/// deliberately sparse — they carry only the stick routers (a held analog re-dispatches against the active page
-/// each tick, so a page without them would stall movement while its chord is held) and wait to be authored through
-/// the binding document. Pages 5 and 6, <see cref="ControlLeftPageId"/> and <see cref="ControlRightPageId"/>, carry
+/// vocabulary is discoverable rather than memorized. Gamepad triggers are deliberately NOT claimed as play-page
+/// chords: a world can bind their full analog values on the resting page without the trigger first switching away
+/// from the very binding it is driving. They remain document-global modifier vocabulary because the editor group
+/// explicitly uses them after its mode flip. The two Control pages, <see cref="ControlLeftPageId"/> and
+/// <see cref="ControlRightPageId"/>, carry
 /// the same keyboard movement rows as the base page for the identical reason — a held Control key must not strand a
 /// keyboard player's movement any more than a held trigger strands a gamepad player's — plus Ctrl+C firing
 /// <see cref="EditorCommandModule.StatusCommand"/>. Both pages are declared, carrying identical entries, because
@@ -54,15 +53,6 @@ internal static class WorldDefaultBindings {
 
     /// <summary>The play group's resting page id (chord: nothing held) — page 0.</summary>
     public const string BasePageId = "base";
-    /// <summary>The play group's page 1 id (chord: LT held).</summary>
-    public const string LeftPageId = "play-lt";
-    /// <summary>The play group's page 2 id (chord: RT held).</summary>
-    public const string RightPageId = "play-rt";
-    /// <summary>The play group's page 3 id (chord: LT then RT held).</summary>
-    public const string LeftRightPageId = "play-lt-rt";
-    /// <summary>The play group's page 4 id (chord: RT then LT held — the reverse squeeze).</summary>
-    public const string RightLeftPageId = "play-rt-lt";
-
     /// <summary>The roster group — a not-yet-active seat's group, selected by a <c>roster</c> context row (see the
     /// class remarks). Holds the roster-management verbs and the stick routers a pending seat's profile picker
     /// needs; carries no channel destination, so no physical button drives gameplay while a seat sits here.</summary>
@@ -111,8 +101,9 @@ internal static class WorldDefaultBindings {
 
     /// <summary>The play wheel's action-ring page id (see <see cref="PlayWheel"/>).</summary>
     public const string WheelActRingId = "play-wheel-act";
-    // Trigger hysteresis: latch at a deliberate squeeze, release only on a clear letoff, so a trigger resting near
-    // its threshold never flaps the active page mid-gesture.
+    // Editor trigger-chord hysteresis: latch at a deliberate squeeze, release only on a clear letoff, so a trigger
+    // resting near its threshold never flaps an editor page mid-gesture. Play has no trigger page rows, leaving the
+    // same sources wholly available to a world's ordinary analog bindings.
     private const float TriggerPress = 0.55f;
     private const float TriggerRelease = 0.35f;
 
@@ -157,18 +148,12 @@ internal static class WorldDefaultBindings {
                             // Start = device cycle (press edge).
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.Start, Command: PlayerCommandModule.CycleCommand, ActivateOn: CommandPhase.Started),
                             // Editor entry — Gamepad Back (the view/menu button); the keyboard's editor entry is the
-                            // wheel's Editor sector (hold Tab). The triggers turn pages; they never enter a mode.
+                            // wheel's Editor sector (hold Tab). Trigger pages belong to the editor group only.
                             new BindingPageEntryDefinition(Source: InputSources.Gamepad.Back, Command: EditorCommandModule.EnterCommand, ActivateOn: CommandPhase.Started, Label: "Editor"),
                         ],
                         Label: "Base"
                     )
                 ),
-                // Pages 1..4 — the four ordered trigger chords, held to turn the bar. Sparse by construction: the
-                // stick routers only, so movement survives a held chord; content is authored into the document.
-                SparsePage(chord: [LeftTriggerModifierId], id: LeftPageId, label: "LT"),
-                SparsePage(chord: [RightTriggerModifierId], id: RightPageId, label: "RT"),
-                SparsePage(chord: [LeftTriggerModifierId, RightTriggerModifierId], id: LeftRightPageId, label: "LT+RT"),
-                SparsePage(chord: [RightTriggerModifierId, LeftTriggerModifierId], id: RightLeftPageId, label: "RT+LT"),
                 // The Ctrl-held pages — the default chord binding a native OS-modifier key drives: hold either
                 // Control key, then press C to fire editor.status (harmless; echoes the seat's active group/page
                 // over stdout). Proves keyboard.controlLeft/Right resolve through the same held-chord machinery a
@@ -316,21 +301,6 @@ internal static class WorldDefaultBindings {
         new BindingContextDefinition(Family: WorldContextFamilies.Roster, State: WorldContextFamilies.RosterClaimed, Group: RosterGroup),
         new BindingContextDefinition(Family: WorldContextFamilies.Roster, State: WorldContextFamilies.RosterPending, Group: RosterGroup),
     ];
-
-    // One of the play group's four held-chord pages: labelled for the bar, carrying only the stick routers (a held
-    // analog re-dispatches against the ACTIVE page each tick, so omitting them would freeze movement mid-chord).
-    private static BindingChordDefinition SparsePage(string[] chord, string id, string label) => new(
-        Group: PlayGroup,
-        Chord: chord,
-        Page: new BindingPageDefinition(
-            Id: id,
-            Entries: [
-                new BindingPageEntryDefinition(Source: InputSources.Gamepad.LeftStick, Command: PlayerCommandModule.MoveCommand),
-                new BindingPageEntryDefinition(Source: InputSources.Gamepad.RightStick, Command: PlayerCommandModule.LookCommand),
-            ],
-            Label: label
-        )
-    );
 
     // The three movement channel names every shipped world declares identically — the engine default binds the
     // keyboard to these NAMES directly.

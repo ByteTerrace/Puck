@@ -340,6 +340,11 @@ public sealed class WorldServer : IWorldServerHost {
     public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
         ExecuteAuthorityOperation(operation: () => m_transferEscrow.Status(sourceAuthority: sourceAuthority, transferId: transferId));
 
+    /// <summary>Reads the authenticated source-border identity for an active escrow-arrived body. Callers already
+    /// under the authority operation gate use this to apply reciprocal adjacency hysteresis.</summary>
+    public bool TryTransferArrivalBorder(int bodyIndex, out string border) =>
+        m_transferEscrow.TryArrivalBorder(bodyIndex: bodyIndex, border: out border);
+
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);

@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -58,6 +59,10 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
     private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldAvatarCatalog.Capacity];
+    private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldAvatarCatalog.Capacity];
+    private readonly int[] m_emittedRigs = new int[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_emittedScales = new float[WorldAvatarCatalog.Capacity];
+    private readonly float[] m_emittedGaitAmplitudes = new float[WorldAvatarCatalog.Capacity];
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.RenderViews (the one place with
     // access to both the local eye and the border pair's two face rows) immediately before this view's Resolve.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
@@ -155,29 +160,30 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
             // Client.WorldClient.UpdateRenderPoses uses.
             var orientation = Quaternion.Lerp(quaternion1: m_mirror.PreviousOrientation(index: index), quaternion2: m_mirror.CurrentOrientation(index: index), amount: alpha);
 
-            if (m_avatarPoseSeeded[index]) {
+            var address = m_mirror.Address(index: index);
+            if (m_avatarPoseSeeded[index] && (m_avatarMotionAddresses[index] == address)) {
                 var travelled = MathF.Min(x: Vector3.Distance(value1: position, value2: m_avatarPreviousPositions[index]), y: 0.25f);
 
                 m_avatarGaitPhases[index] += (travelled * 8.0f);
             } else {
                 m_avatarPoseSeeded[index] = true;
+                m_avatarGaitPhases[index] = 0f;
+                m_avatarMotionAddresses[index] = address;
             }
 
             m_avatarPreviousPositions[index] = position;
-
-            var look = m_mirror.Look(index: index);
 
             WorldAvatarCatalog.PackTransforms(
                 avatar: index,
                 rootPosition: position,
                 rootOrientation: orientation,
-                gaitPhase: (m_avatarGaitPhases[index] * look.Motion.GaitAmplitude),
+                gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
                 // A session view disables soft shadows entirely (see Dress below), so crowd-radius participation has
                 // no observer — false is exact, not an approximation.
                 castsSoftShadow: false,
                 transforms: avatars,
-                rig: LookRig(look: look, catalogRig: m_mirror.CatalogRig(index: index)),
-                scale: look.Scale
+                rig: m_emittedRigs[index],
+                scale: m_emittedScales[index]
             );
         }
     }
@@ -193,6 +199,11 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
             var bodyColor = m_mirror.BodyColor(index: index);
+            var look = m_mirror.Look(index: index);
+
+            m_emittedRigs[index] = LookRig(look: look, catalogRig: m_mirror.CatalogRig(index: index));
+            m_emittedScales[index] = look.Scale;
+            m_emittedGaitAmplitudes[index] = look.Motion.GaitAmplitude;
 
             bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
             accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * noseFactor)));
@@ -205,8 +216,8 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
             accentMaterials: accentMaterials,
             probeWorstCase: probeWorstCase,
             slotBase: slotBase,
-            rigFor: (probeWorstCase ? null : index => LookRig(look: m_mirror.Look(index: index), catalogRig: m_mirror.CatalogRig(index: index))),
-            scaleFor: (probeWorstCase ? null : index => m_mirror.Look(index: index).Scale)
+            rigFor: (probeWorstCase ? null : index => m_emittedRigs[index]),
+            scaleFor: (probeWorstCase ? null : index => m_emittedScales[index])
         );
     }
 

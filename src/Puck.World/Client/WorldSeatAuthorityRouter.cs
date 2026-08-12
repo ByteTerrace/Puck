@@ -9,6 +9,10 @@ namespace Puck.World.Client;
 /// </summary>
 internal sealed class WorldSeatAuthorityRouter {
     private readonly WorldAuthorityRoute?[] m_routes = new WorldAuthorityRoute?[WorldSeatBindings.SeatCount];
+    private int m_revision;
+
+    /// <summary>Monotonic presentation watch bumped for every successful complete-claim publication.</summary>
+    public int Revision => Volatile.Read(ref m_revision);
 
     /// <summary>Raised after a successful claim change.</summary>
     public event Action<int>? RouteChanged;
@@ -45,6 +49,7 @@ internal sealed class WorldSeatAuthorityRouter {
             if (ReferenceEquals(
                 objA: Interlocked.CompareExchange(location1: ref m_routes[slot], value: next, comparand: previous),
                 objB: previous)) {
+                _ = Interlocked.Increment(ref m_revision);
                 RouteChanged?.Invoke(obj: slot);
                 return next;
             }
@@ -69,11 +74,22 @@ internal sealed class WorldSeatAuthorityRouter {
 
         if (ReferenceEquals(objA: observed, objB: expected)) {
             current = next;
+            _ = Interlocked.Increment(ref m_revision);
             RouteChanged?.Invoke(obj: slot);
             return true;
         }
 
         current = observed ?? throw new InvalidOperationException(message: $"seat {(slot + 1)} lost its authority claim");
+        return false;
+    }
+
+    /// <summary>Whether any locally followed seat currently claims this exact generation-addressed entity.</summary>
+    public bool Claims(in WorldEntityAddress entity) {
+        for (var slot = 0; slot < m_routes.Length; slot++) {
+            if (Volatile.Read(location: ref m_routes[slot]) is { } route && (route.Entity == entity)) {
+                return true;
+            }
+        }
         return false;
     }
 }

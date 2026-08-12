@@ -39,7 +39,16 @@ public sealed class MappedArrivalApplicationLawTests {
         // this body at, or the assertions below would pass just as well against a no-op.
         Assert.NotEqual(expected: mappedPosition, actual: spawnPosition);
 
-        var applied = population.ApplyMappedArrival(slot: actor.Index, position: mappedPosition, yawRadians: mappedYaw, planarVelocity: mappedPlanarVelocity, verticalVelocity: mappedVerticalVelocity);
+        var applied = population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: mappedPosition,
+            yawRadians: mappedYaw,
+            planarVelocity: mappedPlanarVelocity,
+            verticalVelocity: mappedVerticalVelocity,
+            actionContinuity: new WorldTransferActionContinuity(
+                Channels: [new WorldTransferChannelEdge(Name: "forward", PreviousBit: true)],
+                Registers: []));
 
         Assert.True(condition: applied);
         Assert.Equal(expected: mappedPosition, actual: body.FixedPosition);
@@ -55,6 +64,7 @@ public sealed class MappedArrivalApplicationLawTests {
 
         Assert.Equal(expected: mappedPlanarVelocity, actual: state.PlanarVelocity);
         Assert.Equal(expected: mappedVerticalVelocity, actual: state.VerticalVelocity);
+        Assert.True(condition: state.PreviousChannelBit[0], userMessage: "the mapped writer change manufactured a fresh held-channel edge");
     }
 
     [Fact]
@@ -65,6 +75,7 @@ public sealed class MappedArrivalApplicationLawTests {
         // ApplyMappedArrival must report that honestly rather than throwing or silently minting one.
         var applied = fixture.Server.Population.ApplyMappedArrival(
             slot: 0,
+            motionProgramName: "grounded",
             position: FixedVector3.Zero,
             yawRadians: FixedQ4816.Zero,
             planarVelocity: FixedVector3.Zero,

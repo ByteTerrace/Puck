@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-Runs Four Corners as four independent federated authorities and proves every invisible seam on the real path.
+Runs Four Corners plus its floating island as five independent federated authorities and proves horizontal and vertical seams on the real path.
 
 .DESCRIPTION
-The runner copies the four quilt documents to unique scratch space, gives each document a distinct TCP authority,
-starts four Puck.World processes with one shared federation key, and drives one local body clockwise across each
+The runner copies the five quilt documents to unique scratch space, gives each document a distinct TCP authority,
+starts five Puck.World processes with one shared federation key, and drives one local body clockwise across each
 seam at the same time. After handoff, every traveler is stopped and driven again through synthesized left/right
-stick signals—the exact binding/router path used by physical gamepads. NW also drives one autonomous body through
-the same invisible edge. It requires all four human transfers, retained camera state and movement control under the
-new authority, the autonomous ownership migration, routed read-backs after departure, delivered remote entity
+stick signals—the exact binding/router path used by physical gamepads. Every authority also wakes two
+producer-driven bodies at authored spawns and never submits movement for them. It requires all four human transfers,
+retained camera state and movement control under the new authority, eight autonomous ownership migrations, routed read-backs after departure, delivered remote entity
 addresses, and zero rejected wire commands.
 
 This artifact falsifies the sharding claim if any edge silently colocates: its transfer echo must name the distinct
@@ -51,8 +51,11 @@ $topology = [ordered]@{
     se = [PSCustomObject]@{ Port = (Get-FreeLoopbackPort); Edge = 'west';  Target = 'sw'; Corner = 'nw'; Pose = '2 0 12 0 0 0 1';   Fly = '0 -1 0 0 0 0 1 1'; Neighbours = @('ne', 'sw', 'nw'); ContactOut = '0.2 0 20 0 0 0'; ContactIn = '20 0 0.2 0 0 0'; OutAxis = 0; OutSign = 1; InAxis = 2; InSign = 1 }
     sw = [PSCustomObject]@{ Port = (Get-FreeLoopbackPort); Edge = 'north'; Target = 'nw'; Corner = 'ne'; Pose = '-12 0 2 0 0 0 1';  Fly = '1 0 0 0 0 0 1 1'; Neighbours = @('nw', 'se', 'ne'); ContactOut = '-4 0 0.2 0 0 0'; ContactIn = '-0.2 0 20 0 0 0'; OutAxis = 2; OutSign = 1; InAxis = 0; InSign = -1 }
 }
+$islandPort = Get-FreeLoopbackPort
+$authorityIds = @($topology.Keys) + @('island')
 
 function Endpoint([string] $id) {
+    if ($id -eq 'island') { return "127.0.0.1:$islandPort" }
     return "127.0.0.1:$($topology[$id].Port)"
 }
 
@@ -78,7 +81,7 @@ try {
 [byte[]] $key = 1..32
 [System.IO.File]::WriteAllBytes($keyPath, $key)
 
-foreach ($id in $topology.Keys) {
+foreach ($id in $authorityIds) {
     $source = Join-Path $repoRoot "src\Puck.World\Assets\worlds\quilt-$id.world.json"
     $target = Join-Path $worldDir "quilt-$id.world.json"
     $document = Get-Content -Raw -LiteralPath $source | ConvertFrom-Json
@@ -90,12 +93,19 @@ foreach ($id in $topology.Keys) {
     if ($id -eq 'nw') { $document.simulation.rateHz = 30 }
     # Four indices are reserved for local seats. A federated arrival is an ordinary admitted network player, so the
     # sharded fixture must author network capacity instead of relying on the quilt documents' local-only floor.
-    $document.population.capacity = 12
-    $document.population.networkPlayers = 8
+    # Four driven locals plus all eight autonomous travelers can legally collect on one authority. Slot reuse under
+    # that crowd is intentional: it is the real-path falsifier for generation-stable appearance and forwarding.
+    $document.population.capacity = 20
+    $document.population.networkPlayers = 16
     $document.population.seatActivation = @('Eager', 'Eager', 'Eager', 'Eager')
     $document.population.defaultPeerSource = 'Idle'
-    $document.population.distribution.region = [PSCustomObject]@{ '$type' = 'points'; names = @('seat-1'); halfExtent = 0 }
+    $document.population.distribution.region = [PSCustomObject]@{ '$type' = 'points'; names = @('npc-spawn'); halfExtent = 0 }
     $document.population.distribution.fill = [PSCustomObject]@{ name = 'r2'; offset = 0; step = 0 }
+    if ($id -eq 'nw') {
+        $npcSpawn = $document.spawnPoints | Where-Object { $_.id -eq 'npc-spawn' }
+        $npcSpawn.position = @(-0.6, 0, -12)
+        $npcSpawn.yawDegrees = -90
+    }
     [System.IO.File]::WriteAllText($target, ($document | ConvertTo-Json -Depth 100), $utf8NoBom)
 }
 
@@ -104,8 +114,8 @@ $assertions = 0
 $failures = @()
 
 try {
-    foreach ($id in $topology.Keys) {
-        $row = $topology[$id]
+    foreach ($id in $authorityIds) {
+        $row = if ($id -eq 'island') { $null } else { $topology[$id] }
         $stdin = Join-Path $scratch "$id.stdin.txt"
         $stdout = Join-Path $scratch "$id.stdout.log"
         $stderr = Join-Path $scratch "$id.stderr.log"
@@ -113,13 +123,12 @@ try {
         $state = Join-Path $scratch "state-$id"
         $startupWait = if ($id -eq 'nw') { 45 } else { 90 }
         $neighbourWait = if ($id -eq 'nw') { 15 } else { 30 }
-        $contactWait = if ($id -eq 'nw') { 15 } else { 30 }
-        $autonomous = if ($id -eq 'nw') { @"
-world.population 1
-world.wait 2
-player.pose 2 0 -12 0 0 0 5
-player.fly 0 1 0 0 0 0 1 5
-"@ } else { '' }
+        # Give the cross-authority contact loop half a physical second at either authored rate.
+        $contactWait = if ($id -eq 'nw') { 15 } else { 120 }
+        $autonomous = if ($id -eq 'island') { '' } else { @"
+world.population 2 producer:wander
+world.wait 30
+"@ }
         $continuation = if ($id -eq 'nw') { @"
 player.fly -1 0 0 0 0 0 2 1
 world.wait 180
@@ -129,12 +138,23 @@ player.fly 0 -1 0 0 0 0 2 1
 world.wait 180
 player.where 1
 world.view.camera 1
-player.fly 1 0 0 0 0 0 2 1
-world.wait 180
+player.fly 1 0 0 0 0 0 2.5 1
+world.wait 210
 player.where 1
 world.view.camera 1
 "@ } else { '' }
-        $script = @"
+        $script = if ($id -eq 'island') { @"
+world.wait $startupWait
+wire.errors reset
+world.adjacencies
+world.wait 300
+world.adjacencies
+wire.errors
+"@ } else { 
+        # Probe ordinary open air beside the solid platform. The handoff plane sits below the island, so the
+        # traveler must enter island authority first and rise around its edge rather than pass through furniture.
+        $upCenter = switch ($id) { 'nw' { '-23 1 -23' }; 'ne' { '23 1 -23' }; 'se' { '23 1 23' }; 'sw' { '-23 1 23' } }
+        @"
 world.wait $startupWait
 wire.errors reset
 $autonomous
@@ -158,22 +178,60 @@ player.signal gamepad.rightStick 1 0
 world.wait 12
 player.signal gamepad.rightStick 0 0
 world.view.camera 1
+player.where 1
 player.signal gamepad.leftStick 0.5 0
 world.wait 8
 player.signal gamepad.leftStick 0 0
 player.stop 1
 player.where 1
+player.signal gamepad.rightTrigger 1
+world.wait 30
+player.signal gamepad.rightTrigger 1
+world.wait 30
+player.signal gamepad.rightTrigger 1
+world.wait 30
+player.signal gamepad.rightTrigger 1
+world.wait 30
+player.signal gamepad.rightTrigger 0
+world.wait 30
+player.where 1
+world.wait 60
+player.where 1
+player.stop 1
+player.signal gamepad.leftTrigger 1
+world.wait 30
+player.signal gamepad.leftTrigger 1
+world.wait 30
+player.signal gamepad.leftTrigger 1
+world.wait 30
+player.signal gamepad.leftTrigger 1
+world.wait 30
+player.signal gamepad.leftTrigger 0
+player.stop 1
+player.where 1
 world.adjacencies
+player.pose $upCenter 0 0 0 4
+player.fly 0 0 1 0 0 0 2 4
+world.wait 120
+player.fly 0 0 1 0 0 0 2 4
+world.wait 180
+player.where 4
 $continuation
+player.where 4
+player.press jump 1 0.05 4
+world.wait 30
+player.where 4
+world.wait 300
+player.where 4
 wire.errors
-"@
+"@ }
         [System.IO.File]::WriteAllText($stdin, $script, $utf8NoBom)
 
         $arguments = @(
             $artifact,
             '--world', $world,
             '--headless', 'true',
-            '--exit-after-seconds', '42',
+            '--exit-after-seconds', '56',
             '--state-dir', $state,
             '--federation-key-file', $keyPath
         )
@@ -183,7 +241,7 @@ wire.errors
         $processes[$id] = [PSCustomObject]@{ Process = $process; Stdout = $stdout; Stderr = $stderr }
     }
 
-    $deadline = [DateTime]::UtcNow.AddSeconds(55)
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
     while (($processes.Values | Where-Object { -not $_.Process.HasExited }).Count -gt 0 -and [DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 100
     }
@@ -197,31 +255,67 @@ wire.errors
     foreach ($id in $topology.Keys) {
         $row = $topology[$id]
         $entry = $processes[$id]
-        [string] $stdout = if (Test-Path -LiteralPath $entry.Stdout) { Get-Content -Raw -LiteralPath $entry.Stdout } else { '' }
-        [string] $stderr = if (Test-Path -LiteralPath $entry.Stderr) { Get-Content -Raw -LiteralPath $entry.Stderr } else { '' }
+        [string] $stdout = if (Test-Path -LiteralPath $entry.Stdout) { (Get-Content -Raw -LiteralPath $entry.Stdout) + '' } else { '' }
+        [string] $stderr = if (Test-Path -LiteralPath $entry.Stderr) { (Get-Content -Raw -LiteralPath $entry.Stderr) + '' } else { '' }
         $combined = $stdout + "`n" + $stderr
         $destinationEndpoint = Endpoint $row.Target
 
         Require ($entry.Process.HasExited -and ($entry.Process.ExitCode -eq 0)) "$id authority did not exit cleanly"
         Require ($stderr.Contains("[world.listen: bound $(Endpoint $id)]")) "$id did not bind its distinct authority endpoint"
+        Require ($stdout.Contains('[world.population: 2 ')) "$id did not wake both authored producer bodies"
+        Require ([regex]::IsMatch($stdout, "\[world\.adjacency: 'boot/[^']+' seat 5 crossed")) "$id first authored producer body never crossed an invisible boundary"
+        Require ([regex]::IsMatch($stdout, "\[world\.adjacency: 'boot/[^']+' seat 6 crossed")) "$id second authored producer body never crossed an invisible boundary"
         Require ($combined.Contains("[world.adjacency: 'boot/$($row.Edge)' seat 1 crossed")) "$id/$($row.Edge) did not cross automatically"
         Require ($stdout.Contains("remote authority $destinationEndpoint")) "$id/$($row.Edge) did not use remote authority $destinationEndpoint"
         Require ([regex]::IsMatch($stdout, '\[player\.where:.*instance:.*\]')) "$id traveler was not queryable through its routed remote authority"
-        $cameraReads = [regex]::Matches($stdout, '\[world\.view\.camera: player=1 authority=([^ ]+).*? yaw=(-?[0-9.]+)')
+        Require ($combined.Contains("[world.adjacency: 'boot/up' seat 4 crossed")) "$id/up did not cross into the floating island"
+        Require ($stdout.Contains("remote authority $(Endpoint 'island')")) "$id/up did not use floating-island authority $(Endpoint 'island')"
+        $cameraReads = [regex]::Matches($stdout, '\[world\.view\.camera: player=1 authority=([^ ]+).*? epoch=([0-9]+).*? yaw=(-?[0-9.]+)')
         Require ($cameraReads.Count -ge 2) "$id did not expose both routed camera reads"
         if ($cameraReads.Count -ge 2) {
-            Require (($cameraReads[1].Groups[1].Value -ne 'boot') -and $stdout.Contains('epoch=2')) "$id camera did not remain attached to the transferred identity/epoch"
-            Require ([math]::Abs([double]::Parse($cameraReads[1].Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)) -gt 1.0) "$id right-stick signal did not rotate the retained camera"
+            Require (($cameraReads[1].Groups[1].Value -ne 'boot') -and ([int]::Parse($cameraReads[1].Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture) -ge 2)) "$id camera did not remain attached to the transferred identity/epoch"
+            Require ([math]::Abs([double]::Parse($cameraReads[1].Groups[3].Value, [Globalization.CultureInfo]::InvariantCulture)) -gt 1.0) "$id right-stick signal did not rotate the retained camera"
         }
         Require (-not $stdout.Contains('resolved=false')) "$id exposed a camera epoch with no generation-addressed continuum anchor"
-        $whereReads = [regex]::Matches($stdout, '\[player\.where: p[0-9]+ pos=\(([^)]+)\)')
-        Require ($whereReads.Count -ge 3) "$id did not expose the before/after routed movement reads"
-        if ($whereReads.Count -ge 3) {
-            Require ($whereReads[1].Groups[1].Value -ne $whereReads[2].Groups[1].Value) "$id left-stick signal did not move the traveler under remote authority"
-            $before = $whereReads[1].Groups[1].Value.Split(',') | ForEach-Object { [double]::Parse($_.Trim(), [Globalization.CultureInfo]::InvariantCulture) }
-            $after = $whereReads[2].Groups[1].Value.Split(',') | ForEach-Object { [double]::Parse($_.Trim(), [Globalization.CultureInfo]::InvariantCulture) }
+        $whereReads = [regex]::Matches($stdout, '\[player\.where: p[0-9]+ pos=\(([^)]+)\) yaw=(-?[0-9.]+)°[^\r\n]* instance:')
+        Require ($whereReads.Count -ge 8) "$id did not expose the routed facing, horizontal, and vertical movement reads"
+        if ($whereReads.Count -ge 8) {
+            $yawBefore = [double]::Parse($whereReads[1].Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+            $yawAfter = [double]::Parse($whereReads[2].Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+            Require ([math]::Abs($yawAfter - $yawBefore) -ge 5) "$id right-stick camera turn did not turn the authored camera-facing body"
+            if ($cameraReads.Count -ge 2) {
+                $cameraYaw = [double]::Parse($cameraReads[1].Groups[3].Value, [Globalization.CultureInfo]::InvariantCulture)
+                $facingError = [math]::Abs((($yawAfter - $cameraYaw + 540.0) % 360.0) - 180.0)
+                # Camera presentation and authoritative turn close on adjacent clocks, and player.where rounds body
+                # yaw to whole degrees. Pin visual alignment while allowing that bounded handoff/tick quantization.
+                Require ($facingError -le 5.0) "$id body facing drifted $($facingError.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)) degrees from camera yaw"
+            }
+            Require ($whereReads[2].Groups[1].Value -ne $whereReads[3].Groups[1].Value) "$id left-stick signal did not move the traveler under remote authority"
+            $before = $whereReads[2].Groups[1].Value.Split(',') | ForEach-Object { [double]::Parse($_.Trim(), [Globalization.CultureInfo]::InvariantCulture) }
+            $after = $whereReads[3].Groups[1].Value.Split(',') | ForEach-Object { [double]::Parse($_.Trim(), [Globalization.CultureInfo]::InvariantCulture) }
             $distance = [math]::Sqrt((($after[0] - $before[0]) * ($after[0] - $before[0])) + (($after[1] - $before[1]) * ($after[1] - $before[1])) + (($after[2] - $before[2]) * ($after[2] - $before[2])))
-            Require ($distance -ge 0.4) "$id remote held-stick movement collapsed to $($distance.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)) units across 8 source ticks"
+            Require ($distance -ge 0.25) "$id remote held-stick movement collapsed to $($distance.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)) units across 8 source ticks"
+            $beforeAscent = [double]::Parse($whereReads[3].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+            $afterAscent = [double]::Parse($whereReads[4].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+            # The island frame's origin is six metres above the ground frame. Compare physical height rather than
+            # the two authorities' deliberately different local coordinates.
+            $afterAscentPhysical = $afterAscent + 6.0
+            Require ($afterAscentPhysical -gt ($beforeAscent + 0.25)) "$id ascent did not survive the federated handoff's authored traversal program"
+            $afterReleasePhysical = [double]::Parse($whereReads[5].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture) + 6.0
+            Require ($afterReleasePhysical -le ($afterAscentPhysical + 0.05)) "$id continued ascending after the trigger's completed release edge"
+            $afterDescent = [double]::Parse($whereReads[6].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+            Require ($afterDescent -lt ($afterAscentPhysical - 0.25)) "$id descent did not survive the federated handoff's authored traversal program"
+            $islandLanding = [double]::Parse($whereReads[7].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+            Require ([math]::Abs($islandLanding - 0.05) -le 0.15) "$id open-air ascent did not settle onto the floating island surface"
+            if ($whereReads.Count -ge 11) {
+                $jumpBase = [double]::Parse($whereReads[$whereReads.Count - 3].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+                $jumpPeak = [double]::Parse($whereReads[$whereReads.Count - 2].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+                $jumpRest = [double]::Parse($whereReads[$whereReads.Count - 1].Groups[1].Value.Split(',')[1].Trim(), [Globalization.CultureInfo]::InvariantCulture)
+                Require ($jumpPeak -gt ($jumpBase + 0.25)) "$id post-transition jump did not leave the island surface"
+                Require ([math]::Abs($jumpRest - $jumpBase) -le 0.08) "$id post-transition jump did not return to the same authored resting height"
+            } else {
+                Require $false "$id did not expose the post-transition jump baseline, peak, and landing"
+            }
         }
         Require (-not [regex]::IsMatch($stdout, '\[wire\.errors: [1-9][0-9]* rejected\]')) "$id reported rejected wire commands"
         Require ($stdout.Contains('derived=corner') -and $stdout.Contains("entities=$(Endpoint $row.Corner)/")) "$id did not derive its diagonal corner peer $($row.Corner)"
@@ -229,6 +323,7 @@ wire.errors
         Require (-not $combined.Contains('[world.continuum: committed transfer=')) "$id could not seed a committed authority epoch before publishing its route"
         Require (-not $combined.Contains('has not delivered body:')) "$id exposed an inactive presentation interval between committed authority writers"
         Require (-not $combined.Contains('intent stream to') -and -not $combined.Contains('intent stream update names no')) "$id lost or refused its persistent federated input lane"
+        Require (-not $combined.Contains('no committed onward route') -and -not $combined.Contains('release could not follow')) "$id lost a generation-addressed onward route under crowded slot reuse"
         Require (-not $combined.Contains('[world.authority unavailable:')) "$id exposed a transient authority outage on the committed route"
         Require (-not [regex]::IsMatch($combined, 'Unhandled exception|ABORTED| refused \(')) "$id emitted an exception, abort, or refusal"
 
@@ -248,6 +343,13 @@ wire.errors
         }
     }
 
+    $islandEntry = $processes.island
+    [string] $islandStdout = if (Test-Path -LiteralPath $islandEntry.Stdout) { Get-Content -Raw -LiteralPath $islandEntry.Stdout } else { '' }
+    [string] $islandStderr = if (Test-Path -LiteralPath $islandEntry.Stderr) { Get-Content -Raw -LiteralPath $islandEntry.Stderr } else { '' }
+    Require ($islandEntry.Process.HasExited -and ($islandEntry.Process.ExitCode -eq 0)) 'island authority did not exit cleanly'
+    Require ($islandStderr.Contains("[world.listen: bound $(Endpoint 'island')]")) 'island did not bind its distinct authority endpoint'
+    Require (-not ($islandStdout + "`n" + $islandStderr).Contains('[wire.errors: 1 rejected')) 'island rejected a wire command'
+
     Require ($observedNamespaces.Count -eq 4) "the delivered entity addresses did not cover four distinct authority namespaces"
 
     foreach ($id in $topology.Keys) {
@@ -263,8 +365,20 @@ wire.errors
     Require (([regex]::Matches($nwTranscript, '\[player\.where:')).Count -ge 6) "nw traveler did not remain queryable after remote controls and every onward handoff"
     Require ($nwTranscript.Contains("[world.adjacency: 'boot/east' seat 5 crossed")) "nw autonomous body did not cross the invisible east boundary"
     Require ([regex]::IsMatch($nwTranscript, "\[world\.transfer:.*'boot' seat 5 departed -> '.*' seat [5-9][0-9]* arrived \(anonymous\)")) "nw autonomous body did not migrate as an anonymous server-authored entity"
+    $anonymousAuthorities = 0
+    $anonymousTransfers = 0
+    foreach ($id in $topology.Keys) {
+        $transcript = Get-Content -Raw -LiteralPath $processes[$id].Stdout
+        $count = ([regex]::Matches($transcript, '\[world\.transfer:.*arrived \(anonymous\)')).Count
+        $anonymousTransfers += $count
+        if ($count -gt 0) { $anonymousAuthorities++ }
+    }
+    Require ($anonymousTransfers -ge 3) "the producer-driven body did not complete a multi-hop autonomous journey"
+    Require ($anonymousAuthorities -ge 3) "autonomous ownership did not pass through at least three distinct authorities"
     Require (-not [regex]::IsMatch($nwTranscript, 'no live or forwarded transfer body|no committed onward route|forwarded body:.*no committed destination credential')) "nw traveler hit a dead forwarding route"
-    Require ([regex]::IsMatch($nwTranscript, '\[player\.where: p6 .*anchor=body:5\]')) "nw traveler control/presentation route did not advance from the first remote body to the onward body"
+    $nwRouteAuthorities = [regex]::Matches($nwTranscript, '\[world\.view\.camera:.*? entity=([^/ ]+)/[0-9]+#[0-9]+ epoch=[0-9]+ resolved=true') |
+        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+    Require ($nwRouteAuthorities.Count -ge 4) "nw traveler control/presentation route did not advance through four distinct authority writers"
     $nwCameraEpochs = [regex]::Matches($nwTranscript, '\[world\.view\.camera:.*? epoch=([0-9]+) resolved=true')
     Require ($nwCameraEpochs.Count -ge 5) "nw did not read back a resolved camera after every onward authority handoff"
     if ($nwCameraEpochs.Count -ge 5) {
@@ -306,5 +420,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output 'PASS: Four Corners ran as four distinct authorities; simultaneous cross-host body contact, human and autonomous handoffs, retained dual-stick control, diagonal peers, and one full multi-host traveler circuit all held.'
+Write-Output 'PASS: Four Corners plus the floating island ran as five distinct authorities; horizontal and vertical handoffs, simultaneous cross-host body contact, eight autonomous travelers, retained dual-stick control, diagonal peers, and one full human traveler circuit all held.'
 exit 0

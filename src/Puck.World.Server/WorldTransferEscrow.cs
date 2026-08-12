@@ -36,6 +36,21 @@ public readonly record struct WorldTransferKey(string SourceAuthority, ulong Tra
 /// <summary>The destination's idempotent answer for an ambiguous commit.</summary>
 public enum WorldTransferStatus : byte { Missing = 0, Reserved = 1, Committed = 2 }
 
+/// <summary>One named channel edge carried across an authority change. Names, rather than ordinals, keep a
+/// destination's independently-authored channel order from changing the meaning of a held control.</summary>
+public readonly record struct WorldTransferChannelEdge(string Name, bool PreviousBit);
+
+/// <summary>One named action register carried across an authority change. A destination accepts it only when its
+/// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
+public readonly record struct WorldTransferActionRegister(string Name, ActionStateKind Kind, FixedQ4816 Value, ulong TimerTicks);
+
+/// <summary>The minimal action continuity that prevents an authority seam from manufacturing a new input edge or
+/// a fresh cooldown/charge.</summary>
+public sealed record WorldTransferActionContinuity(
+    IReadOnlyList<WorldTransferChannelEdge> Channels,
+    IReadOnlyList<WorldTransferActionRegister> Registers
+);
+
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
 public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
     /// <summary>Creates a named refusal.</summary>
@@ -46,10 +61,12 @@ public sealed record WorldTransferReservationReply(bool Accepted, string Reason,
 public sealed record WorldTransferCommitMember(
     WorldIdentity? Profile,
     bool HasMappedArrival,
+    string BodyMotionProgramName,
     FixedVector3 Position,
     FixedQ4816 YawRadians,
     FixedVector3 PlanarVelocity,
-    FixedQ4816 VerticalVelocity
+    FixedQ4816 VerticalVelocity,
+    WorldTransferActionContinuity? ActionContinuity = null
 );
 
 /// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
@@ -208,6 +225,17 @@ internal sealed class WorldTransferEscrow {
             return false;
         }
 
+        for (var index = 0; index < members.Count; index++) {
+            var member = members[index];
+
+            if (member.HasMappedArrival && (string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)
+                || !lease.DestinationDefinition.BodyMotionPrograms.Any(program => (program.Kind == BodyProgramKind.Motion)
+                    && string.Equals(a: program.Name, b: member.BodyMotionProgramName, comparisonType: StringComparison.Ordinal)))) {
+                reason = $"transfer {transferId} traveler {index + 1} names unavailable destination motion program '{member.BodyMotionProgramName}'";
+                return false;
+            }
+        }
+
         var landed = new List<int>(capacity: members.Count);
 
         for (var index = 0; (index < members.Count); index++) {
@@ -250,7 +278,7 @@ internal sealed class WorldTransferEscrow {
             m_server.Population.SetCatalogRig(slot: slot, catalogRig: reservationMember.CatalogRig);
 
             if (member.HasMappedArrival) {
-                m_server.Population.ApplyMappedArrival(slot: slot, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity);
+                m_server.Population.ApplyMappedArrival(slot: slot, motionProgramName: member.BodyMotionProgramName, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity, actionContinuity: member.ActionContinuity ?? new WorldTransferActionContinuity(Channels: [], Registers: []));
             }
 
             landed.Add(item: slot);
@@ -282,6 +310,10 @@ internal sealed class WorldTransferEscrow {
 
         return (m_committed.Contains(item: key) ? WorldTransferStatus.Committed : (m_leases.ContainsKey(key: key) ? WorldTransferStatus.Reserved : WorldTransferStatus.Missing));
     }
+
+    /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
+    public bool TryArrivalBorder(int bodyIndex, out string border) =>
+        m_borderAdmissions.TryGetValue(key: bodyIndex, value: out border!);
 
     public void ReclaimExpired(ulong tick) {
         PruneDepartedAdmissions();
@@ -367,6 +399,7 @@ internal sealed class WorldTransferEscrow {
 
             if (!IdentityMatches(left: a.Profile, right: b.Profile)
                 || (a.HasMappedArrival != b.HasMappedArrival)
+                || !string.Equals(a: a.BodyMotionProgramName, b: b.BodyMotionProgramName, comparisonType: StringComparison.Ordinal)
                 || (a.Position != b.Position)
                 || (a.YawRadians != b.YawRadians)
                 || (a.PlanarVelocity != b.PlanarVelocity)

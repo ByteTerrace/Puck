@@ -179,7 +179,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.fly",
-            description: "Enqueues a 6DOF timed segment on a player's tape: player.fly <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> [player] — each channel a float clamped to [-1,1] (forward/strafe/up drive the body axes, yaw/pitch/roll spin them), held for <seconds>. Works in either model — grounded ignores up/pitch/roll by its constraints; free integrates all six in the body frame. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — player.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing player index is 1..128 (default 1) — 1..4 local seats, 5..128 simulated entries.",
+            description: "Enqueues a six-role timed segment on a player's tape: player.fly <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> [player] — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyVerticalDrive consumes up alongside a gravity/jump arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — player.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing player index is 1..128 (default 1) — 1..4 local seats, 5..128 simulated entries.",
             handler: FlyHandler,
             ackOnly: true
         );
@@ -329,7 +329,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
                         return CommandResult.None;
                     }
 
-                    if (context.Phase is CommandPhase.Started or CommandPhase.Active) {
+                    // Zero is the neutral image of an analog channel even when a backend reports it as Active
+                    // rather than Completed. Treat it as the same release edge so a trigger/stick cannot leave a
+                    // zero-valued dictionary row behind, and so every backend gets identical held semantics.
+                    if ((context.Phase is CommandPhase.Started or CommandPhase.Active) && (scale != FixedQ4816.Zero)) {
                         if (declared) {
                             seat.HoldChannel(controlId: context.Source, ordinal: ordinal, scale: scale);
                         }

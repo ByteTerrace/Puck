@@ -9,6 +9,9 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
+/// <summary>A committed body's immutable address on one remote authority hop.</summary>
+internal readonly record struct WorldRemoteRouteCredential(int BodyIndex, string SourceAuthority, ulong TransferId, int Ordinal);
+
 /// <summary>The remote implementation of the authority contract used by transfer and continuous projection.</summary>
 internal sealed class WorldRemoteAuthority : IDisposable {
     private IPEndPoint m_endpoint;
@@ -19,7 +22,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     private readonly WorldFederationSecurity m_security;
     private readonly string m_observerAuthority;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
-    private readonly int m_submissionBodyIndex;
+    private readonly WorldRemoteRouteCredential? m_submissionCredential;
     private WorldAuthorityRouteDescription? m_observedRoute;
     private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
     private int m_routeRevision;
@@ -27,7 +30,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     private string m_authority = string.Empty;
     private WorldDefinition m_definition;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, int submissionBodyIndex = -1, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, WorldFederationSecurity security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
         if (!IPEndPoint.TryParse(endpoint, out var parsed)) {
             throw new FormatException($"host.authority '{endpoint}' is not a parseable IP endpoint");
         }
@@ -37,7 +40,10 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         m_security = security ?? throw new ArgumentNullException(paramName: nameof(security));
         m_observerAuthority = observerAuthority;
         m_submissionAuthority = submissionAuthority;
-        m_submissionBodyIndex = submissionBodyIndex;
+        m_submissionCredential = submissionCredential;
+        if ((submissionAuthority is null) != (submissionCredential is null)) {
+            throw new ArgumentException(message: "a routed observer requires both its submission authority and immutable route credential");
+        }
         m_observedRoute = initialRoute;
         m_routeChanged = routeChanged;
         m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
@@ -135,8 +141,11 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     }
 
     internal bool TryCredential(int bodyIndex, out string sourceAuthority, out ulong transferId, out int ordinal) {
-        if (m_submissionAuthority is { } upstream) {
-            return upstream.TryCredential(bodyIndex: m_submissionBodyIndex, sourceAuthority: out sourceAuthority, transferId: out transferId, ordinal: out ordinal);
+        if (m_submissionCredential is { } captured) {
+            sourceAuthority = captured.SourceAuthority;
+            transferId = captured.TransferId;
+            ordinal = captured.Ordinal;
+            return true;
         }
 
         if ((bodyIndex < 0) && (m_credentials.Count > 0)) {
@@ -155,36 +164,53 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         sourceAuthority = string.Empty; transferId = 0; ordinal = -1; return false;
     }
 
-    internal bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {
-        if (m_submissionAuthority is { } upstream) {
-            return upstream.TryForwardIntent(bodyIndex: m_submissionBodyIndex, submission: in submission, reason: out reason);
+    internal bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential) {
+        if (m_submissionCredential is { } captured) {
+            credential = captured;
+            return true;
+        }
+        if (TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
+            credential = new WorldRemoteRouteCredential(BodyIndex: bodyIndex, SourceAuthority: sourceAuthority, TransferId: transferId, Ordinal: ordinal);
+            return true;
         }
 
-        if (!TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
+        credential = default;
+        return false;
+    }
+
+    internal bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {
+        if (!TryRouteCredential(bodyIndex: bodyIndex, credential: out var credential)) {
             reason = $"forwarded body:{bodyIndex} has no committed destination credential";
             return false;
         }
 
-        var stamped = submission with { EntityIndex = bodyIndex };
-        var pump = m_intentPumps.GetOrAdd(key: sourceAuthority, valueFactory: authority => new FederatedIntentPump(owner: this, sourceAuthority: authority));
-        pump.Publish(transferId: transferId, ordinal: ordinal, submission: in stamped);
+        return TryForwardIntent(credential: in credential, submission: in submission, reason: out reason);
+    }
+
+    internal bool TryForwardIntent(in WorldRemoteRouteCredential credential, in IntentSubmission submission, out string reason) {
+        var target = (m_submissionAuthority ?? this);
+        var stamped = submission with { EntityIndex = credential.BodyIndex };
+        var pump = target.m_intentPumps.GetOrAdd(key: credential.SourceAuthority, valueFactory: authority => new FederatedIntentPump(owner: target, sourceAuthority: authority));
+        pump.Publish(transferId: credential.TransferId, ordinal: credential.Ordinal, submission: in stamped);
 
         reason = string.Empty;
         return true;
     }
 
     internal bool TryDescribeRoute(int bodyIndex, out WorldAuthorityRouteDescription route, out string reason) {
-        if (m_submissionAuthority is { } upstream) {
-            return upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, route: out route, reason: out reason);
-        }
-
-        route = default;
-        if (!TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
+        if (!TryRouteCredential(bodyIndex: bodyIndex, credential: out var credential)) {
+            route = default;
             reason = $"forwarded body:{bodyIndex} has no committed destination credential";
             return false;
         }
 
-        var response = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Route, body: WorldFederationWireFormat.EncodeRouteCredential(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal));
+        return TryDescribeRoute(credential: in credential, route: out route, reason: out reason);
+    }
+
+    internal bool TryDescribeRoute(in WorldRemoteRouteCredential credential, out WorldAuthorityRouteDescription route, out string reason) {
+        route = default;
+        var target = (m_submissionAuthority ?? this);
+        var response = target.RoundTrip(sourceAuthority: credential.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Route, body: WorldFederationWireFormat.EncodeRouteCredential(sourceAuthority: credential.SourceAuthority, transferId: credential.TransferId, ordinal: credential.Ordinal));
         if ((response.Kind != WorldFederationWireFormat.ResponseKind.Route) || !WorldFederationWireFormat.TryDecodeRoute(body: response.Body, route: out route)) {
             reason = DecodeRefusal(response);
             return false;
@@ -195,22 +221,25 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     }
 
     internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
-        if (m_submissionAuthority is { } upstream) {
-            return upstream.TryForwardSubmission(bodyIndex: m_submissionBodyIndex, payload: payload, result: out result, reason: out reason);
-        }
-
-        result = null;
-        if (!TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
+        if (!TryRouteCredential(bodyIndex: bodyIndex, credential: out var credential)) {
+            result = null;
             reason = $"forwarded body:{bodyIndex} has no committed destination credential";
             return false;
         }
+
+        return TryForwardSubmission(credential: in credential, payload: payload, result: out result, reason: out reason);
+    }
+
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+        result = null;
         if (!WorldFrameCodec.TryEncode(payload: payload, frame: out var canonical, failure: out var failure)) {
             reason = $"forwarded submission could not be encoded — {failure.Detail}";
             return false;
         }
 
-        var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, frame: canonical);
-        var response = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
+        var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: credential.SourceAuthority, transferId: credential.TransferId, ordinal: credential.Ordinal, frame: canonical);
+        var target = (m_submissionAuthority ?? this);
+        var response = target.RoundTrip(sourceAuthority: credential.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
         if (response.Kind != WorldFederationWireFormat.ResponseKind.Completion) {
             reason = DecodeRefusal(response);
             return false;
@@ -352,9 +381,16 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     }
 
     private bool SnapshotContainsObservedEntity(in WorldSnapshot snapshot) {
-        var bodyIndex = (m_observedRoute?.Entity.Index ?? m_submissionBodyIndex);
+        var observedEntity = m_observedRoute?.Entity;
+        var bodyIndex = (observedEntity?.Index ?? m_submissionCredential?.BodyIndex ?? -1);
         foreach (ref readonly var entry in snapshot.Entries.Span) {
-            if ((entry.Index == bodyIndex) && entry.Active) {
+            // A population slot may be reused in the same snapshot that the traveler leaves. Index+active alone
+            // would then mistake the replacement occupant for the traveler and suppress the route refresh forever,
+            // leaving control/camera attached to the wrong body. A durable entity address is authority/index/
+            // generation; use all three whenever the committed route supplied them.
+            if ((entry.Index == bodyIndex) && entry.Active &&
+                ((observedEntity is null) || ((entry.Generation == observedEntity.Value.Generation) &&
+                    string.Equals(a: snapshot.Authority, b: observedEntity.Value.Authority, comparisonType: StringComparison.Ordinal)))) {
                 return true;
             }
         }
@@ -362,8 +398,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     }
 
     private bool RefreshObservedRoute() {
-        if ((m_submissionAuthority is not { } upstream) ||
-            !upstream.TryDescribeRoute(bodyIndex: m_submissionBodyIndex, route: out var route, reason: out _) ||
+        if ((m_submissionAuthority is null) || (m_submissionCredential is not { } credential) ||
+            !TryDescribeRoute(credential: in credential, route: out var route, reason: out _) ||
             !IPEndPoint.TryParse(route.Endpoint, out var routedEndpoint)) {
             return false;
         }
@@ -377,7 +413,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
         m_endpoint = routedEndpoint;
         m_observedRoute = route;
-        InvalidateAcknowledgement(bodyIndex: m_submissionBodyIndex);
+        InvalidateAcknowledgement(credential: in credential);
         Volatile.Write(ref m_definition, route.Definition);
         Volatile.Write(ref m_authority, route.Entity.Authority);
         _ = Interlocked.Exchange(location1: ref m_lastObservedTickBits, value: unchecked((long)route.Tick));
@@ -386,15 +422,9 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         return true;
     }
 
-    private void InvalidateAcknowledgement(int bodyIndex) {
-        if (m_submissionAuthority is { } upstream) {
-            upstream.InvalidateAcknowledgement(bodyIndex: m_submissionBodyIndex);
-            return;
-        }
-
-        if (TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal) &&
-            m_intentPumps.TryGetValue(key: sourceAuthority, value: out var pump)) {
-            pump.InvalidateAcknowledgement(transferId: transferId, ordinal: ordinal);
+    private void InvalidateAcknowledgement(in WorldRemoteRouteCredential credential) {
+        if ((m_submissionAuthority ?? this).m_intentPumps.TryGetValue(key: credential.SourceAuthority, value: out var pump)) {
+            pump.InvalidateAcknowledgement(transferId: credential.TransferId, ordinal: credential.Ordinal);
         }
     }
 

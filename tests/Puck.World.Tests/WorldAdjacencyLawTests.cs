@@ -18,6 +18,27 @@ public sealed class WorldAdjacencyLawTests {
     }
 
     [Fact]
+    public void CardinalPitchKeepsExactAxesAndVerticalPairIsIdentity() {
+        var up = Boundary(yaw: 0f, pitch: 90f).CompileFrame();
+        var down = Boundary(yaw: 180f, pitch: -90f).CompileFrame();
+        var worldUp = Fixed(x: 0, y: 1, z: 0);
+        var probe = Fixed(x: 3, y: 7, z: -2);
+
+        Assert.Equal(worldUp, up.Normal);
+        Assert.Equal(-worldUp, down.Normal);
+        Assert.Equal(probe, WorldFrameIsometry.MapVector(value: probe, source: up, destination: down));
+    }
+
+    [Fact]
+    public void HorizontalBoundarySweepsUpward() {
+        var frame = Boundary(yaw: 0f, pitch: 90f).CompileFrame();
+        var crossing = WorldAdjacencyRegion.Sweep(frame, Fixed(x: 0, y: -1, z: 0), Fixed(x: 0, y: 1, z: 0));
+
+        Assert.True(crossing.Crossed);
+        Assert.Equal(FixedQ4816.FromDouble(0.5), crossing.Parameter);
+    }
+
+    [Fact]
     public void SweepOnlyHandsOffOutwardThroughRectangle() {
         var frame = Boundary(yaw: 90f).CompileFrame();
         var outward = WorldAdjacencyRegion.Sweep(frame, Fixed(x: -1, y: 0, z: 0), Fixed(x: 1, y: 0, z: 0));
@@ -55,6 +76,18 @@ public sealed class WorldAdjacencyLawTests {
 
         Assert.False(WorldDefinitionValidator.TryValidate(west, out var refused, driftResolver));
         Assert.Contains("but neighbour", refused, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidatorRefusesAFramePairThatCannotPreserveBodyUp() {
+        var (west, east) = Pair();
+        var pitched = east with {
+            Adjacencies = [east.Adjacencies![0] with { Boundary = Boundary(yaw: -90f, pitch: 90f) }],
+        };
+        var resolver = new Resolver(new Dictionary<string, WorldDefinition> { ["east.world.json"] = pitched, ["west.world.json"] = west });
+
+        Assert.False(WorldDefinitionValidator.TryValidate(west, out var refused, resolver));
+        Assert.Contains("do not preserve world up", refused, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -195,7 +228,7 @@ public sealed class WorldAdjacencyLawTests {
         return (source, left, right, corner);
     }
 
-    private static WorldAdjacencyBoundary Boundary(float yaw) => new(Center: Vector3.Zero, OutwardYawDegrees: yaw, Width: 8f, Height: 8f);
+    private static WorldAdjacencyBoundary Boundary(float yaw, float pitch = 0f) => new(Center: Vector3.Zero, OutwardYawDegrees: yaw, OutwardPitchDegrees: pitch, Width: 8f, Height: 8f);
 
     private static FixedVector3 Fixed(double x, double y, double z) => new(FixedQ4816.FromDouble(x), FixedQ4816.FromDouble(y), FixedQ4816.FromDouble(z));
 

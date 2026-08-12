@@ -1285,6 +1285,31 @@ public sealed class WorldPopulation {
     /// slot.</returns>
     public int[] CaptureDesignations(int slot) => (((uint)slot < m_entries.Length) ? [.. m_entries[slot].Designations] : []);
 
+    /// <summary>Names the edge/action subset of a captured body state so another world can restore it without
+    /// assuming the two documents assigned the same ordinals.</summary>
+    public WorldTransferActionContinuity NameTransferActionContinuity(int slot, WorldBody.TransferState state) {
+        var channels = new List<WorldTransferChannelEdge>();
+        for (var ordinal = 0; (ordinal < Math.Min(val1: state.PreviousChannelBit.Length, val2: m_channels.ChannelCount)); ordinal++) {
+            if (m_channels.Name(ordinal: ordinal) is { } name) {
+                channels.Add(item: new WorldTransferChannelEdge(Name: name, PreviousBit: state.PreviousChannelBit[ordinal]));
+            }
+        }
+
+        var definitions = m_kits[ResolveKitIndex(index: slot)].ActionState;
+        var count = Math.Min(val1: definitions.Length, val2: Math.Min(val1: state.ActionStateValues.Length, val2: state.ActionStateTimers.Length));
+        var registers = new WorldTransferActionRegister[count];
+        for (var index = 0; (index < count); index++) {
+            registers[index] = new WorldTransferActionRegister(
+                Name: definitions[index].Name,
+                Kind: definitions[index].Kind,
+                Value: state.ActionStateValues[index],
+                TimerTicks: state.ActionStateTimers[index]
+            );
+        }
+
+        return new WorldTransferActionContinuity(Channels: channels, Registers: registers);
+    }
+
     /// <summary>Restores a body <see cref="TryDetachSeatForTransfer"/> just detached back onto its original seat at
     /// the exact pose it held at detach — the abort half of a same-process transfer's atomic move. Unlike
     /// <see cref="ActivateSeat"/>'s fresh-spawn path, the body is posed at <paramref name="position"/>/<paramref name="yawRadians"/>
@@ -1430,31 +1455,40 @@ public sealed class WorldPopulation {
     /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal
     /// transfer (see <c>Puck.World.WorldPlacementPortal.Arrival</c>): called by <c>Puck.World.WorldInstanceHost</c>
     /// after the destination's own ordinary <see cref="ActivateSeat"/> join already embodied the traveler fresh
-    /// under its own kit (appearance, grants, action-track state) — this call carries across only the
-    /// positional-continuity facts <c>Puck.World.Server.WorldPortalArrivalMath.ComputeArrival</c> computed: pose,
-    /// and captured velocity rotated into the destination's frame. Never touches kit, appearance, grants, or any
-    /// other dynamic-state facet (dash overlay, timers, tape) — those stay the destination's own fresh values,
-    /// exactly like an ordinary spawn arrival. <see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>
+    /// under its own kit (appearance, grants, action-track state) — this call selects the source's named motion
+    /// program from the destination's own declared program table, then carries across the positional-continuity facts
+    /// <c>Puck.World.Server.WorldPortalArrivalMath.ComputeArrival</c> computed: pose and captured velocity rotated into
+    /// the destination's frame. It never imports the source kit, appearance, grants, dash overlay, timers, or tape.
+    /// <see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>
     /// runs first (the hard-teleport commit), <see cref="WorldBody.SetArrivalVelocity"/> after — the same
     /// "after Pose, never before" ordering <see cref="WorldBody.ApplyTransferState"/> already follows, so the
     /// discontinuity has already reset <see cref="WorldBody.FixedPreviousPosition"/> before velocity is written. A
     /// no-op returning <see langword="false"/> for an inactive slot — nothing to override.</summary>
     /// <param name="slot">The seat index (0-based) — the same slot the destination's own join just activated.</param>
+    /// <param name="motionProgramName">The source-selected motion program, which must also be declared by the destination.</param>
     /// <param name="position">The mapped arrival position, fixed point.</param>
     /// <param name="yawRadians">The mapped arrival yaw, fixed-point radians.</param>
     /// <param name="planarVelocity">The mapped (rotated) planar velocity.</param>
     /// <param name="verticalVelocity">The mapped (rotation-invariant) vertical velocity.</param>
+    /// <param name="actionContinuity">Named held-edge and action-register state carried without assuming matching ordinals.</param>
     /// <returns><see langword="true"/> when the seat was active and its body was overridden.</returns>
-    public bool ApplyMappedArrival(int slot, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity) {
+    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, WorldTransferActionContinuity? actionContinuity = null) {
         var entry = m_entries[slot];
 
         if (!entry.Active || (entry.Body is not { } body)) {
             return false;
         }
 
+        if (!body.SetBodyMotionProgram(programName: motionProgramName)) {
+            return false;
+        }
+
         body.Pose(position: position, yawRadians: yawRadians, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
         // AFTER Pose's own CommitTeleport — see this method's own remarks.
         body.SetArrivalVelocity(planarVelocity: planarVelocity, verticalVelocity: verticalVelocity);
+        if (actionContinuity is not null) {
+            body.ApplyTransferActionContinuity(continuity: actionContinuity, channels: m_channels);
+        }
 
         return true;
     }

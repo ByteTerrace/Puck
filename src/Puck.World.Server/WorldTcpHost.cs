@@ -441,10 +441,22 @@ public sealed class WorldTcpHost : IDisposable {
                             m_server.Submit(envelope: new SubmissionEnvelope(ConnectionId: principal.Index, SessionGeneration: principal.Generation, Sequence: 0, CorrelationId: 0, Principal: principal, Payload: stamped), completion: value => captured = value);
                             return captured;
                         });
-                    } else if ((m_server.TransferForwarder is { } forwarder) && forwarder.TryForwardSubmission(source: m_server, principal: principal, payload: payload, result: out result, reason: out forwardReason)) {
-                        // The next authority returned the typed completion.
                     } else {
                         result = null;
+                        if (m_server.TransferForwarder is { } forwarder) {
+                            // Detach precedes publication of the committed onward route. A routed query/command can
+                            // arrive in that small interval just like a held-stick update can; retain the one typed
+                            // request at this authority until the commit path publishes its immutable credential.
+                            for (var attempt = 0; attempt < 25; attempt++) {
+                                if (forwarder.TryForwardSubmission(source: m_server, principal: principal, payload: payload, result: out result, reason: out forwardReason)) {
+                                    break;
+                                }
+                                if (!forwardReason.Contains(value: "no committed onward route", comparisonType: StringComparison.Ordinal)) {
+                                    break;
+                                }
+                                await Task.Delay(delay: TimeSpan.FromMilliseconds(4), cancellationToken: ct).ConfigureAwait(false);
+                            }
+                        }
                     }
 
                     if (result is null) {

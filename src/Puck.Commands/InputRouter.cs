@@ -565,9 +565,16 @@ public sealed class InputRouter {
                 }
             }
 
+            // A channel destination is a held contribution, so its ordinary (ActivateOn:null) binding owns BOTH
+            // halves of the hold. In particular, an axis such as a trigger commonly ends with Completed+zero. If
+            // that edge is filtered like an ordinary press-bound verb, this router clears its carried sample while
+            // the destination never hears the release and retains the last non-zero contribution forever. Authors
+            // should not have to duplicate every channel row with an ActivateOn:Completed twin merely to make a
+            // physical control stop. An explicit ActivateOn remains exactly edge-selective.
             var dispatch = ((binding.ActivateOn is { } required)
                 ? (phase == required)
-                : (phase is CommandPhase.Started or CommandPhase.Active));
+                : ((phase is CommandPhase.Started or CommandPhase.Active) ||
+                    ((binding.ChannelScale is not null) && (phase is CommandPhase.Completed or CommandPhase.Canceled))));
             var heldControl = new HeldControl(Slot: slot, Device: signal.DeviceId, Source: signal.Source, CommandId: commandId);
             var wasCommandHeld = (isDigital && IsCommandHeld(slot: slot, commandId: commandId));
             var active = ((phase is CommandPhase.Started or CommandPhase.Active) && value.IsActive && (signal.Text is null));

@@ -55,6 +55,8 @@ namespace Puck.World.Server;
 /// measures and pins explicit budgets for both.</para>
 /// </remarks>
 public static class WorldPortalArrivalMath {
+    private static readonly FixedVector3 s_up = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+    private static readonly FixedVector3 s_forward = new(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One);
     // The world-up rotation axis every portal frame rotates about — no pitch/roll ever enters this computation (the
     // same grounded, yaw-only convention WorldInstanceHost.ScanPortalFace and WorldPopulation.ActivateSeat's own
     // spawn pose already assume for a placement's authored transform).
@@ -113,6 +115,32 @@ public static class WorldPortalArrivalMath {
             YawRadians: (travelerYawRadians + deltaYaw),
             PlanarVelocity: planarVelocity,
             VerticalVelocity: travelerVerticalVelocity
+        );
+    }
+
+    /// <summary>Computes an adjacency arrival through the boundary frames themselves. Unlike portal furniture,
+    /// adjacency planes may be horizontal; reciprocal authoring must still compose to a world-up-preserving
+    /// rotation so the body's yaw/vertical representation remains complete.</summary>
+    public static Arrival ComputeFrameArrival(
+        FixedVector3 travelerPosition,
+        FixedQ4816 travelerYawRadians,
+        FixedVector3 travelerPlanarVelocity,
+        FixedQ4816 travelerVerticalVelocity,
+        FixedVector3 sourceSeamPosition,
+        in WorldFaceFrame sourceFrame,
+        FixedVector3 destinationSeamPosition,
+        in WorldFaceFrame destinationFrame
+    ) {
+        var velocity = new FixedVector3(X: travelerPlanarVelocity.X, Y: travelerVerticalVelocity, Z: travelerPlanarVelocity.Z);
+        var mappedVelocity = WorldFrameIsometry.MapVector(value: velocity, source: sourceFrame, destination: destinationFrame);
+        var forward = FixedQuaternion.FromAxisAngle(axis: s_up, angle: travelerYawRadians).Rotate(vector: s_forward);
+        var mappedForward = WorldFrameIsometry.MapVector(value: forward, source: sourceFrame, destination: destinationFrame);
+
+        return new Arrival(
+            Position: (destinationSeamPosition + WorldFrameIsometry.MapVector(value: (travelerPosition - sourceSeamPosition), source: sourceFrame, destination: destinationFrame)),
+            YawRadians: FixedQ4816.Atan2(y: mappedForward.X, x: mappedForward.Z),
+            PlanarVelocity: new FixedVector3(X: mappedVelocity.X, Y: FixedQ4816.Zero, Z: mappedVelocity.Z),
+            VerticalVelocity: mappedVelocity.Y
         );
     }
 }

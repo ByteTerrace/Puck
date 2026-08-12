@@ -1,16 +1,20 @@
 <#
 .SYNOPSIS
-Opens the playable Four Corners window while three hidden processes host its other shards.
+Opens the playable Four Corners window while four hidden processes host its other shards and floating island.
 
 .DESCRIPTION
-Uses fresh temporary documents/state and four distinct loopback authorities. Closing the playable NW process tears
-down NE, SE, and SW. Transcripts remain in the printed scratch directory for diagnosis.
+Uses fresh temporary documents/state and five distinct loopback authorities. Closing the playable NW process tears
+down NE, SE, SW, and the island. Each authority wakes the requested authored wander population at its own `npc-spawn`; those
+bodies use the same automatic adjacency/federation path as the player. Transcripts remain in the printed scratch
+directory for diagnosis.
 #>
 
 [CmdletBinding()]
 param(
     [int] $Width = 1280,
-    [int] $Height = 720
+    [int] $Height = 720,
+    [ValidateRange(0, 8)]
+    [int] $NpcCount = 2
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,7 +45,9 @@ $ports = [ordered]@{
     ne = Get-FreeLoopbackPort
     se = Get-FreeLoopbackPort
     sw = Get-FreeLoopbackPort
+    island = Get-FreeLoopbackPort
 }
+$peerBudget = (1 + (5 * $NpcCount))
 
 foreach ($id in $ports.Keys) {
     $source = Join-Path $repoRoot "src\Puck.World\Assets\worlds\quilt-$id.world.json"
@@ -49,15 +55,22 @@ foreach ($id in $ports.Keys) {
     $document = Get-Content -Raw -LiteralPath $source | ConvertFrom-Json
     $document.host.listen = "127.0.0.1:$($ports[$id])"
     $document.host.authority = "127.0.0.1:$($ports[$id])"
-    $document.population.capacity = 12
-    $document.population.networkPlayers = 8
+    # Every NPC may legally collect on one authority, with one additional peer slot for the walking player.
+    $document.population.capacity = (4 + $peerBudget)
+    $document.population.networkPlayers = $peerBudget
     [System.IO.File]::WriteAllText($target, ($document | ConvertTo-Json -Depth 100), $utf8NoBom)
+}
+
+$stdin = @{}
+foreach ($id in $ports.Keys) {
+    $stdin[$id] = Join-Path $scratch "$id.stdin.txt"
+    [System.IO.File]::WriteAllText($stdin[$id], "world.population $NpcCount producer:wander`n", $utf8NoBom)
 }
 
 $companions = @()
 $playable = $null
 try {
-    foreach ($id in @('ne', 'se', 'sw')) {
+    foreach ($id in @('ne', 'se', 'sw', 'island')) {
         $arguments = @(
             $artifact,
             '--world', (Join-Path $worldDir "quilt-$id.world.json"),
@@ -67,7 +80,7 @@ try {
             '--federation-key-file', $keyPath
         )
         $companions += Start-Process -FilePath 'dotnet' -ArgumentList $arguments -WorkingDirectory $repoRoot `
-            -WindowStyle Hidden -RedirectStandardOutput (Join-Path $scratch "$id.stdout.log") `
+            -WindowStyle Hidden -RedirectStandardInput $stdin[$id] -RedirectStandardOutput (Join-Path $scratch "$id.stdout.log") `
             -RedirectStandardError (Join-Path $scratch "$id.stderr.log") -PassThru
     }
 
@@ -81,6 +94,7 @@ try {
         '--federation-key-file', $keyPath
     )
     $playable = Start-Process -FilePath 'dotnet' -ArgumentList $arguments -WorkingDirectory $repoRoot `
+        -RedirectStandardInput $stdin.nw `
         -RedirectStandardOutput (Join-Path $scratch 'nw.stdout.log') `
         -RedirectStandardError (Join-Path $scratch 'nw.stderr.log') -PassThru
 

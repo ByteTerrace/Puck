@@ -302,8 +302,18 @@ public static class WorldFederationWireFormat {
         writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(members.Count);
         foreach (var member in members) {
             writer.Write(member.HasMappedArrival);
+            writer.Write(member.BodyMotionProgramName);
             WriteFixedVector(writer, member.Position); writer.Write(member.YawRadians.Value);
             WriteFixedVector(writer, member.PlanarVelocity); writer.Write(member.VerticalVelocity.Value);
+            var continuity = member.ActionContinuity ?? new WorldTransferActionContinuity(Channels: [], Registers: []);
+            writer.Write(continuity.Channels.Count);
+            foreach (var channel in continuity.Channels) {
+                writer.Write(channel.Name); writer.Write(channel.PreviousBit);
+            }
+            writer.Write(continuity.Registers.Count);
+            foreach (var register in continuity.Registers) {
+                writer.Write(register.Name); writer.Write((byte)register.Kind); writer.Write(register.Value.Value); writer.Write(register.TimerTicks);
+            }
         }
         return output.ToArray();
     }
@@ -319,7 +329,28 @@ public static class WorldFederationWireFormat {
             }
             members = new WorldTransferCommitMember[count];
             for (var i = 0; i < count; i++) {
-                members[i] = new WorldTransferCommitMember(null, reader.ReadBoolean(), ReadFixedVector(reader), new FixedQ4816(reader.ReadInt64()), ReadFixedVector(reader), new FixedQ4816(reader.ReadInt64()));
+                var mapped = reader.ReadBoolean();
+                var program = reader.ReadString();
+                var position = ReadFixedVector(reader);
+                var yaw = new FixedQ4816(reader.ReadInt64());
+                var planar = ReadFixedVector(reader);
+                var vertical = new FixedQ4816(reader.ReadInt64());
+                var channelCount = reader.ReadInt32();
+                if ((channelCount < 0) || (channelCount > ChannelLimits.MaxChannels)) { throw new FormatException($"commit channel count {channelCount} is invalid"); }
+                var channels = new WorldTransferChannelEdge[channelCount];
+                for (var channel = 0; (channel < channelCount); channel++) {
+                    channels[channel] = new WorldTransferChannelEdge(Name: reader.ReadString(), PreviousBit: reader.ReadBoolean());
+                }
+                var registerCount = reader.ReadInt32();
+                if ((registerCount < 0) || (registerCount > ChannelLimits.MaxChannels)) { throw new FormatException($"commit action register count {registerCount} is invalid"); }
+                var registers = new WorldTransferActionRegister[registerCount];
+                for (var register = 0; (register < registerCount); register++) {
+                    var name = reader.ReadString();
+                    var kind = (ActionStateKind)reader.ReadByte();
+                    if (!Enum.IsDefined(value: kind)) { throw new FormatException($"commit action register kind {(byte)kind} is invalid"); }
+                    registers[register] = new WorldTransferActionRegister(Name: name, Kind: kind, Value: new FixedQ4816(reader.ReadInt64()), TimerTicks: reader.ReadUInt64());
+                }
+                members[i] = new WorldTransferCommitMember(null, mapped, program, position, yaw, planar, vertical, new WorldTransferActionContinuity(Channels: channels, Registers: registers));
             }
             if (input.Position != input.Length) {
                 throw new FormatException("commit carries trailing bytes");

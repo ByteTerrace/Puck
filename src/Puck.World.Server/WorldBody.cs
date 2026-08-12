@@ -1478,6 +1478,41 @@ public sealed class WorldBody {
         m_verticalVelocity = verticalVelocity;
     }
 
+    /// <summary>Restores the named action-edge/register subset that must remain continuous when exactly one writer
+    /// hands this body to another authority. Destination names and kinds are authoritative; unknown rows are ignored
+    /// and admitted values are clamped through the destination's own envelope.</summary>
+    public void ApplyTransferActionContinuity(WorldTransferActionContinuity continuity, WorldChannelTable channels) {
+        ArgumentNullException.ThrowIfNull(continuity);
+        ArgumentNullException.ThrowIfNull(channels);
+
+        foreach (var channel in continuity.Channels) {
+            if (channels.TryGetOrdinal(name: channel.Name, ordinal: out var ordinal) && ((uint)ordinal < (uint)m_previousChannelBit.Length)) {
+                m_previousChannelBit[ordinal] = channel.PreviousBit;
+            }
+        }
+
+        foreach (var register in continuity.Registers) {
+            for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+                var definition = m_actionStateDefinitions[slot];
+                if (!string.Equals(a: definition.Name, b: register.Name, comparisonType: StringComparison.Ordinal) || (definition.Kind != register.Kind)) {
+                    continue;
+                }
+
+                if (definition.Kind == ActionStateKind.Counter) {
+                    var raw = register.Value.Value;
+                    var initial = definition.InitialValue.Value;
+                    m_actionStateValues[slot] = new FixedQ4816(definition.Envelope?.Clamp(value: raw, initial: initial) ?? raw);
+                } else {
+                    var raw = unchecked((long)register.TimerTicks);
+                    var initial = unchecked((long)definition.InitialTicks);
+                    var admitted = definition.Envelope?.Clamp(value: raw, initial: initial) ?? raw;
+                    m_actionStateTimers[slot] = unchecked((ulong)Math.Max(val1: admitted, val2: 0L));
+                }
+                break;
+            }
+        }
+    }
+
     // The shared clamped-copy every array field ApplyTransferState restores uses: never trusts the captured array's
     // length to match the restored body's own (a defensive habit, not a load-bearing one — the SAME seat kit always
     // produces the SAME lengths for a same-process abort/restore).
@@ -1933,6 +1968,7 @@ public sealed class WorldBody {
     internal void ExecuteProducer(CompiledBodyProducer producer, ref BodyProducerState state, in BodyProducerSensors sensors, ulong stepTicks) {
         var scratch = new BodyMotionScratch {
             StepTicks = stepTicks,
+            TurnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed),
             Producer = producer,
             ProducerState = state,
             ProducerSensors = sensors,
@@ -2003,6 +2039,9 @@ public sealed class WorldBody {
                 break;
             case BodyMotionOp.ApplyBuoyancyAndSurface:
                 ApplyBuoyancyAndSurface(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyVerticalDrive:
+                ApplyVerticalDrive(scratch: ref scratch);
                 break;
             case BodyMotionOp.IntegratePlanarAndVerticalVelocity:
                 IntegratePlanarAndVerticalVelocity(scratch: ref scratch);
@@ -2111,11 +2150,27 @@ public sealed class WorldBody {
                 roll: (-turn * producer.Scalar(name: "rollTurn"))
             );
         } else {
-            scratch.Intent = m_roleOrdinals.Intent(
-                moveForward: producer.Scalar(name: "forward"),
-                moveStrafe: (wave * producer.Scalar(name: "strafeWave")),
-                turn: FixedQ4816.Clamp(value: (turn + (wave * producer.Scalar(name: "turnWave"))), minimum: s_negativeOne, maximum: FixedQ4816.One)
-            );
+            var angularIntent = FixedQ4816.Clamp(value: (turn + (wave * producer.Scalar(name: "turnWave"))), minimum: s_negativeOne, maximum: FixedQ4816.One);
+            var forward = producer.Scalar(name: "forward");
+            var strafe = (wave * producer.Scalar(name: "strafeWave"));
+
+            if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+                // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
+                // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
+                // the Turn channel is deliberately inert under World and every wanderer can only march toward -Z.
+                var targetYaw = (FixedYaw + PerStep(value: (angularIntent * scratch.TurnSpeed), stepTicks: scratch.StepTicks));
+                var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
+                scratch.Intent = m_roleOrdinals.Intent(
+                    moveForward: ((forward * cosYaw) + (strafe * sinYaw)),
+                    moveStrafe: ((-forward * sinYaw) + (strafe * cosYaw))
+                );
+            } else {
+                scratch.Intent = m_roleOrdinals.Intent(
+                    moveForward: forward,
+                    moveStrafe: strafe,
+                    turn: angularIntent
+                );
+            }
 
             var press = producer.Channel(name: "press");
             var threshold = producer.Scalar(name: "pressThreshold");
@@ -2178,6 +2233,20 @@ public sealed class WorldBody {
         scratch.Up = ResolveUp();
 
         if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+            // World-frame movement means the TRANSLATION axes are already resolved by the seat; it does not make
+            // the authored Turn role inert. Integrate facing independently so an author can choose camera-facing
+            // strafe (FacingSnap=false plus right-stick.x -> Turn) or movement-facing locomotion (FacingSnap=true,
+            // whose later SnapYawToPlanarIntent remains the final word while movement is nonzero).
+            var worldAngleStep = m_rotationAccumulator.Integrate(
+                ratePerSecond: new FixedVector3(
+                    X: (Role(intent: in scratch.Intent, role: ChannelRole.Turn) * scratch.TurnSpeed),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                elapsedTicks: scratch.StepTicks
+            );
+            m_yaw += worldAngleStep.X;
+            scratch.Orientation = FixedQuaternion.FromAxisAngle(axis: s_unitY, angle: m_yaw);
             scratch.Facing = -s_unitZ;
             scratch.Right = s_unitX;
             return;
@@ -2237,8 +2306,23 @@ public sealed class WorldBody {
 
     }
 
+    // Direct vertical traversal and ballistic motion are separate channels. While MoveUp is held, direct drive is
+    // the complete vertical request and the jump/fall accumulator is cleared; on release, the direct term vanishes
+    // in this same tick and gravity resumes from rest. A trigger therefore cannot become stored upward velocity,
+    // while the same authored program can still jump, land, and fly.
+    private void ApplyVerticalDrive(ref BodyMotionScratch scratch) {
+        var drive = Role(intent: in scratch.Intent, role: ChannelRole.MoveUp);
+        if (drive == FixedQ4816.Zero) {
+            return;
+        }
+
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        scratch.DirectVerticalVelocity = (drive * scratch.MoveSpeed);
+    }
+
     private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
-        scratch.Velocity = (m_planarVelocity + (scratch.Up * m_verticalVelocity));
+        scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
         var step = m_positionAccumulator.Integrate(
             ratePerSecond: scratch.Velocity,
             elapsedTicks: scratch.StepTicks
@@ -2279,6 +2363,18 @@ public sealed class WorldBody {
             var resolvedNormal = FixedVector3.Dot(left: resolvedVelocity, right: scratch.Up);
 
             m_planarVelocity = (resolvedVelocity - (scratch.Up * resolvedNormal));
+
+            // The direct term is one tick of authored input, not persistent motion state. Never fold contact's
+            // clipped drive into the ballistic channel: holding down against a floor would otherwise store an equal
+            // upward launch for the frame the trigger was released.
+            if (scratch.DirectVerticalVelocity != FixedQ4816.Zero) {
+                m_verticalVelocity = FixedQ4816.Zero;
+                m_verticalVelocityAccumulator.Reset();
+                if (m_grounded) {
+                    m_positionAccumulator.ResetY();
+                }
+                return;
+            }
 
             if (resolvedNormal != m_verticalVelocity) {
                 m_verticalVelocity = resolvedNormal;
@@ -2604,9 +2700,14 @@ public sealed class WorldBody {
     }
 
     private void ComputeLocalTargetVelocity(ref BodyMotionScratch scratch) {
-        var facing = scratch.Orientation.Rotate(vector: -s_unitZ);
-        var right = scratch.Orientation.Rotate(vector: s_unitX);
-        var up = scratch.Orientation.Rotate(vector: s_unitY);
+        // The free program shares the kit's declared movement frame. Under World, the client has ALREADY rotated
+        // the planar pair through camera yaw, so rotating it through body attitude again is a second composition
+        // (the source of direction-dependent flight and apparent vertical loss after a handoff). World also makes
+        // MoveUp literal world Y, keeping an upright hover body's ascent independent of its rendered facing. Heading
+        // retains true 6DOF body-local flight.
+        var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? -s_unitZ : scratch.Orientation.Rotate(vector: -s_unitZ));
+        var right = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? s_unitX : scratch.Orientation.Rotate(vector: s_unitX));
+        var up = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? s_unitY : scratch.Orientation.Rotate(vector: s_unitY));
 
         scratch.Velocity = ((((facing * Role(intent: in scratch.Intent, role: ChannelRole.MoveForward)) + (right * Role(intent: in scratch.Intent, role: ChannelRole.MoveStrafe))) + (up * Role(intent: in scratch.Intent, role: ChannelRole.MoveUp))) * scratch.MoveSpeed);
         scratch.TargetVelocity = scratch.Velocity;
@@ -3056,6 +3157,7 @@ public sealed class WorldBody {
         public FixedVector3 Facing;
         public FixedVector3 Right;
         public FixedVector3 TargetVelocity;
+        public FixedQ4816 DirectVerticalVelocity;
         public FixedQ4816 SwimVerticalTarget;
         public FixedVector3 Velocity;
         public FixedVector3 NextPosition;

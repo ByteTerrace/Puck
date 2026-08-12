@@ -1036,6 +1036,10 @@ public enum BodyMotionOp : byte {
     ApplyVerticalGravity,
     ApplyVerticalDecay,
     ApplyBuoyancyAndSurface,
+    /// <summary>While MoveUp is non-zero, drives vertical velocity directly at MoveSpeed and suspends the ballistic
+    /// channel. Releasing MoveUp returns vertical ownership to gravity, so authored jump actions and ordinary ground
+    /// contact remain coherent in the same program.</summary>
+    ApplyVerticalDrive,
     IntegratePlanarAndVerticalVelocity,
     IntegrateScratchVelocity,
     CommitPose,
@@ -1266,7 +1270,8 @@ public sealed class CompiledBodyMotionProgram {
             || Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || Contains(operation: BodyMotionOp.ResolveVehicleFrame),
         ChannelRole.MoveUp => Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || Contains(operation: BodyMotionOp.ComputeSwimTargetVelocity),
+            || Contains(operation: BodyMotionOp.ComputeSwimTargetVelocity)
+            || Contains(operation: BodyMotionOp.ApplyVerticalDrive),
         // ResolveVehicleFrame reads Pitch only under a positive PitchRate, so Pitch is not REQUIRED for it — a
         // pitchless world's flying-vehicle pitch reads zero rather than refusing the kit.
         ChannelRole.Pitch or ChannelRole.Roll => Contains(operation: BodyMotionOp.IntegrateLocalAttitude),
@@ -1352,6 +1357,7 @@ public sealed class CompiledBodyMotionProgram {
             => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.RunActionTriggers => (BodyProgramAdmission.Channels | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),
         BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyBuoyancyAndSurface
+            or BodyMotionOp.ApplyVerticalDrive
             or BodyMotionOp.IntegratePlanarAndVerticalVelocity
             or BodyMotionOp.IntegrateScratchVelocity => (BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity),
         BodyMotionOp.CommitPose => BodyProgramAdmission.Pose,
@@ -1369,7 +1375,8 @@ public sealed class CompiledBodyMotionProgram {
         BodyMotionOp.ComputePlanarTargetVelocity or BodyMotionOp.ComputeLocalTargetVelocity or BodyMotionOp.ComputeSwimTargetVelocity => 1,
         BodyMotionOp.ShapePlanarVelocity or BodyMotionOp.SnapYawToPlanarIntent or BodyMotionOp.ShapeVehicleVelocity => 2,
         BodyMotionOp.RunActionTriggers => 3,
-        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyBuoyancyAndSurface => 4,
+        BodyMotionOp.ApplyVerticalGravity or BodyMotionOp.ApplyVerticalDecay or BodyMotionOp.ApplyBuoyancyAndSurface
+            or BodyMotionOp.ApplyVerticalDrive => 4,
         BodyMotionOp.IntegratePlanarAndVerticalVelocity or BodyMotionOp.IntegrateScratchVelocity => 5,
         BodyMotionOp.CommitPose => 7,
         _ => throw Refuse(BodyMotionProgramRefusal.OpcodeUnknown, "<unnamed>", $"opcode value {(int)op} is not declared"),

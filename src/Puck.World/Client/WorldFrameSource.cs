@@ -234,8 +234,8 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
         // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
-        m_emitter = new WorldSceneEmitter(client: client, settings: settings, targeting: targeting, drag: drag, workbench: workbench, animator: animator, audio: audio, anchor: anchor);
-        m_adjacencies = new WorldAdjacencySceneEmitter(client: client, source: adjacencies);
+        m_emitter = new WorldSceneEmitter(client: client, settings: settings, targeting: targeting, drag: drag, workbench: workbench, animator: animator, audio: audio, anchor: anchor, continuum: continuum);
+        m_adjacencies = new WorldAdjacencySceneEmitter(client: client, source: adjacencies, suppressEntity: entity => continuum.IsFollowed(entity: in entity));
         m_audio.ReconcileSpeakers(definition: definition);
         // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
@@ -756,7 +756,7 @@ internal sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
 
-        if (m_continuum.TryResolve(route: route, interpolationAlpha: interpolationAlpha, position: out var bodyPosition, orientation: out var bodyOrientation)) {
+        if (m_continuum.TryResolveSeatPose(slot: slot, interpolationAlpha: interpolationAlpha, position: out var bodyPosition, orientation: out var bodyOrientation)) {
             m_lastSeatAnchorPosition[slot] = bodyPosition;
             m_lastSeatAnchorOrientation[slot] = bodyOrientation;
             m_hasSeatAnchor[slot] = true;

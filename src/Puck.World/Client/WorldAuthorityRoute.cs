@@ -84,6 +84,22 @@ internal sealed class WorldAuthorityEndpoint : IDisposable {
         return false;
     }
 
+    /// <summary>Reads the render identity belonging to the same complete entity claim as <see cref="TryEntityPose(in WorldEntityAddress, out Vector3, out Quaternion)"/>.</summary>
+    public bool TryEntityAppearance(in WorldEntityAddress entity, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
+        if (((uint)entity.Index < WorldClient.EntityCapacity) && m_mirror.IsActive(index: entity.Index) &&
+            (m_mirror.Address(index: entity.Index) == entity)) {
+            bodyColor = m_mirror.BodyColor(index: entity.Index);
+            look = m_mirror.Look(index: entity.Index);
+            catalogRig = m_mirror.CatalogRig(index: entity.Index);
+            return true;
+        }
+
+        bodyColor = default;
+        look = WorldLook.Implicit;
+        catalogRig = 0;
+        return false;
+    }
+
     /// <summary>Atomically seeds a newly discovered committed route before publishing its new seat epoch.</summary>
     public void SeedRoute(in WorldAuthorityRouteDescription route) => m_mirror.SeedRoute(route: in route);
 
