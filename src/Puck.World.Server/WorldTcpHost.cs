@@ -65,6 +65,9 @@ public sealed class WorldTcpHost : IDisposable {
     // Indexed by WorldFederationRefusal; every federation refusal this door writes is counted here so the read-back
     // reports refusals by name rather than by sentence.
     private readonly int[] m_federationRefusals = new int[Enum.GetValues<WorldFederationRefusal>().Length];
+    // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
+    // tracked here only so shutdown can half-close them; the value is unused.
+    private readonly ConcurrentDictionary<TcpClient, byte> m_federationConnections = new();
     private readonly ConcurrentQueue<Action> m_pending = new();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
@@ -237,7 +240,14 @@ public sealed class WorldTcpHost : IDisposable {
                 await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Ack, body: default, ct: handshakeCt).ConfigureAwait(false);
                 handshakeSlotHeld = false;
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
-                await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                _ = m_federationConnections.TryAdd(key: client, value: 0);
+
+                try {
+                    await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                } finally {
+                    _ = m_federationConnections.TryRemove(key: client, value: out _);
+                }
+
                 return;
             }
 
@@ -913,6 +923,18 @@ public sealed class WorldTcpHost : IDisposable {
         }
 
         m_disposed = true;
+
+        // Half-close every federation lane BEFORE cancelling its read: cancelling a pending socket read closes the
+        // handle abortively, and a peer blocked on that lane reads the abort (WSAECONNABORTED) as an outage rather
+        // than as this authority ending an ordinary session. A FIN gives it a clean end-of-stream instead.
+        foreach (var federation in m_federationConnections.Keys) {
+            try {
+                federation.Client.Shutdown(how: SocketShutdown.Send);
+            } catch (Exception ex) when (ex is SocketException or ObjectDisposedException) {
+                // The lane is already gone; there is nothing left to end politely.
+            }
+        }
+
         m_cts?.Cancel();
         m_listener?.Stop();
 

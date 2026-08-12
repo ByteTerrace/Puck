@@ -885,10 +885,12 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         private async Task RunAsync(CancellationToken ct) {
             while (!ct.IsCancellationRequested) {
                 string? attemptedEndpoint = null;
+                var established = false;
+
                 try {
                     await m_signal.WaitAsync(cancellationToken: ct).ConfigureAwait(false);
                     attemptedEndpoint = m_owner.Endpoint;
-                    await RunConnectionAsync(ct: ct).ConfigureAwait(false);
+                    await RunConnectionAsync(established: () => established = true, ct: ct).ConfigureAwait(false);
                     _ = Interlocked.Exchange(location1: ref m_unavailable, value: 0);
                 } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                     return;
@@ -902,9 +904,15 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                     if (ct.IsCancellationRequested) {
                         return;
                     }
-                    if (Interlocked.Exchange(location1: ref m_unavailable, value: 1) == 0) {
+
+                    // Only a lane this pump could not re-establish is an outage. An established lane ending is not
+                    // evidence about the peer: a peer cancelling its own pending read closes the handle abortively
+                    // (WSAECONNABORTED), so its ordinary shutdown arrives here identically to a fault, and
+                    // reconnecting loses nothing because an unacknowledged row is still pending.
+                    if (!established && (Interlocked.Exchange(location1: ref m_unavailable, value: 1) == 0)) {
                         Console.Error.WriteLine(value: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]");
                     }
+
                     try {
                         await Task.Delay(delay: TimeSpan.FromMilliseconds(100), cancellationToken: ct).ConfigureAwait(false);
                     } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
@@ -917,7 +925,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
         }
 
-        private async Task RunConnectionAsync(CancellationToken ct) {
+        private async Task RunConnectionAsync(Action established, CancellationToken ct) {
             using var client = new TcpClient();
             client.NoDelay = true;
             await client.ConnectAsync(remoteEP: m_owner.m_endpoint, cancellationToken: ct).ConfigureAwait(false);
@@ -930,6 +938,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             if (!opening.Ok || (opening.Kind != (byte)WorldFederationResponse.Ack)) {
                 throw new IOException(DescribeHandshake(read: opening, stage: "intent stream opening"));
             }
+
+            established();
 
             while (!ct.IsCancellationRequested) {
                 if (m_pending.IsEmpty) {
