@@ -69,14 +69,18 @@ public sealed record KeyBindingPayload(KeyId TargetId, ReadOnlyMemory<byte> Publ
 
 /// <summary>
 /// A sealed carriage payload: an AEAD ciphertext produced by ECDH P-256 key agreement to an AES-256-GCM
-/// key, with the envelope's serialized context header as associated data (README.md, "Signed
-/// carriage"). Tampering any header byte changes the AAD, so decryption fails closed.
+/// key, with both the envelope's serialized context header and the recipient sealing-key identity as
+/// associated data (README.md, "Signed carriage"). The recipient id is also inside the signed payload,
+/// so neither the signer nor the AEAD operation can be separated from the exact sealing key and scheme
+/// selected by the sender.
 /// </summary>
+/// <param name="RecipientId">The self-certifying id of the recipient's sealing key. Its algorithm MUST name a sealing algorithm and its hash MUST identify the actual recipient public key.</param>
 /// <param name="EphemeralPublicKeySubjectPublicKeyInfo">The sender's one-time ECDH public key (SPKI bytes), carried so the recipient can redo the agreement.</param>
 /// <param name="Nonce">The 12-byte AES-GCM nonce.</param>
 /// <param name="Tag">The 16-byte AES-GCM authentication tag.</param>
 /// <param name="Ciphertext">The encrypted payload bytes.</param>
 public sealed record SealedPayload(
+    KeyId RecipientId,
     ReadOnlyMemory<byte> EphemeralPublicKeySubjectPublicKeyInfo,
     ReadOnlyMemory<byte> Nonce,
     ReadOnlyMemory<byte> Tag,
@@ -105,6 +109,10 @@ public sealed record SealedPayload(
 /// it desynchronises nothing.</para>
 /// </remarks>
 public sealed record SignedCarriageEnvelope {
+    private readonly byte[] m_payloadBytes;
+    private readonly byte[] m_signedPortion;
+    private byte[] m_signature;
+
     private SignedCarriageEnvelope(
         CarriageEnvelopeHeader header,
         CarriagePayloadKind payloadKind,
@@ -113,23 +121,26 @@ public sealed record SignedCarriageEnvelope {
         ReadOnlyMemory<byte> signedPortion
     ) {
         Header = header;
-        PayloadBytes = payloadBytes;
+        m_payloadBytes = payloadBytes.ToArray();
         PayloadKind = payloadKind;
-        Signature = signature;
-        SignedPortion = signedPortion;
+        m_signature = signature.ToArray();
+        m_signedPortion = signedPortion.ToArray();
     }
 
     /// <summary>
     /// Builds an envelope around signed-portion bytes that already exist — a decoder's arrived bytes, or
-    /// the bytes a signer just put its pen to. <paramref name="signedPortion"/> must be the encoding of
-    /// the other three signed arguments; nothing re-derives it, which is the whole point.
+    /// the bytes a signer just put its pen to. This factory is deliberately assembly-only: accepting an
+    /// independently supplied projection and signed portion at the public API boundary would let callers
+    /// authenticate one message while presenting another. <paramref name="signedPortion"/> must be the
+    /// encoding of the other three signed arguments; <see cref="CarriageVerifier"/> checks that invariant
+    /// again before it trusts the projection.
     /// </summary>
     /// <param name="header">The context header those bytes encode.</param>
     /// <param name="payloadKind">The payload kind those bytes encode.</param>
     /// <param name="payloadBytes">The payload those bytes encode.</param>
     /// <param name="signature">The signature over <paramref name="signedPortion"/>.</param>
     /// <param name="signedPortion">The exact bytes the signature covers.</param>
-    public static SignedCarriageEnvelope FromSignedPortion(
+    internal static SignedCarriageEnvelope FromSignedPortion(
         CarriageEnvelopeHeader header,
         CarriagePayloadKind payloadKind,
         ReadOnlyMemory<byte> payloadBytes,
@@ -177,19 +188,37 @@ public sealed record SignedCarriageEnvelope {
     /// <summary>Gets the canonical context header, always part of the signing input.</summary>
     public CarriageEnvelopeHeader Header { get; }
 
-    /// <summary>Gets the payload, already encoded by whichever <see cref="ICarriageCodec"/> produced this envelope.</summary>
-    public ReadOnlyMemory<byte> PayloadBytes { get; }
+    /// <summary>Gets a defensive copy of the payload encoded by whichever <see cref="ICarriageCodec"/> produced this envelope.</summary>
+    public ReadOnlyMemory<byte> PayloadBytes => m_payloadBytes.ToArray();
+
+    /// <summary>Assembly-internal zero-copy access after the envelope boundary has taken its defensive copy.</summary>
+    internal ReadOnlySpan<byte> PayloadSpan => m_payloadBytes;
+
+    internal int PayloadLength => m_payloadBytes.Length;
 
     /// <summary>Gets the shape <see cref="PayloadBytes"/> decodes as.</summary>
     public CarriagePayloadKind PayloadKind { get; }
 
-    /// <summary>Gets the ECDSA signature (IEEE P1363 fixed-field r‖s) over <see cref="SignedPortion"/>.</summary>
-    public ReadOnlyMemory<byte> Signature { get; init; }
+    /// <summary>Gets a defensive copy of the ECDSA signature (IEEE P1363 fixed-field r‖s) over <see cref="SignedPortion"/>.</summary>
+    public ReadOnlyMemory<byte> Signature {
+        get => m_signature.ToArray();
+        init => m_signature = value.ToArray();
+    }
+
+    /// <summary>Assembly-internal zero-copy access after the envelope boundary has taken its defensive copy.</summary>
+    internal ReadOnlySpan<byte> SignatureSpan => m_signature;
+
+    internal int SignatureLength => m_signature.Length;
 
     /// <summary>
-    /// Gets the exact bytes the signature covers — the codec's signed-portion encoding of <see cref="Header"/>,
+    /// Gets a defensive copy of the exact bytes the signature covers — the codec's signed-portion encoding of <see cref="Header"/>,
     /// <see cref="PayloadKind"/>, and <see cref="PayloadBytes"/>, as they arrived rather than as they would
     /// re-encode. This is what <see cref="CarriageVerifier"/> verifies against.
     /// </summary>
-    public ReadOnlyMemory<byte> SignedPortion { get; }
+    public ReadOnlyMemory<byte> SignedPortion => m_signedPortion.ToArray();
+
+    /// <summary>Assembly-internal zero-copy access to the authoritative signed bytes.</summary>
+    internal ReadOnlySpan<byte> SignedPortionSpan => m_signedPortion;
+
+    internal int SignedPortionLength => m_signedPortion.Length;
 }

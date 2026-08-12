@@ -22,15 +22,14 @@ namespace Puck.Carriage;
 /// <para>One binding is refused as a broken chain, three as an unbounded one. Two is a number this verifier
 /// hard-codes, not an engine it runs — there is no path discovery and no cross-certification.</para>
 /// </remarks>
-public static class CarriageVerifier {
+internal static class CarriageVerifier {
     /// <summary>
     /// Walks a claim's chain against a trust list and reports whether it verifies.
     /// </summary>
     /// <remarks>
     /// <b>This never runs inside a tick.</b> It is an admission-boundary operation, and it breaks
-    /// world-model invariant 2 twice if it is not: the window is checked against wall-clock Unix seconds
-    /// (see <paramref name="now"/>), and a claim carrying a sequence both reads and writes durable storage
-    /// through <paramref name="sequenceStore"/>. Verification is also far too slow for 240 Hz. Call it at
+    /// world-model invariant 2 if it is not: the window is checked against wall-clock Unix seconds
+    /// (see <paramref name="now"/>). Verification is also far too slow for 240 Hz. Call it at
     /// the boundary, tape the verdict, and let the simulation read the verdict — never call it from
     /// <c>Step</c>. Nothing in the build enforces this today, so it is stated where the caller is.
     /// </remarks>
@@ -53,19 +52,8 @@ public static class CarriageVerifier {
     /// boundary, "never a mid-tick read of another document, of storage, or of a clock").
     /// </param>
     /// <param name="expectedPurpose">The purpose this call expects the claim to declare. Must be non-blank, and must not be <see cref="CarriagePurposes.KeyBinding"/> — that purpose is refused unconditionally, which is what stops a binding being replayed as a claim.</param>
-    /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="CarriageEnvelopeHeader.Audience"/>. A claim with no audience travels anywhere and is checked against <paramref name="sequenceStore"/> instead.</param>
-    /// <param name="sequenceStore">
-    /// The durable per-(issuer domain, subject) high-water mark seam. Required whenever the claim carries a
-    /// sequence — which a directed claim may also do, since binding an audience defends only against replay
-    /// at another world and never against replay at the audience itself (README.md: "Same-world
-    /// replay needs the sequence either way"). May be <see langword="null"/> only if the caller knows no
-    /// claim carrying a sequence will ever be presented; one that does is refused, never silently accepted.
-    /// <para>The store's <see cref="ISequenceStore.TryAdvance"/> must be atomic per pair. This method makes
-    /// exactly one call into it and treats the returned bool as the verdict, so a store that compares and
-    /// advances non-atomically hands two concurrent receivers of one bearer claim two acceptances — and
-    /// this specification's other implementation is a web service, where concurrent is the normal case
-    /// rather than the exotic one (README.md §8).</para>
-    /// </param>
+    /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="CarriageEnvelopeHeader.Audience"/>.</param>
+    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> only for this assembly's adversarial harness.</param>
     public static CarriageVerifyResult VerifyChain(
         ICarriageCodec codec,
         SignedCarriageEnvelope claim,
@@ -74,9 +62,18 @@ public static class CarriageVerifier {
         DateTimeOffset now,
         string expectedPurpose,
         string? expectedAudience,
-        ISequenceStore? sequenceStore
+        CarriageConformanceProfile? profile = null
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedPurpose);
+
+        if (!HasCoherentProjection(
+            codec: codec,
+            envelope: claim,
+            label: "claim",
+            refusal: out var projectionRefusal
+        )) {
+            return CarriageVerifyResult.Refuse(reason: projectionRefusal!);
+        }
 
         if (string.Equals(
             a: expectedPurpose,
@@ -124,13 +121,14 @@ public static class CarriageVerifier {
 
         if (directTrust is not null) {
             return VerifyDirectlyPinned(
+                codec: codec,
                 claim: claim,
                 chain: chain,
                 entry: directTrust,
                 trustList: trustList,
                 now: now,
                 expectedAudience: expectedAudience,
-                sequenceStore: sequenceStore
+                profile: profile
             );
         }
 
@@ -141,7 +139,7 @@ public static class CarriageVerifier {
             trustList: trustList,
             now: now,
             expectedAudience: expectedAudience,
-            sequenceStore: sequenceStore
+            profile: profile
         );
     }
 
@@ -151,13 +149,14 @@ public static class CarriageVerifier {
     /// unexamined bindings would let an attacker attach whatever they liked to a claim that verifies.
     /// </summary>
     private static CarriageVerifyResult VerifyDirectlyPinned(
+        ICarriageCodec codec,
         SignedCarriageEnvelope claim,
         IReadOnlyList<SignedCarriageEnvelope>? chain,
         TrustListEntry entry,
         TrustList trustList,
         DateTimeOffset now,
         string? expectedAudience,
-        ISequenceStore? sequenceStore
+        CarriageConformanceProfile? profile
     ) {
         if (
             (chain is not null) &&
@@ -182,15 +181,28 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: "claim signature does not verify against the pinned subject key");
         }
 
-        return CheckClaimPolicy(
+        var policy = CheckClaimPolicy(
             claim: claim,
             subject: entry.PinnedId.Subject!,
             entry: entry,
             maximumAge: trustList.MaximumAgeFor(entry: entry),
+            replayAcceptanceHorizon: trustList.ReplayAcceptanceHorizon,
             now: now,
-            expectedAudience: expectedAudience,
-            sequenceStore: sequenceStore
+            expectedAudience: expectedAudience
         );
+
+        if (!policy.Verified) {
+            return policy;
+        }
+
+        var payloadRefusal = ValidateAuthenticatedClaimPayload(
+            codec: codec,
+            claim: claim
+        );
+
+        return ((payloadRefusal is null)
+            ? policy
+            : CarriageVerifyResult.Refuse(reason: payloadRefusal));
     }
 
     /// <summary>The two-hop case: root vouches for an issuing key, the issuing key vouches for the subject, the subject signed the claim.</summary>
@@ -201,7 +213,7 @@ public static class CarriageVerifier {
         TrustList trustList,
         DateTimeOffset now,
         string? expectedAudience,
-        ISequenceStore? sequenceStore
+        CarriageConformanceProfile? profile
     ) {
         if (
             (chain is null) ||
@@ -220,8 +232,6 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: $"domain '{claim.Header.Domain}' is not a trusted vouching root");
         }
 
-        var maximumAge = trustList.MaximumAgeFor(entry: rootTrust);
-
         var rootHop = VerifyBindingHop(
             codec: codec,
             binding: chain[0],
@@ -229,8 +239,9 @@ public static class CarriageVerifier {
             pinnedSignerId: rootTrust.PinnedId,
             pinnedSignerSpki: rootTrust.PublicKeySubjectPublicKeyInfo.Span,
             now: now,
-            maximumAge: maximumAge,
-            hopLabel: "root-vouches-issuing binding"
+            maximumAge: trustList.RootBindingMaximumAgeFor(entry: rootTrust),
+            hopLabel: "root-vouches-issuing binding",
+            profile: profile
         );
 
         if (rootHop.Refusal is not null) {
@@ -269,8 +280,9 @@ public static class CarriageVerifier {
             pinnedSignerId: issuingId,
             pinnedSignerSpki: rootHop.TargetSubjectPublicKeyInfo.Span,
             now: now,
-            maximumAge: maximumAge,
-            hopLabel: "issuing-vouches-subject binding"
+            maximumAge: trustList.SubjectBindingMaximumAgeFor(entry: rootTrust),
+            hopLabel: "issuing-vouches-subject binding",
+            profile: profile
         );
 
         if (issuingHop.Refusal is not null) {
@@ -315,15 +327,52 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: "claim signature does not verify against the pinned subject key");
         }
 
-        return CheckClaimPolicy(
+        var policy = CheckClaimPolicy(
             claim: claim,
             subject: subjectId.Subject,
             entry: rootTrust,
-            maximumAge: maximumAge,
+            maximumAge: trustList.MaximumAgeFor(entry: rootTrust),
+            replayAcceptanceHorizon: trustList.ReplayAcceptanceHorizon,
             now: now,
-            expectedAudience: expectedAudience,
-            sequenceStore: sequenceStore
+            expectedAudience: expectedAudience
         );
+
+        if (!policy.Verified) {
+            return policy;
+        }
+
+        var payloadRefusal = ValidateAuthenticatedClaimPayload(
+            codec: codec,
+            claim: claim
+        );
+
+        return ((payloadRefusal is null)
+            ? policy
+            : CarriageVerifyResult.Refuse(reason: payloadRefusal));
+    }
+
+    /// <summary>
+    /// Validates a claim payload whose signature has already authenticated its bytes. In particular, an
+    /// attacker-controlled sealed payload is not decoded and its ephemeral EC key is not imported before
+    /// the signature check succeeds.
+    /// </summary>
+    private static string? ValidateAuthenticatedClaimPayload(ICarriageCodec codec, SignedCarriageEnvelope claim) {
+        if (claim.PayloadKind != CarriagePayloadKind.Sealed) {
+            return null;
+        }
+
+        try {
+            _ = codec.DecodeSealedPayload(bytes: claim.PayloadSpan);
+
+            return null;
+        } catch (Exception exception) when (
+            (exception is FormatException) ||
+            (exception is ArgumentException) ||
+            (exception is NotSupportedException) ||
+            (exception is CryptographicException)
+        ) {
+            return $"sealed claim payload is malformed: {exception.Message}";
+        }
     }
 
     /// <summary>
@@ -339,14 +388,18 @@ public static class CarriageVerifier {
         string subject,
         TrustListEntry entry,
         TimeSpan? maximumAge,
+        TimeSpan? replayAcceptanceHorizon,
         DateTimeOffset now,
-        string? expectedAudience,
-        ISequenceStore? sequenceStore
+        string? expectedAudience
     ) {
+        var effectiveMaximumAge = Minimum(
+            left: maximumAge,
+            right: (claim.Header.Sequence is null) ? null : replayAcceptanceHorizon
+        );
         var windowFailure = CheckWindow(
             header: claim.Header,
             now: now,
-            maximumAge: maximumAge
+            maximumAge: effectiveMaximumAge
         );
 
         if (windowFailure is not null) {
@@ -365,38 +418,100 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: "bearer claim (no audience) carries no sequence number");
         }
 
+        ReplayCommitRequirement? replayCommit = null;
+
         if (claim.Header.Sequence is not null) {
-            if (sequenceStore is null) {
-                return CarriageVerifyResult.Refuse(reason: "the claim carries a sequence and no sequence store was supplied — a declared replay defence is never skipped because the receiver has nowhere to record it");
+            if (replayAcceptanceHorizon is null) {
+                return CarriageVerifyResult.Refuse(reason: "the claim carries a sequence but this verifier has no finite replay-acceptance horizon — safe mark eviction cannot be derived");
             }
 
-            // One call, not compare-then-write: the store decides, atomically. Splitting it would put a
-            // check-then-act race on the one check whose entire job is to make a claim usable once.
-            //
-            // A store that is unreachable, unreadable, or cannot durably record the advance REFUSES the
-            // claim — it does not propagate (README.md §8). "Accept because the store is
-            // down" inverts the one rule the mark exists for: an unavailable store means the declared replay
-            // defence is absent, and an absent replay defence is already a refusal three lines above. An
-            // indeterminate outcome — a timeout, an aborted transaction, a lock nobody won — is not an
-            // acceptance either. Nothing was consumed, so the same claim may be presented again later.
-            bool advanced;
-
-            try {
-                advanced = sequenceStore.TryAdvance(
-                    domain: claim.Header.Domain,
-                    subject: subject,
-                    sequence: claim.Header.Sequence.Value
-                );
-            } catch (Exception exception) {
-                return CarriageVerifyResult.Refuse(reason: $"the sequence mark store could not decide: {exception.GetType().Name}: {exception.Message} — an unavailable or indeterminate mark store refuses, never admits");
+            if (!TryDeriveReplayEpoch(
+                notBefore: claim.Header.NotBefore,
+                notAfter: claim.Header.NotAfter,
+                horizon: replayAcceptanceHorizon.Value,
+                epochStartUnixSeconds: out var epochStartUnixSeconds,
+                retainThroughUnixSeconds: out var retainThroughUnixSeconds,
+                refusal: out var epochRefusal
+            )) {
+                return CarriageVerifyResult.Refuse(reason: epochRefusal!);
             }
 
-            if (!advanced) {
-                return CarriageVerifyResult.Refuse(reason: $"sequence replay: claim sequence {claim.Header.Sequence.Value} does not strictly exceed the recorded high-water mark");
-            }
+            replayCommit = new ReplayCommitRequirement(
+                Domain: claim.Header.Domain,
+                Subject: subject,
+                EpochStartUnixSeconds: epochStartUnixSeconds,
+                RetainThroughUnixSeconds: retainThroughUnixSeconds,
+                Sequence: claim.Header.Sequence.Value
+            );
         }
 
-        return CarriageVerifyResult.Accept(reach: entry.Reach);
+        return CarriageVerifyResult.Accept(
+            reach: entry.Reach,
+            replayCommit: replayCommit
+        );
+    }
+
+    private static TimeSpan? Minimum(TimeSpan? left, TimeSpan? right) {
+        if (left is null) {
+            return right;
+        }
+
+        if (right is null) {
+            return left;
+        }
+
+        return (left.Value <= right.Value) ? left : right;
+    }
+
+    /// <summary>
+    /// Derives a replay epoch solely from signed <c>notBefore</c>. Epoch width is the verifier-wide
+    /// horizon. Keeping an epoch mark through the end of the following epoch is sufficient because a claim
+    /// beginning in this epoch has a window no longer than one horizon and is also subject to that same
+    /// maximum-age ceiling. A far-future lower sequence belongs to a later epoch instead of reopening this
+    /// one after eviction.
+    /// </summary>
+    private static bool TryDeriveReplayEpoch(
+        long notBefore,
+        long notAfter,
+        TimeSpan horizon,
+        out long epochStartUnixSeconds,
+        out long retainThroughUnixSeconds,
+        out string? refusal
+    ) {
+        var horizonSeconds = checked((long)horizon.TotalSeconds);
+        var signedWindowSeconds = ((decimal)notAfter - notBefore);
+
+        epochStartUnixSeconds = default;
+        retainThroughUnixSeconds = default;
+
+        if (signedWindowSeconds > horizonSeconds) {
+            refusal = $"sequenced claim window {signedWindowSeconds} seconds exceeds the verifier's replay-acceptance horizon of {horizonSeconds} seconds";
+
+            return false;
+        }
+
+        var epoch = Math.DivRem(
+            a: notBefore,
+            b: horizonSeconds,
+            result: out var remainder
+        );
+
+        if (remainder < 0) {
+            epoch--;
+        }
+
+        try {
+            epochStartUnixSeconds = checked(epoch * horizonSeconds);
+            retainThroughUnixSeconds = checked(epochStartUnixSeconds + checked((2 * horizonSeconds) - 1));
+        } catch (OverflowException) {
+            refusal = "sequenced claim window lies outside the representable replay-epoch retention range";
+
+            return false;
+        }
+
+        refusal = null;
+
+        return true;
     }
 
     /// <summary>The outcome of verifying one binding hop: either a refusal, or the vouched-for key's id and actual key bytes to carry into the next hop.</summary>
@@ -410,8 +525,22 @@ public static class CarriageVerifier {
         ReadOnlySpan<byte> pinnedSignerSpki,
         DateTimeOffset now,
         TimeSpan? maximumAge,
-        string hopLabel
+        string hopLabel,
+        CarriageConformanceProfile? profile
     ) {
+        if (!HasCoherentProjection(
+            codec: codec,
+            envelope: binding,
+            label: hopLabel,
+            refusal: out var projectionRefusal
+        )) {
+            return new BindingHopResult(
+                Refusal: projectionRefusal,
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
+        }
+
         if (!string.Equals(
             a: binding.Header.Purpose,
             b: CarriagePurposes.KeyBinding,
@@ -499,7 +628,7 @@ public static class CarriageVerifier {
         KeyBindingPayload payload;
 
         try {
-            payload = codec.DecodeKeyBindingPayload(bytes: binding.PayloadBytes.Span);
+            payload = codec.DecodeKeyBindingPayload(bytes: binding.PayloadSpan);
         } catch (FormatException exception) {
             return new BindingHopResult(
                 Refusal: $"{hopLabel}'s payload does not decode: {exception.Message}",
@@ -511,6 +640,21 @@ public static class CarriageVerifier {
         if (!CarriageAlgorithms.IsKnown(algorithm: payload.TargetId.Algorithm)) {
             return new BindingHopResult(
                 Refusal: $"{hopLabel} vouches for a key naming algorithm '{payload.TargetId.Algorithm}', which is not a carriage algorithm",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
+        }
+
+        if (
+            (profile is not null) &&
+            !profile.TryValidateKeyBindingPayload(
+                payload: payload,
+                label: hopLabel,
+                refusal: out var profileRefusal
+            )
+        ) {
+            return new BindingHopResult(
+                Refusal: profileRefusal,
                 TargetId: null,
                 TargetSubjectPublicKeyInfo: default
             );
@@ -529,6 +673,41 @@ public static class CarriageVerifier {
             TargetId: payload.TargetId,
             TargetSubjectPublicKeyInfo: payload.PublicKeySubjectPublicKeyInfo
         );
+    }
+
+    /// <summary>
+    /// Defends the verifier's object boundary as well as its wire boundary. Raw signed-portion construction
+    /// is assembly-only, but every envelope consumed here must still prove that its parsed projection is the
+    /// canonical decoding of the bytes whose signature will be checked. Re-encoding is used only for this
+    /// equality guard; <see cref="VerifySignature"/> continues to authenticate the original bytes.
+    /// </summary>
+    private static bool HasCoherentProjection(
+        ICarriageCodec codec,
+        SignedCarriageEnvelope envelope,
+        string label,
+        out string? refusal
+    ) {
+        try {
+            var projectedBytes = codec.EncodeSignedPortion(
+                header: envelope.Header,
+                payloadKind: envelope.PayloadKind,
+                payloadBytes: envelope.PayloadSpan
+            );
+
+            if (!projectedBytes.AsSpan().SequenceEqual(other: envelope.SignedPortionSpan)) {
+                refusal = $"{label}'s parsed fields do not match its authenticated signed portion";
+
+                return false;
+            }
+        } catch (Exception exception) {
+            refusal = $"{label}'s parsed fields cannot be encoded for an integrity check: {exception.GetType().Name}: {exception.Message}";
+
+            return false;
+        }
+
+        refusal = null;
+
+        return true;
     }
 
     /// <summary>
@@ -580,8 +759,8 @@ public static class CarriageVerifier {
         // uniqueness — (r, s) and (r, n-s) are both valid for the same message, so signature bytes are never
         // an identity. Replay is defended by the sequence mark and the audience, never by signature equality.
         return ecdsa.VerifyData(
-            data: envelope.SignedPortion.Span,
-            signature: envelope.Signature.Span,
+            data: envelope.SignedPortionSpan,
+            signature: envelope.SignatureSpan,
             hashAlgorithm: descriptor.SignatureHash.Value,
             signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
         );
@@ -610,10 +789,14 @@ public static class CarriageVerifier {
         }
 
         if (maximumAge is not null) {
-            var age = TimeSpan.FromSeconds(value: (nowSeconds - header.NotBefore));
+            // Both values are signed 64-bit wire seconds. Subtracting them as Int64 can wrap, and converting
+            // an attacker-authored extreme to TimeSpan can throw. Int128 covers the complete difference and
+            // keeps every malformed/extreme window on the refusal path.
+            var ageSeconds = ((Int128)nowSeconds - header.NotBefore);
+            var maximumAgeSeconds = (Int128)(maximumAge.Value.Ticks / TimeSpan.TicksPerSecond);
 
-            if (age > maximumAge.Value) {
-                return $"expired: age {age} exceeds the verifier's maximum age {maximumAge.Value}";
+            if (ageSeconds > maximumAgeSeconds) {
+                return $"expired: age {ageSeconds} seconds exceeds the verifier's maximum age of {maximumAgeSeconds} seconds";
             }
         }
 
