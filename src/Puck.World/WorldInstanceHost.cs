@@ -1153,6 +1153,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
+    // The transfer id a seat's crossing hold has already been announced under, so the held-crossing line prints
+    // once per traversal rather than once per suppressed scan.
+    private readonly Dictionary<(string Instance, int Seat), ulong> m_announcedCrossingHolds = [];
     // Every transfer id this host has drained (committed or aborted). A pure function of enqueue/drain
     // order, never wall-clock or RNG — checked first in ApplyTransfer so a retry-shaped duplicate (the same
     // id resubmitted, e.g. world.transfer's transfer:<id> token) refuses by name rather than double-landing.
@@ -1388,7 +1391,25 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         var population = instance.Server.Population;
         var candidates = new List<AdjacencyEdgeHit>[population.Capacity];
+        var heldSeats = HeldCrossingSeats(instance: instance);
         _ = WorldAdjacencyPolicy.TryReciprocalHysteresis(definition: instance.Server.Definition, depth: out var reciprocalHysteresis, reason: out _);
+
+        for (var seat = 0; !resolveOnly && (seat < population.Capacity); seat++) {
+            var announced = m_announcedCrossingHolds.TryGetValue(key: (instance.Name, seat), value: out var announcedTransferId);
+
+            if (!heldSeats.TryGetValue(key: seat, value: out var heldTransferId)) {
+                if (announced) {
+                    _ = m_announcedCrossingHolds.Remove(key: (instance.Name, seat));
+                }
+
+                continue;
+            }
+
+            if (!announced || (announcedTransferId != heldTransferId)) {
+                m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
+                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]");
+            }
+        }
 
         foreach (var adjacency in adjacencies) {
             if (adjacency is null) {
@@ -1402,6 +1423,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     continue;
                 }
                 if (resolveOnly && (body.PendingContinuum is null)) {
+                    continue;
+                }
+                if (!resolveOnly && heldSeats.ContainsKey(key: seat)) {
                     continue;
                 }
 
@@ -1471,6 +1495,46 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
             EnqueueAdjacencyTransfer(instance: instance, hit: in winner);
         }
+    }
+
+    // Every seat of `instance` that already has a transfer queued or in flight, mapped to that transfer's id.
+    // WorldAdjacencyRegion.Sweep answers Crossed for a body ALREADY beyond the ownership threshold (parameter
+    // zero, so a multi-edge corner traversal can continue), which means a traveler waiting for its own queued
+    // transfer to drain re-satisfies the same edge on every scan. One traversal must mint one crossing, so a
+    // seat holding a transfer is not scanned again until that transfer resolves. Derived from the two live
+    // collections rather than latched, so no resolution path can leak a stale hold: ApplyTransfer runs at the
+    // drain point, never between a scan's read and its use.
+    private Dictionary<int, ulong> HeldCrossingSeats(WorldInstance instance) {
+        var held = new Dictionary<int, ulong>();
+
+        void Hold(in PendingTransfer transfer) {
+            if (!string.Equals(a: transfer.SourceInstance, b: instance.Name, comparisonType: StringComparison.Ordinal)) {
+                return;
+            }
+
+            if (transfer.FrozenCohortSlots is { } frozen) {
+                foreach (var slot in frozen) {
+                    held[slot] = transfer.TransferId;
+                }
+            } else if (transfer.Scope == TransferScope.Party) {
+                foreach (var slot in ActiveLocalSeats(server: instance.Server)) {
+                    held[slot] = transfer.TransferId;
+                }
+            } else {
+                held[transfer.SourceSlot] = transfer.TransferId;
+            }
+        }
+
+        foreach (var transfer in m_pendingTransfers) {
+            Hold(transfer: in transfer);
+        }
+
+        foreach (var pending in m_inDoubtTransfers) {
+            var transfer = pending.Transfer;
+            Hold(transfer: in transfer);
+        }
+
+        return held;
     }
 
     private static ulong StableJunctionSeed(string authority, int entity, int generation) {
