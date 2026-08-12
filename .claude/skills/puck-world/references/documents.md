@@ -38,9 +38,10 @@ none of them round-trips unchanged): `Rules` (see below), `Identity`,
 `Groups`, `Properties`, `Interactions`, `Generation`, `Generators`, `Water`
 (the standing-water medium — one waterline `level`; null IS the dry world;
 `WorldWater.cs`), `References`, `Portals`, `Simulation`, `Destinations`
-(`WorldDestinations.cs`), `Admission` (`Protocol/WorldAdmission.cs`, the TCP
-door's trust list — deny-by-default, an absent/empty section admits no remote
-peer), `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
+(`WorldDestinations.cs`), `Admission` (`Protocol/WorldAdmission.cs`, the one
+trust list every ingress crosses — key-bearing rows for the TCP identity door,
+keyless `federatedAuthority` rows for travellers an authenticated authority
+hands over; deny-by-default, an absent/empty section admits neither), `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
 auction house's config and live listing ledger; null IS today's no-market
 behavior, falling back to `WorldMarketSection.Empty`), and `Adjacencies`
 (`WorldAdjacencies.cs` — invisible reciprocal authority boundaries; null

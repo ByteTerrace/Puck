@@ -12,6 +12,7 @@ ONE server-side table authorizes every write: `WorldGrants`
 - ONE admission predicate decides a mutation
 - Trusted vs untrusted is two predicates, not one
 - Subject legitimacy and grant-door rules
+- One admission door, every ingress
 - Boot seeding and document grants
 - The co-driving fold
 - Ingress stamping — the acting-principal rule
@@ -246,6 +247,47 @@ directions, except boot-seeded per-section Mutate rows never block an
 exclusive acquisition. Revoking the seat's own Drive row is the only way to
 clear authored ceilings.
 
+## One admission door, every ingress
+
+`WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
+population body plus grant rows, and it takes a `WorldAdmissionVerdict` — never
+raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
+`TryAdmit` (a verified carriage claim at the TCP hello), `TryMatchEntry` (an
+already-verified identity re-matched against a rebuild candidate), and
+`TryAdmitArrival` (an authenticated federation authority's namespace). No
+verdict means a named refusal, never a default seed.
+
+The `admission` section therefore governs transfers too. A row in
+`WorldAdmissionTrustMode.FederatedAuthority` mode carries no key: its `domain`
+is the authenticated source-authority namespace, or
+`WorldAdmissionEntry.AnyAuthority` (`*`) for any authority that completes
+`WorldFederationSecurity`'s shared-secret handshake; a named row beats the
+wildcard in either authored order. The door skips such rows when building its
+carriage trust list, so a document authoring arrivals alone still admits no
+connecting peer, and `TryAdmit` answers `NoAdmissionEntries` there.
+`WorldAdmissionRefusal.NoArrivalAuthority` names the arrival-side miss. Every
+shipped world authors a `*` arrivals row, because an authority is addressed
+`<machineId>/<instance>` and the machine id is minted per installation.
+
+A template's `Subject` is NULLABLE and means "the body this admission assigns"
+when absent — `WorldAdmissionGrant.SubjectFor(bodyIndex)` is the one resolution
+point, used by the mint, the rebuild re-mint, and the escrow's reserve-time
+check alike. That is how an authored row can confer `Drive` over a body index
+nobody knows until admission runs.
+
+`WorldTransferEscrow.Reserve` runs the arrival door ONCE and carries the
+verdict on the lease to `Commit`, so reserve and commit cannot disagree; its
+per-slot authorization asks the same question of whichever authority will drive
+the body — the live grant table for a colocated traveller keeping its own
+principal, the verdict's templates for a live peer arrival, and source support
+alone for an autonomous traveller, which has no driver at all.
+
+A body that is neither a local seat nor an admitted peer travels as
+`WorldPrincipal.World` (`WorldInstanceHost.TravelPrincipal`), which holds no
+grant row and is admitted structurally only over a body the world's own program
+authors — never `Console`, whose `Drive/all` would also cover every seat and
+peer.
+
 ## Boot seeding and document grants
 
 Constructor seed: each seat gets `Drive` over its OWN body only, plus the
@@ -253,8 +295,11 @@ domain seed (`Observe/all`, `Control/all`, `Edit/all`,
 `Control/composition`, `Mutate/section:<s>` for every section EXCEPT
 `grants`); Console gets the domain seed including `Mutate/section:grants`
 plus the table's only `Drive/all`; addons get NOTHING. Peers are not seeded by
-index: each `PeerAdmitted` event mints `Control/all` for that exact generation,
-and disconnect/reactivation revokes stale-generation rows before re-minting.
+index: each `PeerAdmitted` event mints the admission verdict's own authored
+templates for that exact generation, and disconnect/reactivation revokes
+stale-generation rows before re-minting. A census/inhabitant activation, which
+verifies no identity at all, still mints the `Control/all` seed
+(`BuildDefaultPeerControlGrants`) — population housekeeping, not an admission.
 A world document's `grants` section applies in the `WorldServer`
 constructor, in document order, under the Console actor, through the same
 `Grant` path `world.grant` uses — same loud accept/reject lines.

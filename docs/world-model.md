@@ -235,10 +235,12 @@ resolution even when they do not share presentation or transfer.
   proves BOTH protocol compatibility and identity (2026-08-09):
   a version check, then a challenge-response over a signed-carriage claim verified against the
   document's own authored `admission` trust list, mapping the verified identity to its OWN authored
-  grants rather than admitting every connection as `Control`/`all`. What the hello still does NOT prove
-  is destination/session resolution, an unembodied session authority, or projection authorization — a
-  verified peer is still admitted straight to a population body, exactly as before identity existed;
-  see "Authenticating the game wire" below and Campaign 2 item 2.
+  grants rather than admitting every connection as `Control`/`all`. A traveller handed over by an
+  authenticated federation authority crosses the same section through a keyless `federatedAuthority`
+  row, so no ingress mints authority the destination document did not author. What the hello still
+  does NOT prove is destination/session resolution, an unembodied session authority, or projection
+  authorization — a verified peer is still admitted straight to a population body; see
+  "Authenticating the game wire" below and Campaign 2 item 2.
 
 These are implementation gaps. They do not change the model below.
 
@@ -629,12 +631,14 @@ continuum presentation deliberately has no separate remote-projection subsystem.
 1. Authenticate issuer-qualified authority/document/user/group claims and create an unembodied session
    authority before projection. Implement the target-document admission/capability door and its policy
    algebra, including the chosen `Observe` world/session subject. **Partial (2026-08-09):** the
-   target-document admission door is implemented and live for the TCP wire specifically — a
-   `Puck.World.Data.Protocol.WorldAdmissionDoor` challenge-response verifies a signed carriage claim
-   against the document's authored `admission` trust list (`Puck.Carriage`'s
-   `TrustList`/`CarriageVerifier`) and maps the verified identity to its own authored `WorldGrant`
-   templates. Still open: issuer-qualified GROUP/document claims (only per-identity domain/subject
-   entries exist today), and the unembodied session authority this item's own second sentence names —
+   target-document admission door is implemented and live for the TCP wire and for authority transfer
+   — a `Puck.World.Data.Protocol.WorldAdmissionDoor` challenge-response verifies a signed carriage
+   claim against the document's authored `admission` trust list (`Puck.Carriage`'s
+   `TrustList`/`CarriageVerifier`), a transfer arrival matches the authenticated source-authority
+   namespace against the same section, and both map to that entry's own authored `WorldGrant`
+   templates through one server entry that accepts no other shape. Still open: issuer-qualified
+   GROUP/document claims (only per-identity domain/subject and per-authority namespace entries exist
+   today), and the unembodied session authority this item's own second sentence names —
    there is still no session principal for observation without embodiment, only the existing
    `Peer`/body-indexed one.
 2. TCP's hello now proves protocol compatibility THEN authentication (landed, item 1 above) — the

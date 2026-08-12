@@ -130,11 +130,9 @@ document's own authored `admission` section, mapping the verified identity to
 that entry's own authored grant templates. Each door refuses by its OWN named
 spelling (`version-mismatch: …` vs `identity-refused: …`) — the two are never
 conflated. Only once BOTH doors pass does population admission run
-(`WorldServer.TryAdmitPeerConnection` → `WorldPopulation.TryAdmitRemotePeer`,
-refused by name when the 128-body table is full or the document's
-`networkPlayers` admission cap is already met) — it now mints the VERIFIED
-identity's own authored grants (`WorldServer.BuildAdmissionGrants`), never an
-unconditional `Control`/`all`; every subsequent frame
+(`WorldServer.TryAdmitPeerConnection`, refused by name when the 128-body table
+is full or the document's `networkPlayers` admission cap is already met); every
+subsequent frame
 (decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
 loopback and tape use), and disconnect
 (`WorldServer.DisconnectPeerConnection`) are marshaled onto the tick thread —
@@ -161,10 +159,46 @@ a scaffold beyond this one lane). `Puck.World.WorldRemoteClient` is the
 `--connect` side: a minimal, self-contained stdin client speaking this same
 Hello + leaf-codec grammar directly, not a second composition graph.
 `Puck.World.WorldNetworkCommandModule`'s `world.peers` echoes the connection
-table this class owns, INCLUDING each connection's verified admission
-identity (domain/subject); `Puck.World.WorldMutationCommandModule`'s
+table this class owns — each connection's verified admission identity
+(domain/subject) — plus an `arrivals:` group naming every body admitted by
+transfer and the authority its verdict was decided against;
+`Puck.World.WorldMutationCommandModule`'s
 `world.admission` echoes the document's own authored `admission` entries —
 the runtime and document halves of the admission decision, respectively.
+
+### One admission entry, every ingress
+
+`WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
+population body plus grant rows. It takes a `WorldAdmissionVerdict` and nothing
+else — no arm accepts raw `WorldGrant` rows — and only
+`WorldAdmissionDoor` produces one: from a verified carriage claim
+(`TryAdmit`), from an already-verified identity re-matched against a candidate
+document (`TryMatchEntry`, the whole-document rebuild's re-authorization), or
+from an authenticated federation authority's namespace (`TryAdmitArrival`).
+A caller with no verdict is refused by name rather than admitted on a default
+seed. `WorldServer.BuildAdmissionGrants` fills in the two fields a template
+cannot carry — the `Peer` principal, and a `body:<n>` subject for a template
+that authored none (`WorldAdmissionGrant.SubjectFor`) — and passes every other
+field through, so an authored template states exactly what the peer holds.
+
+A federated or colocated transfer crosses the same door. `WorldTransferEscrow`
+runs `TryAdmitArrival` once at reserve against `request.SourceAuthority` (the
+namespace `WorldFederationSecurity`'s shared-secret handshake authenticated, or
+the in-process host's own for a colocated authority), carries the verdict on
+the lease, and commits it through `WorldServer.AdmitTransferredPeer`. Reserve
+and commit therefore cannot disagree: the reservation's per-slot authorization
+asks the verdict's templates whether they confer `Drive` over the body it is
+about to bind, which is the question the mint answers again. An arrival's
+identity columns name the authenticated authority, never the traveller's
+carried profile — `world.peers`'s `arrivals:` group echoes them.
+
+An `admission` row in `federatedAuthority` mode carries no key: its `domain` is
+the authenticated authority namespace, or `*` for any authority that completes
+the handshake. An authority is addressed `<machineId>/<instance>` and the
+machine id is minted per installation, so `*` is what a document authors when
+it cannot know its neighbours' machine ids in advance. Such a row is skipped
+when the door builds its carriage trust list — it can never verify a claim —
+and a document authoring arrivals alone still admits no connecting peer.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never

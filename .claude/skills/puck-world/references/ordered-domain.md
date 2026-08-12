@@ -115,8 +115,9 @@ drain order. A client can never submit one.
 `host.listen`/`--listen` (a document field; a document with no `listen` never
 opens a socket). Per connection: the raw Hello handshake
 (`WorldHelloDoor.TryAccept`) runs off the tick thread — it touches no server
-state — then admission (`WorldServer.TryAdmitPeerConnection`, allocating a
-body via `WorldPopulation.TryAdmitRemotePeer`), every subsequent frame
+state — then admission (`WorldServer.TryAdmitPeerConnection` →
+`TryAdmitVerifiedParticipant`, which takes the door's verdict and never raw
+grant rows), every subsequent frame
 decoded via `WorldFrameCodec`/`WorldSubmissionCodec`, and disconnect
 (`WorldServer.DisconnectPeerConnection`) are marshaled onto the tick thread —
 `WorldServer`/`WorldPopulation`/`WorldGrants` carry no lock, so nothing here

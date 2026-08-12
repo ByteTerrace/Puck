@@ -43,12 +43,16 @@ crosses TWO doors before either side sees a submission: `WorldHelloDoor`
 (`Puck.World.Data`'s `Protocol/WorldAdmissionDoor.cs`) — a challenge-response
 identity check over `Puck.Carriage`'s signed-carriage envelopes against the
 world document's own `admission` section. A world authoring no `admission`
-entries admits no remote peer at all (deny by default); `--connect-identity-dir <dir>`
+entries admits no remote peer at all, and no traveller from another authority
+either (deny by default — a transfer's own arrival verdict comes from the same
+section, through a keyless `federatedAuthority` row naming the source authority
+namespace or `*`); `--connect-identity-dir <dir>`
 supplies the connecting client's own identity, and omitting it signs with a
 freshly minted, unregistered key so the door's refusal path is exercisable
 without a pre-arranged identity. `world.peers` echoes each connection's
-verified identity and mapped principal; `world.admission` echoes the
-document's own authored entries.
+verified identity and mapped principal, plus an `arrivals:` group naming each
+transferred body and the authority its verdict was decided against;
+`world.admission` echoes the document's own authored entries.
 
 Authority-to-authority projection and transfer additionally require
 `--federation-key-file <path>` on both processes. The file contains exactly 32
