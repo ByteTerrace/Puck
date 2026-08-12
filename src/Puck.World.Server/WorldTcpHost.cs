@@ -237,7 +237,7 @@ public sealed class WorldTcpHost : IDisposable {
                 await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Ack, body: default, ct: handshakeCt).ConfigureAwait(false);
                 handshakeSlotHeld = false;
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
-                await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                await ServeFederationAsync(stream: stream, sourceAuthority: federationAuthority, tier: DisclosureFor(sourceAuthority: federationAuthority), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
                 return;
             }
 
@@ -368,7 +368,7 @@ public sealed class WorldTcpHost : IDisposable {
     // A federation connection is a persistent authenticated lane. Requests ride it strictly request-then-response
     // and in order, which is what lets the peer omit a correlation id. Observe and IntentStream take the connection
     // over and stream on it until it closes.
-    private async Task ServeFederationAsync(NetworkStream stream, string sourceAuthority, CancellationToken ct) {
+    private async Task ServeFederationAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadRequestAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -380,17 +380,26 @@ public sealed class WorldTcpHost : IDisposable {
                 return;
             }
 
-            if (!await ServeFederationRequestAsync(stream: stream, sourceAuthority: sourceAuthority, kind: (WorldFederationRequest)frame.Kind, body: frame.Body, ct: ct).ConfigureAwait(continueOnCapturedContext: false)) {
+            if (!await ServeFederationRequestAsync(stream: stream, sourceAuthority: sourceAuthority, tier: tier, kind: (WorldFederationRequest)frame.Kind, body: frame.Body, ct: ct).ConfigureAwait(continueOnCapturedContext: false)) {
                 return;
             }
         }
     }
 
+    // The tier a federated peer's own authority namespace is authored at, decided once per connection through the
+    // same admission arm that decides what an arriving traveler is minted. A namespace no admission row names
+    // resolves to presentation: an authority that never authored trust for this peer never authorized a replica of
+    // its document either.
+    private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
+        ((WorldAdmissionDoor.TryAdmitArrival(entries: m_server.Definition.Admission, sourceAuthority: sourceAuthority, verdict: out var verdict) is null) && (verdict is not null)
+            ? verdict.Tier
+            : WorldDisclosureTier.Presentation);
+
     // Returns whether the lane stays open for another request.
-    private async Task<bool> ServeFederationRequestAsync(NetworkStream stream, string sourceAuthority, WorldFederationRequest kind, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeFederationRequestAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, byte[] body, CancellationToken ct) {
         switch (kind) {
             case WorldFederationRequest.Reserve:
-                return await ServeReserveAsync(stream: stream, sourceAuthority: sourceAuthority, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                return await ServeReserveAsync(stream: stream, sourceAuthority: sourceAuthority, tier: tier, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Commit:
                 return await ServeCommitAsync(stream: stream, sourceAuthority: sourceAuthority, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
@@ -404,10 +413,10 @@ public sealed class WorldTcpHost : IDisposable {
                 return await ServeSubmissionAsync(stream: stream, sourceAuthority: sourceAuthority, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Route:
-                return await ServeRouteAsync(stream: stream, sourceAuthority: sourceAuthority, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                return await ServeRouteAsync(stream: stream, sourceAuthority: sourceAuthority, tier: tier, body: body, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Observe:
-                await StreamProjectionAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+                await StreamProjectionAsync(stream: stream, tier: tier, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
                 return false;
 
@@ -429,7 +438,7 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
 
-    private async Task<bool> ServeReserveAsync(NetworkStream stream, string sourceAuthority, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeReserveAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, byte[] body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeReservation(body: body, defaults: m_server.Definition.PlayerDefaults, request: out var request, failure: out var failure) || (request is null)) {
             await WriteFederationRefusal(stream: stream, refusal: WorldFederationRefusal.FrameMalformed, detail: $"reservation — {failure}", ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -447,7 +456,7 @@ public sealed class WorldTcpHost : IDisposable {
         // could only answer on its own next tick would deadlock two hosts crossing into one another at once.
         var reply = m_server.ReserveTransfer(request: request);
 
-        await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Reservation, body: WorldFederationCodec.EncodeReservationReply(reply: reply), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+        await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Reservation, body: WorldFederationCodec.EncodeReservationReply(reply: reply, tier: tier, authority: m_server.AuthorityIdentity, revision: m_server.Population.Revision), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
     }
@@ -602,7 +611,7 @@ public sealed class WorldTcpHost : IDisposable {
         return (null, reason);
     }
 
-    private async Task<bool> ServeRouteAsync(NetworkStream stream, string sourceAuthority, byte[] body, CancellationToken ct) {
+    private async Task<bool> ServeRouteAsync(NetworkStream stream, string sourceAuthority, WorldDisclosureTier tier, byte[] body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeRouteCredential(body: body, sourceAuthority: out var carriedAuthority, mobility: out var mobility, failure: out var failure)) {
             await WriteFederationRefusal(stream: stream, refusal: WorldFederationRefusal.FrameMalformed, detail: $"route credential — {failure}", ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -640,7 +649,7 @@ public sealed class WorldTcpHost : IDisposable {
             return true;
         }
 
-        await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Route, body: WorldFederationCodec.EncodeRoute(route: in route), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+        await WorldFederationCodec.WriteResponseAsync(stream: stream, kind: WorldFederationResponse.Route, body: WorldFederationCodec.EncodeRoute(route: in route, tier: tier, authority: m_server.AuthorityIdentity, revision: m_server.Population.Revision), ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
     }
@@ -672,8 +681,8 @@ public sealed class WorldTcpHost : IDisposable {
         return WorldFederationCodec.WriteRefusalAsync(stream: stream, refusal: refusal, detail: detail, ct: ct);
     }
 
-    private async Task StreamProjectionAsync(NetworkStream stream, CancellationToken ct) {
-        var sink = new FederationProjectionSink();
+    private async Task StreamProjectionAsync(NetworkStream stream, WorldDisclosureTier tier, CancellationToken ct) {
+        var sink = new FederationProjectionSink(tier: tier, authority: m_server.AuthorityIdentity, revision: () => m_server.Population.Revision);
         var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink));
 
         try {
@@ -693,11 +702,11 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
 
-    private sealed class FederationProjectionSink : IClientSink {
+    private sealed class FederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision) : IClientSink {
         private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(new BoundedChannelOptions(capacity: 8) { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
         public ChannelReader<(WorldFederationResponse Kind, byte[] Body)> Frames => m_frames.Reader;
         public void DeliverSnapshot(in WorldSnapshot snapshot) => Write(kind: WorldFederationResponse.Snapshot, body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot));
-        public void DeliverDefinition(WorldDefinition definition) => Write(kind: WorldFederationResponse.Definition, body: WorldFederationCodec.EncodeDefinition(definition: definition));
+        public void DeliverDefinition(WorldDefinition definition) => Write(kind: WorldFederationResponse.Definition, body: WorldFederationCodec.EncodeDocument(definition: definition, tier: tier, authority: authority, revision: revision()));
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
