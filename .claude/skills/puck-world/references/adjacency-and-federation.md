@@ -140,6 +140,39 @@ The boot replay tape also does not reproduce federated arrival/forwarding. Do
 not cite `replay.verify` MATCH as federation evidence; the five-authority runner
 and focused laws below are the current executable proof.
 
+## Federation transport
+
+`WorldFederationCodec` (`Puck.World.Server`) is the one authority-to-authority
+codec. It reuses the framing, bounded reader/writer, and refusal vocabulary in
+`Puck.World.Data/Protocol/WorldWireCodec.cs`: `WorldWireFrame` carries
+`[u32 following][u8 kind][payload]` little-endian — the same grammar
+`WorldFrameCodec` defines for submissions — over `WorldWireReader`,
+`WorldWireWriter`, and `WorldWireRefusal`. Every decoder over peer bytes is
+Try-shaped and bounded before it allocates; a decoder that throws on hostile
+bytes is a defect. Add a message as a leaf there, never as a second dialect.
+
+One connection carries the whole conversation: the federation wire key
+(`WorldFederationCodec.WireKey`, distinct from the interactive peer key), then
+`Challenge`/`Authenticate`/`Ack`, then framed requests in order,
+request-then-response, until `Observe` or `IntentStream` takes the connection
+over and streams on it. There is no second hello and no correlation id.
+
+Refusals are named (`WorldFederationRefusal`) and every refusal frame's text
+opens with the name, so a peer and `WorldTcpHost.FederationRefusals` count the
+same vocabulary.
+
+`WorldRemoteAuthority` holds two persistent authenticated lanes per source
+authority namespace: `FederatedRequestLane` for reserve/commit/abort/
+acknowledge/status/route/submission, and `FederatedIntentPump` for the
+latest-value intent stream. Connect, hello, and challenge are paid once per
+lane, never once per operation. A lane that cannot reach its peer marks itself
+unavailable for a backoff window and answers every request in that window
+immediately with `LaneUnavailable`; that, not a socket timeout, is what keeps a
+closed edge from stalling the source's tick. Abort and acknowledge are posted
+and never waited on. A commit whose answer is `WorldTransferStep.Unreachable`
+is IN DOUBT, never a refusal — the source keeps its recovery state and
+reconciles against the destination's idempotent status.
+
 ## Verification
 
 Run the focused laws after changing frames, handoff continuity, hysteresis, or

@@ -684,7 +684,15 @@ unlink, each CAS-pinned where it names on-disk content), and
 thirteen payload leaves. `WorldFrameCodec.cs` wraps a leaf as little-endian
 `[u32 following-length][u8 kind][payload]` with a hard per-kind cap; malformed
 caller state and bytes return a `WorldCodecRefusal` name. Loopback always
-round-trips through that frame. The opaque `WorldProtocol.WireProtocolKey` is
+round-trips through that frame. `WorldWireCodec.cs` holds the transport-neutral
+half every World socket shares: `WorldWireFrame` (that same
+`[u32 following][u8 kind][payload]` grammar as async read/write, given the cap
+its caller admits), the bounded forward-only `WorldWireReader`, its exact
+mirror `WorldWireWriter`, and the `WorldWireRefusal` names both return. A
+decoder over untrusted bytes is written against those two types so its bound
+sits before the allocation the bytes ask for; `Puck.World.Server`'s
+`WorldFederationCodec` is the second surface built on them. The opaque
+`WorldProtocol.WireProtocolKey` is
 checked by `WorldHelloDoor` and echoed by `Join`; it is deliberately unrelated
 to replay-tape magic and guest-ABI pins. `WorldServerEvent.cs` declares the
 server-authored peer admission/disconnect records; they are ordered events,

@@ -17,7 +17,7 @@ internal sealed class WorldNetworkCommandModule(WorldTcpHost tcpHost) : ICommand
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.peers",
-            description: "Lists the TCP socket's connection table: whether the host is listening (and on what endpoint), then one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint. Not listening (no host.listen/--listen) prints that plainly rather than an empty table.",
+            description: "Lists the TCP socket's connection table: whether the host is listening (and on what endpoint), then one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint — then every federation refusal this door has written, counted by its stable name. Not listening (no host.listen/--listen) prints that plainly rather than an empty table.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: DescribeConnections())
         );
@@ -29,13 +29,17 @@ internal sealed class WorldNetworkCommandModule(WorldTcpHost tcpHost) : ICommand
         }
 
         var connections = tcpHost.Connections;
+        var refusals = tcpHost.FederationRefusals;
+        var refusalEcho = ((refusals.Count == 0)
+            ? " | federation-refusals none"
+            : $" | federation-refusals {string.Join(separator: ",", values: refusals.Select(selector: static row => $"{row.Refusal}={row.Count}"))}");
 
         if (connections.Count == 0) {
-            return $"[world.peers: listening on {tcpHost.ListenEndpoint}, 0 connections]";
+            return $"[world.peers: listening on {tcpHost.ListenEndpoint}, 0 connections{refusalEcho}]";
         }
 
         var rows = string.Join(separator: " | ", values: connections.Select(selector: c => $"conn:{c.ConnectionId} peer:{c.PeerIndex}:{c.Generation} identity:{c.IdentityDomain}/{c.IdentitySubject} @ {c.RemoteEndpoint}"));
 
-        return $"[world.peers: listening on {tcpHost.ListenEndpoint}, {connections.Count} connections | {rows}]";
+        return $"[world.peers: listening on {tcpHost.ListenEndpoint}, {connections.Count} connections | {rows}{refusalEcho}]";
     }
 }
