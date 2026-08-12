@@ -16,7 +16,12 @@ namespace Puck.SdfVm.Queries;
 // any program containing an op that needs runtime trigonometry not implemented in fixed point (BendX/BendY/BendZ/
 // TwistY/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp), the one op needing a per-frame dynamic-transform
 // buffer this evaluator's signature has no seam for (TransformDynamic — see the constructor's remarks), and
-// WallpaperFold, whose 17-group parity-keyed cell logic has no fixed-point implementation. It similarly rejects
+// WallpaperFold, whose 17-group parity-keyed cell logic has no fixed-point implementation. It also rejects a
+// NON-UNIFORM Scale: the renderer's min-axis correction is deliberately a safe sphere-tracing lower bound, not
+// Euclidean surface distance, while this evaluator's query and contact consumers require physical clearance.
+// Scalable primitives must bake anisotropy into a native shape spelling (CreationGeometry does this for boxes,
+// spheres/ellipsoids, axially symmetric cylinders/cones, and planes). It
+// similarly rejects
 // three shapes whose EXACT cores need runtime trig (RegularPolygon/Star: atan2 in sdfStar2D; Ellipse: an analytic
 // cubic solve with acos/pow) and one needing texture sampling (Glyph) — every other shape in
 // <see cref="SdfShapeType"/> is supported. The constructor throws <see cref="ArgumentException"/> naming the FIRST
@@ -51,7 +56,8 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // editing the shared constant.
     private static readonly FixedQ4816 HitEpsilon = FixedQ4816.FromDouble(value: 0.001);
     // The march step floor: since every op this evaluator interprets is an isometry, a distance-preserving field op,
-    // or Scale's exact min-axis correction (see the type remarks), the interpreted field is EXACTLY 1-Lipschitz, so
+    // or an isotropic Scale (non-uniform Scale is rejected at construction), the interpreted field is EXACTLY
+    // 1-Lipschitz, so
     // stepping by the raw field distance can never overstep a real surface — this floor exists only to keep a
     // pathological near-zero-but-not-accepted clearance from stalling the loop at MaxMarchIterations.
     private static readonly FixedQ4816 MinMarchStep = FixedQ4816.FromDouble(value: 0.0001);
@@ -76,7 +82,8 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <see cref="FixedQ4816"/> exactly once and is cached, never re-converted per query.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape this WARP-FREE
-    /// evaluator cannot interpret — see the type remarks' excluded-ops rule. <see cref="SdfOp.TransformDynamic"/> is
+    /// evaluator cannot interpret, or contains a non-uniform <see cref="SdfOp.Scale"/> whose value is only a
+    /// conservative march bound — see the type remarks' excluded-op rule. <see cref="SdfOp.TransformDynamic"/> is
     /// excluded not because a rigid dynamic transform is hard to interpret (it is the same cross/mul/add as
     /// <see cref="SdfOp.Rotate"/> plus a translate), but because THIS constructor takes only a program, never a
     /// per-frame dynamic-transform table against which to resolve a slot.</exception>
@@ -362,6 +369,14 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         for (var index = 0; (index < instructions.Count); index++) {
             var instruction = instructions[index];
+
+            if ((instruction.Op == SdfOp.Scale) &&
+                ((instruction.Data0.X != instruction.Data0.Y) || (instruction.Data0.Y != instruction.Data0.Z))) {
+                throw new ArgumentException(
+                    message: $"SdfFieldEvaluator cannot interpret instruction {index}'s non-uniform Scale ({instruction.Data0.X}, {instruction.Data0.Y}, {instruction.Data0.Z}) as physical distance. The renderer's minimum-axis correction is a conservative march bound; bake anisotropy into an exact primitive spelling before constructing a query/contact field.",
+                    paramName: nameof(instructions)
+                );
+            }
 
             if (!IsSupportedOp(op: instruction.Op)) {
                 throw new ArgumentException(message: $"SdfFieldEvaluator is warp-free this wave and cannot interpret instruction {index}'s op {instruction.Op}. See SdfFieldEvaluator.cs's KEEP-IN-SYNC header for the full excluded-op rule.", paramName: nameof(instructions));

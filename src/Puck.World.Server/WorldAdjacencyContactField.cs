@@ -3,8 +3,9 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 /// <summary>
-/// Wraps this world's own compiled <see cref="IContactField"/> so a body standing in a compiler-derived adjacency
-/// overlap gets ground from the neighbour's own solid geometry when this world's own field has none there.
+/// Wraps this world's own compiled <see cref="IContactField"/> so a body standing in a direct or compiler-derived
+/// corner adjacency overlap gets ground from the projected neighbour's own solid geometry when this world's own
+/// field has none there.
 /// Rendering's own composition
 /// (<c>Puck.World.Client.WorldAdjacencySceneEmitter</c>) draws the same neighbour geometry through the same
 /// isometry, so what a body stands on and what it sees agree.
@@ -28,24 +29,16 @@ namespace Puck.World.Server;
 internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
     private readonly IContactField m_inner;
-    private readonly WorldDefinition m_definition;
-    private readonly IReadOnlyList<WorldAdjacencyBand> m_bands;
     private readonly IWorldAdjacencySource m_source;
 
     /// <summary>Initializes the wrapper.</summary>
-    /// <param name="definition">This authority's live definition.</param>
     /// <param name="inner">This world's own compiled contact field.</param>
-    /// <param name="bands">Every adjacency band this definition authors.</param>
     /// <param name="source">The injected neighbour resolver.</param>
-    public WorldAdjacencyContactField(WorldDefinition definition, IContactField inner, IReadOnlyList<WorldAdjacencyBand> bands, IWorldAdjacencySource source) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    public WorldAdjacencyContactField(IContactField inner, IWorldAdjacencySource source) {
         ArgumentNullException.ThrowIfNull(argument: inner);
-        ArgumentNullException.ThrowIfNull(argument: bands);
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        m_definition = definition;
         m_inner = inner;
-        m_bands = bands;
         m_source = source;
     }
 
@@ -77,23 +70,15 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
         var resolution = m_inner.ResolveSweep(previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
 
-        if (m_bands.Count == 0) {
-            return resolution;
-        }
-
-        foreach (var band in m_bands) {
-            if (!m_source.TryResolve(adjacencyName: band.Name, neighbour: out var neighbour) || (neighbour is null) ||
-                !WorldAdjacencyPolicy.TryDeriveOverlap(local: m_definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _) ||
-                !band.Contains(position: position, depth: depth)) {
+        foreach (var projection in m_source.Visuals()) {
+            if (!TryMapIntoNeighbour(position: position, projection: projection, mapped: out var neighbourPosition)) {
                 continue;
             }
 
-            var neighbourFrame = neighbour.CounterpartFrame;
-            var deltaRotation = WorldFrameIsometry.Rotation(source: band.Frame, destination: neighbourFrame);
-            var neighbourPreviousPosition = WorldFrameIsometry.MapPoint(point: previousPosition, source: band.Frame, destination: neighbourFrame);
-            var neighbourPosition = WorldFrameIsometry.MapPoint(point: position, source: band.Frame, destination: neighbourFrame);
-            var neighbourVelocity = WorldFrameIsometry.MapVector(value: velocity, source: band.Frame, destination: neighbourFrame);
-            var neighbourOrientation = (deltaRotation * orientation).Normalize();
+            var neighbour = projection.Neighbour;
+            var neighbourPreviousPosition = MapIntoNeighbour(value: previousPosition, path: projection.Path);
+            var neighbourVelocity = MapVectorIntoNeighbour(value: velocity, path: projection.Path);
+            var neighbourOrientation = MapOrientationIntoNeighbour(value: orientation, path: projection.Path);
 
             var dynamicObstruction = FixedVector3.Zero;
             var localAddress = ((entityIndex >= 0) ? m_source.LocalEntityAddress(index: entityIndex) : default);
@@ -137,23 +122,71 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                 // sit inside two bands' extents at once) rather than committing an inert round trip.
                 continue;
             }
-            // Map the neighbour's depenetrated answer back through the INVERSE isometry (source/destination
-            // swapped — the same shape a return crossing's own arrival would compute).
-            var backRotation = WorldFrameIsometry.Rotation(source: neighbourFrame, destination: band.Frame);
-
-            position = WorldFrameIsometry.MapPoint(point: neighbourPosition, source: neighbourFrame, destination: band.Frame);
-            velocity = WorldFrameIsometry.MapVector(value: neighbourVelocity, source: neighbourFrame, destination: band.Frame);
+            // Map the projected neighbour's depenetrated answer through every forward stage into this authority.
+            position = MapIntoSource(value: neighbourPosition, path: projection.Path);
+            velocity = MapVectorIntoSource(value: neighbourVelocity, path: projection.Path);
 
             var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
                 ? neighbourResolution.ObstructionNormal
                 : dynamicObstruction);
             return new ContactResolution(
                 Grounded: (resolution.Grounded || neighbourResolution.Grounded),
-                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero) ? resolution.ObstructionNormal : backRotation.Rotate(vector: neighbourObstruction))
+                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero) ? resolution.ObstructionNormal : MapVectorIntoSource(value: neighbourObstruction, path: projection.Path))
             );
         }
 
         return resolution;
+    }
+
+    private static bool TryMapIntoNeighbour(FixedVector3 position, WorldAdjacencyProjection projection, out FixedVector3 mapped) {
+        mapped = position;
+        for (var stageIndex = (projection.Path.Count - 1); stageIndex >= 0; stageIndex--) {
+            var stage = projection.Path[stageIndex];
+            if (!new WorldAdjacencyBand(Name: projection.Name, Frame: stage.Source).Contains(position: mapped, depth: stage.OverlapDepth)) {
+                mapped = default;
+                return false;
+            }
+            mapped = WorldFrameIsometry.MapPoint(point: mapped, source: stage.Source, destination: stage.Neighbour);
+        }
+        return true;
+    }
+
+    private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
+            var stage = path[stageIndex];
+            value = WorldFrameIsometry.MapPoint(point: value, source: stage.Source, destination: stage.Neighbour);
+        }
+        return value;
+    }
+
+    private static FixedVector3 MapVectorIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
+            var stage = path[stageIndex];
+            value = WorldFrameIsometry.MapVector(value: value, source: stage.Source, destination: stage.Neighbour);
+        }
+        return value;
+    }
+
+    private static FixedQuaternion MapOrientationIntoNeighbour(FixedQuaternion value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
+            var stage = path[stageIndex];
+            value = (WorldFrameIsometry.Rotation(source: stage.Source, destination: stage.Neighbour) * value).Normalize();
+        }
+        return value;
+    }
+
+    private static FixedVector3 MapIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        foreach (var stage in path) {
+            value = WorldFrameIsometry.MapPoint(point: value, source: stage.Neighbour, destination: stage.Source);
+        }
+        return value;
+    }
+
+    private static FixedVector3 MapVectorIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        foreach (var stage in path) {
+            value = WorldFrameIsometry.MapVector(value: value, source: stage.Neighbour, destination: stage.Source);
+        }
+        return value;
     }
 
 }

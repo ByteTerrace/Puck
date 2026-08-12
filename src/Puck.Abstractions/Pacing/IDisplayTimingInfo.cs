@@ -17,12 +17,12 @@ public interface IDisplayTimingInfo {
     ulong DisplayConfigurationVersion { get; }
 }
 
-/// <summary>The active display path's physical signal timing.</summary>
+/// <summary>The active display path's presentation cadence.</summary>
 public readonly record struct DisplaySignalTiming {
     /// <summary>An unavailable signal timing.</summary>
     public static DisplaySignalTiming Unknown => default;
 
-    /// <summary>Creates a known physical signal timing.</summary>
+    /// <summary>Creates a known active presentation cadence.</summary>
     /// <param name="hertz">The active physical vertical scan frequency, in Hz.</param>
     public DisplaySignalTiming(double hertz) {
         if (!double.IsFinite(d: hertz) || (hertz <= 0.0)) {
@@ -35,7 +35,7 @@ public readonly record struct DisplaySignalTiming {
     /// <summary>The active physical vertical scan frequency, in Hz; zero only for <see cref="Unknown"/>.</summary>
     public double Hertz { get; }
 
-    /// <summary>Whether the physical signal frequency is known.</summary>
+    /// <summary>Whether the active presentation cadence is known.</summary>
     public bool IsKnown => (Hertz > 0.0);
 }
 
@@ -155,7 +155,7 @@ public readonly record struct VariableRefreshCapabilities {
 }
 
 /// <summary>A display path's independent physical-signal and variable-refresh facts.</summary>
-/// <param name="Signal">The active physical signal timing.</param>
+/// <param name="Signal">The active presentation cadence.</param>
 /// <param name="VariableRefresh">Explicit variable-refresh capabilities, if discoverable.</param>
 public readonly record struct DisplayTimingSnapshot(DisplaySignalTiming Signal, VariableRefreshCapabilities VariableRefresh) {
     /// <summary>A snapshot in which neither signal timing nor VRR capability is available.</summary>

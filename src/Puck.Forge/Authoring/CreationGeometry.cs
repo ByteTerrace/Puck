@@ -80,6 +80,96 @@ public static class CreationGeometry {
         };
     }
 
+    /// <summary>Emits a primitive at an authored per-axis scale, preferring a native distance spelling over the
+    /// renderer-only non-uniform scale transform. Boxes bake their extents, spheres and ellipsoids bake their radii,
+    /// and axially symmetric cylinders and cones bake their radial and vertical dimensions. A plane's zero set is
+    /// scale-invariant. Other anisotropic shapes retain the generic transform for rendering, but physical field
+    /// evaluators deliberately refuse that conservative march bound until the VM gains a native spelling.</summary>
+    /// <param name="chain">The builder chain after translation and rotation.</param>
+    /// <param name="type">The primitive to emit.</param>
+    /// <param name="scale">The authored per-axis scale. Components use the builder's magnitude/nonzero convention.</param>
+    /// <param name="material">The material id for the shape.</param>
+    /// <param name="blend">How the shape combines with the field before it.</param>
+    /// <param name="smooth">The blend radius for smooth composition.</param>
+    /// <returns>The builder, for chaining.</returns>
+    public static SdfProgramBuilder AppendScaledPrimitive(SdfProgramBuilder chain, AvatarPrimitive type, Vector3 scale,
+        int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+        ArgumentNullException.ThrowIfNull(chain);
+
+        var effectiveScale = Vector3.Max(
+            value1: Vector3.Abs(value: scale),
+            value2: new Vector3(value: 0.0001f)
+        );
+
+        if ((effectiveScale.X == effectiveScale.Y) && (effectiveScale.Y == effectiveScale.Z)) {
+            return AppendPrimitive(
+                chain: chain.Scale(scale: effectiveScale),
+                type: type,
+                material: material,
+                blend: blend,
+                smooth: smooth
+            );
+        }
+
+        var minimumScale = MathF.Min(x: effectiveScale.X, y: MathF.Min(x: effectiveScale.Y, y: effectiveScale.Z));
+        var boxRound = (BoxRound * minimumScale);
+
+        return type switch {
+            AvatarPrimitive.Box => chain.Box(
+                // Preserve the transformed box's axial zero-set extents, but use one conventional world-space
+                // corner radius so the resulting field remains a true rounded-box distance.
+                halfExtents: (((BoxHalfExtents + new Vector3(value: BoxRound)) * effectiveScale) - new Vector3(value: boxRound)),
+                round: boxRound,
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            AvatarPrimitive.Sphere => chain.Ellipsoid(
+                radii: (new Vector3(value: SphereRadius) * effectiveScale),
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            AvatarPrimitive.Ellipsoid => chain.Ellipsoid(
+                radii: (EllipsoidRadii * effectiveScale),
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            AvatarPrimitive.Cylinder when effectiveScale.X == effectiveScale.Z => chain.Cylinder(
+                radius: (CylinderRadius * effectiveScale.X),
+                halfHeight: (CylinderHalfHeight * effectiveScale.Y),
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            AvatarPrimitive.Cone when effectiveScale.X == effectiveScale.Z => chain.Trapezoid(
+                bottomHalfWidth: (ConeRadius * effectiveScale.X),
+                topHalfWidth: 0f,
+                halfHeight: (ConeHalfHeight * effectiveScale.Y),
+                lift: SdfLift.Revolve,
+                liftAmount: 0f,
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            AvatarPrimitive.Plane => chain.Plane(
+                normal: Vector3.UnitY,
+                offset: 0f,
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+            _ => AppendPrimitive(
+                chain: chain.Scale(scale: effectiveScale),
+                type: type,
+                material: material,
+                blend: blend,
+                smooth: smooth
+            ),
+        };
+    }
+
     /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component
     /// times the primitive's farthest surface point.</summary>
     /// <param name="type">The primitive.</param>

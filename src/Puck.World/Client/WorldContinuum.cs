@@ -78,7 +78,9 @@ internal sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRoute
                     continue;
                 }
 
-                var alpha = Math.Clamp(value: interpolationAlpha, min: 0f, max: 1f);
+                // A remote mirror owns its snapshot arrival clock. Reusing the boot world's fixed-step fraction here
+                // makes every asynchronously arriving neighbour snapshot jump backward before advancing again.
+                var alpha = neighbour.InterpolationAlpha;
                 var neighbourPosition = Vector3.Lerp(value1: neighbour.PreviousPosition(index: entityIndex), value2: neighbour.CurrentPosition(index: entityIndex), amount: alpha);
                 var neighbourOrientation = Quaternion.Normalize(value: Quaternion.Lerp(quaternion1: neighbour.PreviousOrientation(index: entityIndex), quaternion2: neighbour.CurrentOrientation(index: entityIndex), amount: alpha));
                 var mapped = WorldAdjacencySceneEmitter.MapPoseIntoSource(position: neighbourPosition, orientation: neighbourOrientation, path: projection.Path);

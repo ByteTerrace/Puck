@@ -21,6 +21,8 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
     private readonly WorldInstanceHost m_instances;
     private readonly string m_sourceInstanceName;
     private readonly Dictionary<string, Handle> m_handles = new(comparer: StringComparer.Ordinal);
+    private WorldAdjacencyProjection[] m_tickProjections = [];
+    private bool m_tickProjectionsCurrent;
 
     /// <summary>Initializes the source.</summary>
     /// <param name="instances">The process's running world instances — the one observation door an adjacency's
@@ -56,6 +58,8 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
     /// <inheritdoc/>
     public void BeginTick(ulong tick) {
         if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
+            m_tickProjections = [];
+            m_tickProjectionsCurrent = true;
             return;
         }
 
@@ -64,6 +68,16 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                 handle.Pin(sourceTick: tick);
             }
         }
+
+        // Resolve the topology once per authority tick, then pin any derived corner handles the direct-row walk did
+        // not encounter. Contact may ask once per body; returning this frozen array avoids rebuilding the two-hop
+        // graph (and allocating a list) for every body while keeping the render on the same delivered image.
+        var projections = BuildProjections();
+        foreach (var handle in projections.Select(selector: projection => projection.Neighbour).OfType<Handle>().Distinct()) {
+            handle.Pin(sourceTick: tick);
+        }
+        m_tickProjections = BuildProjections();
+        m_tickProjectionsCurrent = true;
     }
 
     /// <inheritdoc/>
@@ -106,6 +120,14 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
 
     /// <inheritdoc/>
     public IReadOnlyList<WorldAdjacencyProjection> Visuals() {
+        if (m_tickProjectionsCurrent) {
+            return m_tickProjections;
+        }
+
+        return BuildProjections();
+    }
+
+    private WorldAdjacencyProjection[] BuildProjections() {
         if (!m_instances.TryGet(name: m_sourceInstanceName, instance: out var source) || (source is null)) {
             return [];
         }
@@ -122,7 +144,7 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: row.Name.Value,
                     Neighbour: neighbour,
-                    Path: [new WorldAdjacencyFramePair(Neighbour: neighbour.CounterpartFrame, Source: row.Boundary.CompileFrame())],
+                    Path: [new WorldAdjacencyFramePair(Neighbour: neighbour.CounterpartFrame, Source: row.Boundary.CompileFrame(), OverlapDepth: depth)],
                     OverlapDepth: depth,
                     Direct: true));
             }
@@ -152,15 +174,15 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                     Name: $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}",
                     Neighbour: corner,
                     Path: [
-                        new WorldAdjacencyFramePair(Neighbour: corner.CounterpartFrame, Source: leftEdge.Boundary.CompileFrame()),
-                        new WorldAdjacencyFramePair(Neighbour: leftNeighbour.CounterpartFrame, Source: leftRow.Boundary.CompileFrame()),
+                        new WorldAdjacencyFramePair(Neighbour: corner.CounterpartFrame, Source: leftEdge.Boundary.CompileFrame(), OverlapDepth: cornerDepth),
+                        new WorldAdjacencyFramePair(Neighbour: leftNeighbour.CounterpartFrame, Source: leftRow.Boundary.CompileFrame(), OverlapDepth: visuals.First(projection => projection.Direct && string.Equals(projection.Name, leftRow.Name.Value, StringComparison.Ordinal)).OverlapDepth),
                     ],
                     OverlapDepth: cornerDepth,
                     Direct: false));
             }
         }
 
-        return visuals;
+        return visuals.ToArray();
     }
 
     private bool TryResolveCorner(WorldInstance source, string key, string destinationName, string counterpart, IWorldAdjacencyNeighbour intermediate, WorldAdjacency intermediateEdge, out IWorldAdjacencyNeighbour? handle) {

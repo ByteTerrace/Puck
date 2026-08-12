@@ -11,7 +11,7 @@ internal static class EdidVariableRefreshParser {
 
     /// <summary>Extracts positively identified VRR capabilities; generic monitor range limits are intentionally ignored.</summary>
     /// <param name="edid">The effective base EDID plus its declared extension blocks.</param>
-    /// <param name="activeSignalHertz">The current physical signal rate used to select an applicable DisplayID mode.</param>
+    /// <param name="activeSignalHertz">The active display cadence used to select an applicable DisplayID mode.</param>
     /// <returns>Supported capabilities, or unknown when no trustworthy declaration is present.</returns>
     public static VariableRefreshCapabilities Parse(ReadOnlySpan<byte> edid, double? activeSignalHertz = null) {
         if (
@@ -293,7 +293,7 @@ internal static class EdidVariableRefreshParser {
         public double MaximumHertz;
 
         public void Consider(double minimumHertz, double maximumHertz, bool native, double? activeSignalHertz) {
-            // A descriptor below the current physical signal cannot describe the active operating mode.
+            // A descriptor below the active display cadence cannot describe the active operating mode.
             if ((activeSignalHertz is { } active) && ((maximumHertz + 0.01) < active)) {
                 return;
             }

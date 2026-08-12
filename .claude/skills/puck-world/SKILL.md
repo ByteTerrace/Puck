@@ -1,6 +1,6 @@
 ---
 name: puck-world
-description: Guides work on Puck.World across its document and Protocol model, authoritative server simulation, composition root, mutation and authority systems, ordered submissions, HUD and views, engagement and session lifecycles, addons, replay, and console verbs. Use whenever changing or diagnosing any src/Puck.World* project, especially console verbs, mutation kinds, document sections, grants or refusals, HUD or view bindings, addon or replay behavior, and client/server seams. Also use before writing stdin-driven game verification because it defines the supported run recipes and encoding, indexing, collision, drain, screenshot, and replay-proof constraints.
+description: Guides work on Puck.World across its document and Protocol model, authoritative server simulation, composition root, mutation and authority systems, adjacency and federation, ordered submissions, HUD and views, engagement and session lifecycles, addons, replay, and console verbs. Use whenever changing or diagnosing any src/Puck.World* project, especially console verbs, mutation kinds, document sections, grants or refusals, transfers, seamless boundaries, HUD or view bindings, addon or replay behavior, and client/server seams. Also use before writing stdin-driven game verification because it defines the supported run recipes and encoding, indexing, collision, drain, screenshot, and replay-proof constraints.
 ---
 
 # Puck.World: the game of many games
@@ -177,7 +177,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   ([references/replay.md](references/replay.md)).
 - Committed batteries: the runners under `docs/verification/`
   (undo-all-or-nothing, strict-definition-parse, sdf-decode-sign-refusal,
-  doc-links, addon-mutation-seam, four-world-boot-smoke) — re-run the ones
+  doc-links, addon-mutation-seam, four-world-boot-smoke,
+  four-corners-sharded) — re-run the ones
   your change touches. `ordered-domain`,
   `lane-present-deletion`, `hud-document`, `headless-boot`,
   `engagement-dissolution`, and `verification/authority` are QUARANTINED
@@ -242,6 +243,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | `SubmissionEnvelope`, the one queue, completions, echo routing, the intent buffer | [references/ordered-domain.md](references/ordered-domain.md) |
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
+| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `player.engage`, context routes (screen or body target, capture policy, channel mask), latch/route repair, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |

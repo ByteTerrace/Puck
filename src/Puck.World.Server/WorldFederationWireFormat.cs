@@ -10,29 +10,29 @@ namespace Puck.World.Server;
 /// server methods directly; this codec is only the transport underneath that contract.</summary>
 public static class WorldFederationWireFormat {
     /// <summary>A protocol discriminator distinct from the interactive peer wire key.</summary>
-    public const ulong WireKey = 0x33444546554B4350UL; // "PCKUFED3", little endian on the wire.
+    public const ulong WireKey = 0x35444546554B4350UL; // "PCKUFED5", little endian on the wire.
     /// <summary>The maximum framed federation payload.</summary>
     public const int MaxFrameBytes = (32 * 1024 * 1024);
 
     /// <summary>Federation request kinds.</summary>
-    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8, Route = 9, IntentStream = 10, IntentStreamHandoff = 11 }
+    public enum RequestKind : byte { Observe = 1, Reserve = 2, Commit = 3, Abort = 4, Submission = 5, Intent = 6, Authenticate = 7, Status = 8, Route = 9, IntentStream = 10, IntentStreamHandoff = 11, AcknowledgeTransfer = 12 }
     /// <summary>Federation response/event kinds.</summary>
     public enum ResponseKind : byte { Definition = 1, Snapshot = 2, Reservation = 3, Commit = 4, Ack = 5, Refusal = 6, Completion = 7, Challenge = 8, Status = 9, Route = 10 }
 
     /// <summary>Encodes a committed-transfer credential without a gameplay payload.</summary>
-    public static byte[] EncodeRouteCredential(string sourceAuthority, ulong transferId, int ordinal) {
+    public static byte[] EncodeRouteCredential(string sourceAuthority, in WorldMobilityIdentity mobility) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal);
+        writer.Write(sourceAuthority); WriteMobility(writer: writer, value: mobility);
         return output.ToArray();
     }
 
-    public static bool TryDecodeRouteCredential(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal) {
+    public static bool TryDecodeRouteCredential(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32();
-            return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (ordinal >= 0) && (input.Position == input.Length);
+            sourceAuthority = reader.ReadString(); mobility = ReadMobility(reader: reader);
+            return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (input.Position == input.Length);
         } catch (Exception exception) when (exception is IOException or FormatException) {
-            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; return false;
+            sourceAuthority = string.Empty; mobility = default; return false;
         }
     }
 
@@ -187,6 +187,11 @@ public static class WorldFederationWireFormat {
 
         foreach (var member in request.Members) {
             writer.Write(member.PreferredSlot);
+            if (member.Mobility is not { } mobility) {
+                throw new InvalidOperationException(message: "federated reservation traveler has no mobility identity");
+            }
+            WriteEntityAddress(writer: writer, value: mobility.Incarnation);
+            writer.Write(mobility.Epoch);
             WriteIntentSource(writer: writer, source: member.Source);
             WriteVector(writer: writer, value: member.BodyColor);
             writer.Write(member.CatalogRig);
@@ -222,6 +227,10 @@ public static class WorldFederationWireFormat {
             var members = new WorldTransferReservationMember[count];
             for (var index = 0; index < count; index++) {
                 var preferred = reader.ReadInt32();
+                var mobility = new WorldMobilityIdentity(Incarnation: ReadEntityAddress(reader: reader), Epoch: reader.ReadUInt64());
+                if (string.IsNullOrWhiteSpace(value: mobility.Incarnation.Authority) || (mobility.Incarnation.Index < 0) || (mobility.Incarnation.Generation <= 0)) {
+                    throw new FormatException($"traveler {index + 1} mobility incarnation is invalid");
+                }
                 var source = ReadIntentSource(reader: reader);
                 var bodyColor = ReadVector(reader: reader);
                 if (!float.IsFinite(bodyColor.X) || !float.IsFinite(bodyColor.Y) || !float.IsFinite(bodyColor.Z)) {
@@ -241,7 +250,7 @@ public static class WorldFederationWireFormat {
                     var definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
                     identity = new WorldIdentity(document: definition, defaults: defaults);
                 }
-                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor, CatalogRig: catalogRig);
+                members[index] = new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: preferred, Identity: identity, Source: source, BodyColor: bodyColor, CatalogRig: catalogRig, Mobility: mobility);
             }
 
             if (input.Position != input.Length) {
@@ -314,6 +323,15 @@ public static class WorldFederationWireFormat {
             foreach (var register in continuity.Registers) {
                 writer.Write(register.Name); writer.Write((byte)register.Kind); writer.Write(register.Value.Value); writer.Write(register.TimerTicks);
             }
+            writer.Write(member.Continuum.HasValue);
+            if (member.Continuum is { } continuum) {
+                WriteFixedVector(writer: writer, value: continuum.PreviousPosition);
+                writer.Write(continuum.SourceTick);
+                writer.Write(continuum.ContinuumStartEngineTick);
+                writer.Write(continuum.ContinuumEndEngineTick);
+                writer.Write(continuum.ConsumedThroughEngineTick);
+                writer.Write(continuum.BoundaryEvents);
+            }
         }
         return output.ToArray();
     }
@@ -350,7 +368,23 @@ public static class WorldFederationWireFormat {
                     if (!Enum.IsDefined(value: kind)) { throw new FormatException($"commit action register kind {(byte)kind} is invalid"); }
                     registers[register] = new WorldTransferActionRegister(Name: name, Kind: kind, Value: new FixedQ4816(reader.ReadInt64()), TimerTicks: reader.ReadUInt64());
                 }
-                members[i] = new WorldTransferCommitMember(null, mapped, program, position, yaw, planar, vertical, new WorldTransferActionContinuity(Channels: channels, Registers: registers));
+                WorldContinuumTrajectory? continuum = null;
+                if (reader.ReadBoolean()) {
+                    var previousPosition = ReadFixedVector(reader: reader);
+                    var sourceTick = reader.ReadUInt64();
+                    var continuumStartEngineTick = reader.ReadUInt64();
+                    var continuumEndEngineTick = reader.ReadUInt64();
+                    var consumedThroughEngineTick = reader.ReadUInt64();
+                    var boundaryEvents = reader.ReadByte();
+                    if ((continuumEndEngineTick <= continuumStartEngineTick) ||
+                        (consumedThroughEngineTick < continuumEndEngineTick) ||
+                        (boundaryEvents == 0) ||
+                        (boundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents)) {
+                        throw new FormatException($"continuum trajectory has invalid interval [{continuumStartEngineTick},{continuumEndEngineTick}), consumed-through {consumedThroughEngineTick}, or boundary count {boundaryEvents}");
+                    }
+                    continuum = new WorldContinuumTrajectory(PreviousPosition: previousPosition, SourceTick: sourceTick, ContinuumStartEngineTick: continuumStartEngineTick, ContinuumEndEngineTick: continuumEndEngineTick, ConsumedThroughEngineTick: consumedThroughEngineTick, BoundaryEvents: boundaryEvents);
+                }
+                members[i] = new WorldTransferCommitMember(null, mapped, program, position, yaw, planar, vertical, new WorldTransferActionContinuity(Channels: channels, Registers: registers), continuum);
             }
             if (input.Position != input.Length) {
                 throw new FormatException("commit carries trailing bytes");
@@ -395,9 +429,9 @@ public static class WorldFederationWireFormat {
     }
 
     /// <summary>Encodes a transferred body's per-tick intent with its lease credential.</summary>
-    public static byte[] EncodeIntent(string sourceAuthority, ulong transferId, int ordinal, in IntentSubmission submission) {
+    public static byte[] EncodeIntent(string sourceAuthority, in WorldMobilityIdentity mobility, in IntentSubmission submission) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal); writer.Write(submission.Tick); writer.Write(submission.MeasuredHoldTicks);
+        writer.Write(sourceAuthority); WriteMobility(writer: writer, value: mobility); writer.Write(submission.Tick); writer.Write(submission.MeasuredHoldTicks);
         for (var channel = 0; channel < ChannelLimits.MaxChannels; channel++) {
             writer.Write(submission.Intent[channel].Value);
         }
@@ -408,10 +442,10 @@ public static class WorldFederationWireFormat {
     }
 
     /// <summary>Decodes a transferred body's per-tick intent.</summary>
-    public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal, out IntentSubmission submission) {
+    public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out IntentSubmission submission) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32(); var tick = reader.ReadUInt64(); var measured = reader.ReadInt32();
+            sourceAuthority = reader.ReadString(); mobility = ReadMobility(reader: reader); var tick = reader.ReadUInt64(); var measured = reader.ReadInt32();
             if (string.IsNullOrWhiteSpace(value: sourceAuthority)) { throw new FormatException(); }
             var intent = default(PlayerIntent); var held = default(PlayerIntent);
             for (var channel = 0; channel < ChannelLimits.MaxChannels; channel++) {
@@ -423,7 +457,7 @@ public static class WorldFederationWireFormat {
             submission = new IntentSubmission(tick, -1, intent, WorldPrincipal.Console, held, measured);
             return (input.Position == input.Length);
         } catch (Exception exception) when (exception is IOException or FormatException) {
-            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; submission = default; return false;
+            sourceAuthority = string.Empty; mobility = default; submission = default; return false;
         }
     }
 
@@ -462,19 +496,19 @@ public static class WorldFederationWireFormat {
         }
     }
 
-    public static byte[] EncodeSubmission(string sourceAuthority, ulong transferId, int ordinal, byte[] frame) {
+    public static byte[] EncodeSubmission(string sourceAuthority, in WorldMobilityIdentity mobility, byte[] frame) {
         using var output = new MemoryStream(); using var writer = new BinaryWriter(output);
-        writer.Write(sourceAuthority); writer.Write(transferId); writer.Write(ordinal); writer.Write(frame);
+        writer.Write(sourceAuthority); WriteMobility(writer: writer, value: mobility); writer.Write(frame);
         return output.ToArray();
     }
 
-    public static bool TryDecodeSubmission(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out int ordinal, out byte[] frame) {
+    public static bool TryDecodeSubmission(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out byte[] frame) {
         try {
             using var input = new MemoryStream(body.ToArray(), writable: false); using var reader = new BinaryReader(input);
-            sourceAuthority = reader.ReadString(); transferId = reader.ReadUInt64(); ordinal = reader.ReadInt32(); frame = reader.ReadBytes(checked((int)(input.Length - input.Position)));
+            sourceAuthority = reader.ReadString(); mobility = ReadMobility(reader: reader); frame = reader.ReadBytes(checked((int)(input.Length - input.Position)));
             return !string.IsNullOrWhiteSpace(value: sourceAuthority) && (frame.Length >= WorldFrameCodec.PrefixBytes);
         } catch (Exception exception) when (exception is IOException or FormatException or ArgumentException or OverflowException) {
-            sourceAuthority = string.Empty; transferId = 0; ordinal = -1; frame = []; return false;
+            sourceAuthority = string.Empty; mobility = default; frame = []; return false;
         }
     }
 
@@ -484,6 +518,10 @@ public static class WorldFederationWireFormat {
     }
     private static void WriteFixedVector(BinaryWriter writer, FixedVector3 value) { writer.Write(value.X.Value); writer.Write(value.Y.Value); writer.Write(value.Z.Value); }
     private static FixedVector3 ReadFixedVector(BinaryReader reader) => new(new FixedQ4816(reader.ReadInt64()), new FixedQ4816(reader.ReadInt64()), new FixedQ4816(reader.ReadInt64()));
+    private static void WriteEntityAddress(BinaryWriter writer, WorldEntityAddress value) { writer.Write(value.Authority); writer.Write(value.Index); writer.Write(value.Generation); }
+    private static WorldEntityAddress ReadEntityAddress(BinaryReader reader) => new(Authority: reader.ReadString(), Index: reader.ReadInt32(), Generation: reader.ReadInt32());
+    private static void WriteMobility(BinaryWriter writer, WorldMobilityIdentity value) { WriteEntityAddress(writer: writer, value: value.Incarnation); writer.Write(value.Epoch); }
+    private static WorldMobilityIdentity ReadMobility(BinaryReader reader) => new(Incarnation: ReadEntityAddress(reader: reader), Epoch: reader.ReadUInt64());
     private static void WriteVector(BinaryWriter writer, Vector3 value) { writer.Write(value.X); writer.Write(value.Y); writer.Write(value.Z); }
     private static Vector3 ReadVector(BinaryReader reader) => new(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
     private static void WriteQuaternion(BinaryWriter writer, Quaternion value) { writer.Write(value.X); writer.Write(value.Y); writer.Write(value.Z); writer.Write(value.W); }

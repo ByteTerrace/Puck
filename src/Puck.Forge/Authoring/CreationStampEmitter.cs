@@ -96,26 +96,28 @@ public static class CreationStampEmitter {
 
         foreach (var shape in (document.Shapes ?? [])) {
             var (shapePosition, shapeRotation) = ReflectedShapeTransform(shape: shape, normal: transform.ReflectionNormal);
+            var shapeScale = EffectiveScale(value: shape.Scale);
             var chain = builder
                 .ResetPoint()
                 .Translate(offset: transform.Origin)
                 .Rotate(rotation: transform.Rotation)
                 .Scale(scale: new Vector3(value: transform.Scale))
                 .Translate(offset: shapePosition)
-                .Rotate(rotation: shapeRotation)
-                .Scale(scale: shape.Scale);
+                .Rotate(rotation: shapeRotation);
 
             var blend = (shape.Blend ?? SdfBlendOp.Union);
             var smooth = (shape.Smooth ?? 0f);
 
             if (contactMargin is not { } margin || (margin == 0f)) {
-                _ = CreationGeometry.AppendPrimitive(chain: chain, type: shape.Type, material: materialFor(arg: shape), blend: blend, smooth: smooth);
+                _ = CreationGeometry.AppendScaledPrimitive(chain: chain, type: shape.Type, scale: shapeScale,
+                    material: materialFor(arg: shape), blend: blend, smooth: smooth);
                 continue;
             }
 
-            chain = CreationGeometry.AppendPrimitive(
+            chain = CreationGeometry.AppendScaledPrimitive(
                 chain: chain.PushField(compose: blend, smooth: smooth),
                 type: shape.Type,
+                scale: shapeScale,
                 material: materialFor(arg: shape)
             ).Dilate(radius: margin);
             _ = chain.PopField();
@@ -144,26 +146,28 @@ public static class CreationStampEmitter {
 
         foreach (var shape in (document.Shapes ?? [])) {
             var (shapePosition, shapeRotation) = ReflectedShapeTransformFixed(shape: shape, normal: reflectionNormal);
+            var shapeScale = EffectiveFixedScale(value: shape.Scale).ToVector3();
             var chain = builder
                 .ResetPoint()
                 .Translate(offset: transform.Origin.ToVector3())
                 .Rotate(rotation: stampRotation)
                 .Scale(scale: new Vector3(value: ((float)((double)stampScale))))
                 .Translate(offset: shapePosition.ToVector3())
-                .Rotate(rotation: shapeRotation)
-                .Scale(scale: EffectiveFixedScale(value: shape.Scale).ToVector3());
+                .Rotate(rotation: shapeRotation);
 
             var blend = (shape.Blend ?? SdfBlendOp.Union);
             var smooth = (shape.Smooth ?? 0f);
 
             if (contactMargin is not { } margin || (margin == 0f)) {
-                _ = CreationGeometry.AppendPrimitive(chain: chain, type: shape.Type, material: materialFor(arg: shape), blend: blend, smooth: smooth);
+                _ = CreationGeometry.AppendScaledPrimitive(chain: chain, type: shape.Type, scale: shapeScale,
+                    material: materialFor(arg: shape), blend: blend, smooth: smooth);
                 continue;
             }
 
-            chain = CreationGeometry.AppendPrimitive(
+            chain = CreationGeometry.AppendScaledPrimitive(
                 chain: chain.PushField(compose: blend, smooth: smooth),
                 type: shape.Type,
+                scale: shapeScale,
                 material: materialFor(arg: shape)
             ).Dilate(radius: margin);
             _ = chain.PopField();

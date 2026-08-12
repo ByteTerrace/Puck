@@ -144,11 +144,12 @@ EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
 The obsolete portal-border canary was deleted with that model. Its replacement,
 `puck canary seamless-adjacency`, executes both the crossing and stationary discriminating legs on
 the real headless composition path. The stronger `docs/verification/four-corners-sharded/run.ps1`
-starts four distinct authorities and requires four simultaneous remote human handoffs, an
-autonomous-body handoff through the same seam, one player's complete four-host circuit with its
-original input credential and camera route still following, post-handoff queries, every host's two
-edge peers plus its compiler-derived diagonal corner peer, four non-colliding entity-address
-namespaces, and zero wire errors.
+starts five distinct authorities — four ground worlds plus the floating island — and requires
+simultaneous horizontal and vertical remote handoffs, cross-host body contact, autonomous travellers,
+one player's complete four-ground-world circuit plus vertical human probes, with held input and the
+camera/authority route still following, post-handoff queries, every ground host's direct peers plus
+its compiler-derived diagonal corner peer,
+generation-addressed entity namespaces, and zero wire errors.
 
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.

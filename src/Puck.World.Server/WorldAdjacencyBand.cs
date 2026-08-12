@@ -11,9 +11,9 @@ namespace Puck.World.Server;
 public readonly record struct WorldAdjacencyBand(string Name, WorldFaceFrame Frame) {
     /// <summary>Whether <paramref name="position"/> sits within this band — on this facet's source/front side (the
     /// side it faces and from which handoff admits a crossing), no farther than the derived depth from
-    /// its plane, and within the face's own lateral extent. The symmetric band intentionally covers the small
-    /// post-integration portion beyond the plane until the immediately following ownership scan commits or closes
-    /// the handoff; otherwise contact and visible ground would disappear for that fraction of a tick.</summary>
+    /// its plane, and within the face's own lateral extent. The symmetric band intentionally covers both the
+    /// wall-boundary ownership deadband and the small post-integration overshoot beyond a plane-based boundary;
+    /// otherwise contact and visible ground could disappear before the ownership scan commits or closes handoff.</summary>
     /// <param name="position">The point to test, in the SOURCE side's own local coordinates.</param>
     /// <param name="depth">The compiler-derived overlap depth.</param>
     public bool Contains(FixedVector3 position, FixedQ4816 depth) {

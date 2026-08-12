@@ -776,6 +776,37 @@ public sealed class WorldBody {
     /// <see cref="Reconcile"/>) resets this to the landing position, so the segment collapses to a point exactly
     /// where a teleport-into-the-volume must still be detected as a point test.</summary>
     public FixedVector3 FixedPreviousPosition => m_previousPosition;
+
+    private WorldContinuumTrajectory? m_pendingContinuum;
+    private ulong? m_continuumConsumedThroughEngineTick;
+    private bool m_ordinaryAdvanceAdmitted;
+
+    /// <summary>The already-evaluated source-step trajectory awaiting ownership resolution before this body may
+    /// advance normally on its destination authority.</summary>
+    public WorldContinuumTrajectory? PendingContinuum => m_pendingContinuum;
+
+    /// <summary>Clears the exact pending trajectory after topology either retained this owner, forwarded the body, or
+    /// safety-clamped it. The independent consumed-through time fence remains until a non-overlapping ordinary
+    /// authority step begins.</summary>
+    public void ClearPendingContinuum() => m_pendingContinuum = null;
+
+    /// <summary>Attempts to admit an ordinary authority step after both geometric continuation and continuum-time
+    /// ownership have settled. A refused step performs no input, action, timer, gravity, or movement work.</summary>
+    public bool TryBeginOrdinaryAdvance(ulong stepStartEngineTick) {
+        if ((m_pendingContinuum is not null) ||
+            (m_continuumConsumedThroughEngineTick is { } consumedThrough && (stepStartEngineTick < consumedThrough))) {
+            m_ordinaryAdvanceAdmitted = false;
+            return false;
+        }
+
+        m_continuumConsumedThroughEngineTick = null;
+        m_ordinaryAdvanceAdmitted = true;
+        return true;
+    }
+
+    /// <summary>Gets whether this body entered the current authority step and may participate in its dynamic-contact
+    /// solve. A continuum-fenced body is immutable until a non-overlapping ordinary step admits it.</summary>
+    public bool OrdinaryAdvanceAdmitted => m_ordinaryAdvanceAdmitted;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
     /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
@@ -1278,6 +1309,8 @@ public sealed class WorldBody {
     /// <param name="DurableInputTick">The simulation tick the staged durable input targets.</param>
     /// <param name="TapeIntents">The scripted tape's live segments, in FIFO (dequeue) order.</param>
     /// <param name="TapeRemainingTicks">Each segment's own remaining ticks, parallel to <paramref name="TapeIntents"/>.</param>
+    /// <param name="PendingContinuum">The already-evaluated adjacency segment awaiting ownership resolution, or
+    /// <see langword="null"/> when this body may advance normally.</param>
     public readonly record struct TransferState(
         FixedVector3 PlanarVelocity,
         FixedQ4816 VerticalVelocity,
@@ -1316,7 +1349,8 @@ public sealed class WorldBody {
         string[] DurableInputWriters,
         ulong DurableInputTick,
         PlayerIntent[] TapeIntents,
-        ulong[] TapeRemainingTicks);
+        ulong[] TapeRemainingTicks,
+        WorldContinuumTrajectory? PendingContinuum);
 
     /// <summary>Captures this body's own <see cref="TransferState"/> — read live, right now, never cached. Called
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
@@ -1381,7 +1415,8 @@ public sealed class WorldBody {
             DurableInputWriters: [.. m_durableInputWriters],
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
-            TapeRemainingTicks: tapeRemainingTicks);
+            TapeRemainingTicks: tapeRemainingTicks,
+            PendingContinuum: m_pendingContinuum);
     }
 
     /// <summary>Reapplies a captured <see cref="TransferState"/> — the abort/refire invariant's own ordering: call
@@ -1412,6 +1447,11 @@ public sealed class WorldBody {
         m_overlayVelocity = state.OverlayVelocity;
         m_overlayRemaining = state.OverlayRemainingTicks;
         m_source = state.Source;
+        m_pendingContinuum = state.PendingContinuum;
+        m_continuumConsumedThroughEngineTick = state.PendingContinuum?.ConsumedThroughEngineTick;
+        if (state.PendingContinuum is not null) {
+            m_ordinaryAdvanceAdmitted = false;
+        }
 
         var ticks = state.ChannelTimerTicks;
         var values = state.ChannelTimerValues;
@@ -1493,6 +1533,48 @@ public sealed class WorldBody {
     public void SetArrivalVelocity(FixedVector3 planarVelocity, FixedQ4816 verticalVelocity) {
         m_planarVelocity = planarVelocity;
         m_verticalVelocity = verticalVelocity;
+    }
+
+    /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
+    /// authority's own contact field. No input, action, timer, gravity, or motion-program operation is evaluated.</summary>
+    public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, int entityIndex, ulong destinationCompletedEngineTick) {
+        var next = m_position;
+        var velocity = (m_planarVelocity + (s_unitY * m_verticalVelocity));
+        var resolution = default(ContactResolution);
+
+        if ((m_contactField is { } field) && (m_collider is { } collider)) {
+            resolution = ((field is IEntityContactField entityField)
+                ? entityField.ResolveEntitySweep(entityIndex: entityIndex, previousPosition: trajectory.PreviousPosition, position: ref next, velocity: ref velocity, orientation: in m_orientation, volumes: collider.Volumes)
+                : field.ResolveSweep(previousPosition: trajectory.PreviousPosition, position: ref next, velocity: ref velocity, orientation: in m_orientation, volumes: collider.Volumes));
+        }
+
+        m_previousPosition = trajectory.PreviousPosition;
+        m_position = next;
+        m_planarVelocity = new FixedVector3(X: velocity.X, Y: FixedQ4816.Zero, Z: velocity.Z);
+        m_verticalVelocity = velocity.Y;
+        m_grounded = resolution.Grounded;
+        m_lastContactCount = (resolution.Grounded ? 1 : 0);
+        var consumedThrough = Math.Max(trajectory.ConsumedThroughEngineTick, destinationCompletedEngineTick);
+        m_pendingContinuum = trajectory with { ConsumedThroughEngineTick = consumedThrough };
+        m_continuumConsumedThroughEngineTick = consumedThrough;
+        m_ordinaryAdvanceAdmitted = false;
+    }
+
+    /// <summary>Stops an exhausted continuum at the last confirmed ownership face. Tangential momentum survives;
+    /// only velocity trying to leave this owner is removed.</summary>
+    public void ClampContinuum(in WorldFaceFrame frame, FixedQ4816 seamU, FixedQ4816 seamV) {
+        var inward = FixedQ4816.FromRawBits(value: 1L);
+        m_position = (frame.PointAt(u: seamU, v: seamV) - (frame.Normal * inward));
+        m_previousPosition = m_position;
+        var velocity = (m_planarVelocity + (s_unitY * m_verticalVelocity));
+        var outward = FixedVector3.Dot(left: velocity, right: frame.Normal);
+        if (outward > FixedQ4816.Zero) {
+            velocity -= (frame.Normal * outward);
+            m_planarVelocity = new FixedVector3(X: velocity.X, Y: FixedQ4816.Zero, Z: velocity.Z);
+            m_verticalVelocity = velocity.Y;
+        }
+        m_positionAccumulator.Reset();
+        m_pendingContinuum = null;
     }
 
     /// <summary>Restores the named action-edge/register subset that must remain continuous when exactly one writer

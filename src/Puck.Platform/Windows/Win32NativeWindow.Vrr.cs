@@ -10,8 +10,8 @@ using Windows.Win32.Foundation;
 
 namespace Puck.Platform.Windows;
 
-// Display timing and precision-wait capabilities. Physical signal timing comes from CCD; VRR support comes only from
-// explicit declarations in the effective monitor EDID. Neither affects deterministic simulation state.
+// Display timing and precision-wait capabilities. The active presentation cadence comes from CCD; VRR support comes
+// only from explicit declarations in the effective monitor EDID. Neither affects deterministic simulation state.
 internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecisionWaiter {
     private const uint DicsFlagGlobal = 0x00000001u;
     private const uint DiregDevice = 0x00000001u;
@@ -195,7 +195,15 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
                     continue;
                 }
 
-                var signalRate = targetMode.Anonymous.targetMode.targetVideoSignalInfo.vSyncFreq;
+                // targetVideoSignalInfo.vSyncFreq may report the instantaneous scan rate while adaptive refresh is
+                // active. Feeding that value back into the frame pacer can lock an otherwise 60 Hz mode to a low
+                // transient rate (for example 32 Hz). The path target's refreshRate is the active desktop cadence;
+                // with QDC_VIRTUAL_REFRESH_RATE_AWARE it is also the cadence applications should target under DRR.
+                var signalRate = path.targetInfo.refreshRate;
+
+                if ((signalRate.Numerator == 0u) || (signalRate.Denominator == 0u)) {
+                    signalRate = targetMode.Anonymous.targetMode.targetVideoSignalInfo.vSyncFreq;
+                }
 
                 if (signalRate.Denominator == 0u) {
                     targetAccumulator.AddUnknownTarget();

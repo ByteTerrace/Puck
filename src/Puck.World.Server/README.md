@@ -453,6 +453,13 @@ A change that moves simulation math is expected to change replay hashes;
 re-record any persisted tape it invalidates in the same change (`CLAUDE.md`
 rule 4).
 
+Adjacency/federation changes additionally run
+`docs/verification/four-corners-sharded/run.ps1`. It starts five distinct
+authorities and exercises horizontal and vertical reserve/commit handoffs,
+generation-addressed forwarding, held input continuity, autonomous travellers,
+neighbour contact, and routed read-backs. The automatic smaller proof is
+`puck canary seamless-adjacency`.
+
 Verify a network-transport change by running two `Puck.World` processes: a
 headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a
 `--connect <ip:port>` client, both scripted over stdin — `world.peers`/

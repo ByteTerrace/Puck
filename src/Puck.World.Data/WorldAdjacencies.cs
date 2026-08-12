@@ -145,27 +145,52 @@ public readonly record struct WorldAdjacencyCrossing(bool Crossed, FixedQ4816 Pa
 public static class WorldAdjacencyRegion {
     /// <summary>Tests a body-center segment against an adjacency rectangle, from owned to neighbouring space.</summary>
     public static WorldAdjacencyCrossing Sweep(WorldFaceFrame frame, FixedVector3 from, FixedVector3 to) {
+        return Sweep(frame: frame, from: from, to: to, outwardThreshold: FixedQ4816.Zero);
+    }
+
+    /// <summary>Tests a body-center segment against an adjacency rectangle after it has crossed an explicit
+    /// outward ownership threshold. A reciprocal pair using the same positive threshold forms a closed deadband:
+    /// the current authority keeps writing throughout the overlap, and a transfer lands at least that far inside
+    /// the destination before its reciprocal edge can become eligible.</summary>
+    /// <param name="frame">The authored boundary frame. Seam coordinates remain anchored to this plane.</param>
+    /// <param name="from">The segment start.</param>
+    /// <param name="to">The segment end.</param>
+    /// <param name="outwardThreshold">The non-negative distance beyond the authored plane at which ownership
+    /// changes.</param>
+    /// <returns>The earliest qualifying ownership-boundary crossing, or the default value when the segment does not
+    /// leave through the threshold rectangle.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="outwardThreshold"/> is negative.</exception>
+    public static WorldAdjacencyCrossing Sweep(WorldFaceFrame frame, FixedVector3 from, FixedVector3 to, FixedQ4816 outwardThreshold) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: outwardThreshold.Value);
+
         var fromDelta = (from - frame.Origin);
         var toDelta = (to - frame.Origin);
         var fromNormal = FixedVector3.Dot(left: fromDelta, right: frame.Normal);
         var toNormal = FixedVector3.Dot(left: toDelta, right: frame.Normal);
 
-        if (toNormal <= FixedQ4816.Zero) {
+        if (toNormal <= outwardThreshold) {
             return default;
         }
 
         // A newly arrived body may already lie beyond a second boundary after one diagonal step. It still belongs
         // to exactly one authority; reporting parameter zero lets that authority forward it deterministically on
         // its next step instead of requiring an impossible reconstructed pre-arrival segment.
-        var parameter = ((fromNormal > FixedQ4816.Zero) ? FixedQ4816.Zero :
-            ((FixedQ4816.Zero - fromNormal) / (toNormal - fromNormal)));
+        var parameter = ((fromNormal > outwardThreshold) ? FixedQ4816.Zero :
+            ((outwardThreshold - fromNormal) / (toNormal - fromNormal)));
         var point = (from + ((to - from) * parameter));
         var seam = (point - frame.Origin);
         var u = FixedVector3.Dot(left: seam, right: frame.Right);
         var v = FixedVector3.Dot(left: seam, right: frame.Up);
 
+        // A yaw-only ownership plane offset outward by T is one face of the owner's T-expanded horizontal
+        // half-space. Its horizontal ends must expand by the same T or two perpendicular faces leave an unowned
+        // T-by-T corner: a diagonal body reaches (T,T), lies beyond both original face rectangles, and neither
+        // authority can claim it. Keep the authored vertical aperture exact — this is horizontal ownership
+        // topology, not permission to cross above or below the boundary.
+        var ownershipHalfWidth = (frame.HalfWidth + (frame.IsYawOnly ? outwardThreshold : FixedQ4816.Zero));
+
         return new WorldAdjacencyCrossing(
-            Crossed: ((FixedQ4816.Abs(value: u) <= frame.HalfWidth) && (FixedQ4816.Abs(value: v) <= frame.HalfHeight)),
+            Crossed: ((FixedQ4816.Abs(value: u) <= ownershipHalfWidth) && (FixedQ4816.Abs(value: v) <= frame.HalfHeight)),
             Parameter: parameter,
             SeamU: u,
             SeamV: v
@@ -178,6 +203,19 @@ public static class WorldAdjacencyPolicy {
     /// <summary>Number of slower-side tick periods reserved for delivery and tick-start installation. One period is
     /// in flight while the other is the consumer's pinned tick-start image.</summary>
     public const int DeliveryPeriods = 2;
+
+    /// <summary>Returns the ownership threshold appropriate to a boundary's traversal geometry. A vertical wall
+    /// (world-up in its plane) can carry the full reciprocal deadband without obstructing ordinary grounded travel.
+    /// A floor/ceiling boundary must transfer at its authored plane: offsetting that threshold would delay ownership
+    /// until after an ascent has crossed solid destination terrain or exhausted its held traversal input.</summary>
+    /// <param name="frame">The compiled local boundary frame.</param>
+    /// <param name="reciprocalHysteresis">The non-negative two-body contact hysteresis.</param>
+    /// <returns><paramref name="reciprocalHysteresis"/> for a vertical wall; zero for a floor/ceiling boundary.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="reciprocalHysteresis"/> is negative.</exception>
+    public static FixedQ4816 OwnershipThreshold(in WorldFaceFrame frame, FixedQ4816 reciprocalHysteresis) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: reciprocalHysteresis.Value);
+        return (frame.IsYawOnly ? reciprocalHysteresis : FixedQ4816.Zero);
+    }
 
     /// <summary>Finds the diagonal document shared by two direct neighbours at a junction. Both neighbours must
     /// independently name the same third document through an edge other than the edge returning to the source;
@@ -286,7 +324,17 @@ public static class WorldAdjacencyPolicy {
             return false;
         }
 
-        depth = new FixedQ4816(Value: depthRaw);
+        if (!TryReciprocalHysteresis(definition: local, depth: out var localHysteresis, reason: out reason) ||
+            !TryReciprocalHysteresis(definition: neighbour, depth: out var neighbourHysteresis, reason: out reason)) {
+            return false;
+        }
+
+        // Handoff occurs at the far side of this deadband, not at the authored plane. Contact and observation must
+        // therefore cover at least the larger side's threshold even when both worlds have low speed/reach settings
+        // whose delivery-latency term alone would derive a shallower overlap.
+        depth = FixedQ4816.Max(
+            x: new FixedQ4816(Value: depthRaw),
+            y: FixedQ4816.Max(x: localHysteresis, y: neighbourHysteresis));
         reason = string.Empty;
         return true;
     }
@@ -313,8 +361,8 @@ public static class WorldAdjacencyPolicy {
 
     /// <summary>Derives the reciprocal handoff hysteresis needed to survive the strongest local contact correction:
     /// two maximum-radius body colliders separated beside the seam, plus the authored contact skin. A one-radius
-    /// latch is insufficient for the intended seam melee: another body can legally push an arrival by the sum of
-    /// both radii and falsely re-arm the reciprocal edge.</summary>
+    /// wall deadband (or arrival latch at a plane-based boundary) is insufficient for the intended seam melee:
+    /// another body can legally push an arrival by the sum of both radii.</summary>
     public static bool TryReciprocalHysteresis(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 

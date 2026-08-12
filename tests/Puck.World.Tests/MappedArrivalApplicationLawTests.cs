@@ -1,5 +1,6 @@
 using Xunit;
 
+using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -106,6 +107,166 @@ public sealed class MappedArrivalApplicationLawTests {
         fixture.Step();
 
         Assert.Equal(expected: FixedQ4816.Zero, actual: body.ChannelReadHeld[ordinal]);
+    }
+
+    [Fact]
+    public void ContinuumArrival_CannotAdvanceTwice_AndAbortCaptureRetainsItsCursor() {
+        using var fixture = Fixtures.FreshServer();
+        var actor = WorldPrincipal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var contactActor = WorldPrincipal.Seat(slot: 1);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(contactActor, contactActor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var mappedPosition = new FixedVector3(FixedQ4816.FromInteger(value: 4), FixedQ4816.FromInteger(value: 7), FixedQ4816.Zero);
+        var trajectory = new WorldContinuumTrajectory(
+            PreviousPosition: new FixedVector3(FixedQ4816.FromInteger(value: 3), FixedQ4816.FromInteger(value: 7), FixedQ4816.Zero),
+            SourceTick: 41,
+            ContinuumStartEngineTick: 0,
+            ContinuumEndEngineTick: 210,
+            ConsumedThroughEngineTick: 210,
+            BoundaryEvents: 2);
+
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: mappedPosition,
+            yawRadians: FixedQ4816.Zero,
+            planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 9), FixedQ4816.Zero, FixedQ4816.Zero),
+            verticalVelocity: FixedQ4816.FromInteger(value: -5),
+            continuum: trajectory));
+        fixture.Server.Body(index: contactActor.Index)!.Pose(
+            position: mappedPosition,
+            yawRadians: FixedQ4816.Zero,
+            pitchRadians: FixedQ4816.Zero,
+            rollRadians: FixedQ4816.Zero);
+
+        var settledPosition = body.FixedPosition;
+        var settledState = body.CaptureTransferState();
+        Assert.Equal(expected: trajectory, actual: body.PendingContinuum);
+        Assert.Equal(expected: trajectory, actual: settledState.PendingContinuum);
+
+        // A destination-rate step may arrive before the host's topology continuation drain. It advances the world
+        // clock, but this body must not evaluate input, gravity, actions, or position a second time.
+        fixture.Step();
+        Assert.Equal(expected: settledPosition, actual: body.FixedPosition);
+        Assert.Equal(expected: settledState.PlanarVelocity, actual: body.CaptureTransferState().PlanarVelocity);
+        Assert.Equal(expected: settledState.VerticalVelocity, actual: body.CaptureTransferState().VerticalVelocity);
+
+        body.ClearPendingContinuum();
+        fixture.Step();
+        Assert.NotEqual(expected: settledPosition, actual: body.FixedPosition);
+    }
+
+    [Theory]
+    [InlineData(120U, 2)]
+    [InlineData(60U, 1)]
+    public void ContinuumTimeFence_RejectsEveryDestinationStepThatOverlapsTheSourceStep(uint destinationRateHz, int overlappingSteps) {
+        using var fixture = Fixtures.FreshServer();
+        var actor = WorldPrincipal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var sourceWidth = EngineTicks.PerRate(ratePerSecond: 60);
+        var destinationWidth = EngineTicks.PerRate(ratePerSecond: destinationRateHz);
+        var position = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(value: 20), FixedQ4816.Zero);
+        var trajectory = new WorldContinuumTrajectory(
+            PreviousPosition: position,
+            SourceTick: 1,
+            ContinuumStartEngineTick: 0,
+            ContinuumEndEngineTick: sourceWidth,
+            ConsumedThroughEngineTick: sourceWidth,
+            BoundaryEvents: 1);
+
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: position,
+            yawRadians: FixedQ4816.Zero,
+            planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 12), FixedQ4816.Zero, FixedQ4816.Zero),
+            verticalVelocity: FixedQ4816.Zero,
+            continuum: trajectory));
+        body.ClearPendingContinuum();
+
+        for (var step = 0; step < overlappingSteps; step++) {
+            fixture.Step(stepTicks: destinationWidth);
+            Assert.Equal(expected: position, actual: body.FixedPosition);
+        }
+
+        fixture.Step(stepTicks: destinationWidth);
+        Assert.NotEqual(expected: position, actual: body.FixedPosition);
+    }
+
+    [Fact]
+    public void ContinuumTimeFence_UsesDestinationAdmissionTimeWhenTransportArrivesLate() {
+        using var fixture = Fixtures.FreshServer();
+        var actor = WorldPrincipal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var width = EngineTicks.PerRate(ratePerSecond: 60);
+        fixture.Step(stepTicks: width);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var position = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(value: 20), FixedQ4816.Zero);
+        var trajectory = new WorldContinuumTrajectory(
+            PreviousPosition: position,
+            SourceTick: 1,
+            ContinuumStartEngineTick: 0,
+            ContinuumEndEngineTick: (width / 2UL),
+            ConsumedThroughEngineTick: (width / 2UL),
+            BoundaryEvents: 1);
+
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: position,
+            yawRadians: FixedQ4816.Zero,
+            planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 12), FixedQ4816.Zero, FixedQ4816.Zero),
+            verticalVelocity: FixedQ4816.Zero,
+            continuum: trajectory,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks));
+        body.ClearPendingContinuum();
+
+        fixture.Step(stepTicks: width);
+        Assert.NotEqual(expected: position, actual: body.FixedPosition);
+    }
+
+    [Fact]
+    public void ContinuumHopClamp_PreservesTheConsumedThroughTimeFence() {
+        using var fixture = Fixtures.FreshServer();
+        var actor = WorldPrincipal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var consumedThrough = EngineTicks.PerRate(ratePerSecond: 60);
+        var position = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(value: 20), FixedQ4816.Zero);
+        var trajectory = new WorldContinuumTrajectory(
+            PreviousPosition: position,
+            SourceTick: 1,
+            ContinuumStartEngineTick: 0,
+            ContinuumEndEngineTick: consumedThrough,
+            ConsumedThroughEngineTick: consumedThrough,
+            BoundaryEvents: WorldContinuumTrajectory.MaxBoundaryEvents);
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: position,
+            yawRadians: FixedQ4816.Zero,
+            planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 12), FixedQ4816.Zero, FixedQ4816.Zero),
+            verticalVelocity: FixedQ4816.Zero,
+            continuum: trajectory));
+        var frame = new WorldFaceFrame(
+            Origin: position,
+            Right: new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero),
+            Up: new FixedVector3(FixedQ4816.Zero, FixedQ4816.One, FixedQ4816.Zero),
+            Normal: new FixedVector3(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.One),
+            HalfWidth: FixedQ4816.One,
+            HalfHeight: FixedQ4816.One,
+            HalfDepth: FixedQ4816.Zero);
+
+        body.ClampContinuum(frame: in frame, seamU: FixedQ4816.Zero, seamV: FixedQ4816.Zero);
+
+        Assert.Null(body.PendingContinuum);
+        Assert.False(body.TryBeginOrdinaryAdvance(stepStartEngineTick: consumedThrough - 1UL));
+        Assert.True(body.TryBeginOrdinaryAdvance(stepStartEngineTick: consumedThrough));
     }
 
     [Fact]

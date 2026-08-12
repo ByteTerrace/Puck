@@ -34,15 +34,17 @@ the section list is the `WorldSection` enum in `Protocol/WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, links, grants, hud, state, input hold, rules,
-groups, properties, interactions). Worlds live as data
-under `../Puck.World/Assets/worlds/` — five checked-in documents. Four are the
+groups, properties, interactions, player defaults, market). Worlds live as data
+under `../Puck.World/Assets/worlds/` — ten checked-in documents. Four are the
 four-world charter's whole game roster (2026-08-06): `play` (the overworld hub —
 the game's first main city, and the shipped boot default; carries the
 optional `references` section naming the other three by document path, and a
 wall-mounted picture-frame portal placement per named world), `dive`
 (underwater), `kart` (racing), `jump` (platformer). The fifth, `studio`, is a
 non-game dev canvas for character work (neutral floor, no scenery or crowd,
-four anchored camera eyes and a `sheet` layout) reached only with `--world`. The movement platform
+four anchored camera eyes and a `sheet` layout) reached only with `--world`.
+Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and
+`quilt-island`) are non-game adjacency/federation stress content. The movement platform
 every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
 row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`) and
 `WorldCameraRig.SmoothRate`. The motion-model union's second arm is

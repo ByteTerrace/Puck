@@ -32,7 +32,7 @@ members in declaration (= canonical-write) order: `Motion`, `SpawnPoints`,
 `Hud`, `State`, `InputHold` (its own type, `WorldInputHoldAuthoring`, is the
 AUTHORED seconds shape — `WorldDefinition.CompiledInputHold` is the compiled
 ticks form runtime code consumes; see `WorldInputHoldSettings`'s remarks) —
-plus 14 trailing OPTIONAL members (each `[JsonIgnore(Condition =
+plus 15 trailing OPTIONAL members (each `[JsonIgnore(Condition =
 WhenWritingNull)]` with a `= null` default, so an existing document declaring
 none of them round-trips unchanged): `Rules` (see below), `Identity`,
 `Groups`, `Properties`, `Interactions`, `Generation`, `Generators`, `Water`
@@ -40,14 +40,16 @@ none of them round-trips unchanged): `Rules` (see below), `Identity`,
 `WorldWater.cs`), `References`, `Portals`, `Simulation`, `Destinations`
 (`WorldDestinations.cs`), `Admission` (`Protocol/WorldAdmission.cs`, the TCP
 door's trust list — deny-by-default, an absent/empty section admits no remote
-peer), and `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
+peer), `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
 auction house's config and live listing ledger; null IS today's no-market
-behavior, falling back to `WorldMarketSection.Empty`) — plus `Schema`
+behavior, falling back to `WorldMarketSection.Empty`), and `Adjacencies`
+(`WorldAdjacencies.cs` — invisible reciprocal authority boundaries; null
+names no seamless neighbours) — plus `Schema`
 and the `[JsonExtensionData]` `Extensions` bag. There is no `Wander`/`Scene`
 member and no `WorldSceneRow` type any more — both retired; scenery is
 authored through `Placements` now.
 
-The last three carry topology/timing facts that are BOOT-AUTHORED ONLY —
+The topology/timing members carry facts that are BOOT-AUTHORED ONLY —
 none has a `WorldSection` axis or a `MutationKind` ordinal, so nothing
 mutates them in session and no grant subject names them:
 
@@ -77,6 +79,12 @@ mutates them in session and no grant subject names them:
   `RateHz / 4` only at `n` = 2 — and the representable band) is NOT built;
   `n` is a solver parameter, so `WorldSimulationDefaults` is the seam the
   solver landing that introduces it adds the validator to.
+- **`Adjacencies`** (`WorldAdjacencies.cs`) — reciprocal rectangular ownership
+  boundaries layered over global persisted `Destinations`. Authors declare
+  each destination, counterpart, frame, unavailable treatment, and optional
+  failure channel; the compiler derives overlap and diagonal corner interest.
+  Runtime, transfer, and verification details live in
+  [adjacency-and-federation.md](adjacency-and-federation.md).
 
 The `WorldSection` enum (`Protocol/WorldGrant.cs`, 31 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
@@ -87,7 +95,7 @@ Groups, Properties, Interactions, PlayerDefaults, Market`. It is the grant subje
 `WorldDefinition`'s own member list above: `Channels`,
 `TargetRegisters`, `BodyMotionPrograms`, `Storage`, `Identity`,
 `Generation`, `Generators`, `Water`, `References`, `Portals`, `Simulation`,
-`Destinations`, and `Admission` carry no dispatch axis of their own (some
+`Destinations`, `Admission`, and `Adjacencies` carry no dispatch axis of their own (some
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
 `Kits` respectively; `PlayerDefaults` dispatches through
@@ -424,8 +432,10 @@ other three by document path, and a wall-mounted picture-frame placement per nam
 arena scaffold — the one that also authors `water`), `kart` (the racing arena), `jump` (the platformer arena). A
 fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
 no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached only
-with `--world` and never from Play. All five carry the full required top-level set, so a change that adds a
-top-level section sweeps five documents, not four. The loader is `src/Puck.World/WorldDefinitionLoader.cs`.
+with `--world` and never from Play. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`,
+`quilt-island`) ship beside them as non-game adjacency/federation stress content. All ten carry the full required
+top-level set, so a change that adds a required top-level section sweeps ten documents. The loader is
+`src/Puck.World/WorldDefinitionLoader.cs`.
 
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
@@ -893,6 +903,9 @@ radial with one six-sector action ring. Presentation and the live verbs:
 - `WorldColor.cs` — golden-ratio index palette for simulated avatars.
 - `WorldHostTokens.cs` — the one spelling for backend/surface-format tokens
   (JSON converters + the `world.row.set host` payload grammar).
+- `WorldAdjacencies.cs` — the authored boundary rows, fixed frame compilation,
+  crossing test, derived overlap, reciprocal hysteresis, and corner topology;
+  see [adjacency-and-federation.md](adjacency-and-federation.md).
 - `ShadowTier.cs` — the tier↔scale map `world.save` folds live shadow reach
   through.
 - `BindingVocabularyHook.cs` — the static injection seam the composition

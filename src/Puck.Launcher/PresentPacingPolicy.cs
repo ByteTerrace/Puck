@@ -7,13 +7,13 @@ public enum PresentPacingBasis {
     /// <summary>No rate could be resolved; presentation remains unpaced.</summary>
     Unbounded,
 
-    /// <summary>An explicit application target, capped only by a known physical signal rate.</summary>
+    /// <summary>An explicit application target, capped only by a known active display cadence.</summary>
     ExplicitTarget,
 
     /// <summary>An explicitly advertised variable-refresh interval.</summary>
     VariableRefreshRange,
 
-    /// <summary>The active physical signal rate, with no claim that VRR is available.</summary>
+    /// <summary>The active display cadence, with no claim that VRR is available.</summary>
     SignalTiming,
 }
 
@@ -64,7 +64,7 @@ public static class PresentPacingPolicy {
 
         if (requestedHertz > 0.0) {
             return new PresentPacingDecision(
-                // An explicit fixed cadence is bounded by the physical signal, not by the monitor's adaptive interval.
+                // An explicit fixed cadence is bounded by the active display cadence, not by the monitor's adaptive interval.
                 TargetHertz: (timing.Signal.IsKnown ? Math.Min(val1: requestedHertz, val2: timing.Signal.Hertz) : requestedHertz),
                 Basis: PresentPacingBasis.ExplicitTarget
             );

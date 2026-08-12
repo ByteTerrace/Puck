@@ -12,7 +12,8 @@ namespace Puck.World.Server;
 /// <param name="BodyColor">The source body's exact rendered material color, preserved across ownership.</param>
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
-public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig);
+/// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
+public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
 
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
@@ -33,8 +34,18 @@ public sealed record WorldTransferReservationRequest(
 /// numeric id is only required to be unique inside that namespace.</summary>
 public readonly record struct WorldTransferKey(string SourceAuthority, ulong TransferId);
 
+/// <summary>A traveler identity that survives authority-local index changes. The incarnation is minted once from a
+/// complete generation-addressed origin; the epoch advances exactly once at each committed ownership handoff.</summary>
+public readonly record struct WorldMobilityIdentity(WorldEntityAddress Incarnation, ulong Epoch) {
+    /// <summary>Returns the next committed ownership epoch.</summary>
+    public WorldMobilityIdentity Advance() => this with { Epoch = checked(Epoch + 1UL) };
+}
+
 /// <summary>The destination's idempotent answer for an ambiguous commit.</summary>
 public enum WorldTransferStatus : byte { Missing = 0, Reserved = 1, Committed = 2 }
+
+/// <summary>Bounded operational counts for transfer-state churn laws and diagnostics.</summary>
+public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases);
 
 /// <summary>One named channel edge carried across an authority change. Names, rather than ordinals, keep a
 /// destination's independently-authored channel order from changing the meaning of a held control. HeldValue is
@@ -53,6 +64,31 @@ public sealed record WorldTransferActionContinuity(
     IReadOnlyList<WorldTransferActionRegister> Registers
 );
 
+/// <summary>The unconsumed geometric image of one already-evaluated simulation step. Actions, timers, gravity, and
+/// authored motion have run exactly once on the source authority; a destination may only sweep this segment through
+/// its own contact and ownership topology. It must never call <see cref="WorldBody.Advance"/> for the represented
+/// time span.</summary>
+/// <param name="PreviousPosition">The mapped point at which the destination became physically relevant. For an
+/// adjacency this is the counterpart seam point, not the source step's original position.</param>
+/// <param name="SourceTick">The source authority tick that evaluated the motion.</param>
+/// <param name="ContinuumStartEngineTick">The inclusive engine-time start of that source step.</param>
+/// <param name="ContinuumEndEngineTick">The exclusive engine-time end of that source step.</param>
+/// <param name="ConsumedThroughEngineTick">The latest engine-time boundary an authority has already consumed for
+/// this traveler. A destination may not ordinarily advance the body from a step whose start precedes it.</param>
+/// <param name="BoundaryEvents">How many ownership faces this one source step has already crossed.</param>
+public readonly record struct WorldContinuumTrajectory(
+    FixedVector3 PreviousPosition,
+    ulong SourceTick,
+    ulong ContinuumStartEngineTick,
+    ulong ContinuumEndEngineTick,
+    ulong ConsumedThroughEngineTick,
+    byte BoundaryEvents
+) {
+    /// <summary>A representation-level work ceiling. Exhaustion is a deterministic safety clamp at the last
+    /// confirmed owner; it is not an authored feel parameter.</summary>
+    public const byte MaxBoundaryEvents = 8;
+}
+
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
 public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
     /// <summary>Creates a named refusal.</summary>
@@ -68,19 +104,28 @@ public sealed record WorldTransferCommitMember(
     FixedQ4816 YawRadians,
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
-    WorldTransferActionContinuity? ActionContinuity = null
+    WorldTransferActionContinuity? ActionContinuity = null,
+    WorldContinuumTrajectory? Continuum = null
 );
 
 /// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
 internal sealed class WorldTransferEscrow {
     private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition);
+    private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
+    private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
     private readonly WorldServer m_server;
     private readonly Dictionary<WorldTransferKey, Lease> m_leases = new();
     private readonly HashSet<WorldTransferKey> m_committed = new();
     private readonly Dictionary<WorldTransferKey, WorldTransferCommitMember[]> m_committedMembers = new();
     private readonly Dictionary<WorldTransferKey, WorldPrincipal[]> m_committedPrincipals = new();
+    private readonly Dictionary<WorldTransferKey, HashSet<WorldEntityAddress>> m_committedIncarnations = new();
+    private readonly Dictionary<WorldEntityAddress, WorldTransferKey> m_latestCommittedTransfer = new();
+    private readonly Dictionary<WorldEntityAddress, MobilityLease> m_mobilityLeases = new();
+    // One stable credential row per authenticated upstream namespace and traveler incarnation. Repeated seam
+    // crossings overwrite its epoch/principal; transaction ids never enter this table.
+    private readonly Dictionary<(string SourceAuthority, WorldEntityAddress Incarnation), MobilityAdmission> m_mobilityAdmissions = new();
     // A committed body continues to consume its authored border capacity until it leaves that body index.
     // The population remains the source of truth: stale rows are pruned before every capacity decision.
     private readonly Dictionary<int, string> m_borderAdmissions = new();
@@ -107,9 +152,22 @@ internal sealed class WorldTransferEscrow {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
         }
 
+        var reservationIncarnations = new HashSet<WorldEntityAddress>();
         for (var index = 0; index < request.Members.Count; index++) {
             if (request.Members[index].CatalogRig >= WorldLookSource.Catalog.RigCount) {
                 return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} catalog rig {request.Members[index].CatalogRig} is outside 0..{WorldLookSource.Catalog.RigCount - 1}");
+            }
+            if (request.Members[index].Mobility is not { } mobility) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} carries no stable mobility identity");
+            }
+            if (!reservationIncarnations.Add(item: mobility.Incarnation)) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} repeats mobility incarnation {mobility.Incarnation}");
+            }
+            if (m_mobilityLeases.TryGetValue(key: mobility.Incarnation, value: out var mobilityLease)) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} mobility incarnation is already leased to transfer {mobilityLease.Transfer.TransferId} at epoch {mobilityLease.ExpectedEpoch}");
+            }
+            if (TryKnownMobilityEpoch(incarnation: mobility.Incarnation, epoch: out var knownEpoch) && (knownEpoch >= mobility.Epoch)) {
+                return WorldTransferReservationReply.Refused(reason: $"traveler {index + 1} mobility epoch {mobility.Epoch} is stale; destination has consumed through {knownEpoch}");
             }
         }
 
@@ -186,6 +244,10 @@ internal sealed class WorldTransferEscrow {
         var destinationDefinition = m_server.Definition;
 
         m_leases.Add(key: key, value: new Lease(Request: request, DeadlineTick: deadline, Slots: slots, DestinationDefinition: destinationDefinition));
+        foreach (var member in request.Members) {
+            var mobility = member.Mobility!.Value;
+            m_mobilityLeases.Add(key: mobility.Incarnation, value: new MobilityLease(Transfer: key, ExpectedEpoch: mobility.Epoch));
+        }
 
         return new WorldTransferReservationReply(Accepted: true, Reason: string.Empty, DeadlineDestinationTick: deadline, BodyIndices: slots, DestinationDefinition: destinationDefinition);
     }
@@ -203,11 +265,23 @@ internal sealed class WorldTransferEscrow {
             return false;
         }
 
-        if (!m_leases.Remove(key: key, value: out var lease)) {
+        if (!m_leases.TryGetValue(key: key, value: out var lease)) {
             reason = $"transfer {transferId} has no live reservation";
 
             return false;
         }
+
+        for (var index = 0; index < lease.Request.Members.Count; index++) {
+            var mobility = lease.Request.Members[index].Mobility!.Value;
+            if (!m_mobilityLeases.TryGetValue(key: mobility.Incarnation, value: out var mobilityLease)
+                || (mobilityLease.Transfer != key)
+                || (mobilityLease.ExpectedEpoch != mobility.Epoch)) {
+                reason = $"transfer {transferId} no longer owns traveler {index + 1}'s mobility epoch lease";
+                return false;
+            }
+        }
+
+        ReleaseLease(key: key);
 
         if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
@@ -219,6 +293,14 @@ internal sealed class WorldTransferEscrow {
             reason = $"transfer {transferId} destination definition moved after reservation; reserve again against the current revision";
 
             return false;
+        }
+
+        for (var index = 0; index < lease.Request.Members.Count; index++) {
+            var mobility = lease.Request.Members[index].Mobility!.Value;
+            if (TryKnownMobilityEpoch(incarnation: mobility.Incarnation, epoch: out var knownEpoch) && (knownEpoch >= mobility.Epoch)) {
+                reason = $"transfer {transferId} traveler {index + 1} lost its mobility epoch compare-and-set; expected {mobility.Epoch}, destination has consumed through {knownEpoch}";
+                return false;
+            }
         }
 
         if (members.Count != lease.Slots.Length) {
@@ -234,6 +316,15 @@ internal sealed class WorldTransferEscrow {
                 || !lease.DestinationDefinition.BodyMotionPrograms.Any(program => (program.Kind == BodyProgramKind.Motion)
                     && string.Equals(a: program.Name, b: member.BodyMotionProgramName, comparisonType: StringComparison.Ordinal)))) {
                 reason = $"transfer {transferId} traveler {index + 1} names unavailable destination motion program '{member.BodyMotionProgramName}'";
+                return false;
+            }
+            if (member.Continuum is { } continuum &&
+                (!member.HasMappedArrival ||
+                 (continuum.ContinuumEndEngineTick <= continuum.ContinuumStartEngineTick) ||
+                 (continuum.ConsumedThroughEngineTick < continuum.ContinuumEndEngineTick) ||
+                 (continuum.BoundaryEvents == 0) ||
+                 (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))) {
+                reason = $"transfer {transferId} traveler {index + 1} carries an invalid continuum interval or boundary count";
                 return false;
             }
         }
@@ -280,8 +371,11 @@ internal sealed class WorldTransferEscrow {
             m_server.Population.SetCatalogRig(slot: slot, catalogRig: reservationMember.CatalogRig);
 
             if (member.HasMappedArrival) {
-                m_server.Population.ApplyMappedArrival(slot: slot, motionProgramName: member.BodyMotionProgramName, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity, actionContinuity: member.ActionContinuity ?? new WorldTransferActionContinuity(Channels: [], Registers: []));
+                m_server.Population.ApplyMappedArrival(slot: slot, motionProgramName: member.BodyMotionProgramName, position: member.Position, yawRadians: member.YawRadians, planarVelocity: member.PlanarVelocity, verticalVelocity: member.VerticalVelocity, actionContinuity: member.ActionContinuity ?? new WorldTransferActionContinuity(Channels: [], Registers: []), continuum: member.Continuum, destinationCompletedEngineTick: m_server.CompletedEngineTicks);
             }
+
+            var committedMobility = reservationMember.Mobility!.Value.Advance();
+            m_server.Population.SetMobility(index: slot, mobility: in committedMobility);
 
             landed.Add(item: slot);
             m_borderAdmissions[slot] = lease.Request.Border;
@@ -290,12 +384,32 @@ internal sealed class WorldTransferEscrow {
         m_committed.Add(item: key);
         m_committedMembers[key] = [.. members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => lease.Request.PeerAdmission ? m_server.Population.PeerPrincipal(index: slot) : lease.Request.Members[Array.IndexOf(array: lease.Slots, value: slot)].Principal).ToArray();
+        var committedIncarnations = new HashSet<WorldEntityAddress>();
+        for (var index = 0; index < lease.Slots.Length; index++) {
+            var mobility = lease.Request.Members[index].Mobility!.Value.Advance();
+            var principal = m_committedPrincipals[key][index];
+            if (m_latestCommittedTransfer.TryGetValue(key: mobility.Incarnation, value: out var previousTransfer) && (previousTransfer != key)) {
+                SupersedeCommittedIncarnation(key: previousTransfer, incarnation: mobility.Incarnation);
+            }
+            m_latestCommittedTransfer[mobility.Incarnation] = key;
+            _ = committedIncarnations.Add(item: mobility.Incarnation);
+            // Returning to an authority refreshes every authenticated upstream alias for this incarnation so an old
+            // route resolves the new live generation instead of forwarding around a loop.
+            foreach (var alias in m_mobilityAdmissions.Keys.Where(candidate => candidate.Incarnation == mobility.Incarnation).ToArray()) {
+                m_mobilityAdmissions[alias] = new MobilityAdmission(Epoch: mobility.Epoch, Principal: principal);
+            }
+            m_mobilityAdmissions[(lease.Request.SourceAuthority, mobility.Incarnation)] = new MobilityAdmission(Epoch: mobility.Epoch, Principal: principal);
+        }
+        m_committedIncarnations[key] = committedIncarnations;
         reason = string.Empty;
 
         return true;
     }
 
-    public void Abort(string sourceAuthority, ulong transferId) => _ = m_leases.Remove(key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId));
+    public void Abort(string sourceAuthority, ulong transferId) => ReleaseLease(key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId));
+
+    /// <summary>Retires disposable exact-retry payload after the source has observed and published commit.</summary>
+    public void Acknowledge(string sourceAuthority, ulong transferId) => RetireCommittedTransaction(new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId));
 
     public bool TryCommittedPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
         if (m_committedPrincipals.TryGetValue(key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId), value: out var principals) && ((uint)ordinal < (uint)principals.Length)) {
@@ -307,11 +421,41 @@ internal sealed class WorldTransferEscrow {
         return false;
     }
 
+    public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) {
+        if (m_mobilityAdmissions.TryGetValue(key: (sourceAuthority, mobility.Incarnation), value: out var admission) &&
+            (mobility.Epoch <= admission.Epoch)) {
+            principal = admission.Principal;
+            return true;
+        }
+        principal = default;
+        return false;
+    }
+
+    public void RetireMobility(in WorldMobilityIdentity mobility) {
+        var incarnation = mobility.Incarnation;
+        if (m_mobilityLeases.TryGetValue(key: incarnation, value: out var mobilityLease)) {
+            ReleaseLease(key: mobilityLease.Transfer);
+        }
+        if (m_latestCommittedTransfer.TryGetValue(key: incarnation, value: out var committedTransfer)) {
+            SupersedeCommittedIncarnation(key: committedTransfer, incarnation: incarnation);
+        }
+        foreach (var key in m_mobilityAdmissions.Keys.Where(candidate => candidate.Incarnation == incarnation).ToArray()) {
+            _ = m_mobilityAdmissions.Remove(key: key);
+        }
+    }
+
     public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
         var key = new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId);
 
-        return (m_committed.Contains(item: key) ? WorldTransferStatus.Committed : (m_leases.ContainsKey(key: key) ? WorldTransferStatus.Reserved : WorldTransferStatus.Missing));
+        return (m_committed.Contains(item: key)
+            ? WorldTransferStatus.Committed
+            : (m_leases.ContainsKey(key: key) ? WorldTransferStatus.Reserved : WorldTransferStatus.Missing));
     }
+
+    public WorldTransferTableCounts Counts => new(
+        ActiveTransactions: (m_leases.Count + m_committed.Count),
+        MobilityCredentials: m_mobilityAdmissions.Count,
+        MobilityLeases: m_mobilityLeases.Count);
 
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
     public bool TryArrivalBorder(int bodyIndex, out string border) =>
@@ -329,8 +473,58 @@ internal sealed class WorldTransferEscrow {
         PruneDepartedAdmissions();
 
         foreach (var transferId in m_leases.Where(predicate: pair => tick >= pair.Value.DeadlineTick).Select(selector: pair => pair.Key).ToArray()) {
-            _ = m_leases.Remove(key: transferId);
+            ReleaseLease(key: transferId);
         }
+    }
+
+    private void RetireCommittedTransaction(WorldTransferKey key) {
+        if (m_committedIncarnations.Remove(key: key, value: out var incarnations)) {
+            foreach (var incarnation in incarnations) {
+                if (m_latestCommittedTransfer.TryGetValue(key: incarnation, value: out var latest) && (latest == key)) {
+                    _ = m_latestCommittedTransfer.Remove(key: incarnation);
+                }
+            }
+        }
+        _ = m_committed.Remove(item: key);
+        _ = m_committedMembers.Remove(key: key);
+        _ = m_committedPrincipals.Remove(key: key);
+    }
+
+    private void SupersedeCommittedIncarnation(WorldTransferKey key, WorldEntityAddress incarnation) {
+        if (m_latestCommittedTransfer.TryGetValue(key: incarnation, value: out var latest) && (latest == key)) {
+            _ = m_latestCommittedTransfer.Remove(key: incarnation);
+        }
+        if (!m_committedIncarnations.TryGetValue(key: key, value: out var incarnations)) {
+            return;
+        }
+        _ = incarnations.Remove(item: incarnation);
+        if (incarnations.Count == 0) {
+            RetireCommittedTransaction(key: key);
+        }
+    }
+
+    private void ReleaseLease(WorldTransferKey key) {
+        if (!m_leases.Remove(key: key, value: out var lease)) {
+            return;
+        }
+        foreach (var member in lease.Request.Members) {
+            var mobility = member.Mobility!.Value;
+            if (m_mobilityLeases.TryGetValue(key: mobility.Incarnation, value: out var mobilityLease) && (mobilityLease.Transfer == key)) {
+                _ = m_mobilityLeases.Remove(key: mobility.Incarnation);
+            }
+        }
+    }
+
+    private bool TryKnownMobilityEpoch(WorldEntityAddress incarnation, out ulong epoch) {
+        var found = false;
+        epoch = 0;
+        foreach (var pair in m_mobilityAdmissions) {
+            if ((pair.Key.Incarnation == incarnation) && (!found || (pair.Value.Epoch > epoch))) {
+                found = true;
+                epoch = pair.Value.Epoch;
+            }
+        }
+        return found;
     }
 
     private void PruneDepartedAdmissions() {
@@ -371,7 +565,7 @@ internal sealed class WorldTransferEscrow {
             var a = left.Members[index];
             var b = right.Members[index];
 
-            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || (a.Source != b.Source) || (a.BodyColor != b.BodyColor) || (a.CatalogRig != b.CatalogRig) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
+            if ((a.Principal != b.Principal) || (a.PreferredSlot != b.PreferredSlot) || (a.Source != b.Source) || (a.BodyColor != b.BodyColor) || (a.CatalogRig != b.CatalogRig) || (a.Mobility != b.Mobility) || !IdentityMatches(left: a.Identity, right: b.Identity)) {
                 return false;
             }
         }
@@ -413,7 +607,8 @@ internal sealed class WorldTransferEscrow {
                 || (a.Position != b.Position)
                 || (a.YawRadians != b.YawRadians)
                 || (a.PlanarVelocity != b.PlanarVelocity)
-                || (a.VerticalVelocity != b.VerticalVelocity)) {
+                || (a.VerticalVelocity != b.VerticalVelocity)
+                || (a.Continuum != b.Continuum)) {
                 return false;
             }
         }

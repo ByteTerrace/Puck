@@ -62,6 +62,33 @@ public sealed class WorldPopulation {
     /// <summary>The authored peer slice behind the reserved local seats.</summary>
     public int PeerCapacity => (Capacity - LocalSeatCount);
 
+    /// <summary>Reads or mints the stable mobility identity for one active occupant. A new local incarnation is
+    /// derived from the complete authority/index/generation address; a transferred incarnation retains its origin.</summary>
+    public WorldMobilityIdentity EnsureMobility(int index, string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
+        var entry = m_entries[index];
+        if (!entry.Active || (entry.Body is null)) {
+            throw new InvalidOperationException(message: $"body:{index} is not active");
+        }
+        if ((entry.Mobility is null) || (entry.MobilityGeneration != entry.Generation)) {
+            entry.Mobility = new WorldMobilityIdentity(
+                Incarnation: new WorldEntityAddress(Authority: authority, Index: index, Generation: entry.Generation),
+                Epoch: 0UL);
+            entry.MobilityGeneration = entry.Generation;
+        }
+        return entry.Mobility.Value;
+    }
+
+    /// <summary>Installs the committed mobility epoch on an already-admitted destination occupant.</summary>
+    public void SetMobility(int index, in WorldMobilityIdentity mobility) {
+        var entry = m_entries[index];
+        if (!entry.Active || (entry.Body is null)) {
+            throw new InvalidOperationException(message: $"body:{index} is not active");
+        }
+        entry.Mobility = mobility;
+        entry.MobilityGeneration = entry.Generation;
+    }
+
     /// <summary>The number of entity-table slots currently eligible for destination-authored census bodies. Inhabitants,
     /// connected humans, and authority-transferred entities are excluded wherever they sit; mapped handoff makes a
     /// low-index exclusion ordinary, so no packing-order or contiguous-floor assumption is valid.</summary>
@@ -307,7 +334,7 @@ public sealed class WorldPopulation {
         var bands = ((m_adjacencies is not null) ? WorldAdjacencyBands.CollectFrom(definition: definition) : []);
 
         m_contactField = ((m_adjacencies is { } source) && (bands.Count > 0))
-            ? new WorldAdjacencyContactField(definition: definition, inner: baseField, bands: bands, source: source)
+            ? new WorldAdjacencyContactField(inner: baseField, source: source)
             : baseField;
     }
 
@@ -1475,8 +1502,12 @@ public sealed class WorldPopulation {
     /// <param name="planarVelocity">The mapped (rotated) planar velocity.</param>
     /// <param name="verticalVelocity">The mapped (rotation-invariant) vertical velocity.</param>
     /// <param name="actionContinuity">Named held-edge and action-register state carried without assuming matching ordinals.</param>
+    /// <param name="continuum">The optional already-evaluated adjacency segment to resolve before this body may
+    /// participate in another ordinary simulation step. Portal and spawn arrivals omit it.</param>
+    /// <param name="destinationCompletedEngineTick">The destination authority's completed engine-time boundary at
+    /// admission. It raises the traveler's consumed-through fence when transport arrives after the source interval.</param>
     /// <returns><see langword="true"/> when the seat was active and its body was overridden.</returns>
-    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, WorldTransferActionContinuity? actionContinuity = null) {
+    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, WorldTransferActionContinuity? actionContinuity = null, WorldContinuumTrajectory? continuum = null, ulong destinationCompletedEngineTick = 0UL) {
         var entry = m_entries[slot];
 
         if (!entry.Active || (entry.Body is not { } body)) {
@@ -1492,6 +1523,9 @@ public sealed class WorldPopulation {
         body.SetArrivalVelocity(planarVelocity: planarVelocity, verticalVelocity: verticalVelocity);
         if (actionContinuity is not null) {
             body.ApplyTransferActionContinuity(continuity: actionContinuity, channels: m_channels);
+        }
+        if (continuum is { } trajectory) {
+            body.ApplyContinuumTrajectory(trajectory: in trajectory, entityIndex: slot, destinationCompletedEngineTick: destinationCompletedEngineTick);
         }
 
         return true;
@@ -1590,6 +1624,7 @@ public sealed class WorldPopulation {
     /// population advances before seats.</summary>
     /// <param name="tick">The explicit simulation tick.</param>
     /// <param name="stepTicks">The exact engine ticks this step advances.</param>
+    /// <param name="stepStartEngineTick">The inclusive engine-time boundary at which this authority step begins.</param>
     /// <param name="engageProbeOrdinals">Per-slot channel ordinal to probe for the context-sensitive-button rising
     /// edge, sentinel <c>-1</c> for "no probe", or empty for none
     /// at all — the zero-cost path every world without an <c>engageChannel</c>-bearing screen takes.</param>
@@ -1597,9 +1632,14 @@ public sealed class WorldPopulation {
     /// (the caller — <see cref="Puck.World.Server.WorldServer.Step"/> — routes each into
     /// <see cref="Puck.World.Server.WorldEngagement.Engage"/>). Every entry is written for an active slot; an inactive
     /// slot is left at the caller's own default (callers pass a freshly zeroed span).</param>
-    public void AdvanceSeats(ulong tick, ulong stepTicks, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges) {
+    public void AdvanceSeats(ulong tick, ulong stepTicks, ulong stepStartEngineTick, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot] is { Active: true, Body: { } body } entry) {
+                if (!body.TryBeginOrdinaryAdvance(stepStartEngineTick: stepStartEngineTick)) {
+                    engageEdges[slot] = false;
+                    continue;
+                }
+
                 StageProducer(entry: entry, body: body, index: slot, stepTicks: stepTicks);
 
                 var probe = ((!engageProbeOrdinals.IsEmpty && (engageProbeOrdinals[slot] >= 0)) ? engageProbeOrdinals[slot] : (int?)null);
@@ -1624,7 +1664,7 @@ public sealed class WorldPopulation {
 
         for (var index = 0; index < Capacity; index++) {
             if (!m_entries[index].Active || (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: { } collider } body)) {
+                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true } body)) {
                 continue;
             }
 
@@ -1802,7 +1842,7 @@ public sealed class WorldPopulation {
     /// its whole SDF program once and a bad-op world already fails loudly at boot/apply if it cannot (attach+solid
     /// stays refused there, see the document validator).</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    public void AdvanceSimulated(ulong tick, ulong stepTicks) {
+    public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
@@ -1813,6 +1853,10 @@ public sealed class WorldPopulation {
             // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
             // transport/possession supplies intents). An inactive entry has no body.
             if (!entry.Active || (entry.Kind == PopulationKind.LocalSeat) || (entry.Body is not { } player)) {
+                continue;
+            }
+
+            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: stepStartEngineTick)) {
                 continue;
             }
 
@@ -2445,6 +2489,10 @@ public sealed class WorldPopulation {
         public required PopulationKind Kind { get; init; }
         // Bumped every time this peer slot transitions inactive -> active. Never reset on disconnect.
         public int Generation { get; set; }
+        // The stable cross-authority incarnation/epoch and the local generation whose occupant owns it. The stamp
+        // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.
+        public WorldMobilityIdentity? Mobility { get; set; }
+        public int MobilityGeneration { get; set; }
         // The placement row this peer inhabits (null for a plain census peer or an empty slot) — the back-reference the
         // frame source and anchor resolver look up by, and the flag that marks a peer as an inhabitant. Set/cleared by
         // ReconcileInhabitants.

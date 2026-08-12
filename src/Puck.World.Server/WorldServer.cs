@@ -292,6 +292,7 @@ public sealed class WorldServer : IWorldServerHost {
     // point on the tick thread) can stamp itself with the server's actual current tick/step width rather than the
     // literal 0/0 that is only honest before the first Step has ever run — see BuildPrimerSnapshot.
     private ulong m_lastStepTicks;
+    private ulong m_lastCompletedEngineTicks;
 
     /// <summary>Gets the optional host sink for the player-keyed durable writes emitted by each completed tick.</summary>
     public Action<IReadOnlyList<DurableStateOutput>>? DurableStateOutputTap { get; set; }
@@ -300,6 +301,12 @@ public sealed class WorldServer : IWorldServerHost {
 
     /// <summary>Gets the tick a durable input submitted during the current command window must name.</summary>
     public ulong NextInputTick => (m_lastCompletedTick + 1UL);
+
+    /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
+    public ulong CompletedEngineTicks => m_lastCompletedEngineTicks;
+
+    /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
+    public ulong LastStepTicks => m_lastStepTicks;
 
     /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
     /// colocation and the TCP authority door; callers never reserve population capacity by inspecting it directly.</summary>
@@ -328,6 +335,10 @@ public sealed class WorldServer : IWorldServerHost {
     public void AbortTransfer(string sourceAuthority, ulong transferId) =>
         ExecuteAuthorityOperation(operation: () => m_transferEscrow.Abort(sourceAuthority: sourceAuthority, transferId: transferId));
 
+    /// <summary>Retires the acknowledged transaction while preserving stable mobility replay protection.</summary>
+    public void AcknowledgeTransfer(string sourceAuthority, ulong transferId) =>
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Acknowledge(sourceAuthority: sourceAuthority, transferId: transferId));
+
     /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
     public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
         var resolved = default(WorldPrincipal);
@@ -336,9 +347,28 @@ public sealed class WorldServer : IWorldServerHost {
         return found;
     }
 
+    /// <summary>Resolves a stable incarnation/epoch credential without retaining its disposable transfer id.</summary>
+    public bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) {
+        var resolved = default(WorldPrincipal);
+        var credential = mobility;
+        var found = ExecuteAuthorityOperation(operation: () => m_transferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in credential, principal: out resolved));
+        principal = resolved;
+        return found;
+    }
+
+    /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
+    public void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
+        var credential = mobility;
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.RetireMobility(mobility: in credential));
+    }
+
     /// <summary>Returns the destination's idempotent view of a source-scoped transfer.</summary>
     public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
         ExecuteAuthorityOperation(operation: () => m_transferEscrow.Status(sourceAuthority: sourceAuthority, transferId: transferId));
+
+    /// <summary>Reads bounded transfer transaction, mobility credential, and in-flight mobility-lease counts.</summary>
+    public WorldTransferTableCounts TransferTableCounts =>
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.Counts);
 
     /// <summary>Reads the authenticated source-border identity for an active escrow-arrived body. Callers already
     /// under the authority operation gate use this to apply reciprocal adjacency hysteresis.</summary>
@@ -1613,6 +1643,7 @@ public sealed class WorldServer : IWorldServerHost {
         m_mutationBudget.BeginTick();
         m_addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
+        TransferForwarder?.ResolveContinuations(source: this);
         m_inputHold.PrepareParticipants(population: m_population);
 
         m_tickWrittenCount = 0;
@@ -1650,8 +1681,9 @@ public sealed class WorldServer : IWorldServerHost {
 
         var tick = (context.Tick + 1UL);
         m_population.Adjacencies?.BeginTick(tick: tick);
-        m_population.AdvanceSimulated(tick: tick, stepTicks: context.StepTicks);
-        m_population.AdvanceSeats(tick: tick, stepTicks: context.StepTicks, engageProbeOrdinals: engageProbeOrdinals, engageEdges: engageEdges);
+        var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
+        m_population.AdvanceSimulated(tick: tick, stepTicks: context.StepTicks, stepStartEngineTick: stepStartEngineTick);
+        m_population.AdvanceSeats(tick: tick, stepTicks: context.StepTicks, stepStartEngineTick: stepStartEngineTick, engageProbeOrdinals: engageProbeOrdinals, engageEdges: engageEdges);
         m_population.ResolveDynamicContacts();
         m_population.CompleteStep(tick: tick);
         foreach (var designation in m_population.DesignationOutputs) {
@@ -1751,6 +1783,7 @@ public sealed class WorldServer : IWorldServerHost {
         EmitSnapshot(tick: (context.Tick + 1UL), stepTicks: context.StepTicks);
         m_lastCompletedTick = (context.Tick + 1UL);
         m_lastStepTicks = context.StepTicks;
+        m_lastCompletedEngineTicks = context.ElapsedTicks;
     }
 
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>CLAUDE.md</c>'s

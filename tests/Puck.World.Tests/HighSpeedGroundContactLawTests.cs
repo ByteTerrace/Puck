@@ -25,7 +25,7 @@ public sealed class HighSpeedGroundContactLawTests {
         var position = new FixedVector3(
             X: FixedQ4816.Zero,
             Y: FixedQ4816.FromDouble(value: -0.2),
-            Z: FixedQ4816.FromDouble(value: 11.47));
+            Z: FixedQ4816.FromDouble(value: 7.9));
         var velocity = new FixedVector3(
             X: FixedQ4816.Zero,
             Y: FixedQ4816.FromDouble(value: verticalVelocity),
@@ -35,6 +35,34 @@ public sealed class HighSpeedGroundContactLawTests {
 
         Assert.True(position.Y > FixedQ4816.Zero, userMessage: $"edge penetration extracted below the floor: {(double)position.Y:0.###}");
         Assert.True(resolution.Grounded, userMessage: "edge penetration did not settle as an approached top contact");
+    }
+
+    [Fact]
+    public void AnisotropicallyScaledFloorHasNoContactBeyondItsRenderedEdge() {
+        var definition = ThinFloorDocument(requireField: true);
+        Assert.True(WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
+        var collider = FixedWorldCollider.Compile(collider: definition.Kits[0].Collider, creations: definition.Creations)!.Value;
+        var position = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: 20L),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero);
+        var originalPosition = position;
+        var velocity = new FixedVector3(
+            X: FixedQ4816.FromInteger(value: -8L),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero);
+        var originalVelocity = velocity;
+
+        Assert.True(field!.Probe(position: in position, distance: out var distance, material: out _, gradient: out _));
+        var resolution = field.Resolve(position: ref position, velocity: ref velocity,
+            orientation: FixedQuaternion.Identity, volumes: collider.Volumes);
+
+        Assert.True(distance > FixedQ4816.FromDouble(value: 10.5),
+            userMessage: $"the floor's contact metric still reports a distant point as nearby; distance={(double)distance:0.###}");
+        Assert.Equal(expected: originalPosition, actual: position);
+        Assert.Equal(expected: originalVelocity, actual: velocity);
+        Assert.False(resolution.Grounded);
+        Assert.Equal(expected: FixedVector3.Zero, actual: resolution.ObstructionNormal);
     }
 
     [Fact]
@@ -72,6 +100,39 @@ public sealed class HighSpeedGroundContactLawTests {
     }
 
     [Theory]
+    [InlineData(5)]
+    [InlineData(50)]
+    [InlineData(500)]
+    public void AdjacencyContinuationSweepsDestinationTerrainBeforeAnotherAuthorityStep(int distance) {
+        using var fixture = Fixtures.FreshServer(definition: ThinFloorDocument(requireField: true));
+        var actor = WorldPrincipal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var trajectory = new WorldContinuumTrajectory(
+            PreviousPosition: new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(value: distance), FixedQ4816.Zero),
+            SourceTick: 17,
+            ContinuumStartEngineTick: 0,
+            ContinuumEndEngineTick: EngineTicks.PerRate(ratePerSecond: 30),
+            ConsumedThroughEngineTick: EngineTicks.PerRate(ratePerSecond: 30),
+            BoundaryEvents: 1);
+
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromInteger(value: -distance), FixedQ4816.Zero),
+            yawRadians: FixedQ4816.Zero,
+            planarVelocity: FixedVector3.Zero,
+            verticalVelocity: FixedQ4816.FromInteger(value: -(distance * 8)),
+            continuum: trajectory));
+
+        Assert.True(body.FixedPosition.Y >= FixedQ4816.Zero,
+            userMessage: $"destination continuation skipped the intervening thin floor; y={(double)body.FixedPosition.Y:0.###}");
+        Assert.True(body.Grounded);
+        Assert.Equal(expected: trajectory, actual: body.PendingContinuum);
+    }
+
+    [Theory]
     [InlineData(30U)]
     [InlineData(60U)]
     public void TerminalFallLandsOnThinAuthoredFloor(uint rateHz) {
@@ -82,7 +143,7 @@ public sealed class HighSpeedGroundContactLawTests {
         // slab by luck while its neighbour skips from above the expanded contact band to below it.
         for (var phase = 0; (phase < 24); phase++) {
             AssertLanding(rateHz: rateHz, stepTicks: stepTicks, startY: (8f + (terminalStep * phase / 24f)), x: 0f, z: 0f);
-            AssertLanding(rateHz: rateHz, stepTicks: stepTicks, startY: (8f + (terminalStep * phase / 24f)), x: 10.7f, z: 10.77f);
+            AssertLanding(rateHz: rateHz, stepTicks: stepTicks, startY: (8f + (terminalStep * phase / 24f)), x: 7.7f, z: 7.77f);
         }
 
         static void AssertLanding(uint rateHz, ulong stepTicks, float startY, float x, float z) {

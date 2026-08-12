@@ -10,13 +10,13 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>A committed body's immutable address on one remote authority hop.</summary>
-internal readonly record struct WorldRemoteRouteCredential(int BodyIndex, string SourceAuthority, ulong TransferId, int Ordinal);
+internal readonly record struct WorldRemoteRouteCredential(int BodyIndex, string SourceAuthority, WorldMobilityIdentity Mobility);
 
 /// <summary>The remote implementation of the authority contract used by transfer and continuous projection.</summary>
 internal sealed class WorldRemoteAuthority : IDisposable {
     private IPEndPoint m_endpoint;
     private readonly CancellationTokenSource m_lifetime;
-    private readonly Dictionary<int, (string SourceAuthority, ulong TransferId, int Ordinal)> m_credentials = new();
+    private readonly Dictionary<int, (string SourceAuthority, WorldMobilityIdentity Mobility)> m_credentials = new();
     private readonly ConcurrentDictionary<string, FederatedIntentPump> m_intentPumps = new(comparer: StringComparer.Ordinal);
     private readonly WorldFederatedServerLink m_link;
     private readonly WorldFederationSecurity m_security;
@@ -88,9 +88,9 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                 var bodyIndex = reply.BodyIndices[ordinal];
                 if (m_credentials.TryGetValue(key: bodyIndex, value: out var previous) &&
                     m_intentPumps.TryGetValue(key: previous.SourceAuthority, value: out var previousPump)) {
-                    previousPump.Retire(transferId: previous.TransferId, ordinal: previous.Ordinal);
+                    previousPump.Retire(mobility: previous.Mobility);
                 }
-                m_credentials[bodyIndex] = (request.SourceAuthority, request.TransferId, ordinal);
+                m_credentials[bodyIndex] = (request.SourceAuthority, request.Members[ordinal].Mobility!.Value.Advance());
             }
         }
         return reply;
@@ -113,6 +113,10 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     public void Abort(string sourceAuthority, ulong transferId) {
         _ = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Abort, body: WorldFederationWireFormat.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId));
+    }
+
+    public void Acknowledge(string sourceAuthority, ulong transferId) {
+        _ = RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.AcknowledgeTransfer, body: WorldFederationWireFormat.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId));
     }
 
     public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
@@ -140,28 +144,25 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         m_intentPumps.Clear();
     }
 
-    internal bool TryCredential(int bodyIndex, out string sourceAuthority, out ulong transferId, out int ordinal) {
+    internal bool TryCredential(int bodyIndex, out string sourceAuthority, out WorldMobilityIdentity mobility) {
         if (m_submissionCredential is { } captured) {
             sourceAuthority = captured.SourceAuthority;
-            transferId = captured.TransferId;
-            ordinal = captured.Ordinal;
+            mobility = captured.Mobility;
             return true;
         }
 
         if ((bodyIndex < 0) && (m_credentials.Count > 0)) {
             var first = m_credentials.OrderBy(pair => pair.Key).First().Value;
             sourceAuthority = first.SourceAuthority;
-            transferId = first.TransferId;
-            ordinal = first.Ordinal;
+            mobility = first.Mobility;
             return true;
         }
         if (m_credentials.TryGetValue(key: bodyIndex, value: out var credential)) {
             sourceAuthority = credential.SourceAuthority;
-            transferId = credential.TransferId;
-            ordinal = credential.Ordinal;
+            mobility = credential.Mobility;
             return true;
         }
-        sourceAuthority = string.Empty; transferId = 0; ordinal = -1; return false;
+        sourceAuthority = string.Empty; mobility = default; return false;
     }
 
     internal bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential) {
@@ -169,8 +170,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             credential = captured;
             return true;
         }
-        if (TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
-            credential = new WorldRemoteRouteCredential(BodyIndex: bodyIndex, SourceAuthority: sourceAuthority, TransferId: transferId, Ordinal: ordinal);
+        if (TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, mobility: out var mobility)) {
+            credential = new WorldRemoteRouteCredential(BodyIndex: bodyIndex, SourceAuthority: sourceAuthority, Mobility: mobility);
             return true;
         }
 
@@ -191,7 +192,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         var target = (m_submissionAuthority ?? this);
         var stamped = submission with { EntityIndex = credential.BodyIndex };
         var pump = target.m_intentPumps.GetOrAdd(key: credential.SourceAuthority, valueFactory: authority => new FederatedIntentPump(owner: target, sourceAuthority: authority));
-        pump.Publish(transferId: credential.TransferId, ordinal: credential.Ordinal, submission: in stamped);
+        pump.Publish(mobility: credential.Mobility, submission: in stamped);
 
         reason = string.Empty;
         return true;
@@ -210,7 +211,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     internal bool TryDescribeRoute(in WorldRemoteRouteCredential credential, out WorldAuthorityRouteDescription route, out string reason) {
         route = default;
         var target = (m_submissionAuthority ?? this);
-        var response = target.RoundTrip(sourceAuthority: credential.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Route, body: WorldFederationWireFormat.EncodeRouteCredential(sourceAuthority: credential.SourceAuthority, transferId: credential.TransferId, ordinal: credential.Ordinal));
+        var mobility = credential.Mobility;
+        var response = target.RoundTrip(sourceAuthority: credential.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Route, body: WorldFederationWireFormat.EncodeRouteCredential(sourceAuthority: credential.SourceAuthority, mobility: in mobility));
         if ((response.Kind != WorldFederationWireFormat.ResponseKind.Route) || !WorldFederationWireFormat.TryDecodeRoute(body: response.Body, route: out route)) {
             reason = DecodeRefusal(response);
             return false;
@@ -237,7 +239,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return false;
         }
 
-        var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: credential.SourceAuthority, transferId: credential.TransferId, ordinal: credential.Ordinal, frame: canonical);
+        var mobility = credential.Mobility;
+        var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: credential.SourceAuthority, mobility: in mobility, frame: canonical);
         var target = (m_submissionAuthority ?? this);
         var response = target.RoundTrip(sourceAuthority: credential.SourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
         if (response.Kind != WorldFederationWireFormat.ResponseKind.Completion) {
@@ -424,7 +427,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     private void InvalidateAcknowledgement(in WorldRemoteRouteCredential credential) {
         if ((m_submissionAuthority ?? this).m_intentPumps.TryGetValue(key: credential.SourceAuthority, value: out var pump)) {
-            pump.InvalidateAcknowledgement(transferId: credential.TransferId, ordinal: credential.Ordinal);
+            pump.InvalidateAcknowledgement(mobility: credential.Mobility);
         }
     }
 
@@ -469,8 +472,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
         }
 
-        public void Publish(ulong transferId, int ordinal, in IntentSubmission submission) {
-            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+        public void Publish(WorldMobilityIdentity mobility, in IntentSubmission submission) {
+            var key = new IntentKey(Mobility: mobility);
             if (m_acknowledged.TryGetValue(key: key, value: out var acknowledged) &&
                 (acknowledged.Submission == submission) &&
                 (Stopwatch.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < TimeSpan.FromSeconds(1))) {
@@ -484,16 +487,16 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
         }
 
-        public void InvalidateAcknowledgement(ulong transferId, int ordinal) {
-            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+        public void InvalidateAcknowledgement(WorldMobilityIdentity mobility) {
+            var key = new IntentKey(Mobility: mobility);
             if (m_acknowledged.TryRemove(key: key, value: out var acknowledged)) {
                 m_pending[key] = acknowledged.Submission;
             }
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
         }
 
-        public void Retire(ulong transferId, int ordinal) {
-            var key = new IntentKey(TransferId: transferId, Ordinal: ordinal);
+        public void Retire(WorldMobilityIdentity mobility) {
+            var key = new IntentKey(Mobility: mobility);
             _ = m_pending.TryRemove(key: key, value: out _);
             _ = m_acknowledged.TryRemove(key: key, value: out _);
         }
@@ -565,7 +568,8 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                         return;
                     }
                     var sent = pair.Value;
-                    var body = WorldFederationWireFormat.EncodeIntent(sourceAuthority: m_sourceAuthority, transferId: pair.Key.TransferId, ordinal: pair.Key.Ordinal, submission: in sent);
+                    var mobility = pair.Key.Mobility;
+                    var body = WorldFederationWireFormat.EncodeIntent(sourceAuthority: m_sourceAuthority, mobility: in mobility, submission: in sent);
                     await WorldFederationWireFormat.WriteRequestAsync(stream: stream, kind: WorldFederationWireFormat.RequestKind.Intent, body: body, ct: ct).ConfigureAwait(false);
                     var response = await WorldFederationWireFormat.ReadFrameAsync(stream: stream, ct: ct).ConfigureAwait(false);
                     if ((response is null) || (response.Value.Kind != (byte)WorldFederationWireFormat.ResponseKind.Ack)) {
@@ -605,7 +609,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
         }
 
-        private readonly record struct IntentKey(ulong TransferId, int Ordinal);
+        private readonly record struct IntentKey(WorldMobilityIdentity Mobility);
         private readonly record struct AcknowledgedIntent(IntentSubmission Submission, long Timestamp);
     }
 }

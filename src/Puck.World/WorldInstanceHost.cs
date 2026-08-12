@@ -82,8 +82,18 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
-    private readonly ConcurrentDictionary<(WorldServer Server, WorldPrincipal Principal), ForwardedBody> m_forwardedBodies = [];
+    private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
     private readonly record struct ForwardedBody(WorldRemoteAuthority Authority, WorldRemoteRouteCredential Credential);
+
+    /// <inheritdoc/>
+    public void ResolveContinuations(WorldServer source) {
+        foreach (var instance in m_instances.Values) {
+            if (ReferenceEquals(objA: instance.Server, objB: source)) {
+                ScanInstanceAdjacencies(instance: instance, resolveOnly: true);
+                return;
+            }
+        }
+    }
     // Every instance shares the machine's own persisted id — it identifies the MACHINE, not a world, so minting a
     // fresh one per instance would both misreport the machine and put a Guid.NewGuid() on a boot path.
     private readonly Guid m_machineId;
@@ -200,9 +210,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     public bool TryGet(string name, out WorldInstance? instance) => m_instances.TryGetValue(key: name, value: out instance);
 
     /// <inheritdoc/>
-    public bool TryForwardIntent(WorldServer source, WorldPrincipal principal, in IntentSubmission submission, out string reason) {
-        if (!m_forwardedBodies.TryGetValue(key: (source, principal), value: out var route)) {
-            reason = $"{principal.Describe()} has no committed onward route";
+    public bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason) {
+        if (!m_forwardedBodies.TryGetValue(key: (source, mobility.Incarnation), value: out var route)) {
+            reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 
@@ -211,10 +221,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     }
 
     /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldServer source, WorldPrincipal principal, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
-        if (!m_forwardedBodies.TryGetValue(key: (source, principal), value: out var route)) {
+    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+        if (!m_forwardedBodies.TryGetValue(key: (source, mobility.Incarnation), value: out var route)) {
             result = null;
-            reason = $"{principal.Describe()} has no committed onward route";
+            reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 
@@ -222,16 +232,16 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         var accepted = route.Authority.TryForwardSubmission(credential: in credential, payload: RebindForwardedPayload(payload: payload, bodyIndex: credential.BodyIndex), result: out result, reason: out reason);
         if (accepted && (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
             (result is WorldSubmissionResult.Session { Reply.Accepted: true })) {
-            _ = m_forwardedBodies.TryRemove(key: (source, principal), value: out _);
+            _ = m_forwardedBodies.TryRemove(key: (source, mobility.Incarnation), value: out _);
         }
         return accepted;
     }
 
     /// <inheritdoc/>
-    public bool TryDescribeForwarding(WorldServer source, WorldPrincipal principal, out WorldAuthorityRouteDescription routeDescription, out string reason) {
-        if (!m_forwardedBodies.TryGetValue(key: (source, principal), value: out var route)) {
+    public bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription routeDescription, out string reason) {
+        if (!m_forwardedBodies.TryGetValue(key: (source, mobility.Incarnation), value: out var route)) {
             routeDescription = default;
-            reason = $"{principal.Describe()} has no committed onward route";
+            reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 
@@ -1102,6 +1112,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// fallback for a cohort member with no entry — a <c>party</c>-travel passenger swept along without personally
     /// crossing the aperture. <see langword="null"/> for a non-resolver transfer (console <c>world.transfer</c>,
     /// which carries no per-hit data at all) or <c>Spawn</c>.</param>
+    /// <param name="Continuum">The source-step interval and geometric cursor captured by an adjacency scan. Null
+    /// for portal furniture and ordinary spawn transfers.</param>
     /// <param name="HoldSeconds">The authored binding lease duration.</param>
     /// <param name="FullPolicy">The authored full-border retry policy.</param>
     /// <param name="PartyAllOrNothing">Whether the cohort binds as one transaction.</param>
@@ -1130,6 +1142,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         FixedQ4816 SourceFaceSeamU,
         FixedQ4816 SourceFaceSeamV,
         IReadOnlyDictionary<int, MemberSeam>? MemberSeams,
+        WorldContinuumTrajectory? Continuum,
         double HoldSeconds,
         WorldTransferFullPolicy FullPolicy,
         bool PartyAllOrNothing,
@@ -1145,6 +1158,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // id resubmitted, e.g. world.transfer's transfer:<id> token) refuses by name rather than double-landing.
     // A diegetic portal crossing always mints a fresh id, so only an explicitly supplied id can collide.
     private readonly HashSet<(string SourceInstance, ulong TransferId)> m_appliedTransferIds = new();
+    private readonly Dictionary<string, ulong> m_appliedTransferHighWater = new(comparer: StringComparer.Ordinal);
     // Advances by exactly one per EnqueueTransfer call — a pure function of enqueue order, never wall-clock,
     // RNG, or tick-of-entry. Separate from the resolver's own generation id: a transfer id names one
     // crossing attempt, a generation id names the destination session many crossings can share. Sits
@@ -1159,7 +1173,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         ulong transferId;
         do {
             transferId = MintTransferId();
-        } while (m_appliedTransferIds.Contains(item: (sourceInstance, transferId)));
+        } while (m_appliedTransferIds.Contains(item: (sourceInstance, transferId)) ||
+            (m_appliedTransferHighWater.TryGetValue(key: sourceInstance, value: out var highWater) && (transferId <= highWater)));
 
         return transferId;
     }
@@ -1224,6 +1239,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <c>Up</c> — see <see cref="PendingTransfer.SourceFaceSeamV"/>. Omit for the ordinary spawn arrival.</param>
     /// <param name="memberSeams">Per-member seam overrides — see <see cref="PendingTransfer.MemberSeams"/>. Omit for
     /// a non-resolver transfer or the ordinary spawn arrival.</param>
+    /// <param name="continuum">The source-step interval captured by an adjacency scan. Omit for portals and spawns.</param>
     /// <param name="holdSeconds">The binding lease duration authored by the source world.</param>
     /// <param name="fullPolicy">Whether a full refusal remains retryable.</param>
     /// <param name="partyAllOrNothing">Whether the cohort binds as one transaction.</param>
@@ -1232,10 +1248,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceSeamPosition = default, FixedQ4816 sourceFaceYawRadians = default, WorldFaceFrame? sourceAdjacencyFrame = null, FixedQ4816 sourceFaceSeamU = default, FixedQ4816 sourceFaceSeamV = default, IReadOnlyDictionary<int, MemberSeam>? memberSeams = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceSeamPosition = default, FixedQ4816 sourceFaceYawRadians = default, WorldFaceFrame? sourceAdjacencyFrame = null, FixedQ4816 sourceFaceSeamU = default, FixedQ4816 sourceFaceSeamV = default, IReadOnlyDictionary<int, MemberSeam>? memberSeams = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
         var transferId = (explicitTransferId ?? MintTransferId());
 
-        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, AdjacencyCounterpart: adjacencyCounterpart, SourceSeamPosition: sourceSeamPosition, SourceFaceYawRadians: sourceFaceYawRadians, SourceAdjacencyFrame: sourceAdjacencyFrame, SourceFaceSeamU: sourceFaceSeamU, SourceFaceSeamV: sourceFaceSeamV, MemberSeams: memberSeams, HoldSeconds: holdSeconds, FullPolicy: fullPolicy, PartyAllOrNothing: partyAllOrNothing, BorderCapacity: borderCapacity, Border: (border ?? "transfer")));
+        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, AdjacencyCounterpart: adjacencyCounterpart, SourceSeamPosition: sourceSeamPosition, SourceFaceYawRadians: sourceFaceYawRadians, SourceAdjacencyFrame: sourceAdjacencyFrame, SourceFaceSeamU: sourceFaceSeamU, SourceFaceSeamV: sourceFaceSeamV, MemberSeams: memberSeams, Continuum: continuum, HoldSeconds: holdSeconds, FullPolicy: fullPolicy, PartyAllOrNothing: partyAllOrNothing, BorderCapacity: borderCapacity, Border: (border ?? "transfer")));
 
         return transferId;
     }
@@ -1243,9 +1259,9 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <summary>Drains every queued transfer at this host's one fixed point in its per-tick driving sequence —
     /// <c>WorldSimulation</c>/<c>HeadlessWorldSimulation</c> call this before stepping the boot instance or any other
     /// instance this tick (mirroring where <c>WorldServer.DrainPendingOps</c> sits relative to the rest of
-    /// <c>WorldServer.Step</c>'s own body), so a transfer that lands this tick is reflected in both instances' very
-    /// next <c>Server.Step</c> this same tick — every traveler is advanced exactly once, by whichever instance now
-    /// holds it, never by both and never by neither.</summary>
+    /// <c>WorldServer.Step</c>'s own body). An adjacency arrival carries the source step's consumed-through
+    /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
+    /// step skips that traveler without evaluating input, motion, or dynamic contact a second time.</summary>
     public void DrainPendingTransfers() {
         ReconcileInDoubtTransfers();
 
@@ -1346,8 +1362,13 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // junction tie is distributed by a stable hash of the entity generation and authority identity over the sorted
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
-    private void ScanInstanceAdjacencies(WorldInstance instance) {
+    private void ScanInstanceAdjacencies(WorldInstance instance, bool resolveOnly = false) {
         if (instance.Server.Definition.Adjacencies is not { Count: > 0 } adjacencies) {
+            if (resolveOnly) {
+                for (var index = 0; index < instance.Server.Population.Capacity; index++) {
+                    instance.Server.Population.EntryBody(index: index)?.ClearPendingContinuum();
+                }
+            }
             return;
         }
 
@@ -1361,29 +1382,41 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             }
 
             var frame = adjacency.Boundary.CompileFrame();
+            var ownershipThreshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in frame, reciprocalHysteresis: reciprocalHysteresis);
             for (var seat = 0; seat < population.Capacity; seat++) {
                 if (!population.IsActive(index: seat) || (population.EntryBody(index: seat) is not { } body)) {
                     continue;
                 }
+                if (resolveOnly && (body.PendingContinuum is null)) {
+                    continue;
+                }
 
                 // A remotely committed arrival bypasses this host's FinalizeCommittedTransfer path, but escrow
-                // retains the authenticated source border on the destination authority. Its reciprocal edge is a
-                // Schmitt latch, not a distance cap: it remains disarmed at ANY outward distance until this writer
-                // has observed the whole two-body contact envelope inside its owned half-space. Thus a seam melee's
-                // contact correction cannot manufacture immediate handback, while entering the new world genuinely
-                // re-arms an intentional return. Other edges remain eligible, preserving parameter-zero corner
-                // forwarding without letting the edge just crossed compete with them.
+                // retains the authenticated source border on the destination authority. Handoff now occurs at the
+                // FAR side of the reciprocal hysteresis, so a mapped arrival starts at least this far inside the new
+                // owner. A floor/ceiling adjacency transfers at its authored plane because offsetting the threshold
+                // would put an ascent beyond its usable traversal interval; its zero threshold also re-arms the
+                // reciprocal edge from the mapped arrival point. Test both ends of this step: a genuine reversal
+                // may cross the whole deadband in one tick and must not be stranded outside its owner merely because
+                // its settled endpoint is outward again.
+                // On a wall, the positive threshold itself prevents the strongest legal contact correction from
+                // manufacturing a return; a plane-based boundary clears from its mapped inside arrival point.
                 if (instance.Server.TryTransferArrivalBorder(bodyIndex: seat, border: out var arrivalBorder) &&
                     string.Equals(a: arrivalBorder, b: $"adjacency/{adjacency.Counterpart}", comparisonType: StringComparison.Ordinal)) {
+                    var previousOutward = FixedVector3.Dot(left: (body.FixedPreviousPosition - frame.Origin), right: frame.Normal);
                     var outward = FixedVector3.Dot(left: (body.FixedPosition - frame.Origin), right: frame.Normal);
-                    if (outward > -reciprocalHysteresis) {
+                    if ((previousOutward > -ownershipThreshold) && (outward > -ownershipThreshold)) {
                         continue;
                     }
 
                     _ = instance.Server.ClearTransferArrivalBorder(bodyIndex: seat, expectedBorder: arrivalBorder);
                 }
 
-                var crossing = WorldAdjacencyRegion.Sweep(frame: frame, from: body.FixedPreviousPosition, to: body.FixedPosition);
+                var crossing = WorldAdjacencyRegion.Sweep(
+                    frame: frame,
+                    from: body.FixedPreviousPosition,
+                    to: body.FixedPosition,
+                    outwardThreshold: ownershipThreshold);
                 if (!crossing.Crossed) {
                     continue;
                 }
@@ -1393,7 +1426,15 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         }
 
         for (var seat = 0; seat < candidates.Length; seat++) {
+            if (resolveOnly && (population.EntryBody(index: seat)?.PendingContinuum is null)) {
+                continue;
+            }
             if (candidates[seat] is not { Count: > 0 } hits) {
+                population.EntryBody(index: seat)?.ClearPendingContinuum();
+                continue;
+            }
+
+            if (resolveOnly) {
                 continue;
             }
 
@@ -1405,6 +1446,15 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 ? 0
                 : (int)(StableJunctionSeed(authority: instance.Server.AuthorityIdentity, entity: seat, generation: population.Generation(index: seat)) % (ulong)eligible.Length);
             var winner = eligible[choice];
+
+            if ((population.EntryBody(index: seat)?.PendingContinuum is { } pending) &&
+                (pending.BoundaryEvents >= WorldContinuumTrajectory.MaxBoundaryEvents)) {
+                var winnerFrame = winner.Frame;
+                population.EntryBody(index: seat)!.ClampContinuum(frame: in winnerFrame, seamU: winner.SeamU, seamV: winner.SeamV);
+                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]");
+                continue;
+            }
+
             EnqueueAdjacencyTransfer(instance: instance, hit: in winner);
         }
     }
@@ -1452,6 +1502,19 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         var memberSeams = new Dictionary<int, MemberSeam> {
             [hit.Seat] = new MemberSeam(SourcePosition: seamPosition, SeamU: hit.SeamU, SeamV: hit.SeamV),
         };
+        var sourceBody = instance.Server.Population.EntryBody(index: hit.Seat)!;
+        var continuum = sourceBody.PendingContinuum;
+        if (continuum is null) {
+            var end = instance.Server.CompletedEngineTicks;
+            var width = instance.Server.LastStepTicks;
+            continuum = new WorldContinuumTrajectory(
+                PreviousPosition: seamPosition,
+                SourceTick: (instance.Server.NextInputTick - 1UL),
+                ContinuumStartEngineTick: (end - width),
+                ContinuumEndEngineTick: end,
+                ConsumedThroughEngineTick: end,
+                BoundaryEvents: 0);
+        }
         var transferId = EnqueueTransfer(
             sourceInstance: instance.Name,
             scope: TransferScope.Body,
@@ -1470,6 +1533,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             sourceFaceSeamU: hit.SeamU,
             sourceFaceSeamV: hit.SeamV,
             memberSeams: memberSeams,
+            continuum: continuum,
             border: $"adjacency/{hit.Adjacency.Name.Value}"
         );
 
@@ -2031,7 +2095,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         WorldPeerEventEntry? Peer,
         IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
         IReadOnlyList<WorldGrant> SourceGrants,
-        WorldPrincipal SourcePrincipal
+        WorldPrincipal SourcePrincipal,
+        WorldMobilityIdentity Mobility
     );
 
     private sealed record InDoubtTransfer(
@@ -2060,6 +2125,13 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 Local.Server.AbortTransfer(sourceAuthority: sourceAuthority, transferId: transferId);
             } else {
                 Remote!.Abort(sourceAuthority: sourceAuthority, transferId: transferId);
+            }
+        }
+        public void Acknowledge(string sourceAuthority, ulong transferId) {
+            if (Local is not null) {
+                Local.Server.AcknowledgeTransfer(sourceAuthority: sourceAuthority, transferId: transferId);
+            } else {
+                Remote!.Acknowledge(sourceAuthority: sourceAuthority, transferId: transferId);
             }
         }
         public WorldTransferStatus Status(string sourceAuthority, ulong transferId) =>
@@ -2241,10 +2313,17 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // can never collide here on its own (it always mints a fresh id); only an explicitly-supplied id
         // (the verification seam) can.
         var appliedKey = (transfer.SourceInstance, transfer.TransferId);
-        if (!m_appliedTransferIds.Add(item: appliedKey)) {
+        var hadAppliedHighWater = m_appliedTransferHighWater.TryGetValue(key: transfer.SourceInstance, value: out var previousAppliedHighWater);
+        if ((hadAppliedHighWater && (transfer.TransferId <= previousAppliedHighWater)) || !m_appliedTransferIds.Add(item: appliedKey)) {
             Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (already applied — refused rather than double-landing)]");
 
             return;
+        }
+        m_appliedTransferHighWater[transfer.SourceInstance] = transfer.TransferId;
+        var appliedSource = transfer.SourceInstance;
+        var appliedTransferId = transfer.TransferId;
+        foreach (var old in m_appliedTransferIds.Where(candidate => string.Equals(a: candidate.SourceInstance, b: appliedSource, comparisonType: StringComparison.Ordinal) && (candidate.TransferId < appliedTransferId)).ToArray()) {
+            _ = m_appliedTransferIds.Remove(item: old);
         }
 
         if (!m_instances.TryGetValue(key: transfer.SourceInstance, value: out var source)) {
@@ -2361,9 +2440,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             var sourceSlot = members[reservationIndex];
             var traveler = source.Server.ExecuteAuthorityOperation(operation: () => {
                 var body = source.Server.Population.EntryBody(index: sourceSlot);
-                return (Identity: body?.Profile, Source: body?.Source ?? IntentSource.Idle, BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot));
+                var mobility = source.Server.Population.EnsureMobility(index: sourceSlot, authority: source.Server.AuthorityIdentity);
+                return (Identity: body?.Profile, Source: body?.Source ?? IntentSource.Idle, BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
-            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor, CatalogRig: traveler.CatalogRig);
+            reservationMembers[reservationIndex] = new WorldTransferReservationMember(Principal: MemberTravelPrincipal(transfer: in transfer, slot: sourceSlot), PreferredSlot: sourceSlot, Identity: traveler.Identity, Source: traveler.Source, BodyColor: traveler.BodyColor, CatalogRig: traveler.CatalogRig, Mobility: traveler.Mobility);
         }
 
         var sourceAuthority = $"{m_machineId:N}/{transfer.SourceInstance}";
@@ -2403,6 +2483,11 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
             if (willRetry) {
                 _ = m_appliedTransferIds.Remove(item: appliedKey);
+                if (hadAppliedHighWater) {
+                    m_appliedTransferHighWater[transfer.SourceInstance] = previousAppliedHighWater;
+                } else {
+                    _ = m_appliedTransferHighWater.Remove(key: transfer.SourceInstance);
+                }
                 m_pendingTransfers.Enqueue(item: transfer);
             }
 
@@ -2546,12 +2631,13 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 break;
             }
 
-            landed.Add(item: new LandedMember(SourceSlot: sourceSlot, TargetSlot: reservedSlot, Profile: profile, BodyColor: bodyColor, Position: position, Yaw: yaw, DynamicState: dynamicState, Designations: designations, Peer: peer, AdmissionGrants: admissionGrants, SourceGrants: sourceGrants, SourcePrincipal: memberPrincipal));
+            landed.Add(item: new LandedMember(SourceSlot: sourceSlot, TargetSlot: reservedSlot, Profile: profile, BodyColor: bodyColor, Position: position, Yaw: yaw, DynamicState: dynamicState, Designations: designations, Peer: peer, AdmissionGrants: admissionGrants, SourceGrants: sourceGrants, SourcePrincipal: memberPrincipal, Mobility: reservationMembers[index].Mobility!.Value));
             var actionContinuity = source.Server.Population.NameTransferActionContinuity(slot: sourceSlot, state: dynamicState);
             var arrivalPosition = position;
             var arrivalYaw = yaw;
             var arrivalPlanarVelocity = dynamicState.PlanarVelocity;
             var arrivalVerticalVelocity = dynamicState.VerticalVelocity;
+            WorldContinuumTrajectory? continuum = null;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
             // (WorldPortalArrivalMath.ComputeArrival), then rotates the captured velocity the same way —
@@ -2598,9 +2684,27 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 arrivalYaw = mapped.YawRadians;
                 arrivalPlanarVelocity = mapped.PlanarVelocity;
                 arrivalVerticalVelocity = mapped.VerticalVelocity;
+
+                // An adjacency is not a teleport: this source step has already evaluated input, actions, authored
+                // motion, gravity, and timers. The destination receives only the remaining geometric image from its
+                // counterpart seam to the mapped endpoint. If that image crosses another owner, the original source
+                // tick/width stays unchanged and only the bounded face count advances. Ordinary portal furniture
+                // deliberately carries no continuum payload and retains its historic arrival behavior.
+                if (transfer.AdjacencyCounterpart is not null) {
+                    var prior = transfer.Continuum ?? dynamicState.PendingContinuum
+                        ?? throw new InvalidOperationException(message: "adjacency transfer carries no continuum interval");
+                    var boundaryEvents = checked((byte)(prior.BoundaryEvents + 1));
+                    continuum = new WorldContinuumTrajectory(
+                        PreviousPosition: memberDestinationPosition,
+                        SourceTick: prior.SourceTick,
+                        ContinuumStartEngineTick: prior.ContinuumStartEngineTick,
+                        ContinuumEndEngineTick: prior.ContinuumEndEngineTick,
+                        ConsumedThroughEngineTick: Math.Max(prior.ConsumedThroughEngineTick, source.Server.CompletedEngineTicks),
+                        BoundaryEvents: boundaryEvents);
+                }
             }
 
-            commitMembers.Add(item: new WorldTransferCommitMember(Profile: profile, HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped), BodyMotionProgramName: dynamicState.BodyMotionProgramName, Position: arrivalPosition, YawRadians: arrivalYaw, PlanarVelocity: arrivalPlanarVelocity, VerticalVelocity: arrivalVerticalVelocity, ActionContinuity: actionContinuity));
+            commitMembers.Add(item: new WorldTransferCommitMember(Profile: profile, HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped), BodyMotionProgramName: dynamicState.BodyMotionProgramName, Position: arrivalPosition, YawRadians: arrivalYaw, PlanarVelocity: arrivalPlanarVelocity, VerticalVelocity: arrivalVerticalVelocity, ActionContinuity: actionContinuity, Continuum: continuum));
         }
 
         if ((abortReason is null) && (transfer.TestForceJoinRefusalOrdinal is { } forcedOrdinal)) {
@@ -2672,7 +2776,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 if (!forwardedAuthority.TryRouteCredential(bodyIndex: member.TargetSlot, credential: out var credential)) {
                     throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
                 }
-                m_forwardedBodies[(sourceInstance.Server, member.SourcePrincipal)] = new ForwardedBody(Authority: forwardedAuthority, Credential: credential);
+                m_forwardedBodies[(sourceInstance.Server, member.Mobility.Incarnation)] = new ForwardedBody(Authority: forwardedAuthority, Credential: credential);
             }
 
             if (targetAuthority.Local is { } target) {
@@ -2717,7 +2821,11 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     }
 
                     var trackedSlot = followedSlot;
-                    var routeName = $"$traveler/{m_machineId:N}/{transfer.TransferId}/{trackedSlot}";
+                    // One route wrapper per local traveler, not per crossing. Its stable mobility credential follows
+                    // the committed onward route recursively, so replacing the wrapper here would tear down a live
+                    // intent stream between ownership epochs and manufacture an unavailable/release window. Keying
+                    // this cache by transfer id leaked one route, pump and observer for every A↔B seam crossing.
+                    var routeName = $"$traveler/{m_machineId:N}/{trackedSlot}";
                     if (!m_remoteAuthorities.TryGetValue(key: routeName, value: out var routeAuthority)) {
                         WorldAuthorityEndpoint? publishedEndpoint = null;
                         routeAuthority = new WorldRemoteAuthority(
@@ -2787,6 +2895,16 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // already refuses a RETAINED (persistent) name.
         if (spawned && (landed.Count == 0)) {
             ReapIfEmpty(name: targetName);
+        }
+
+        // Source publication is now complete; the destination can discard transaction-shaped exact-retry payload.
+        // Until it observes this acknowledgement it retains the exact committed outcome; a later mobility epoch for
+        // the same incarnation supersedes that tombstone, so lost acknowledgements remain bounded by live travelers
+        // rather than accumulating once per seam crossing.
+        try {
+            targetAuthority.Acknowledge(sourceAuthority: $"{m_machineId:N}/{transfer.SourceInstance}", transferId: transfer.TransferId);
+        } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} cleanup acknowledgement deferred ({exception.GetType().Name}: {exception.Message})]");
         }
 
         // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.

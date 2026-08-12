@@ -640,11 +640,11 @@ internal sealed class WorldStampPool {
         _ = builder.EndInstance();
     }
 
-    // One shape's emission: ResetPoint + TransformDynamic + Scale + [mirror/twist/bend point ops] + the primitive +
+    // One shape's emission: ResetPoint + TransformDynamic + [mirror/twist/bend point ops] + the scaled primitive +
     // [dilate/onion field ops, scoped outside a group] — the fixed op sequence over the canonical
     // CreationGeometry dimensions. probeWorstCase emits EVERY op unconditionally (the probe binding rule).
     private static void EmitShape(SdfProgramBuilder builder, int slot, AvatarPrimitive type, int material, Vector3 scale, bool probeWorstCase, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool mirror = false, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false) {
-        var chain = builder.ResetPoint().TransformDynamic(slot: slot).Scale(scale: scale);
+        var chain = builder.ResetPoint().TransformDynamic(slot: slot);
 
         if (probeWorstCase || mirror) {
             chain = chain.SymmetryX();
@@ -662,7 +662,7 @@ internal sealed class WorldStampPool {
         var wantsOnion = (probeWorstCase || (onion != 0f));
 
         if ((wantsDilate || wantsOnion) && !inGroupScope) {
-            var scoped = CreationGeometry.AppendPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, smooth: 0f, type: type);
+            var scoped = CreationGeometry.AppendScaledPrimitive(blend: SdfBlendOp.Union, chain: chain.PushField(compose: blend, smooth: smooth), material: material, scale: scale, smooth: 0f, type: type);
 
             if (wantsDilate) {
                 scoped = scoped.Dilate(radius: (probeWorstCase ? ShapeDocument.MaxDilate : dilate));
@@ -677,7 +677,7 @@ internal sealed class WorldStampPool {
             return;
         }
 
-        var afterShape = CreationGeometry.AppendPrimitive(blend: blend, chain: chain, material: material, smooth: smooth, type: type);
+        var afterShape = CreationGeometry.AppendScaledPrimitive(blend: blend, chain: chain, material: material, scale: scale, smooth: smooth, type: type);
 
         if (wantsDilate) {
             afterShape = afterShape.Dilate(radius: (probeWorstCase ? ShapeDocument.MaxDilate : dilate));

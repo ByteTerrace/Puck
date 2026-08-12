@@ -35,14 +35,15 @@ public interface IWorldAdjacencySource {
     /// <returns><see langword="true"/> when the neighbour is currently reachable and its counterpart face resolves.</returns>
     bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour);
 
-    /// <summary>Returns the deterministic render/interest projection set: every direct edge plus compiler-derived
-    /// corner peers reachable through two different direct neighbours. Corner peers observe but never own a
-    /// crossing; their path maps terrain and entity poses through the same reciprocal frames as both edges.</summary>
+    /// <summary>Returns the deterministic contact/render/interest projection set: every direct edge plus
+    /// compiler-derived corner peers reachable through two different direct neighbours. Corner peers observe and
+    /// provide geometry contact but never own a crossing; their path maps terrain and entity poses through the same
+    /// reciprocal frames as both edges.</summary>
     IReadOnlyList<WorldAdjacencyProjection> Visuals();
 }
 
 /// <summary>One neighbour-to-source mapping stage.</summary>
-public readonly record struct WorldAdjacencyFramePair(WorldFaceFrame Neighbour, WorldFaceFrame Source);
+public readonly record struct WorldAdjacencyFramePair(WorldFaceFrame Neighbour, WorldFaceFrame Source, FixedQ4816 OverlapDepth);
 
 /// <summary>One direct or compiler-derived corner projection.</summary>
 public sealed record WorldAdjacencyProjection(string Name, IWorldAdjacencyNeighbour Neighbour, IReadOnlyList<WorldAdjacencyFramePair> Path, FixedQ4816 OverlapDepth, bool Direct);

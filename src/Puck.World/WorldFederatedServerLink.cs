@@ -69,7 +69,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(bodyIndex: -1, payload: payload);
 
     private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
-        if (!m_authority.TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, transferId: out var transferId, ordinal: out var ordinal)) {
+        if (!m_authority.TryCredential(bodyIndex: bodyIndex, sourceAuthority: out var sourceAuthority, mobility: out var mobility)) {
             NoteUnavailable(bodyIndex: bodyIndex, reason: "committed transfer credential is unavailable");
             return null;
         }
@@ -80,7 +80,7 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
         (WorldFederationWireFormat.ResponseKind Kind, byte[] Body) response;
         try {
-            var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: sourceAuthority, transferId: transferId, ordinal: ordinal, frame: canonical);
+            var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: sourceAuthority, mobility: in mobility, frame: canonical);
             response = m_authority.RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
         } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
             NoteUnavailable(bodyIndex: bodyIndex, reason: $"{exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");

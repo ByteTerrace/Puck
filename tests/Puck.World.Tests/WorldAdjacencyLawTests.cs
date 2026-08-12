@@ -58,8 +58,92 @@ public sealed class WorldAdjacencyLawTests {
 
         Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(first, second, out var forward, out var forwardReason), forwardReason);
         Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(second, first, out var reverse, out var reverseReason), reverseReason);
+        Assert.True(WorldAdjacencyPolicy.TryReciprocalHysteresis(first, out var firstHysteresis, out var firstReason), firstReason);
+        Assert.True(WorldAdjacencyPolicy.TryReciprocalHysteresis(second, out var secondHysteresis, out var secondReason), secondReason);
         Assert.Equal(forward, reverse);
         Assert.True(forward > FixedQ4816.Zero);
+        Assert.True(forward >= firstHysteresis);
+        Assert.True(forward >= secondHysteresis);
+    }
+
+    [Fact]
+    public void ReciprocalHysteresisFormsAClosedOwnershipDeadbandForRapidReversal() {
+        var source = Boundary(yaw: 90f).CompileFrame();
+        var destination = Boundary(yaw: -90f).CompileFrame();
+        var hysteresis = FixedQ4816.FromDouble(value: 0.72);
+        var sourceThreshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in source, reciprocalHysteresis: hysteresis);
+        var destinationThreshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in destination, reciprocalHysteresis: hysteresis);
+
+        var seamZig = WorldAdjacencyRegion.Sweep(
+            frame: source,
+            from: Fixed(x: -0.1, y: 0, z: 0),
+            to: Fixed(x: 0.1, y: 0, z: 0),
+            outwardThreshold: sourceThreshold);
+        var sourceExit = WorldAdjacencyRegion.Sweep(
+            frame: source,
+            from: Fixed(x: 0.7, y: 0, z: 0),
+            to: Fixed(x: 0.8, y: 0, z: 0),
+            outwardThreshold: sourceThreshold);
+        var destinationNearReturn = WorldAdjacencyRegion.Sweep(
+            frame: destination,
+            from: Fixed(x: 0.8, y: 0, z: 0),
+            to: Fixed(x: -0.1, y: 0, z: 0),
+            outwardThreshold: destinationThreshold);
+        var destinationExit = WorldAdjacencyRegion.Sweep(
+            frame: destination,
+            from: Fixed(x: 0.8, y: 0, z: 0),
+            to: Fixed(x: -0.8, y: 0, z: 0),
+            outwardThreshold: destinationThreshold);
+
+        Assert.Equal(hysteresis, sourceThreshold);
+        Assert.Equal(hysteresis, destinationThreshold);
+        Assert.False(seamZig.Crossed);
+        Assert.True(sourceExit.Crossed);
+        Assert.False(destinationNearReturn.Crossed);
+        Assert.True(destinationExit.Crossed);
+    }
+
+    [Fact]
+    public void YawOnlyHysteresisClosesTheDiagonalCornerBetweenPerpendicularBoundaries() {
+        var east = new WorldAdjacencyBoundary(
+            Center: new Vector3(x: 0f, y: 0f, z: -12f),
+            OutwardYawDegrees: 90f,
+            OutwardPitchDegrees: 0f,
+            Width: 24f,
+            Height: 16f).CompileFrame();
+        var south = new WorldAdjacencyBoundary(
+            Center: new Vector3(x: -12f, y: 0f, z: 0f),
+            OutwardYawDegrees: 0f,
+            OutwardPitchDegrees: 0f,
+            Width: 24f,
+            Height: 16f).CompileFrame();
+        var hysteresis = FixedQ4816.FromDouble(value: 0.72);
+        var from = Fixed(x: 0.7, y: 0.05, z: 0.7);
+        var to = Fixed(x: 0.8, y: 0.05, z: 0.8);
+
+        var eastCrossing = WorldAdjacencyRegion.Sweep(frame: east, from: from, to: to, outwardThreshold: hysteresis);
+        var southCrossing = WorldAdjacencyRegion.Sweep(frame: south, from: from, to: to, outwardThreshold: hysteresis);
+
+        Assert.True(eastCrossing.Crossed, userMessage: "the east ownership face left the expanded southeast corner unclaimed");
+        Assert.True(southCrossing.Crossed, userMessage: "the south ownership face left the expanded southeast corner unclaimed");
+        Assert.Equal(eastCrossing.Parameter, southCrossing.Parameter);
+    }
+
+    [Fact]
+    public void FloorAdjacencyTransfersAtItsPlaneWithoutConsumingAscentHeadroom() {
+        var up = Boundary(yaw: 0f, pitch: 90f).CompileFrame();
+        var hysteresis = FixedQ4816.FromDouble(value: 0.72);
+        var threshold = WorldAdjacencyPolicy.OwnershipThreshold(frame: in up, reciprocalHysteresis: hysteresis);
+
+        var crossing = WorldAdjacencyRegion.Sweep(
+            frame: up,
+            from: Fixed(x: 0, y: -0.1, z: 0),
+            to: Fixed(x: 0, y: 0.1, z: 0),
+            outwardThreshold: threshold);
+
+        Assert.Equal(FixedQ4816.Zero, threshold);
+        Assert.True(crossing.Crossed);
+        Assert.Equal(FixedQ4816.FromDouble(value: 0.5), crossing.Parameter);
     }
 
     [Fact]

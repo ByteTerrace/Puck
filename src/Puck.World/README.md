@@ -415,7 +415,10 @@ not.
 Committed, re-runnable batteries cover specific load-bearing seams, under
 `docs/verification/`: `undo-all-or-nothing`, `strict-definition-parse`,
 `sdf-decode-sign-refusal`, `doc-links`, `addon-mutation-seam`, and
-`four-world-boot-smoke`. Each
+`four-world-boot-smoke`. `four-corners-sharded` is the stronger five-authority
+adjacency/federation stress run: four ground worlds plus the floating island,
+with human and autonomous handoffs, retained controls and camera routing,
+cross-host contact, derived corner peers, and routed read-backs. Each
 builds what it needs and exits nonzero on a miss. `ordered-domain`,
 `headless-boot`, `lane-present-deletion`, `hud-document`,
 `engagement-dissolution`, and (at the repository root)

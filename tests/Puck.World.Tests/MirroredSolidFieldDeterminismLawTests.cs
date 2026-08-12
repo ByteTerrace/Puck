@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SdfVm.Queries;
 
 using Xunit;
 
@@ -10,6 +11,90 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the fixed-point transform boundary used by mirrored solid placements.</summary>
 public sealed class MirroredSolidFieldDeterminismLawTests {
+    [Fact]
+    public void AnisotropicBoxScaleBakesIntoMetricShapeDimensions() {
+        var shape = new ShapeDocument(
+            Id: 0,
+            Name: "floor",
+            Type: AvatarPrimitive.Box,
+            Position: Vector3.Zero,
+            Rotation: Quaternion.Identity,
+            Scale: new Vector3(x: 24f, y: 0.1f, z: 24f),
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: 0
+        );
+        var document = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: "metric-box-law",
+            Intent: CreatorIntent.Object,
+            BakeStyle: null,
+            Palette: null,
+            Shapes: [shape],
+            Frames: null
+        );
+        var builder = NewMaterialBuilder(material: out var material);
+
+        CreationStampEmitter.EmitFixed(
+            builder: builder,
+            document: document,
+            transform: new FixedCreationStampTransform(
+                Origin: FixedVector3.Zero,
+                Rotation: FixedQuaternion.Identity,
+                Scale: FixedQ4816.One,
+                ReflectionNormal: null
+            ),
+            materialFor: _ => material
+        );
+
+        var program = builder.Build(buildInstanceGrid: false);
+        var scales = program.Instructions.Where(predicate: candidate => candidate.Op == SdfOp.Scale).ToArray();
+        var box = Assert.Single(collection: program.Instructions, predicate: candidate =>
+            (candidate.Op == SdfOp.ShapeBlend) && ((SdfShapeType)candidate.Shape == SdfShapeType.Box));
+        var fixedThinAxis = (float)((double)FixedQ4816.FromDouble(value: 0.1));
+
+        Assert.Single(collection: scales);
+        Assert.Equal(expected: new Vector4(x: 1f, y: 1f, z: 1f, w: 1f), actual: scales[0].Data0);
+        var expectedRound = (0.04f * fixedThinAxis);
+        Assert.Equal(expected: new Vector4(x: ((0.38f * 24f) - expectedRound), y: (0.34f * fixedThinAxis), z: ((0.38f * 24f) - expectedRound), w: expectedRound), actual: box.Data0);
+        _ = new SdfFieldEvaluator(program: program);
+    }
+
+    [Fact]
+    public void QueryEvaluatorRejectsAConservativeAnisotropicScaleBound() {
+        var builder = NewMaterialBuilder(material: out var material);
+        var program = builder
+            .Scale(scale: new Vector3(x: 24f, y: 0.1f, z: 24f))
+            .Sphere(radius: 1f, material: material)
+            .Build(buildInstanceGrid: false);
+
+        var exception = Assert.Throws<ArgumentException>(() => new SdfFieldEvaluator(program: program));
+
+        Assert.Contains(expectedSubstring: "non-uniform Scale", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "conservative march bound", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AxiallyScaledCylinderBakesIntoMetricShapeDimensions() {
+        var builder = NewMaterialBuilder(material: out var material);
+
+        _ = CreationGeometry.AppendScaledPrimitive(
+            chain: builder,
+            type: AvatarPrimitive.Cylinder,
+            scale: new Vector3(x: 0.4f, y: 1.6f, z: 0.4f),
+            material: material
+        );
+
+        var program = builder.Build(buildInstanceGrid: false);
+        var cylinder = Assert.Single(collection: program.Instructions, predicate: candidate =>
+            (candidate.Op == SdfOp.ShapeBlend) && ((SdfShapeType)candidate.Shape == SdfShapeType.Cylinder));
+
+        Assert.DoesNotContain(collection: program.Instructions, filter: candidate => candidate.Op == SdfOp.Scale);
+        Assert.Equal(expected: new Vector4(x: (0.30f * 0.4f), y: (0.36f * 1.6f), z: 0f, w: 0f), actual: cylinder.Data0);
+        _ = new SdfFieldEvaluator(program: program);
+    }
+
     [Fact]
     public void FixedRotationOverloadPacksTheFixedNormalizedQuaternionWithoutRenormalizingInFloat() {
         var authored = new FixedQuaternion(

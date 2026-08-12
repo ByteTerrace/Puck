@@ -1,0 +1,171 @@
+# Adjacency and federation
+
+Adjacency is authored ownership topology. It makes two world regions continuous
+without adding portal furniture, co-locating their authorities, or allowing two
+writers for one body. Federation is the authenticated transport used when the
+neighbour is not hosted in the same process. Consumers depend on authority
+identity and capabilities, never on that hosting distinction.
+
+## Authoring contract
+
+An invisible boundary needs three document rows:
+
+1. `references` names the neighbouring world document.
+2. A global, persisted `destinations` row names that reference.
+3. An `adjacencies` row names the destination, the neighbour's reciprocal row,
+   and a rectangular boundary (`center`, outward yaw/pitch, width, height).
+
+`WorldAdjacencyUnavailable.Closed` is the only failure treatment today: an
+unreachable or refusing neighbour leaves the local authority in control and
+the edge behaves as closed terrain. `onUnavailable` may name a declared channel
+for authored sound, animation, state, or other feedback; safety never depends
+on the binding. Portals remain intentional authored travel and are not used to
+represent seamless topology.
+
+`WorldDefinitionValidator.ValidateAdjacencies` proves the pair before boot. It
+requires stable destinations, reciprocal counterpart names and dimensions,
+world-up-preserving frame pairs, and a derivable overlap envelope. At a corner,
+two direct neighbours may imply one diagonal observation peer only when both
+paths name the same document; validation also proves the transform diamond
+closes. Authors declare topology and physical envelopes, not safety margins.
+
+`WorldAdjacencyPolicy.TryDeriveOverlap` derives a symmetric overlap from both
+worlds' body reach, interaction/target reach, closing-speed ceilings, and two
+periods of the slower simulation rate, rounding outward in fixed point.
+`WorldFrameIsometry` is the one point/vector/orientation mapping used by
+crossing, contact, transfer, and presentation.
+
+The five quilt documents are the worked stress example: four coloured ground
+worlds meet at one corner and `quilt-island` is vertically adjacent to all
+four. They are test content, not charter game worlds.
+
+## Runtime ownership and handoff
+
+Every active body has exactly one authoritative writer. Crossing an adjacency
+uses the same reserve-then-commit escrow for local-process and federated
+destinations. Reservations bind capacity until commit, explicit abort, or an
+exact tick-denominated deadline. A stable mobility identity binds the origin
+`WorldEntityAddress` incarnation and a monotonically advancing ownership epoch;
+reserve atomically leases that incarnation and expected epoch to one transfer,
+and commit compare-and-sets it to the next epoch exactly once. Ambiguous status
+uses an exact committed outcome, never a scalar inference from later transfer
+IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
+may supersede a lost acknowledgement. The one current credential per mobility
+identity rejects delayed replay. These tables are bounded by active
+transactions/travelers, not lifetime crossing count.
+A committed route can forward later input and submissions through further
+handoffs, so an old credential remains a route to the one current writer
+rather than a stale body slot. Generation recycle creates a different mobility
+identity and cannot inherit the old credential.
+
+Entity identity is `WorldEntityAddress(authority, index, generation)`.
+`WorldAuthorityRoute` carries that complete address plus an epoch, and
+`WorldSeatAuthorityRouter` publishes the complete claim with CAS. Rendering,
+input, audio, HUD, targeting, and read-backs consume that one route.
+`WorldContinuum` and adjacency presentation compare the full address; an
+authority string plus a recyclable index is not an identity.
+
+Reciprocal handoff across a vertical wall uses a true ownership deadband rather
+than transferring at the authored plane and merely suppressing the return edge
+afterward. A body remains with its current writer until its center reaches the
+far side of the overlap; the mapped arrival is therefore already fully inside
+the destination. The threshold comes from two maximum body reaches plus contact
+skin, so a legal cross-authority melee correction cannot manufacture an
+immediate return. Because that threshold moves a vertical ownership face
+outward, the runtime expands its horizontal half-width by the same threshold;
+otherwise two perpendicular faces leave an unowned threshold-by-threshold
+square at their corner and a diagonal traveler can escape both writers. The
+authored vertical aperture remains exact. A floor/ceiling adjacency transfers
+at its authored plane:
+offsetting that boundary would consume ascent headroom and can place handoff
+after solid destination terrain. Its mapped arrival immediately re-arms the
+zero-threshold reciprocal edge. The arrival-border latch remains a defense for
+federated delivery and observes both ends of the first destination step, so a
+genuine rapid reversal cannot run outside its owner while the reciprocal edge
+is disabled. Other edges remain eligible, including deterministic forwarding
+at a multi-world corner. One already-evaluated source step carries its mapped
+geometric cursor, exact engine-time interval, consumed-through watermark, and
+bounded face count through every onward owner. Each destination sweeps its own
+terrain before selecting another ownership face. Before an ordinary authority
+step, the composition root resolves pending topology under that authority's
+gate; a body cannot evaluate input, actions, timers, gravity, or movement while
+the geometric cursor is pending or while the step's start overlaps consumed
+continuum time. This makes a 60 Hz source safe when its destination is scheduled
+at 120 Hz. Exhausting the eight-face work ceiling clamps one raw fixed-point
+unit inside the last confirmed owner and removes only outward normal velocity.
+
+## Input and action continuity
+
+Movement and actions route to the seat's current authority. A transfer carries
+action state by declared name rather than document-local ordinal:
+
+- the previous threshold bit, so arrival cannot manufacture a rising edge;
+- the last admitted held composition value, bridged until the destination
+  receives its first real input publication (neutral included);
+- named counter/timer action registers admitted only when the destination
+  declares the same name and kind; their authored programs give those values
+  cooldown, charge, or other gameplay meaning.
+
+The bridge is why holding jump across a handoff remains one physical hold
+rather than release-then-press. `player.press`, `player.channels`,
+`player.state`, `player.targets`, `world.contacts`, and `player.where` follow
+the same seat route after a crossing. A new seat-facing verb that reads the
+boot population directly is a routing defect.
+
+## Contact across the overlap
+
+`WorldAdjacencyFields` owns the delivered neighbour images used by both contact
+and presentation. It freezes the complete direct-plus-derived projection graph
+once per authority tick; contact must not rebuild that graph per body.
+`WorldAdjacencyContactField` walks the same projection set as rendering,
+including a diagonal peer whose two overlap bands meet at a four-way corner. It
+maps the body through every path stage, resolves neighbour terrain and eligible
+generation-addressed dynamic bodies, then maps the answer back through the
+inverse path. Querying only authored direct edges leaves a physical hole at the
+literal corner even when the rendered diagonal floor is present.
+
+Contact integration calls `IContactField.ResolveSweep`. `WorldSolidField`
+subdivides a long step deterministically before applying its ordinary SDF
+resolver; the adjacency wrapper sweeps both local and mapped-neighbour
+geometry. Do not replace this with endpoint-only sampling: a capsule endpoint
+inside a thin slab has an ambiguous nearest gradient and can be extracted
+through an edge or the underside.
+
+Remote dynamic poses currently enter `WorldAdjacencyContactField` from
+delivered floating-point snapshots. Until Track 3 tapes fixed, tick-aligned
+neighbour records and installs the field at delivery time, do not claim replay
+determinism for cross-authority dynamic contact.
+
+The boot replay tape also does not reproduce federated arrival/forwarding. Do
+not cite `replay.verify` MATCH as federation evidence; the five-authority runner
+and focused laws below are the current executable proof.
+
+## Verification
+
+Run the focused laws after changing frames, handoff continuity, hysteresis, or
+contact sweeping:
+
+```text
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
+```
+
+Run `puck canary seamless-adjacency` for the automatic crossing and stationary
+real-path proof. Run the stronger topology stress proof directly:
+
+```text
+pwsh -NoProfile -File docs/verification/four-corners-sharded/run.ps1
+```
+
+That runner starts five distinct loopback authorities (four ground worlds and
+the floating island) and must prove horizontal and vertical handoffs, one full
+four-ground-world human circuit, vertical human probes, retained dual-stick and
+held-button input, routed camera and query state, cross-host body contact,
+autonomous travellers, derived diagonal peers, and zero wire errors. `play.ps1`
+opens the same five-authority topology for owner playtesting; visual feel
+remains owner acceptance, not a headless substitute.
+
+For federation transport changes, both sides need the same
+`--federation-key-file`; inspect both stdout and stderr. Authentication must
+precede observe, reserve, commit, status, intent, and submission operations.
+Omitting the federation key disables federation by name without changing the
+ordinary admitted-player socket.
