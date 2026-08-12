@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -63,19 +64,17 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
             return;
         }
 
-        foreach (var row in source.Server.Definition.Adjacencies ?? []) {
-            if ((row is not null) && TryResolve(adjacencyName: row.Name.Value, neighbour: out var neighbour) && (neighbour is Handle handle)) {
-                handle.Pin(sourceTick: tick);
-            }
-        }
+        // A derived corner handle only exists once the two-hop walk has found it, so discovery runs first and its
+        // result is discarded: it resolved against handles not yet pinned for this tick. Pinning every handle the
+        // walk left in the table and building again is what makes the frozen array's geometry and the pinned entity
+        // image describe the same delivered revision. Contact may ask once per body; returning that frozen array
+        // avoids rebuilding the two-hop graph for every body while keeping the render on the same image.
+        _ = BuildProjections();
 
-        // Resolve the topology once per authority tick, then pin any derived corner handles the direct-row walk did
-        // not encounter. Contact may ask once per body; returning this frozen array avoids rebuilding the two-hop
-        // graph (and allocating a list) for every body while keeping the render on the same delivered image.
-        var projections = BuildProjections();
-        foreach (var handle in projections.Select(selector: projection => projection.Neighbour).OfType<Handle>().Distinct()) {
+        foreach (var handle in m_handles.Values) {
             handle.Pin(sourceTick: tick);
         }
+
         m_tickProjections = BuildProjections();
         m_tickProjectionsCurrent = true;
     }
@@ -140,11 +139,12 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
         foreach (var row in rows) {
             if (TryResolve(adjacencyName: row!.Name.Value, neighbour: out var neighbour) && (neighbour is not null) &&
                 WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _)) {
+                var frame = row.Boundary.CompileFrame();
                 direct[row.Name.Value] = neighbour;
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: row.Name.Value,
                     Neighbour: neighbour,
-                    Path: [new WorldAdjacencyFramePair(Neighbour: neighbour.CounterpartFrame, Source: row.Boundary.CompileFrame(), OverlapDepth: depth)],
+                    Path: [new WorldAdjacencyFramePair(Neighbour: neighbour.CounterpartFrame, Source: frame, OverlapDepth: depth, OwnershipThreshold: OwnershipThreshold(definition: definition, frame: in frame))],
                     OverlapDepth: depth,
                     Direct: true));
             }
@@ -170,12 +170,17 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                     continue;
                 }
 
+                // The second hop's source face is authored by the INTERMEDIATE document, so its ownership threshold
+                // derives from that document's own envelope, never the local one.
+                var intermediateFrame = leftEdge.Boundary.CompileFrame();
+                var localFrame = leftRow.Boundary.CompileFrame();
+
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}",
                     Neighbour: corner,
                     Path: [
-                        new WorldAdjacencyFramePair(Neighbour: corner.CounterpartFrame, Source: leftEdge.Boundary.CompileFrame(), OverlapDepth: cornerDepth),
-                        new WorldAdjacencyFramePair(Neighbour: leftNeighbour.CounterpartFrame, Source: leftRow.Boundary.CompileFrame(), OverlapDepth: visuals.First(projection => projection.Direct && string.Equals(projection.Name, leftRow.Name.Value, StringComparison.Ordinal)).OverlapDepth),
+                        new WorldAdjacencyFramePair(Neighbour: corner.CounterpartFrame, Source: intermediateFrame, OverlapDepth: cornerDepth, OwnershipThreshold: OwnershipThreshold(definition: leftNeighbour.Definition, frame: in intermediateFrame)),
+                        new WorldAdjacencyFramePair(Neighbour: leftNeighbour.CounterpartFrame, Source: localFrame, OverlapDepth: visuals.First(projection => projection.Direct && string.Equals(projection.Name, leftRow.Name.Value, StringComparison.Ordinal)).OverlapDepth, OwnershipThreshold: OwnershipThreshold(definition: definition, frame: in localFrame)),
                     ],
                     OverlapDepth: cornerDepth,
                     Direct: false));
@@ -183,6 +188,17 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
         }
 
         return visuals.ToArray();
+    }
+
+    // The threshold the ownership scan hands a body over at, derived from the document that authors the face. A
+    // document whose envelope does not derive contributes no expansion rather than an assumed one.
+    private static FixedQ4816 OwnershipThreshold(WorldDefinition definition, in WorldFaceFrame frame) {
+        if (!WorldAdjacencyPolicy.TryReciprocalHysteresis(definition: definition, depth: out var hysteresis, reason: out _) ||
+            !WorldAdjacencyPolicy.TryVerticalSettleDeadband(definition: definition, depth: out var settle, reason: out _)) {
+            return FixedQ4816.Zero;
+        }
+
+        return WorldAdjacencyPolicy.OwnershipThreshold(frame: in frame, reciprocalHysteresis: hysteresis, verticalSettleDeadband: settle);
     }
 
     private bool TryResolveCorner(WorldInstance source, string key, string destinationName, string counterpart, IWorldAdjacencyNeighbour intermediate, WorldAdjacency intermediateEdge, out IWorldAdjacencyNeighbour? handle) {
@@ -231,6 +247,7 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
         private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldAvatarCatalog.Capacity];
         private readonly WorldBodyContactMode[] m_bodyContacts = new WorldBodyContactMode[WorldAvatarCatalog.Capacity];
         private int m_builtRevision = -1;
+        private WorldDefinition? m_builtSourceDefinition;
         private WorldFaceFrame m_frame;
         private bool m_frameResolved;
         private WorldSolidField? m_field;
@@ -334,14 +351,18 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
             return true;
         }
 
+        // The compiled field is a function of BOTH documents: the mirrored one supplies the geometry, and the source
+        // one fixes the overlap depth the selection is taken at. A document is swapped whole, so reference identity
+        // is its revision.
         private void Refresh() {
+            var source = sourceDefinition();
 
-            if (m_builtRevision != mirror.DefinitionRevision) {
+            if ((m_builtRevision != mirror.DefinitionRevision) || !ReferenceEquals(objA: m_builtSourceDefinition, objB: source)) {
                 if (WorldDefinitionRows.FindAdjacency(adjacencies: mirror.Definition.Adjacencies, name: Identity.Counterpart) is { Boundary: { } boundary }) {
                     m_frame = boundary.CompileFrame();
                     m_frameResolved = true;
 
-                    var hasDepth = WorldAdjacencyPolicy.TryDeriveOverlap(local: sourceDefinition(), neighbour: mirror.Definition, depth: out var depth, reason: out m_fieldReason);
+                    var hasDepth = WorldAdjacencyPolicy.TryDeriveOverlap(local: source, neighbour: mirror.Definition, depth: out var depth, reason: out m_fieldReason);
                     var selection = (hasDepth ? WorldAdjacencyGeometry.Select(definition: mirror.Definition, frame: m_frame, overlapDepth: depth) : new WorldAdjacencyGeometry.Selection(Placements: [], Truncated: false));
                     var collisionDefinition = mirror.Definition with { Placements = selection.Placements };
 
@@ -356,15 +377,19 @@ internal sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable 
                     m_fieldReason = "the authored counterpart frame no longer resolves";
                 }
                 m_builtRevision = mirror.DefinitionRevision;
+                m_builtSourceDefinition = source;
             }
 
         }
 
+        /// <inheritdoc/>
+        /// <remarks>The verdict is about the field this call hands out, never about a different one: a caller that
+        /// trusts a true answer must receive a field, and a caller told false must be told which image refused.</remarks>
         public bool TryGetSolidField(out WorldSolidField? field, out string reason) {
             field = (m_hasPin ? m_pinnedField : m_field);
             reason = (m_hasPin ? m_pinnedFieldReason : m_fieldReason);
 
-            return (m_field is not null);
+            return (field is not null);
         }
 
         public void Dispose() => lease.Dispose();

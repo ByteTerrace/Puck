@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -129,6 +130,49 @@ public sealed class WorldAdjacencyLawTests {
         Assert.True(southCrossing.Crossed, userMessage: "the south ownership face left the expanded southeast corner unclaimed");
         Assert.Equal(eastCrossing.Parameter, southCrossing.Parameter);
     }
+
+    [Fact]
+    public void ContactApertureIsNeverNarrowerThanTheOwnershipApertureItClaims() {
+        var east = CornerBoundary(center: new Vector3(x: 0f, y: 0f, z: -12f), yaw: 90f).CompileFrame();
+        var south = CornerBoundary(center: new Vector3(x: -12f, y: 0f, z: 0f), yaw: 0f).CompileFrame();
+        var hysteresis = FixedQ4816.FromDouble(value: 0.72);
+        var depth = FixedQ4816.FromDouble(value: 3.0172);
+        var claimed = Fixed(x: 0.72, y: 0.05, z: 0.72);
+        var beyondAperture = Fixed(x: 0.72, y: 0.05, z: 4);
+
+        var eastBand = new WorldAdjacencyBand(Name: "east", Frame: east);
+        var southBand = new WorldAdjacencyBand(Name: "south", Frame: south);
+        var handoff = WorldAdjacencyRegion.Sweep(frame: east, from: Fixed(x: 0.7, y: 0.05, z: 0.7), to: Fixed(x: 0.75, y: 0.05, z: 0.75), outwardThreshold: hysteresis);
+
+        // The corner of the expanded ownership rectangle: the farthest in-plane point this face still hands over.
+        Assert.True(handoff.Crossed);
+        Assert.Equal(expected: -(east.HalfWidth + hysteresis), actual: handoff.SeamU);
+        Assert.True(eastBand.Contains(position: claimed, depth: depth, ownershipThreshold: hysteresis),
+            userMessage: "the east contact aperture refused a point its own ownership face hands over");
+        Assert.True(southBand.Contains(position: claimed, depth: depth, ownershipThreshold: hysteresis),
+            userMessage: "the south contact aperture refused a point its own ownership face hands over");
+
+        // The aperture is widened by the ownership threshold, not abolished: a face still refuses to answer for a
+        // point four metres past the end of its own authored rectangle, where the diagonal peer's own path applies.
+        Assert.False(eastBand.Contains(position: beyondAperture, depth: depth, ownershipThreshold: hysteresis));
+        Assert.True(eastBand.Transits(position: beyondAperture, depth: depth),
+            userMessage: "a corner path could not transport past the intermediate face's aperture");
+
+        // Outward is unbounded: a step overshoots the threshold before the ownership scan runs, and a handoff takes
+        // ticks to drain. A body in that window is standing on the neighbour's floor, so the neighbour must be asked.
+        Assert.True(eastBand.Contains(position: Fixed(x: 40, y: 0.05, z: -12), depth: depth, ownershipThreshold: hysteresis),
+            userMessage: "contact stopped at a fixed distance outward, where nothing else answers");
+        Assert.False(eastBand.Contains(position: Fixed(x: -40, y: 0.05, z: -12), depth: depth, ownershipThreshold: hysteresis),
+            userMessage: "the owned side is bounded by the derived depth");
+    }
+
+    private static WorldAdjacencyBoundary CornerBoundary(Vector3 center, float yaw) => new(
+        Center: center,
+        OutwardYawDegrees: yaw,
+        OutwardPitchDegrees: 0f,
+        Width: 24f,
+        Height: 16f
+    );
 
     [Fact]
     public void FloorAdjacencyCarriesTheSettleDeadbandNotTheContactHysteresis() {

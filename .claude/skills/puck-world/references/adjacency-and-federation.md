@@ -126,8 +126,18 @@ the pair closes. The boundary's geometry selects which deadband
   and transfers. A zero threshold there reads a settle as a departure and
   oscillates the traveler across the seam.
 
-`TryDeriveOverlap` covers whichever threshold is larger, so contact and
-observation always reach as far as ownership does. The arrival-border latch
+`TryDeriveOverlap` covers whichever threshold is larger, and
+`WorldAdjacencyBand` derives its aperture from the same numbers the ownership
+sweep does, so no point ownership claims is outside every contact band. The band
+bounds the OWNED side by the derived depth and is unbounded outward — a body past
+the plane has left this world's terrain, the neighbour's own geometry is what
+decides whether there is ground, and a finite outward bound is a hole for as long
+as a handoff takes to drain. Its horizontal half-width expands by the ownership
+threshold on a yaw-only face for the same reason the sweep's does. An
+intermediate hop of a derived corner path is gated on the depth alone
+(`WorldAdjacencyBand.Transits`): the junction beyond two perpendicular rectangles
+is exactly the region the diagonal peer serves, and the commuting-diamond proof
+is what makes transport past the aperture the same point either way round. The arrival-border latch
 remains a defense for federated delivery and observes both ends of the first
 destination step, so a genuine rapid reversal cannot run outside its owner while
 the reciprocal edge is disabled. Other edges remain eligible, including deterministic forwarding

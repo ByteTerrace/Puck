@@ -43,7 +43,14 @@ public interface IWorldAdjacencySource {
 }
 
 /// <summary>One neighbour-to-source mapping stage.</summary>
-public readonly record struct WorldAdjacencyFramePair(WorldFaceFrame Neighbour, WorldFaceFrame Source, FixedQ4816 OverlapDepth);
+/// <param name="Neighbour">The counterpart face's frame, in the neighbour's own coordinates.</param>
+/// <param name="Source">The source face's frame, in the coordinates this stage's input is expressed in.</param>
+/// <param name="OverlapDepth">The compiler-derived overlap depth for this stage.</param>
+/// <param name="OwnershipThreshold">The threshold <see cref="Source"/> hands ownership over at
+/// (<see cref="WorldAdjacencyPolicy.OwnershipThreshold"/>), derived from the document that authors it. Contact's
+/// lateral aperture expands by it exactly as <see cref="WorldAdjacencyRegion.Sweep(WorldFaceFrame, Puck.Maths.FixedVector3, Puck.Maths.FixedVector3, FixedQ4816)"/>'s does, so no point ownership
+/// claims is outside every contact band.</param>
+public readonly record struct WorldAdjacencyFramePair(WorldFaceFrame Neighbour, WorldFaceFrame Source, FixedQ4816 OverlapDepth, FixedQ4816 OwnershipThreshold);
 
 /// <summary>One direct or compiler-derived corner projection.</summary>
 public sealed record WorldAdjacencyProjection(string Name, IWorldAdjacencyNeighbour Neighbour, IReadOnlyList<WorldAdjacencyFramePair> Path, FixedQ4816 OverlapDepth, bool Direct);

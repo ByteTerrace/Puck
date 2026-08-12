@@ -137,14 +137,21 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         return resolution;
     }
 
+    // Stage 0 is the hop that reads this projection's neighbour geometry; every earlier index is transport toward it.
     private static bool TryMapIntoNeighbour(FixedVector3 position, WorldAdjacencyProjection projection, out FixedVector3 mapped) {
         mapped = position;
         for (var stageIndex = (projection.Path.Count - 1); stageIndex >= 0; stageIndex--) {
             var stage = projection.Path[stageIndex];
-            if (!new WorldAdjacencyBand(Name: projection.Name, Frame: stage.Source).Contains(position: mapped, depth: stage.OverlapDepth)) {
+            var band = new WorldAdjacencyBand(Name: projection.Name, Frame: stage.Source);
+            var admitted = ((stageIndex == 0)
+                ? band.Contains(position: mapped, depth: stage.OverlapDepth, ownershipThreshold: stage.OwnershipThreshold)
+                : band.Transits(position: mapped, depth: stage.OverlapDepth));
+
+            if (!admitted) {
                 mapped = default;
                 return false;
             }
+
             mapped = WorldFrameIsometry.MapPoint(point: mapped, source: stage.Source, destination: stage.Neighbour);
         }
         return true;
