@@ -18,7 +18,12 @@ public static class CommandArgs {
     /// <param name="value">The parsed value, or 0 on failure.</param>
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseFloat(string text, out float value) =>
-        (float.TryParse(s: text, result: out value, provider: CultureInfo.InvariantCulture, style: NumberStyles.Float) &&
+        (float.TryParse(
+        s: text,
+        result: out value,
+        provider: CultureInfo.InvariantCulture,
+        style: NumberStyles.Float
+    ) &&
         float.IsFinite(f: value));
 
     /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
@@ -37,7 +42,10 @@ public static class CommandArgs {
         }
 
         for (var index = 0; (index < count); index++) {
-            if (!TryParseFloat(text: args[(start + index)], value: out values[index])) {
+            if (!TryParseFloat(
+                text: args[(start + index)],
+                value: out values[index]
+            )) {
                 return false;
             }
         }
@@ -51,7 +59,12 @@ public static class CommandArgs {
     /// <param name="value">The parsed value, or 0 on failure.</param>
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseInt(string text, out int value) =>
-        int.TryParse(s: text, result: out value, provider: CultureInfo.InvariantCulture, style: NumberStyles.Integer);
+        int.TryParse(
+        s: text,
+        result: out value,
+        provider: CultureInfo.InvariantCulture,
+        style: NumberStyles.Integer
+    );
 
     /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON
     /// parse failure, a schema/shape mismatch, a bad base64/number, or a filesystem fault — so a malformed file or a

@@ -63,7 +63,10 @@ public static class BindingVocabularyCheck {
 
             if (row.Page is { } page) {
                 foreach (var entry in (page.Entries ?? [])) {
-                    if ((entry.Source is null) && (entry.Activator is null)) {
+                    if (
+                        (entry.Source is null) &&
+                        (entry.Activator is null)
+                    ) {
                         continue;
                     }
 
@@ -72,23 +75,42 @@ public static class BindingVocabularyCheck {
                     // to catch (BindingProfile.Compile knows nothing of the physical vocabulary; this is where it
                     // is enforced). Falls through to the same channel/command checks below, keyed by the entry's
                     // resolved label instead of a (nonexistent) Source.
-                    if ((entry.Activator is { } activator) && (sourceKind is not null)) {
+                    if (
+                        (entry.Activator is { } activator) &&
+                        (sourceKind is not null)
+                    ) {
                         foreach (var step in (activator.Sequence ?? [])) {
-                            if (!string.IsNullOrEmpty(value: step) && (sourceKind(arg: step) is null)) {
-                                errors.Add(item: $"page \"{page.Id}\" activator [{string.Join(separator: ", ", values: (activator.Sequence ?? []))}] names unknown control \"{step}\"");
+                            if (
+                                !string.IsNullOrEmpty(value: step) &&
+                                (sourceKind(arg: step) is null)
+                            ) {
+                                errors.Add(item: $"page \"{page.Id}\" activator [{string.Join(
+                                    separator: ", ",
+                                    values: (activator.Sequence ?? [])
+                                )}] names unknown control \"{step}\"");
                             }
                         }
                     }
 
-                    var label = (entry.Source ?? $"activator[{string.Join(separator: ',', values: (entry.Activator?.Sequence ?? []))}]");
+                    var label = (entry.Source ?? $"activator[{string.Join(
+                        separator: ',',
+                        values: (entry.Activator?.Sequence ?? [])
+                    )}]");
 
                     // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix parsed
                     // off — BindingProfile.Compile already refused a malformed suffix structurally) must name a
                     // real, two-dimensional control. An unresolvable base is "unknown control name"; a resolvable
                     // but non-Axis2D base is a distinct "malformed axis component" finding.
-                    if ((entry.Source is { } rawSource) && (sourceKind is not null) &&
-                        BindingSourceComponent.TrySplit(source: rawSource, baseSource: out var baseSource, component: out var component) &&
-                        (component is not null)) {
+                    if (
+                        (entry.Source is { } rawSource) &&
+                        (sourceKind is not null) &&
+                        BindingSourceComponent.TrySplit(
+                        source: rawSource,
+                        baseSource: out var baseSource,
+                        component: out var component
+                    ) &&
+                        (component is not null)
+                    ) {
                         var baseKind = sourceKind(arg: baseSource);
 
                         if (baseKind is null) {
@@ -99,16 +121,26 @@ public static class BindingVocabularyCheck {
                     }
 
                     if (entry.Channel is { } channelRef) {
-                        if ((channel is not null) && !channel(arg: channelRef)) {
+                        if (
+                            (channel is not null) &&
+                            !channel(arg: channelRef)
+                        ) {
                             errors.Add(item: $"page \"{page.Id}\" binds {label} to channel {channelRef.Describe()}, which resolves no declared channel");
-                        } else if ((entry.Scale is { } scale) && (scale != 1f) && (channelBinary?.Invoke(arg: channelRef) ?? false)) {
+                        } else if (
+                            (entry.Scale is { } scale) &&
+                            (scale != 1f) &&
+                            (channelBinary?.Invoke(arg: channelRef) ?? false)
+                        ) {
                             errors.Add(item: $"page \"{page.Id}\" binds {label} to channel {channelRef.Describe()} with scale {scale}, but a binary channel's scale is always the default (+1)");
                         }
 
                         continue;
                     }
 
-                    if (string.IsNullOrEmpty(value: entry.Command) || (command is null)) {
+                    if (
+                        string.IsNullOrEmpty(value: entry.Command) ||
+                        (command is null)
+                    ) {
                         continue;
                     }
 
@@ -124,9 +156,14 @@ public static class BindingVocabularyCheck {
                         continue;
                     }
 
-                    var dispatched = (entry.Value?.Kind ?? ((entry.Source is { } sourceForKind) ? sourceKind?.Invoke(arg: sourceForKind) : null));
+                    var dispatched = (entry.Value?.Kind ?? ((entry.Source is { } sourceForKind)
+                        ? sourceKind?.Invoke(arg: sourceForKind)
+                        : null));
 
-                    if ((dispatched is { } kind) && (kind != declared.ValueKind)) {
+                    if (
+                        (dispatched is { } kind) &&
+                        (kind != declared.ValueKind)
+                    ) {
                         errors.Add(item: $"page \"{page.Id}\" sends {Word(kind: kind)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared.ValueKind)}");
                     }
                 }
@@ -134,27 +171,49 @@ public static class BindingVocabularyCheck {
 
             if (row.Command is { } chordCommand) {
                 if (chordCommand.Channel is { } chordChannel) {
-                    if ((channel is not null) && !channel(arg: chordChannel)) {
-                        errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()}, which resolves no declared channel");
-                    } else if ((chordCommand.Scale is { } chordScale) && (chordScale != 1f) && (channelBinary?.Invoke(arg: chordChannel) ?? false)) {
-                        errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()} with scale {chordScale}, but a binary channel's scale is always the default (+1)");
+                    if (
+                        (channel is not null) &&
+                        !channel(arg: chordChannel)
+                    ) {
+                        errors.Add(item: $"chord [{string.Join(
+                            separator: '+',
+                            values: (row.Chord ?? [])
+                        )}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()}, which resolves no declared channel");
+                    } else if (
+                        (chordCommand.Scale is { } chordScale) &&
+                        (chordScale != 1f) &&
+                        (channelBinary?.Invoke(arg: chordChannel) ?? false)
+                    ) {
+                        errors.Add(item: $"chord [{string.Join(
+                            separator: '+',
+                            values: (row.Chord ?? [])
+                        )}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()} with scale {chordScale}, but a binary channel's scale is always the default (+1)");
                     }
 
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(value: chordCommand.Command) || (command is null)) {
+                if (
+                    string.IsNullOrEmpty(value: chordCommand.Command) ||
+                    (command is null)
+                ) {
                     continue;
                 }
 
                 if (command(arg: chordCommand.Command) is not { } declared) {
-                    errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which names no registered command");
+                    errors.Add(item: $"chord [{string.Join(
+                        separator: '+',
+                        values: (row.Chord ?? [])
+                    )}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which names no registered command");
 
                     continue;
                 }
 
                 if (declared.Bindability != CommandBindability.Bindable) {
-                    errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which is not bindable");
+                    errors.Add(item: $"chord [{string.Join(
+                        separator: '+',
+                        values: (row.Chord ?? [])
+                    )}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which is not bindable");
 
                     continue;
                 }
@@ -164,7 +223,10 @@ public static class BindingVocabularyCheck {
                 var pressed = (chordCommand.Value?.Kind ?? CommandValueKind.Digital);
 
                 if (pressed != declared.ValueKind) {
-                    errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") sends {Word(kind: pressed)} to \"{chordCommand.Command}\", which takes {Word(kind: declared.ValueKind)}");
+                    errors.Add(item: $"chord [{string.Join(
+                        separator: '+',
+                        values: (row.Chord ?? [])
+                    )}] (group \"{row.Group}\") sends {Word(kind: pressed)} to \"{chordCommand.Command}\", which takes {Word(kind: declared.ValueKind)}");
                 }
             }
         }

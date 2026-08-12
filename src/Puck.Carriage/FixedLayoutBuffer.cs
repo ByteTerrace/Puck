@@ -15,23 +15,34 @@ internal sealed class FixedLayoutWriter {
 
     public byte[] ToArray() => [.. m_buffer];
     public void WriteByte(byte value) => m_buffer.Add(item: value);
-    public void WriteBool(bool value) => WriteByte(value: (byte)(value ? 1 : 0));
+    public void WriteBool(bool value) => WriteByte(value: (byte)(value
+        ? 1
+        : 0));
     public void WriteInt64(long value) {
         Span<byte> span = stackalloc byte[sizeof(long)];
 
-        BinaryPrimitives.WriteInt64BigEndian(destination: span, value: value);
+        BinaryPrimitives.WriteInt64BigEndian(
+            destination: span,
+            value: value
+        );
         m_buffer.AddRange(collection: span.ToArray());
     }
     public void WriteUInt64(ulong value) {
         Span<byte> span = stackalloc byte[sizeof(ulong)];
 
-        BinaryPrimitives.WriteUInt64BigEndian(destination: span, value: value);
+        BinaryPrimitives.WriteUInt64BigEndian(
+            destination: span,
+            value: value
+        );
         m_buffer.AddRange(collection: span.ToArray());
     }
     public void WriteBytes(ReadOnlySpan<byte> value) {
         Span<byte> lengthSpan = stackalloc byte[sizeof(uint)];
 
-        BinaryPrimitives.WriteUInt32BigEndian(destination: lengthSpan, value: checked((uint)value.Length));
+        BinaryPrimitives.WriteUInt32BigEndian(
+            destination: lengthSpan,
+            value: checked((uint)value.Length)
+        );
         m_buffer.AddRange(collection: lengthSpan.ToArray());
         m_buffer.AddRange(collection: value.ToArray());
     }
@@ -106,7 +117,10 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
     public long ReadInt64() {
         RequireRemaining(count: sizeof(long));
 
-        var value = BinaryPrimitives.ReadInt64BigEndian(source: m_buffer.Slice(start: m_position, length: sizeof(long)));
+        var value = BinaryPrimitives.ReadInt64BigEndian(source: m_buffer.Slice(
+            start: m_position,
+            length: sizeof(long)
+        ));
 
         m_position += sizeof(long);
 
@@ -115,7 +129,10 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
     public ulong ReadUInt64() {
         RequireRemaining(count: sizeof(ulong));
 
-        var value = BinaryPrimitives.ReadUInt64BigEndian(source: m_buffer.Slice(start: m_position, length: sizeof(ulong)));
+        var value = BinaryPrimitives.ReadUInt64BigEndian(source: m_buffer.Slice(
+            start: m_position,
+            length: sizeof(ulong)
+        ));
 
         m_position += sizeof(ulong);
 
@@ -124,7 +141,10 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
     public ReadOnlySpan<byte> ReadBytes() {
         RequireRemaining(count: sizeof(uint));
 
-        var length = BinaryPrimitives.ReadUInt32BigEndian(source: m_buffer.Slice(start: m_position, length: sizeof(uint)));
+        var length = BinaryPrimitives.ReadUInt32BigEndian(source: m_buffer.Slice(
+            start: m_position,
+            length: sizeof(uint)
+        ));
 
         m_position += sizeof(uint);
 
@@ -137,7 +157,10 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
 
         RequireRemaining(count: (int)length);
 
-        var slice = m_buffer.Slice(start: m_position, length: (int)length);
+        var slice = m_buffer.Slice(
+            start: m_position,
+            length: (int)length
+        );
 
         m_position += (int)length;
 
@@ -146,13 +169,20 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
     public ReadOnlySpan<byte> ReadFixedBytes(int count) {
         RequireRemaining(count: count);
 
-        var slice = m_buffer.Slice(start: m_position, length: count);
+        var slice = m_buffer.Slice(
+            start: m_position,
+            length: count
+        );
 
         m_position += count;
 
         return slice;
     }
     public string ReadString() => Encoding.UTF8.GetString(bytes: ReadBytes());
-    public string? ReadOptionalString() => (ReadBool() ? ReadString() : null);
-    public ulong? ReadOptionalUInt64() => (ReadBool() ? ReadUInt64() : null);
+    public string? ReadOptionalString() => (ReadBool()
+        ? ReadString()
+        : null);
+    public ulong? ReadOptionalUInt64() => (ReadBool()
+        ? ReadUInt64()
+        : null);
 }

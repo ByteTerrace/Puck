@@ -40,10 +40,16 @@ public sealed class RowActivatorTracker {
 
         m_mode = activator.Mode;
         m_sequence = activator.Sequence;
-        m_timeoutTicks = ((activator.TimeoutTicks is { } ticks) ? (ulong)ticks : null);
+        m_timeoutTicks = ((activator.TimeoutTicks is { } ticks)
+            ? (ulong)ticks
+            : null);
 
         if (m_mode == BindingActivatorMode.Held) {
-            m_heldTracker = new HeldOrderTracker(modifierCount: m_sequence.Count, pressThreshold: 0.5f, releaseThreshold: 0.4f);
+            m_heldTracker = new HeldOrderTracker(
+                modifierCount: m_sequence.Count,
+                pressThreshold: 0.5f,
+                releaseThreshold: 0.4f
+            );
         } else {
             m_failure = ComputeFailureFunction(sequence: m_sequence);
         }
@@ -82,7 +88,10 @@ public sealed class RowActivatorTracker {
             ? 0f
             : signal.Value.AsAxis1D);
 
-        if (!m_heldTracker!.Set(index: index, value: value)) {
+        if (!m_heldTracker!.Set(
+            index: index,
+            value: value
+        )) {
             return RowActivatorTransition.None;
         }
 
@@ -92,10 +101,16 @@ public sealed class RowActivatorTracker {
 
         m_heldOpen = isOpen;
 
-        if (isOpen && !wasOpen) {
+        if (
+            isOpen &&
+            !wasOpen
+        ) {
             return RowActivatorTransition.Opened;
         }
-        if (!isOpen && wasOpen) {
+        if (
+            !isOpen &&
+            wasOpen
+        ) {
             return RowActivatorTransition.Closed;
         }
 
@@ -133,17 +148,32 @@ public sealed class RowActivatorTracker {
             return RowActivatorTransition.None;
         }
 
-        if ((m_tapProgress > 0) && (m_timeoutTicks is { } timeout) && ((signal.CaptureTick - m_lastAcceptedTick) > timeout)) {
+        if (
+            (m_tapProgress > 0) &&
+            (m_timeoutTicks is { } timeout) &&
+            ((signal.CaptureTick - m_lastAcceptedTick) > timeout)
+        ) {
             m_tapProgress = 0;
         }
 
         var source = signal.Source;
 
-        while ((m_tapProgress > 0) && !string.Equals(a: source, b: m_sequence[m_tapProgress], comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        while (
+            (m_tapProgress > 0) &&
+            !string.Equals(
+            a: source,
+            b: m_sequence[m_tapProgress],
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        ) {
             m_tapProgress = m_failure![(m_tapProgress - 1)];
         }
 
-        if (string.Equals(a: source, b: m_sequence[m_tapProgress], comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(
+            a: source,
+            b: m_sequence[m_tapProgress],
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             m_tapProgress++;
             m_lastAcceptedTick = signal.CaptureTick;
         }
@@ -167,11 +197,22 @@ public sealed class RowActivatorTracker {
         var k = 0;
 
         for (var i = 1; (i < sequence.Count); i++) {
-            while ((k > 0) && !string.Equals(a: sequence[i], b: sequence[k], comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            while (
+                (k > 0) &&
+                !string.Equals(
+                a: sequence[i],
+                b: sequence[k],
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+            ) {
                 k = failure[(k - 1)];
             }
 
-            if (string.Equals(a: sequence[i], b: sequence[k], comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(
+                a: sequence[i],
+                b: sequence[k],
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 k++;
             }
 
@@ -182,7 +223,11 @@ public sealed class RowActivatorTracker {
     }
     private int IndexOf(string source) {
         for (var index = 0; (index < m_sequence.Count); index++) {
-            if (string.Equals(a: m_sequence[index], b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(
+                a: m_sequence[index],
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 return index;
             }
         }

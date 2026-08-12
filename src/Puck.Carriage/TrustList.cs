@@ -59,11 +59,18 @@ public sealed record TrustListEntry(
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void Validate() {
-        if (!string.Equals(a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span), b: PinnedId.KeyHash, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
+            b: PinnedId.KeyHash,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new ArgumentException(message: "A trust list entry's public key does not hash to its own pinned id — it is not self-certifying.");
         }
 
-        if (!CarriageAlgorithms.IsKnown(algorithm: PinnedId.Algorithm) || (CarriageAlgorithms.Resolve(algorithm: PinnedId.Algorithm).Role != CarriageKeyRole.Signing)) {
+        if (
+            !CarriageAlgorithms.IsKnown(algorithm: PinnedId.Algorithm) ||
+            (CarriageAlgorithms.Resolve(algorithm: PinnedId.Algorithm).Role != CarriageKeyRole.Signing)
+        ) {
             throw new ArgumentException(message: $"A trust list entry pins algorithm '{PinnedId.Algorithm}', which is not a carriage SIGNING algorithm — a trust entry can only pin a key that signs.");
         }
 
@@ -80,20 +87,35 @@ public sealed record TrustListEntry(
         using var ecdsa = ECDsa.Create();
 
         try {
-            ecdsa.ImportSubjectPublicKeyInfo(source: PublicKeySubjectPublicKeyInfo.Span, bytesRead: out _);
+            ecdsa.ImportSubjectPublicKeyInfo(
+                source: PublicKeySubjectPublicKeyInfo.Span,
+                bytesRead: out _
+            );
         } catch (CryptographicException exception) {
-            throw new ArgumentException(message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}", innerException: exception);
+            throw new ArgumentException(
+                message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}",
+                innerException: exception
+            );
         }
 
-        if (!CarriageCurves.Matches(key: ecdsa.ExportParameters(includePrivateParameters: false).Curve, expected: descriptor.Curve)) {
+        if (!CarriageCurves.Matches(
+            key: ecdsa.ExportParameters(includePrivateParameters: false).Curve,
+            expected: descriptor.Curve
+        )) {
             throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
         }
 
-        if ((Mode == CarriageTrustMode.Vouches) && !PinnedId.IsRoot) {
+        if (
+            (Mode == CarriageTrustMode.Vouches) &&
+            !PinnedId.IsRoot
+        ) {
             throw new ArgumentException(message: "A vouching trust list entry must pin a root id — the chain it walks is always exactly two hops beneath a root.");
         }
 
-        if ((Mode == CarriageTrustMode.SignsDirectly) && (PinnedId.Subject is null)) {
+        if (
+            (Mode == CarriageTrustMode.SignsDirectly) &&
+            (PinnedId.Subject is null)
+        ) {
             throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
         }
     }
@@ -151,7 +173,11 @@ public sealed record TrustList {
         foreach (var entry in Entries) {
             if (
                 (entry.Mode == CarriageTrustMode.Vouches) &&
-                string.Equals(a: entry.PinnedId.Domain, b: domain, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: entry.PinnedId.Domain,
+                b: domain,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return entry;
             }
@@ -175,8 +201,16 @@ public sealed record TrustList {
         foreach (var entry in Entries) {
             if (
                 (entry.Mode == CarriageTrustMode.SignsDirectly) &&
-                string.Equals(a: entry.PinnedId.Domain, b: domain, comparisonType: StringComparison.Ordinal) &&
-                string.Equals(a: entry.PinnedId.Subject, b: subject, comparisonType: StringComparison.Ordinal)
+                string.Equals(
+                a: entry.PinnedId.Domain,
+                b: domain,
+                comparisonType: StringComparison.Ordinal
+            ) &&
+                string.Equals(
+                a: entry.PinnedId.Subject,
+                b: subject,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return entry;
             }

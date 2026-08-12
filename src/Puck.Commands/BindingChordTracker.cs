@@ -45,7 +45,10 @@ public sealed class BindingChordTracker {
             ? 0f
             : signal.Value.AsAxis1D);
 
-        _ = m_tracker.Set(index: modifierIndex, value: value);
+        _ = m_tracker.Set(
+            index: modifierIndex,
+            value: value
+        );
 
         return true;
     }

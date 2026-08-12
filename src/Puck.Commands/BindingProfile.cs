@@ -24,7 +24,10 @@ public static class BindingProfile {
     /// <summary>The synthesized command name a channel destination named <paramref name="channel"/> compiles down to.</summary>
     public static string ChannelCommandName(ChannelRef channel) => channel switch {
         ChannelRef.Name name => $"{ChannelCommandPrefix}name.{name.Value}",
-        _ => throw new ArgumentException(message: "A channel reference must be a declared name.", paramName: nameof(channel)),
+        _ => throw new ArgumentException(
+        message: "A channel reference must be a declared name.",
+        paramName: nameof(channel)
+    ),
     };
 
     /// <summary>Validates and compiles a profile document.</summary>
@@ -42,7 +45,10 @@ public static class BindingProfile {
         channelCommandName ??= ChannelCommandName;
 
         if (document.Version != BindingProfileDocument.CurrentVersion) {
-            throw new ArgumentException(message: $"Unsupported binding profile version \"{document.Version}\"; expected \"{BindingProfileDocument.CurrentVersion}\".", paramName: nameof(document));
+            throw new ArgumentException(
+                message: $"Unsupported binding profile version \"{document.Version}\"; expected \"{BindingProfileDocument.CurrentVersion}\".",
+                paramName: nameof(document)
+            );
         }
 
         var modifierIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -53,35 +59,53 @@ public static class BindingProfile {
             var modifier = modifiers[modifierIndex];
 
             if (string.IsNullOrEmpty(value: modifier.Id)) {
-                throw new ArgumentException(message: "A modifier id must be non-empty.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: "A modifier id must be non-empty.",
+                    paramName: nameof(document)
+                );
             }
 
             if (string.IsNullOrEmpty(value: modifier.Source)) {
-                throw new ArgumentException(message: $"Modifier \"{modifier.Id}\" must name a source.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Modifier \"{modifier.Id}\" must name a source.",
+                    paramName: nameof(document)
+                );
             }
 
             if (modifier.ReleaseThreshold > modifier.PressThreshold) {
-                throw new ArgumentException(message: $"Modifier \"{modifier.Id}\" has a release threshold above its press threshold.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Modifier \"{modifier.Id}\" has a release threshold above its press threshold.",
+                    paramName: nameof(document)
+                );
             }
 
             if (!modifierIndexById.TryAdd(
                 key: modifier.Id,
                 value: modifierIndex
             )) {
-                throw new ArgumentException(message: $"Duplicate modifier id \"{modifier.Id}\".", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Duplicate modifier id \"{modifier.Id}\".",
+                    paramName: nameof(document)
+                );
             }
 
             if (!modifierIndexBySource.TryAdd(
                 key: modifier.Source,
                 value: modifierIndex
             )) {
-                throw new ArgumentException(message: $"Modifiers \"{modifiers[modifierIndexBySource[modifier.Source]].Id}\" and \"{modifier.Id}\" share the source \"{modifier.Source}\".", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Modifiers \"{modifiers[modifierIndexBySource[modifier.Source]].Id}\" and \"{modifier.Id}\" share the source \"{modifier.Source}\".",
+                    paramName: nameof(document)
+                );
             }
         }
 
         var documentRows = ((document.Chords is { Count: > 0 } chords)
             ? chords
-            : throw new ArgumentException(message: "A binding profile must carry at least one chord row.", paramName: nameof(document)));
+            : throw new ArgumentException(
+            message: "A binding profile must carry at least one chord row.",
+            paramName: nameof(document)
+        ));
         // First pass: group registration, chord resolution, the uniqueness rules, and the raw row facts. Views are
         // built in a second pass so each page view can carry its whole group's command-chord hints.
         var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -95,10 +119,16 @@ public static class BindingProfile {
 
         for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
             var row = (documentRows[rowIndex]
-                ?? throw new ArgumentException(message: $"Chord row {rowIndex} is null.", paramName: nameof(document)));
+                ?? throw new ArgumentException(
+                message: $"Chord row {rowIndex} is null.",
+                paramName: nameof(document)
+            ));
 
             if (string.IsNullOrEmpty(value: row.Group)) {
-                throw new ArgumentException(message: $"Chord row {rowIndex} must name a group.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Chord row {rowIndex} must name a group.",
+                    paramName: nameof(document)
+                );
             }
 
             if (!groupIndexByName.TryGetValue(
@@ -122,11 +152,17 @@ public static class BindingProfile {
                     key: chordIds[chordIndex],
                     value: out var modifierIndex
                 )) {
-                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") chords on undeclared modifier \"{chordIds[chordIndex]}\".", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Chord row {rowIndex} (group \"{row.Group}\") chords on undeclared modifier \"{chordIds[chordIndex]}\".",
+                        paramName: nameof(document)
+                    );
                 }
 
                 if (!chordModifiers.Add(item: modifierIndex)) {
-                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") repeats modifier \"{chordIds[chordIndex]}\" in its chord.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Chord row {rowIndex} (group \"{row.Group}\") repeats modifier \"{chordIds[chordIndex]}\" in its chord.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 chord[chordIndex] = modifierIndex;
@@ -135,21 +171,42 @@ public static class BindingProfile {
             rowChords[rowIndex] = chord;
 
             // Rule 1: exactly one meaning per (group, chord).
-            if (!seenChordKeys.Add(item: $"{groupIndex}\0{string.Join(separator: ',', values: chord)}")) {
-                throw new ArgumentException(message: $"Group \"{row.Group}\" declares two meanings for the chord [{string.Join(separator: ", ", values: chordIds)}] — exactly one meaning per (group, chord).", paramName: nameof(document));
+            if (!seenChordKeys.Add(item: $"{groupIndex}\0{string.Join(
+                separator: ',',
+                values: chord
+            )}")) {
+                throw new ArgumentException(
+                    message: $"Group \"{row.Group}\" declares two meanings for the chord [{string.Join(
+                        separator: ", ",
+                        values: chordIds
+                    )}] — exactly one meaning per (group, chord).",
+                    paramName: nameof(document)
+                );
             }
 
             if ((row.Page is null) == (row.Command is null)) {
-                throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one meaning — a page or a command.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one meaning — a page or a command.",
+                    paramName: nameof(document)
+                );
             }
 
             if (row.Page is { } page) {
                 if (string.IsNullOrEmpty(value: page.Id)) {
-                    throw new ArgumentException(message: "A page id must be non-empty.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: "A page id must be non-empty.",
+                        paramName: nameof(document)
+                    );
                 }
 
-                if (!pageRowsById.TryAdd(key: page.Id, value: (GroupIndex: groupIndex, RowIndex: rowIndex))) {
-                    throw new ArgumentException(message: $"Duplicate page id \"{page.Id}\".", paramName: nameof(document));
+                if (!pageRowsById.TryAdd(
+                    key: page.Id,
+                    value: (GroupIndex: groupIndex, RowIndex: rowIndex)
+                )) {
+                    throw new ArgumentException(
+                        message: $"Duplicate page id \"{page.Id}\".",
+                        paramName: nameof(document)
+                    );
                 }
 
                 if (chord.Length == 0) {
@@ -159,24 +216,48 @@ public static class BindingProfile {
                 var chordCommand = row.Command!;
 
                 if ((chordCommand.Command is null) == (chordCommand.Channel is null)) {
-                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one destination — a command or a channel.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Chord row {rowIndex} (group \"{row.Group}\") must carry exactly one destination — a command or a channel.",
+                        paramName: nameof(document)
+                    );
                 }
 
-                ValidateValue(value: chordCommand.Value, path: $"Chord row {rowIndex} (group \"{row.Group}\")", isChannel: (chordCommand.Channel is not null), paramName: nameof(document));
+                ValidateValue(
+                    value: chordCommand.Value,
+                    path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                    isChannel: (chordCommand.Channel is not null),
+                    paramName: nameof(document)
+                );
 
                 if (chordCommand.Channel is { } channel) {
-                    ValidateChannelRef(channel: channel, path: $"Chord row {rowIndex} (group \"{row.Group}\")", paramName: nameof(document));
+                    ValidateChannelRef(
+                        channel: channel,
+                        path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                        paramName: nameof(document)
+                    );
 
-                    if ((chordCommand.Scale is { } scale) && (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))) {
-                        throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(document));
+                    if (
+                        (chordCommand.Scale is { } scale) &&
+                        (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))
+                    ) {
+                        throw new ArgumentException(
+                            message: $"Chord row {rowIndex} (group \"{row.Group}\") channel {channel.Describe()} scale must be in [-1, 1].",
+                            paramName: nameof(document)
+                        );
                     }
                 } else if (string.IsNullOrEmpty(value: chordCommand.Command)) {
-                    throw new ArgumentException(message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command or channel it fires.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command or channel it fires.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 // Rule 2's command half: an empty chord has no completion edge — the resting row must be a page.
                 if (chord.Length == 0) {
-                    throw new ArgumentException(message: $"Group \"{row.Group}\" binds a command to the empty chord — the resting row must be a page.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Group \"{row.Group}\" binds a command to the empty chord — the resting row must be a page.",
+                        paramName: nameof(document)
+                    );
                 }
             }
         }
@@ -184,7 +265,10 @@ public static class BindingProfile {
         // Rule 2: exactly one resting page per group (uniqueness is rule 1's empty-chord case; presence is checked here).
         for (var groupIndex = 0; (groupIndex < groupNames.Count); groupIndex++) {
             if (restingByGroup[groupIndex] < 0) {
-                throw new ArgumentException(message: $"Group \"{groupNames[groupIndex]}\" has no resting (empty-chord) page.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Group \"{groupNames[groupIndex]}\" has no resting (empty-chord) page.",
+                    paramName: nameof(document)
+                );
             }
         }
 
@@ -195,26 +279,44 @@ public static class BindingProfile {
 
         for (var contextIndex = 0; (contextIndex < contextRows.Count); contextIndex++) {
             var context = (contextRows[contextIndex]
-                ?? throw new ArgumentException(message: $"Contexts row {contextIndex} is null.", paramName: nameof(document)));
+                ?? throw new ArgumentException(
+                message: $"Contexts row {contextIndex} is null.",
+                paramName: nameof(document)
+            ));
 
             if (string.IsNullOrEmpty(value: context.Family)) {
-                throw new ArgumentException(message: $"Contexts row {contextIndex} must name a family.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Contexts row {contextIndex} must name a family.",
+                    paramName: nameof(document)
+                );
             }
 
             if (string.IsNullOrEmpty(value: context.State)) {
-                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\") must name a state.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Contexts row {contextIndex} (family \"{context.Family}\") must name a state.",
+                    paramName: nameof(document)
+                );
             }
 
             if (string.IsNullOrEmpty(value: context.Group)) {
-                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") must name a group.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") must name a group.",
+                    paramName: nameof(document)
+                );
             }
 
             if (!seenContextKeys.Add(item: $"{context.Family}\0{context.State}")) {
-                throw new ArgumentException(message: $"Contexts row {contextIndex} re-declares (family \"{context.Family}\", state \"{context.State}\") — exactly one group per (family, state).", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Contexts row {contextIndex} re-declares (family \"{context.Family}\", state \"{context.State}\") — exactly one group per (family, state).",
+                    paramName: nameof(document)
+                );
             }
 
             if (!groupIndexByName.ContainsKey(key: context.Group)) {
-                throw new ArgumentException(message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") names group \"{context.Group}\", which no chord row declares.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Contexts row {contextIndex} (family \"{context.Family}\", state \"{context.State}\") names group \"{context.Group}\", which no chord row declares.",
+                    paramName: nameof(document)
+                );
             }
         }
 
@@ -227,21 +329,42 @@ public static class BindingProfile {
 
         foreach (var wheel in wheels) {
             if (wheel is null) {
-                throw new ArgumentException(message: "A wheels row is null.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: "A wheels row is null.",
+                    paramName: nameof(document)
+                );
             }
 
-            if (string.IsNullOrEmpty(value: wheel.Id) || !wheelIds.Add(item: wheel.Id)) {
-                throw new ArgumentException(message: $"Wheel id \"{wheel.Id}\" must be non-empty and profile-unique.", paramName: nameof(document));
+            if (
+                string.IsNullOrEmpty(value: wheel.Id) ||
+                !wheelIds.Add(item: wheel.Id)
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel id \"{wheel.Id}\" must be non-empty and profile-unique.",
+                    paramName: nameof(document)
+                );
             }
 
-            if (string.IsNullOrEmpty(value: wheel.Group) || !groupIndexByName.TryGetValue(key: wheel.Group, value: out var wheelGroupIndex)) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" names group \"{wheel.Group}\", which no chord row declares.", paramName: nameof(document));
+            if (
+                string.IsNullOrEmpty(value: wheel.Group) ||
+                !groupIndexByName.TryGetValue(
+                key: wheel.Group,
+                value: out var wheelGroupIndex
+            )
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" names group \"{wheel.Group}\", which no chord row declares.",
+                    paramName: nameof(document)
+                );
             }
 
             var holdPages = (wheel.HoldPages ?? []);
 
             if (holdPages.Count == 0) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" must name at least one hold page.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" must name at least one hold page.",
+                    paramName: nameof(document)
+                );
             }
 
             var holdRows = new int[holdPages.Count];
@@ -250,14 +373,27 @@ public static class BindingProfile {
             for (var holdIndex = 0; (holdIndex < holdPages.Count); holdIndex++) {
                 var holdPage = holdPages[holdIndex];
 
-                if (string.IsNullOrEmpty(value: holdPage) || !seenHoldPages.Add(item: holdPage) ||
-                    !pageRowsById.TryGetValue(key: holdPage, value: out var holdRow) ||
-                    (holdRow.RowIndex < 0) || (holdRow.GroupIndex != wheelGroupIndex)) {
-                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" holds on invalid or repeated page \"{holdPage}\"; every hold page must be a distinct chord-row page of group \"{wheel.Group}\".", paramName: nameof(document));
+                if (
+                    string.IsNullOrEmpty(value: holdPage) ||
+                    !seenHoldPages.Add(item: holdPage) ||
+                    !pageRowsById.TryGetValue(
+                    key: holdPage,
+                    value: out var holdRow
+                ) ||
+                    (holdRow.RowIndex < 0) ||
+                    (holdRow.GroupIndex != wheelGroupIndex)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Wheel \"{wheel.Id}\" holds on invalid or repeated page \"{holdPage}\"; every hold page must be a distinct chord-row page of group \"{wheel.Group}\".",
+                        paramName: nameof(document)
+                    );
                 }
 
                 if (wheelViewByRow.ContainsKey(key: holdRow.RowIndex)) {
-                    throw new ArgumentException(message: $"Hold page \"{holdPage}\" presents more than one wheel.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Hold page \"{holdPage}\" presents more than one wheel.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 holdRows[holdIndex] = holdRow.RowIndex;
@@ -265,52 +401,104 @@ public static class BindingProfile {
 
             var style = (wheel.Style ?? new BindingWheelStyleDefinition());
 
-            if (!Enum.IsDefined(value: style.PointerSelection) || !Enum.IsDefined(value: style.Placement) ||
-                !Enum.IsDefined(value: style.RingSelection)) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries an invalid selection or placement policy.", paramName: nameof(document));
+            if (
+                !Enum.IsDefined(value: style.PointerSelection) ||
+                !Enum.IsDefined(value: style.Placement) ||
+                !Enum.IsDefined(value: style.RingSelection)
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" carries an invalid selection or placement policy.",
+                    paramName: nameof(document)
+                );
             }
 
-            if (!float.IsFinite(f: style.DeadZoneFraction) || (style.DeadZoneFraction < 0f) || (style.DeadZoneFraction >= 0.5f) ||
-                !float.IsFinite(f: style.RingWidthFraction) || (style.RingWidthFraction <= 0f) || (style.RingWidthFraction >= 0.5f) ||
-                !float.IsFinite(f: style.OuterGraceRingFraction) || (style.OuterGraceRingFraction < 0f) ||
-                !float.IsFinite(f: style.RotationDegrees)) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries invalid style geometry.", paramName: nameof(document));
+            if (
+                !float.IsFinite(f: style.DeadZoneFraction) ||
+                (style.DeadZoneFraction < 0f) ||
+                (style.DeadZoneFraction >= 0.5f) ||
+                !float.IsFinite(f: style.RingWidthFraction) ||
+                (style.RingWidthFraction <= 0f) ||
+                (style.RingWidthFraction >= 0.5f) ||
+                !float.IsFinite(f: style.OuterGraceRingFraction) ||
+                (style.OuterGraceRingFraction < 0f) ||
+                !float.IsFinite(f: style.RotationDegrees)
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" carries invalid style geometry.",
+                    paramName: nameof(document)
+                );
             }
 
             var ringCount = (wheel.Rings?.Count ?? 0);
 
-            if ((ringCount < BindingWheelDefinition.MinRings) || (ringCount > BindingWheelDefinition.MaxRings)) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" declares {ringCount} rings; a wheel presents {BindingWheelDefinition.MinRings}..{BindingWheelDefinition.MaxRings}.", paramName: nameof(document));
+            if (
+                (ringCount < BindingWheelDefinition.MinRings) ||
+                (ringCount > BindingWheelDefinition.MaxRings)
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" declares {ringCount} rings; a wheel presents {BindingWheelDefinition.MinRings}..{BindingWheelDefinition.MaxRings}.",
+                    paramName: nameof(document)
+                );
             }
 
-            if ((style.InitialRing < 0) || (style.InitialRing >= ringCount)) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" initial ring {style.InitialRing} is outside its {ringCount} rings.", paramName: nameof(document));
+            if (
+                (style.InitialRing < 0) ||
+                (style.InitialRing >= ringCount)
+            ) {
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" initial ring {style.InitialRing} is outside its {ringCount} rings.",
+                    paramName: nameof(document)
+                );
             }
 
             if ((style.DeadZoneFraction + ((ringCount + style.OuterGraceRingFraction) * style.RingWidthFraction)) >= 0.5f) {
-                throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" style extends beyond half of the seat's smaller viewport extent.", paramName: nameof(document));
+                throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" style extends beyond half of the seat's smaller viewport extent.",
+                    paramName: nameof(document)
+                );
             }
 
             BindingWheelExcursionView? excursionView = null;
 
             if (style.RingSelection == BindingWheelRingSelectionMode.Explicit) {
                 if (style.Excursion is not null) {
-                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries excursion ranges while ring selection is Explicit.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Wheel \"{wheel.Id}\" carries excursion ranges while ring selection is Explicit.",
+                        paramName: nameof(document)
+                    );
                 }
             } else {
                 var excursion = (style.Excursion
-                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" selects rings by Excursion but declares no excursion policy.", paramName: nameof(document)));
+                    ?? throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" selects rings by Excursion but declares no excursion policy.",
+                    paramName: nameof(document)
+                ));
                 var thresholds = (excursion.Thresholds
-                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" excursion policy declares null thresholds.", paramName: nameof(document)));
+                    ?? throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" excursion policy declares null thresholds.",
+                    paramName: nameof(document)
+                ));
 
-                if (!float.IsFinite(f: excursion.DeadZone) || (excursion.DeadZone < 0f) ||
-                    !float.IsFinite(f: excursion.SpatialTravelFraction) || (excursion.SpatialTravelFraction <= 0f) || (excursion.SpatialTravelFraction > 1f) ||
-                    !float.IsFinite(f: excursion.Hysteresis) || (excursion.Hysteresis < 0f)) {
-                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" carries invalid excursion geometry.", paramName: nameof(document));
+                if (
+                    !float.IsFinite(f: excursion.DeadZone) ||
+                    (excursion.DeadZone < 0f) ||
+                    !float.IsFinite(f: excursion.SpatialTravelFraction) ||
+                    (excursion.SpatialTravelFraction <= 0f) ||
+                    (excursion.SpatialTravelFraction > 1f) ||
+                    !float.IsFinite(f: excursion.Hysteresis) ||
+                    (excursion.Hysteresis < 0f)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Wheel \"{wheel.Id}\" carries invalid excursion geometry.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 if (thresholds.Count != (ringCount - 1)) {
-                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" has {ringCount} rings but {thresholds.Count} excursion thresholds; exactly {ringCount - 1} boundaries are required.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Wheel \"{wheel.Id}\" has {ringCount} rings but {thresholds.Count} excursion thresholds; exactly {(ringCount - 1)} boundaries are required.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 var thresholdSquares = new float[thresholds.Count];
@@ -321,8 +509,15 @@ public static class BindingProfile {
                 for (var thresholdIndex = 0; (thresholdIndex < thresholds.Count); thresholdIndex++) {
                     var threshold = thresholds[thresholdIndex];
 
-                    if (!float.IsFinite(f: threshold) || (threshold <= previous) || ((threshold - previous) <= (2f * excursion.Hysteresis))) {
-                        throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" excursion threshold {thresholdIndex} must be finite, strictly ascending from the dead zone, and leave room for twice the authored hysteresis.", paramName: nameof(document));
+                    if (
+                        !float.IsFinite(f: threshold) ||
+                        (threshold <= previous) ||
+                        ((threshold - previous) <= (2f * excursion.Hysteresis))
+                    ) {
+                        throw new ArgumentException(
+                            message: $"Wheel \"{wheel.Id}\" excursion threshold {thresholdIndex} must be finite, strictly ascending from the dead zone, and leave room for twice the authored hysteresis.",
+                            paramName: nameof(document)
+                        );
                     }
 
                     thresholdSquares[thresholdIndex] = (threshold * threshold);
@@ -344,70 +539,129 @@ public static class BindingProfile {
 
             for (var ringIndex = 0; (ringIndex < ringCount); ringIndex++) {
                 var ring = (wheel.Rings![ringIndex]
-                    ?? throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" ring {ringIndex} is null.", paramName: nameof(document)));
+                    ?? throw new ArgumentException(
+                    message: $"Wheel \"{wheel.Id}\" ring {ringIndex} is null.",
+                    paramName: nameof(document)
+                ));
 
                 if (string.IsNullOrEmpty(value: ring.Id)) {
-                    throw new ArgumentException(message: $"Wheel \"{wheel.Id}\" ring {ringIndex} must carry a page id.", paramName: nameof(document));
+                    throw new ArgumentException(
+                        message: $"Wheel \"{wheel.Id}\" ring {ringIndex} must carry a page id.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 // Ring pages share the document-wide page-id namespace (they ARE pages) — but hold no chord row,
                 // so they enter the map with a sentinel row that nothing resolves.
-                if (!pageRowsById.TryAdd(key: ring.Id, value: (GroupIndex: wheelGroupIndex, RowIndex: -1))) {
-                    throw new ArgumentException(message: $"Duplicate page id \"{ring.Id}\".", paramName: nameof(document));
+                if (!pageRowsById.TryAdd(
+                    key: ring.Id,
+                    value: (GroupIndex: wheelGroupIndex, RowIndex: -1)
+                )) {
+                    throw new ArgumentException(
+                        message: $"Duplicate page id \"{ring.Id}\".",
+                        paramName: nameof(document)
+                    );
                 }
 
                 var sectorCount = (ring.Entries?.Count ?? 0);
 
-                if ((sectorCount < BindingWheelDefinition.MinSectorsPerRing) || (sectorCount > BindingWheelDefinition.MaxSectorsPerRing)) {
-                    throw new ArgumentException(message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") declares {sectorCount} sectors; a ring presents {BindingWheelDefinition.MinSectorsPerRing}..{BindingWheelDefinition.MaxSectorsPerRing}.", paramName: nameof(document));
+                if (
+                    (sectorCount < BindingWheelDefinition.MinSectorsPerRing) ||
+                    (sectorCount > BindingWheelDefinition.MaxSectorsPerRing)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") declares {sectorCount} sectors; a ring presents {BindingWheelDefinition.MinSectorsPerRing}..{BindingWheelDefinition.MaxSectorsPerRing}.",
+                        paramName: nameof(document)
+                    );
                 }
 
                 var sectorViews = new BindingWheelSectorView[sectorCount];
 
                 for (var sectorIndex = 0; (sectorIndex < sectorCount); sectorIndex++) {
                     var sector = (ring.Entries![sectorIndex]
-                        ?? throw new ArgumentException(message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex} is null.", paramName: nameof(document)));
+                        ?? throw new ArgumentException(
+                        message: $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex} is null.",
+                        paramName: nameof(document)
+                    ));
                     var sectorPath = $"Wheel ring \"{ring.Id}\" (group \"{wheel.Group}\") sector {sectorIndex}";
 
                     if (string.IsNullOrEmpty(value: sector.Command)) {
-                        throw new ArgumentException(message: $"{sectorPath} must name the command it commits.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} must name the command it commits.",
+                            paramName: nameof(document)
+                        );
                     }
 
                     // The narrowed sector shape — each foreign member refused BY NAME rather than ignored, so an
                     // authored field never silently means nothing.
                     if (!string.IsNullOrEmpty(value: sector.Source)) {
-                        throw new ArgumentException(message: $"{sectorPath} carries a source — the radial gesture is a sector's trigger.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries a source — the radial gesture is a sector's trigger.",
+                            paramName: nameof(document)
+                        );
                     }
                     if (sector.Activator is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries an activator — the radial gesture is a sector's trigger.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries an activator — the radial gesture is a sector's trigger.",
+                            paramName: nameof(document)
+                        );
                     }
                     if (sector.Channel is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries a channel destination — a one-shot radial activation targets a command, never a folded channel.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries a channel destination — a one-shot radial activation targets a command, never a folded channel.",
+                            paramName: nameof(document)
+                        );
                     }
                     if (sector.Scale is not null) {
-                        throw new ArgumentException(message: $"{sectorPath} carries a scale — a sector has no channel to scale.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries a scale — a sector has no channel to scale.",
+                            paramName: nameof(document)
+                        );
                     }
                     if (sector.Mode != BindingEntryMode.Hold) {
-                        throw new ArgumentException(message: $"{sectorPath} sets mode {sector.Mode} — a sector carries no held state.", paramName: nameof(document));
+                        throw new ArgumentException(
+                            message: $"{sectorPath} sets mode {sector.Mode} — a sector carries no held state.",
+                            paramName: nameof(document)
+                        );
                     }
 
-                    ValidateValue(value: sector.Value, path: sectorPath, isChannel: false, paramName: nameof(document));
+                    ValidateValue(
+                        value: sector.Value,
+                        path: sectorPath,
+                        isChannel: false,
+                        paramName: nameof(document)
+                    );
                     var phase = (sector.ActivateOn ?? CommandPhase.Started);
                     var value = (sector.Value ?? ((phase is CommandPhase.Completed or CommandPhase.Canceled)
                         ? CommandValue.Digital(active: false)
                         : CommandValue.Digital(active: true)));
 
                     sectorViews[sectorIndex] = new BindingWheelSectorView(
-                        Activation: new BindingActivation(command: sector.Command!, value: value, phase: phase),
+                        Activation: new BindingActivation(
+                            command: sector.Command!,
+                            value: value,
+                            phase: phase
+                        ),
                         Label: sector.Label,
                         Icon: sector.Icon
                     );
                 }
 
-                ringViews[ringIndex] = new BindingWheelRingView(PageId: ring.Id, Label: ring.Label, Sectors: sectorViews);
+                ringViews[ringIndex] = new BindingWheelRingView(
+                    PageId: ring.Id,
+                    Label: ring.Label,
+                    Sectors: sectorViews
+                );
             }
 
-            var view = new BindingWheelView(Id: wheel.Id, Group: wheel.Group, HoldPageIds: holdPages, Rings: ringViews, Style: style, Excursion: excursionView);
+            var view = new BindingWheelView(
+                Id: wheel.Id,
+                Group: wheel.Group,
+                HoldPageIds: holdPages,
+                Rings: ringViews,
+                Style: style,
+                Excursion: excursionView
+            );
 
             foreach (var holdRow in holdRows) {
                 wheelViewByRow[holdRow] = view;
@@ -423,11 +677,16 @@ public static class BindingProfile {
             var hints = new List<BindingChordCommandView>();
 
             for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
-                if ((rowGroups[rowIndex] != groupIndex) || (documentRows[rowIndex].Command is not { } command)) {
+                if (
+                    (rowGroups[rowIndex] != groupIndex) ||
+                    (documentRows[rowIndex].Command is not { } command)
+                ) {
                     continue;
                 }
 
-                var effectiveCommand = ((command.Channel is { } channel) ? channelCommandName(arg: channel) : command.Command!);
+                var effectiveCommand = ((command.Channel is { } channel)
+                    ? channelCommandName(arg: channel)
+                    : command.Command!);
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
@@ -453,14 +712,20 @@ public static class BindingProfile {
             var groupIndex = rowGroups[rowIndex];
 
             if (row.Page is { } page) {
-                var (table, activators) = BuildTable(page: page, channelCommandName: channelCommandName, nextActivatorIndex: ref nextActivatorIndex);
+                var (table, activators) = BuildTable(
+                    page: page,
+                    channelCommandName: channelCommandName,
+                    nextActivatorIndex: ref nextActivatorIndex
+                );
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
                     Command: null,
                     GroupIndex: groupIndex,
                     Table: table,
-                    Activators: ((activators.Count > 0) ? activators : null),
+                    Activators: ((activators.Count > 0)
+                    ? activators
+                    : null),
                     View: BuildView(
                         chord: [.. chord],
                         group: groupNames[groupIndex],
@@ -473,8 +738,12 @@ public static class BindingProfile {
             } else {
                 var command = row.Command!;
                 var isChannel = (command.Channel is not null);
-                var pressValue = (command.Value ?? (isChannel ? CommandValue.Axis(value: (command.Scale ?? 1f)) : CommandValue.Digital(active: true)));
-                var effectiveCommand = (isChannel ? channelCommandName(arg: command.Channel!) : command.Command!);
+                var pressValue = (command.Value ?? (isChannel
+                    ? CommandValue.Axis(value: (command.Scale ?? 1f))
+                    : CommandValue.Digital(active: true)));
+                var effectiveCommand = (isChannel
+                    ? channelCommandName(arg: command.Channel!)
+                    : command.Command!);
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
@@ -523,19 +792,36 @@ public static class BindingProfile {
             var hasActivator = (entry.Activator is not null);
 
             if (hasSource == hasActivator) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry that must name exactly one trigger — a source or an activator.", paramName: nameof(page));
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" carries an entry that must name exactly one trigger — a source or an activator.",
+                    paramName: nameof(page)
+                );
             }
 
             var label = EntryLabel(entry: entry);
 
             if ((entry.Command is null) == (entry.Channel is null)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} must carry exactly one destination — a command or a channel.", paramName: nameof(page));
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {label} must carry exactly one destination — a command or a channel.",
+                    paramName: nameof(page)
+                );
             }
 
-            ValidateValue(value: entry.Value, path: $"Page \"{page.Id}\" entry for {label}", isChannel: (entry.Channel is not null), paramName: nameof(page));
+            ValidateValue(
+                value: entry.Value,
+                path: $"Page \"{page.Id}\" entry for {label}",
+                isChannel: (entry.Channel is not null),
+                paramName: nameof(page)
+            );
 
-            if ((entry.Mode == BindingEntryMode.Toggle) && (entry.Channel is null)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.", paramName: nameof(page));
+            if (
+                (entry.Mode == BindingEntryMode.Toggle) &&
+                (entry.Channel is null)
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {label} sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.",
+                    paramName: nameof(page)
+                );
             }
 
             string effectiveCommand;
@@ -543,10 +829,20 @@ public static class BindingProfile {
             float? channelScale;
 
             if (entry.Channel is { } channel) {
-                ValidateChannelRef(channel: channel, path: $"Page \"{page.Id}\" entry for {label}", paramName: nameof(page));
+                ValidateChannelRef(
+                    channel: channel,
+                    path: $"Page \"{page.Id}\" entry for {label}",
+                    paramName: nameof(page)
+                );
 
-                if ((entry.Scale is { } scale) && (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} channel {channel.Describe()} scale must be in [-1, 1].", paramName: nameof(page));
+                if (
+                    (entry.Scale is { } scale) &&
+                    (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))
+                ) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} channel {channel.Describe()} scale must be in [-1, 1].",
+                        paramName: nameof(page)
+                    );
                 }
 
                 effectiveCommand = channelCommandName(arg: channel);
@@ -556,7 +852,10 @@ public static class BindingProfile {
                 effectiveValue = null;
                 channelScale = (entry.Scale ?? 1f);
             } else if (string.IsNullOrEmpty(value: entry.Command)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" carries an entry without a command or channel.", paramName: nameof(page));
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" carries an entry without a command or channel.",
+                    paramName: nameof(page)
+                );
             } else {
                 effectiveCommand = entry.Command;
                 effectiveValue = entry.Value;
@@ -567,16 +866,25 @@ public static class BindingProfile {
                 var activator = entry.Activator!;
 
                 if (entry.ActivateOn is not null) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.", paramName: nameof(page));
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.",
+                        paramName: nameof(page)
+                    );
                 }
 
                 if (activator.Sequence is not { Count: > 0 }) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator sequence must be non-empty.", paramName: nameof(page));
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} activator sequence must be non-empty.",
+                        paramName: nameof(page)
+                    );
                 }
 
                 foreach (var step in activator.Sequence) {
                     if (string.IsNullOrEmpty(value: step)) {
-                        throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator sequence carries an empty control name.", paramName: nameof(page));
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" entry for {label} activator sequence carries an empty control name.",
+                            paramName: nameof(page)
+                        );
                     }
                 }
 
@@ -585,24 +893,47 @@ public static class BindingProfile {
 
                     foreach (var step in activator.Sequence) {
                         if (!seenSteps.Add(item: step)) {
-                            throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} repeats control \"{step}\" in a Held activator sequence — a simultaneous hold cannot distinguish a repeat.", paramName: nameof(page));
+                            throw new ArgumentException(
+                                message: $"Page \"{page.Id}\" entry for {label} repeats control \"{step}\" in a Held activator sequence — a simultaneous hold cannot distinguish a repeat.",
+                                paramName: nameof(page)
+                            );
                         }
                     }
 
                     if (activator.TimeoutTicks is not null) {
-                        throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} sets timeoutTicks on a Held activator — timeout only applies to a Tapped sequence.", paramName: nameof(page));
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" entry for {label} sets timeoutTicks on a Held activator — timeout only applies to a Tapped sequence.",
+                            paramName: nameof(page)
+                        );
                     }
-                } else if ((activator.TimeoutTicks is { } timeout) && (timeout <= 0)) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {label} activator timeoutTicks must be positive.", paramName: nameof(page));
+                } else if (
+                    (activator.TimeoutTicks is { } timeout) &&
+                    (timeout <= 0)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} activator timeoutTicks must be positive.",
+                        paramName: nameof(page)
+                    );
                 }
 
-                var shadowKey = $"{activator.Mode}\0{string.Join(separator: ',', values: activator.Sequence)}";
+                var shadowKey = $"{activator.Mode}\0{string.Join(
+                    separator: ',',
+                    values: activator.Sequence
+                )}";
 
                 if (!seenActivatorKeys.Add(item: shadowKey)) {
-                    throw new ArgumentException(message: $"Page \"{page.Id}\" declares two activators for the same {activator.Mode} sequence [{string.Join(separator: ", ", values: activator.Sequence)}] — the second can never fire (shadowed).", paramName: nameof(page));
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" declares two activators for the same {activator.Mode} sequence [{string.Join(
+                            separator: ", ",
+                            values: activator.Sequence
+                        )}] — the second can never fire (shadowed).",
+                        paramName: nameof(page)
+                    );
                 }
 
-                var pressValue = (entry.Value ?? ((channelScale is { } scale) ? CommandValue.Axis(value: scale) : CommandValue.Digital(active: true)));
+                var pressValue = (entry.Value ?? ((channelScale is { } scale)
+                    ? CommandValue.Axis(value: scale)
+                    : CommandValue.Digital(active: true)));
 
                 activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
                     ActivatorIndex: nextActivatorIndex++,
@@ -623,12 +954,25 @@ public static class BindingProfile {
             // A plain-source entry may name an axis COMPONENT (gamepad.leftStick.x) instead of a bare control — the
             // table key is always the BASE source (what a raw InputSignal actually carries); the component rides
             // the compiled CommandBinding and is extracted at resolve time (see InputRouter's ResolveValue).
-            if (!BindingSourceComponent.TrySplit(source: entry.Source!, baseSource: out var baseSource, component: out var component)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {entry.Source} names a malformed axis component — the final segment must be \"x\" or \"y\".", paramName: nameof(page));
+            if (!BindingSourceComponent.TrySplit(
+                source: entry.Source!,
+                baseSource: out var baseSource,
+                component: out var component
+            )) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {entry.Source} names a malformed axis component — the final segment must be \"x\" or \"y\".",
+                    paramName: nameof(page)
+                );
             }
 
-            if ((component is not null) && (channelScale is null)) {
-                throw new ArgumentException(message: $"Page \"{page.Id}\" entry for {entry.Source} names an axis component, which is only meaningful on a channel destination.", paramName: nameof(page));
+            if (
+                (component is not null) &&
+                (channelScale is null)
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {entry.Source} names an axis component, which is only meaningful on a channel destination.",
+                    paramName: nameof(page)
+                );
             }
 
             if (!grouped.TryGetValue(
@@ -661,7 +1005,10 @@ public static class BindingProfile {
     // A stable label for error messages — an activator entry has no Source, so it identifies by its sequence.
     private static string EntryLabel(BindingPageEntryDefinition entry) {
         return (entry.Source ?? ((entry.Activator is { } activator)
-            ? $"activator[{string.Join(separator: ',', values: activator.Sequence)}]"
+            ? $"activator[{string.Join(
+            separator: ',',
+            values: activator.Sequence
+        )}]"
             : "(unset)"));
     }
     private static BindingPageView BuildView(
@@ -678,7 +1025,9 @@ public static class BindingProfile {
             var entry = page.Entries![entryIndex];
 
             buttons[entryIndex] = new BindingPageButtonView(
-                Command: ((entry.Channel is { } channel) ? channelCommandName(arg: channel) : entry.Command!),
+                Command: ((entry.Channel is { } channel)
+                ? channelCommandName(arg: channel)
+                : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
                 // An activator entry has no Source — EntryLabel's synthetic "activator[...]" label stands in, so a
@@ -716,9 +1065,15 @@ public static class BindingProfile {
             case ChannelRef.Name { Value.Length: > 0 }:
                 return;
             case ChannelRef.Name:
-                throw new ArgumentException(message: $"{path} channel name must be non-empty.", paramName: paramName);
+                throw new ArgumentException(
+                    message: $"{path} channel name must be non-empty.",
+                    paramName: paramName
+                );
             default:
-                throw new ArgumentException(message: $"{path} channel reference is not a declared name variant.", paramName: paramName);
+                throw new ArgumentException(
+                    message: $"{path} channel reference is not a declared name variant.",
+                    paramName: paramName
+                );
         }
     }
     private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {
@@ -726,13 +1081,27 @@ public static class BindingProfile {
             return;
         }
         if (isChannel) {
-            throw new ArgumentException(message: $"{path} carries a Value on a channel destination; Scale is the channel constant.", paramName: paramName);
+            throw new ArgumentException(
+                message: $"{path} carries a Value on a channel destination; Scale is the channel constant.",
+                paramName: paramName
+            );
         }
         if (!Enum.IsDefined(value: constant.Kind)) {
-            throw new ArgumentException(message: $"{path} Value kind {(int)constant.Kind} is not declared.", paramName: paramName);
+            throw new ArgumentException(
+                message: $"{path} Value kind {(int)constant.Kind} is not declared.",
+                paramName: paramName
+            );
         }
-        if (!float.IsFinite(f: constant.Raw.X) || !float.IsFinite(f: constant.Raw.Y) || !float.IsFinite(f: constant.Raw.Z) || !float.IsFinite(f: constant.Raw.W)) {
-            throw new ArgumentException(message: $"{path} Value components must be finite.", paramName: paramName);
+        if (
+            !float.IsFinite(f: constant.Raw.X) ||
+            !float.IsFinite(f: constant.Raw.Y) ||
+            !float.IsFinite(f: constant.Raw.Z) ||
+            !float.IsFinite(f: constant.Raw.W)
+        ) {
+            throw new ArgumentException(
+                message: $"{path} Value components must be finite.",
+                paramName: paramName
+            );
         }
     }
 

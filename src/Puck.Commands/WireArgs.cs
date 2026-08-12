@@ -84,7 +84,10 @@ public readonly ref struct WireArgs {
     /// <param name="value">The word to compare against.</param>
     /// <returns>Whether the token exists and matches.</returns>
     public bool Is(int index, string value) => (((uint)index < (uint)Count) &&
-        this[index].Equals(other: value, comparisonType: StringComparison.OrdinalIgnoreCase));
+        this[index].Equals(
+        other: value,
+        comparisonType: StringComparison.OrdinalIgnoreCase
+    ));
 
     /// <summary>Joins the tokens from <paramref name="start"/> onward with single spaces — the one place a verb whose
     /// argument is free text (a path, a name, a message) or a whitespace-split inline-JSON payload rebuilds its tail.
@@ -107,7 +110,9 @@ public readonly ref struct WireArgs {
 
         // One allocation: the result. The scratch buffer is the stack below the common-tail size (a path, a name, a
         // short inline-JSON row), a heap array only for a genuinely long tail.
-        var destination = ((length <= MaxStackTail) ? stackalloc char[MaxStackTail] : new char[length]);
+        var destination = ((length <= MaxStackTail)
+            ? stackalloc char[MaxStackTail]
+            : new char[length]);
         var offset = 0;
 
         for (var index = start; (index < count); index++) {
@@ -131,7 +136,12 @@ public readonly ref struct WireArgs {
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
     /// <returns>Whether the token parsed.</returns>
     public bool TryFloat(int index, out float value) =>
-        (float.TryParse(s: this[index], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out value) &&
+        (float.TryParse(
+        s: this[index],
+        style: NumberStyles.Float,
+        provider: CultureInfo.InvariantCulture,
+        result: out value
+    ) &&
         float.IsFinite(f: value));
 
     /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="int"/> straight from its
@@ -140,5 +150,10 @@ public readonly ref struct WireArgs {
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
     /// <returns>Whether the token parsed.</returns>
     public bool TryInt(int index, out int value) =>
-        int.TryParse(s: this[index], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out value);
+        int.TryParse(
+        s: this[index],
+        style: NumberStyles.Integer,
+        provider: CultureInfo.InvariantCulture,
+        result: out value
+    );
 }

@@ -59,14 +59,21 @@ public sealed class TextCommandSource {
         // inline read-back would observe pre-mutation state, so it waits for the snapshot to apply. Further
         // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order, so a burst
         // of scripted mutations lands in one tick instead of one per frame.
-        while (!(HoldGate?.Invoke() ?? false) && m_pending.TryPeek(result: out var line)) {
+        while (
+            !(HoldGate?.Invoke() ?? false) &&
+            m_pending.TryPeek(result: out var line)
+        ) {
             // Blank lines and '#' COMMENT lines are skipped, so a piped driving SCRIPT can be self-documenting: an
             // agent pipes a commented list of verbs (a "# what this run proves" header, per-step notes) and only the
             // real verbs run. A comment is a line whose first non-whitespace character is '#'.
             var content = line.AsSpan().TrimStart();
             var isComment = (content.IsEmpty || (content[0] == '#'));
 
-            if (!isComment && m_registry.HasPendingSimulationSubmission && !m_registry.RoutesToSimulation(line: line)) {
+            if (
+                !isComment &&
+                m_registry.HasPendingSimulationSubmission &&
+                !m_registry.RoutesToSimulation(line: line)
+            ) {
                 break;
             }
 

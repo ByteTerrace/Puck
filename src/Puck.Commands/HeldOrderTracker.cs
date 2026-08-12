@@ -21,7 +21,16 @@ public sealed class HeldOrderTracker {
     /// <param name="pressThreshold">The value at or above which an unlatched modifier latches held.</param>
     /// <param name="releaseThreshold">The value at or below which a latched modifier releases; at most <paramref name="pressThreshold"/>.</param>
     public HeldOrderTracker(int modifierCount, float pressThreshold, float releaseThreshold)
-        : this(pressThresholds: Fill(count: modifierCount, value: pressThreshold), releaseThresholds: Fill(count: modifierCount, value: releaseThreshold)) {
+        : this(
+        pressThresholds: Fill(
+            count: modifierCount,
+            value: pressThreshold
+        ),
+        releaseThresholds: Fill(
+            count: modifierCount,
+            value: releaseThreshold
+        )
+    ) {
     }
 
     /// <summary>Initializes a new instance with a PER-MODIFIER press/release threshold pair — the shape
@@ -34,7 +43,10 @@ public sealed class HeldOrderTracker {
         ArgumentNullException.ThrowIfNull(argument: releaseThresholds);
 
         if (pressThresholds.Count != releaseThresholds.Count) {
-            throw new ArgumentException(message: "pressThresholds and releaseThresholds must be the same length.", paramName: nameof(releaseThresholds));
+            throw new ArgumentException(
+                message: "pressThresholds and releaseThresholds must be the same length.",
+                paramName: nameof(releaseThresholds)
+            );
         }
 
         m_latched = new bool[pressThresholds.Count];
@@ -56,14 +68,20 @@ public sealed class HeldOrderTracker {
     /// <returns><see langword="true"/> when the modifier's held/released membership changed (it joined or left
     /// <see cref="HeldOrder"/> this call).</returns>
     public bool Set(int index, float value) {
-        if (!m_latched[index] && (value >= m_pressThresholds[index])) {
+        if (
+            !m_latched[index] &&
+            (value >= m_pressThresholds[index])
+        ) {
             m_latched[index] = true;
             m_heldOrder.Add(item: index);
 
             return true;
         }
 
-        if (m_latched[index] && (value <= m_releaseThresholds[index])) {
+        if (
+            m_latched[index] &&
+            (value <= m_releaseThresholds[index])
+        ) {
             m_latched[index] = false;
             _ = m_heldOrder.Remove(item: index);
 
@@ -82,7 +100,10 @@ public sealed class HeldOrderTracker {
     private static float[] Fill(int count, float value) {
         var array = new float[count];
 
-        Array.Fill(array: array, value: value);
+        Array.Fill(
+            array: array,
+            value: value
+        );
 
         return array;
     }

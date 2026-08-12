@@ -49,7 +49,13 @@ public sealed class InMemorySequenceStore : ISequenceStore {
     /// <inheritdoc/>
     public bool TryAdvance(string domain, string subject, ulong sequence) {
         lock (m_marks) {
-            if (m_marks.TryGetValue(key: (domain, subject), out var mark) && (sequence <= mark)) {
+            if (
+                m_marks.TryGetValue(
+                key: (domain, subject),
+                out var mark
+            ) &&
+                (sequence <= mark)
+            ) {
                 return false;
             }
 

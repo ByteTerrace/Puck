@@ -44,15 +44,24 @@ public sealed class BindingSession {
         ArgumentNullException.ThrowIfNull(plan);
 
         if (plan.Steps.Count == 0) {
-            throw new ArgumentException(message: "a binding session needs at least one step", paramName: nameof(plan));
+            throw new ArgumentException(
+                message: "a binding session needs at least one step",
+                paramName: nameof(plan)
+            );
         }
 
         if (plan.RequiredPresses < 1) {
-            throw new ArgumentException(message: "a binding session needs at least one press per step", paramName: nameof(plan));
+            throw new ArgumentException(
+                message: "a binding session needs at least one press per step",
+                paramName: nameof(plan)
+            );
         }
 
         if (plan.ReleaseThreshold > plan.PressThreshold) {
-            throw new ArgumentException(message: "the release threshold must not exceed the press threshold", paramName: nameof(plan));
+            throw new ArgumentException(
+                message: "the release threshold must not exceed the press threshold",
+                paramName: nameof(plan)
+            );
         }
 
         m_captures = new List<BindingSessionCapture>(capacity: plan.Steps.Count);
@@ -124,9 +133,20 @@ public sealed class BindingSession {
             );
         }
 
-        if (m_capturedSources.Contains(item: source) && !string.Equals(a: source, b: m_pendingSource, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (
+            m_capturedSources.Contains(item: source) &&
+            !string.Equals(
+            a: source,
+            b: m_pendingSource,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        ) {
             return new BindingSessionEvent(
-                ConflictingCommand: m_captures.Last(predicate: capture => string.Equals(a: capture.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)).Command,
+                ConflictingCommand: m_captures.Last(predicate: capture => string.Equals(
+                    a: capture.Source,
+                    b: source,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )).Command,
                 Kind: BindingSessionEventKind.ConflictRejected,
                 PressesRemaining: m_pressesRemaining,
                 Source: source,
@@ -142,21 +162,33 @@ public sealed class BindingSession {
             m_pressesRemaining = (m_plan.RequiredPresses - 1);
 
             if (m_pressesRemaining == 0) {
-                return Confirm(source: source, step: step, stepIndex: stepIndex);
+                return Confirm(
+                    source: source,
+                    step: step,
+                    stepIndex: stepIndex
+                );
             }
 
             return new BindingSessionEvent(
                 ConflictingCommand: null,
-                Kind: (string.Equals(a: source, b: step.SuggestedSource, comparisonType: StringComparison.OrdinalIgnoreCase)
-                    ? BindingSessionEventKind.SuggestedCaptured
-                    : BindingSessionEventKind.DeviationCaptured),
+                Kind: (string.Equals(
+                    a: source,
+                    b: step.SuggestedSource,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+                ? BindingSessionEventKind.SuggestedCaptured
+                : BindingSessionEventKind.DeviationCaptured),
                 PressesRemaining: m_pressesRemaining,
                 Source: source,
                 StepIndex: stepIndex
             );
         }
 
-        if (!string.Equals(a: source, b: m_pendingSource, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(
+            a: source,
+            b: m_pendingSource,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             // A wandering confirmation invalidates the capture: redo the whole step (the calibration protocol's
             // redo-on-mismatch rule — a hesitant player restates their choice instead of locking in an accident).
             m_pendingSource = null;
@@ -183,7 +215,11 @@ public sealed class BindingSession {
             );
         }
 
-        return Confirm(source: source, step: step, stepIndex: stepIndex);
+        return Confirm(
+            source: source,
+            step: step,
+            stepIndex: stepIndex
+        );
     }
 
     private BindingSessionEvent Confirm(string source, BindingSessionStep step, int stepIndex) {
@@ -192,7 +228,11 @@ public sealed class BindingSession {
             Command: step.Command,
             Icon: step.Icon,
             Label: step.Label,
-            MatchedSuggestion: string.Equals(a: source, b: step.SuggestedSource, comparisonType: StringComparison.OrdinalIgnoreCase),
+            MatchedSuggestion: string.Equals(
+                a: source,
+                b: step.SuggestedSource,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ),
             Source: source
         ));
         _ = m_capturedSources.Add(item: source);
@@ -203,8 +243,8 @@ public sealed class BindingSession {
         return new BindingSessionEvent(
             ConflictingCommand: null,
             Kind: ((m_stepIndex < m_plan.Steps.Count)
-                ? BindingSessionEventKind.StepConfirmed
-                : BindingSessionEventKind.SessionCompleted),
+            ? BindingSessionEventKind.StepConfirmed
+            : BindingSessionEventKind.SessionCompleted),
             PressesRemaining: 0,
             Source: source,
             StepIndex: stepIndex
@@ -226,7 +266,10 @@ public sealed class BindingSession {
 
         switch (signal.Value.Kind) {
             case CommandValueKind.Digital:
-                return ((signal.Phase == CommandPhase.Started) && m_held.Add(item: signal.Source));
+                return (
+                    (signal.Phase == CommandPhase.Started) &&
+                    m_held.Add(item: signal.Source)
+                );
             case CommandValueKind.Axis1D: {
                     var value = signal.Value.AsAxis1D;
 
@@ -238,7 +281,10 @@ public sealed class BindingSession {
                         return false;
                     }
 
-                    return ((value >= m_plan.PressThreshold) && m_held.Add(item: signal.Source));
+                    return (
+                        (value >= m_plan.PressThreshold) &&
+                        m_held.Add(item: signal.Source)
+                    );
                 }
             default:
                 return false;

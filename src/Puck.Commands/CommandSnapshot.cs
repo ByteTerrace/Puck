@@ -36,7 +36,10 @@ public readonly record struct CommandSnapshot {
     /// <param name="tick">The fixed-step tick the snapshot stands for.</param>
     /// <returns>A snapshot with no lanes.</returns>
     public static CommandSnapshot Empty(ulong tick) {
-        return new CommandSnapshot(lanes: [], tick: tick);
+        return new CommandSnapshot(
+            lanes: [],
+            tick: tick
+        );
     }
 
     /// <summary>Finds the lane for a logical slot, if it has any active input this tick.</summary>

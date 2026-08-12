@@ -54,7 +54,7 @@ public static class CarriageInterchange {
     private const string SealedFileName = "sealed.envelope";
 
     /// <summary>The manifest keys §17 requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
-    private static readonly string[] s_requiredManifestKeys = [
+    private static readonly string[] RequiredManifestKeys = [
         "algorithm",
         "audience",
         "domain",
@@ -66,7 +66,10 @@ public static class CarriageInterchange {
     ];
 
     /// <summary>The manifest's encoding: UTF-8 with no byte-order mark, refusing byte sequences that are not valid UTF-8 rather than substituting replacement characters.</summary>
-    private static readonly UTF8Encoding s_manifestEncoding = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding ManifestEncoding = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true
+    );
 
     /// <summary>The purpose the interchange claim is minted with, so both sides expect the same one without negotiating.</summary>
     public const string InterchangePurpose = "carriage.cross-check";
@@ -113,9 +116,21 @@ public static class CarriageInterchange {
         var rootSpki = rootKey.ExportSubjectPublicKeyInfo();
         var issuingSpki = issuingKey.ExportSubjectPublicKeyInfo();
         var subjectSpki = subjectKey.ExportSubjectPublicKeyInfo();
-        var rootId = KeyId.ForRoot(subjectPublicKeyInfo: rootSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
-        var issuingId = KeyId.ForIssuing(domain: rootId.Domain, subjectPublicKeyInfo: issuingSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
-        var subjectId = KeyId.ForSubject(domain: rootId.Domain, subject: InterchangeSubject, subjectPublicKeyInfo: subjectSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var rootId = KeyId.ForRoot(
+            subjectPublicKeyInfo: rootSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
+        var issuingId = KeyId.ForIssuing(
+            domain: rootId.Domain,
+            subjectPublicKeyInfo: issuingSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
+        var subjectId = KeyId.ForSubject(
+            domain: rootId.Domain,
+            subject: InterchangeSubject,
+            subjectPublicKeyInfo: subjectSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
 
         var bindingOne = CarriageSigner.SignKeyBinding(
             codec: codec,
@@ -181,14 +196,53 @@ public static class CarriageInterchange {
         );
 
         Directory.CreateDirectory(path: directory);
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: RootKeyFileName), bytes: rootSpki);
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: SealedFileName), bytes: codec.EncodeEnvelope(envelope: sealedClaim));
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: RecipientSealingKeyFileName), bytes: recipientSealingKey.ExportPkcs8PrivateKey());
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: BindingOneFileName), bytes: codec.EncodeEnvelope(envelope: bindingOne));
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: BindingTwoFileName), bytes: codec.EncodeEnvelope(envelope: bindingTwo));
-        File.WriteAllBytes(path: Path.Combine(path1: directory, path2: ClaimFileName), bytes: codec.EncodeEnvelope(envelope: claim));
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: RootKeyFileName
+            ),
+            bytes: rootSpki
+        );
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: SealedFileName
+            ),
+            bytes: codec.EncodeEnvelope(envelope: sealedClaim)
+        );
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: RecipientSealingKeyFileName
+            ),
+            bytes: recipientSealingKey.ExportPkcs8PrivateKey()
+        );
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: BindingOneFileName
+            ),
+            bytes: codec.EncodeEnvelope(envelope: bindingOne)
+        );
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: BindingTwoFileName
+            ),
+            bytes: codec.EncodeEnvelope(envelope: bindingTwo)
+        );
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: directory,
+                path2: ClaimFileName
+            ),
+            bytes: codec.EncodeEnvelope(envelope: claim)
+        );
         WriteManifest(
-            path: Path.Combine(path1: directory, path2: ManifestFileName),
+            path: Path.Combine(
+                path1: directory,
+                path2: ManifestFileName
+            ),
             entries: [
                 ("algorithm", CarriageAlgorithms.EcdsaP256Sha256),
                 ("audience", InterchangeAudience),
@@ -239,14 +293,27 @@ public static class CarriageInterchange {
         var codec = new CborCarriageCodec();
         var failures = 0;
 
-        if (!TryStep(check: $"cross-verify manifest: reading {ManifestFileName}", body: () => ReadManifest(path: Path.Combine(path1: directory, path2: ManifestFileName)), value: out var manifest)) {
+        if (!TryStep(
+            check: $"cross-verify manifest: reading {ManifestFileName}",
+            body: () => ReadManifest(path: Path.Combine(
+                path1: directory,
+                path2: ManifestFileName
+            )),
+            value: out var manifest
+        )) {
             return 1;
         }
 
-        var missingKeys = s_requiredManifestKeys.Where(predicate: key => (!manifest.TryGetValue(key: key, value: out var value) || (value.Length == 0))).ToArray();
+        var missingKeys = RequiredManifestKeys.Where(predicate: key => (!manifest.TryGetValue(
+            key: key,
+            value: out var value
+        ) || (value.Length == 0))).ToArray();
 
         if (missingKeys.Length != 0) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest: {ManifestFileName} is missing (or leaves empty) the required key(s) {string.Join(separator: ", ", values: missingKeys)} — §17 requires all {s_requiredManifestKeys.Length}");
+            Console.WriteLine(value: $"[FAIL] cross-verify manifest: {ManifestFileName} is missing (or leaves empty) the required key(s) {string.Join(
+                separator: ", ",
+                values: missingKeys
+            )} — §17 requires all {RequiredManifestKeys.Length}");
 
             return 1;
         }
@@ -261,25 +328,53 @@ public static class CarriageInterchange {
 
         var expectedPurpose = manifest["purpose"];
 
-        if (string.Equals(a: expectedPurpose, b: CarriagePurposes.KeyBinding, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: expectedPurpose,
+            b: CarriagePurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
             Console.WriteLine(value: $"[FAIL] cross-verify manifest: the manifest names purpose '{CarriagePurposes.KeyBinding}', which is reserved and can never be a claim's purpose (§8)");
 
             return 1;
         }
 
         if (
-            !TryStep(check: $"cross-verify root key: reading {RootKeyFileName}", body: () => File.ReadAllBytes(path: Path.Combine(path1: directory, path2: RootKeyFileName)), value: out var rootSpki) ||
-            !TryStep(check: $"cross-verify claim: reading {ClaimFileName}", body: () => File.ReadAllBytes(path: Path.Combine(path1: directory, path2: ClaimFileName)), value: out var claimBytes)
+            !TryStep(
+            check: $"cross-verify root key: reading {RootKeyFileName}",
+            body: () => File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: RootKeyFileName
+            )),
+            value: out var rootSpki
+        ) ||
+            !TryStep(
+            check: $"cross-verify claim: reading {ClaimFileName}",
+            body: () => File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: ClaimFileName
+            )),
+            value: out var claimBytes
+        )
         ) {
             return 1;
         }
 
-        var rootId = KeyId.ForRoot(subjectPublicKeyInfo: rootSpki, algorithm: algorithm);
+        var rootId = KeyId.ForRoot(
+            subjectPublicKeyInfo: rootSpki,
+            algorithm: algorithm
+        );
 
-        Console.WriteLine(value: $"verifying a chain minted by '{manifest.GetValueOrDefault(key: "minted-by", defaultValue: "(unstated)")}' from {directory}");
+        Console.WriteLine(value: $"verifying a chain minted by '{manifest.GetValueOrDefault(
+            key: "minted-by",
+            defaultValue: "(unstated)"
+        )}' from {directory}");
         Console.WriteLine(value: $"  domain recomputed from {RootKeyFileName}: {rootId.Domain}");
 
-        if (!string.Equals(a: rootId.Domain, b: manifest["domain"], comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: rootId.Domain,
+            b: manifest["domain"],
+            comparisonType: StringComparison.Ordinal
+        )) {
             Console.WriteLine(value: $"[FAIL] cross-verify: the manifest names domain {manifest["domain"]}, but the exported root key hashes to {rootId.Domain}");
 
             return 1;
@@ -290,12 +385,12 @@ public static class CarriageInterchange {
             body: () => new TrustList(
                 entries: [
                     new TrustListEntry(
-                        PinnedId: rootId,
-                        PublicKeySubjectPublicKeyInfo: rootSpki,
-                        Mode: CarriageTrustMode.Vouches,
-                        Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
-                        MaximumAge: null
-                    ),
+                    PinnedId: rootId,
+                    PublicKeySubjectPublicKeyInfo: rootSpki,
+                    Mode: CarriageTrustMode.Vouches,
+                    Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
+                    MaximumAge: null
+                ),
                 ],
                 defaultMaximumAge: null
             ),
@@ -307,8 +402,14 @@ public static class CarriageInterchange {
         if (!TryStep(
             check: $"cross-verify chain: decoding {BindingOneFileName} and {BindingTwoFileName}",
             body: () => new[] {
-                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: BindingOneFileName))),
-                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: BindingTwoFileName))),
+                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: BindingOneFileName
+            ))),
+                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: BindingTwoFileName
+            ))),
             },
             value: out var chain
         )) {
@@ -322,19 +423,29 @@ public static class CarriageInterchange {
         // verification of the same fixture as a replay, and be right to.
         CarriageVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
             CarriageVerifier.VerifyChain(
-                codec: codec,
-                claim: codec.DecodeEnvelope(wire: wire),
-                chain: chain,
-                trustList: trustList,
-                now: DateTimeOffset.UtcNow,
-                expectedPurpose: expected,
-                expectedAudience: manifest["audience"],
-                sequenceStore: new InMemorySequenceStore()
-            );
+            codec: codec,
+            claim: codec.DecodeEnvelope(wire: wire),
+            chain: chain,
+            trustList: trustList,
+            now: DateTimeOffset.UtcNow,
+            expectedPurpose: expected,
+            expectedAudience: manifest["audience"],
+            sequenceStore: new InMemorySequenceStore()
+        );
 
-        if (TryStep(check: "cross-verify", body: () => VerifyClaimBytes(wire: claimBytes, expected: expectedPurpose), value: out var result)) {
+        if (TryStep(
+            check: "cross-verify",
+            body: () => VerifyClaimBytes(
+                wire: claimBytes,
+                expected: expectedPurpose
+            ),
+            value: out var result
+        )) {
             if (result.Verified) {
-                Console.WriteLine(value: $"[PASS] cross-verify: the imported chain and claim verify against the pinned root — reach [{string.Join(separator: ", ", values: result.Reach!)}]");
+                Console.WriteLine(value: $"[PASS] cross-verify: the imported chain and claim verify against the pinned root — reach [{string.Join(
+                    separator: ", ",
+                    values: result.Reach!
+                )}]");
             } else {
                 failures += 1;
 
@@ -344,7 +455,11 @@ public static class CarriageInterchange {
             failures += 1;
         }
 
-        failures += CheckClaimHeader(codec: codec, claimBytes: claimBytes, manifest: manifest);
+        failures += CheckClaimHeader(
+            codec: codec,
+            claimBytes: claimBytes,
+            manifest: manifest
+        );
 
         // One flipped byte inside the claim's signature: the bytes still decode, so this lands on the
         // signature check rather than on the parser, which is what makes it a control for the case above.
@@ -355,12 +470,23 @@ public static class CarriageInterchange {
         failures += ExpectRefusal(
             check: "cross-verify tamper",
             detail: "one flipped byte",
-            body: () => VerifyClaimBytes(wire: tampered, expected: expectedPurpose)
+            body: () => VerifyClaimBytes(
+                wire: tampered,
+                expected: expectedPurpose
+            )
         );
 
-        failures += VerifySealed(codec: codec, directory: directory, manifest: manifest, trustList: trustList, chain: chain);
+        failures += VerifySealed(
+            codec: codec,
+            directory: directory,
+            manifest: manifest,
+            trustList: trustList,
+            chain: chain
+        );
 
-        return ((failures == 0) ? 0 : 1);
+        return ((failures == 0)
+            ? 0
+            : 1);
     }
 
     /// <summary>
@@ -373,35 +499,62 @@ public static class CarriageInterchange {
     /// <param name="manifest">The parsed manifest.</param>
     /// <returns>The number of failures.</returns>
     private static int CheckClaimHeader(ICarriageCodec codec, byte[] claimBytes, Dictionary<string, string> manifest) {
-        if (!TryStep(check: $"cross-verify manifest agreement: decoding {ClaimFileName}", body: () => codec.DecodeEnvelope(wire: claimBytes), value: out var claim)) {
+        if (!TryStep(
+            check: $"cross-verify manifest agreement: decoding {ClaimFileName}",
+            body: () => codec.DecodeEnvelope(wire: claimBytes),
+            value: out var claim
+        )) {
             return 1;
         }
 
         var expectedSequence = manifest["sequence"];
         var disagreements = new List<string>();
 
-        if (!string.Equals(a: claim.Header.Subject, b: manifest["subject"], comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Subject,
+            b: manifest["subject"],
+            comparisonType: StringComparison.Ordinal
+        )) {
             disagreements.Add(item: $"subject '{(claim.Header.Subject ?? "(none)")}' against the manifest's '{manifest["subject"]}'");
         }
 
-        if (!string.Equals(a: claim.Header.Algorithm, b: manifest["algorithm"], comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Algorithm,
+            b: manifest["algorithm"],
+            comparisonType: StringComparison.Ordinal
+        )) {
             disagreements.Add(item: $"algorithm '{claim.Header.Algorithm}' against the manifest's '{manifest["algorithm"]}'");
         }
 
-        if (!string.Equals(a: claim.Header.Purpose, b: manifest["purpose"], comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Purpose,
+            b: manifest["purpose"],
+            comparisonType: StringComparison.Ordinal
+        )) {
             disagreements.Add(item: $"purpose '{claim.Header.Purpose}' against the manifest's '{manifest["purpose"]}'");
         }
 
-        if (!string.Equals(a: claim.Header.Audience, b: manifest["audience"], comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Audience,
+            b: manifest["audience"],
+            comparisonType: StringComparison.Ordinal
+        )) {
             disagreements.Add(item: $"audience '{(claim.Header.Audience ?? "(none)")}' against the manifest's '{manifest["audience"]}'");
         }
 
-        if (!string.Equals(a: claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), b: expectedSequence, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+            b: expectedSequence,
+            comparisonType: StringComparison.Ordinal
+        )) {
             disagreements.Add(item: $"sequence '{(claim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}' against the manifest's '{expectedSequence}'");
         }
 
         if (disagreements.Count != 0) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest agreement: {ClaimFileName} disagrees with {ManifestFileName} on {string.Join(separator: "; ", values: disagreements)}");
+            Console.WriteLine(value: $"[FAIL] cross-verify manifest agreement: {ClaimFileName} disagrees with {ManifestFileName} on {string.Join(
+                separator: "; ",
+                values: disagreements
+            )}");
 
             return 1;
         }
@@ -431,16 +584,29 @@ public static class CarriageInterchange {
         TrustList trustList,
         IReadOnlyList<SignedCarriageEnvelope> chain
     ) {
-        var sealedPath = Path.Combine(path1: directory, path2: SealedFileName);
-        var keyPath = Path.Combine(path1: directory, path2: RecipientSealingKeyFileName);
+        var sealedPath = Path.Combine(
+            path1: directory,
+            path2: SealedFileName
+        );
+        var keyPath = Path.Combine(
+            path1: directory,
+            path2: RecipientSealingKeyFileName
+        );
 
-        if (!File.Exists(path: sealedPath) || !File.Exists(path: keyPath)) {
+        if (
+            !File.Exists(path: sealedPath) ||
+            !File.Exists(path: keyPath)
+        ) {
             Console.WriteLine(value: $"[FAIL] cross-verify sealed: the fixture is missing {SealedFileName} or {RecipientSealingKeyFileName} — §14 cannot be cross-verified without ciphertext one side actually opens");
 
             return 1;
         }
 
-        if (!TryStep(check: $"cross-verify sealed: decoding {SealedFileName}", body: () => codec.DecodeEnvelope(wire: File.ReadAllBytes(path: sealedPath)), value: out var sealedClaim)) {
+        if (!TryStep(
+            check: $"cross-verify sealed: decoding {SealedFileName}",
+            body: () => codec.DecodeEnvelope(wire: File.ReadAllBytes(path: sealedPath)),
+            value: out var sealedClaim
+        )) {
             return 1;
         }
 
@@ -476,7 +642,14 @@ public static class CarriageInterchange {
         // §17 fixes the sealed envelope's audience and sequence rather than adding manifest keys for them:
         // an unsigned hint about a signed field is a second source of truth, and a sequence here would make
         // the SECOND verification of the same file a legitimate replay refusal.
-        if (!string.Equals(a: sealedClaim.Header.Audience, b: manifest["audience"], comparisonType: StringComparison.Ordinal) || (sealedClaim.Header.Sequence is not null)) {
+        if (
+            !string.Equals(
+            a: sealedClaim.Header.Audience,
+            b: manifest["audience"],
+            comparisonType: StringComparison.Ordinal
+        ) ||
+            (sealedClaim.Header.Sequence is not null)
+        ) {
             Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed envelope carries audience '{(sealedClaim.Header.Audience ?? "(none)")}' and sequence '{(sealedClaim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}'; §17 fixes them as the manifest's audience '{manifest["audience"]}' and no sequence");
 
             return 1;
@@ -488,7 +661,10 @@ public static class CarriageInterchange {
                 var recipientKey = ECDiffieHellman.Create();
 
                 try {
-                    recipientKey.ImportPkcs8PrivateKey(source: File.ReadAllBytes(path: keyPath), bytesRead: out _);
+                    recipientKey.ImportPkcs8PrivateKey(
+                        source: File.ReadAllBytes(path: keyPath),
+                        bytesRead: out _
+                    );
                 } catch {
                     recipientKey.Dispose();
 
@@ -503,7 +679,11 @@ public static class CarriageInterchange {
         }
 
         using (recipientKey) {
-            if (!TryStep(check: "cross-verify sealed: decoding the sealed payload", body: () => codec.DecodeSealedPayload(bytes: sealedClaim.PayloadBytes.Span), value: out var payload)) {
+            if (!TryStep(
+                check: "cross-verify sealed: decoding the sealed payload",
+                body: () => codec.DecodeSealedPayload(bytes: sealedClaim.PayloadBytes.Span),
+                value: out var payload
+            )) {
                 return 1;
             }
 
@@ -520,7 +700,11 @@ public static class CarriageInterchange {
                 value: out var plaintext,
                 note: "This is what a §14 derivation disagreement looks like (salt, info label, output length, tag length, or raw-versus-hashed agreement); it is indistinguishable from tampering, so check all five before suspecting the bytes."
             )) {
-                if (string.Equals(a: plaintext, b: expected, comparisonType: StringComparison.Ordinal)) {
+                if (string.Equals(
+                    a: plaintext,
+                    b: expected,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     Console.WriteLine(value: $"[PASS] cross-verify sealed: the imported sealed payload opens to '{plaintext}' — §14's derivation agrees on both sides");
                 } else {
                     failures += 1;
@@ -567,7 +751,9 @@ public static class CarriageInterchange {
 
             return true;
         } catch (Exception exception) {
-            Console.WriteLine(value: $"[FAIL] {check}: {Describe(exception: exception)}{((note is null) ? string.Empty : $" {note}")}");
+            Console.WriteLine(value: $"[FAIL] {check}: {Describe(exception: exception)}{((note is null)
+                ? string.Empty
+                : $" {note}")}");
 
             value = default!;
 
@@ -624,7 +810,11 @@ public static class CarriageInterchange {
             _ = builder.Append(value: key).Append(value: '=').Append(value: EscapeManifestValue(value: value)).Append(value: '\n');
         }
 
-        File.WriteAllText(path: path, contents: builder.ToString(), encoding: s_manifestEncoding);
+        File.WriteAllText(
+            path: path,
+            contents: builder.ToString(),
+            encoding: ManifestEncoding
+        );
     }
 
     /// <summary>
@@ -638,14 +828,19 @@ public static class CarriageInterchange {
     /// <exception cref="FormatException">A line does not parse, a key repeats, or a value carries an escape the format does not define.</exception>
     private static Dictionary<string, string> ReadManifest(string path) {
         var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var text = File.ReadAllText(path: path, encoding: s_manifestEncoding);
+        var text = File.ReadAllText(
+            path: path,
+            encoding: ManifestEncoding
+        );
         var lineNumber = 0;
 
         foreach (var rawLine in text.Split(separator: '\n')) {
             // A CR immediately before the LF is tolerated and discarded, so a manifest written by a CRLF
             // platform still reads. Nothing else about the line is trimmed — whitespace inside a value is
             // part of the value.
-            var line = (rawLine.EndsWith(value: '\r') ? rawLine[..^1] : rawLine);
+            var line = (rawLine.EndsWith(value: '\r')
+                ? rawLine[..^1]
+                : rawLine);
 
             lineNumber += 1;
 
@@ -661,7 +856,13 @@ public static class CarriageInterchange {
 
             var key = line[..separator];
 
-            if (!manifest.TryAdd(key: key, value: UnescapeManifestValue(value: line[(separator + 1)..], key: key))) {
+            if (!manifest.TryAdd(
+                key: key,
+                value: UnescapeManifestValue(
+                    value: line[(separator + 1)..],
+                    key: key
+                )
+            )) {
                 throw new FormatException(message: $"{ManifestFileName} names the key '{key}' more than once (line {lineNumber}); which one governs is undefined, so the manifest is refused rather than resolved by order.");
             }
         }

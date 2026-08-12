@@ -39,9 +39,26 @@ public readonly record struct BindingWheelCommitResult(
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: activation);
 
-        return router.Activate(slot: slot, activation: activation)
-            ? new BindingWheelCommitResult(Status: BindingWheelCommitStatus.Dispatched, Command: activation.Command, Label: label, Ring: ring, Sector: sector, Reason: string.Empty)
-            : new BindingWheelCommitResult(Status: BindingWheelCommitStatus.Unregistered, Command: activation.Command, Label: label, Ring: ring, Sector: sector, Reason: "unregistered");
+        return (router.Activate(
+            slot: slot,
+            activation: activation
+        )
+            ? new BindingWheelCommitResult(
+            Status: BindingWheelCommitStatus.Dispatched,
+            Command: activation.Command,
+            Label: label,
+            Ring: ring,
+            Sector: sector,
+            Reason: string.Empty
+        )
+            : new BindingWheelCommitResult(
+            Status: BindingWheelCommitStatus.Unregistered,
+            Command: activation.Command,
+            Label: label,
+            Ring: ring,
+            Sector: sector,
+            Reason: "unregistered"
+        ));
     }
 
     /// <summary>Creates the no-armed-gesture result.</summary>

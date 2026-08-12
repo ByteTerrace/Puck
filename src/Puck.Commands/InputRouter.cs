@@ -85,7 +85,11 @@ public sealed class InputRouter {
         m_slotResolver = (slotResolver ?? (static _ => 0));
         // The console text door, built once here so nothing outside can mint one bound to a principal of its choosing.
         // Slot 0 is the local lane a console impulse rides; the Console principal is what makes it NOT that seat.
-        m_consoleTextSink = new CommandInjectionSink(router: this, principal: CommandPrincipal.Console, slot: 0);
+        m_consoleTextSink = new CommandInjectionSink(
+            router: this,
+            principal: CommandPrincipal.Console,
+            slot: 0
+        );
     }
 
     /// <summary>Initializes an input router whose device-to-slot resolver supports side-effect-free probing followed by
@@ -121,7 +125,12 @@ public sealed class InputRouter {
     /// <param name="signal">The timestamped input signal to capture.</param>
     public void Capture(in InputSignal signal) {
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(Sequence: m_sequence++, CaptureTick: signal.CaptureTick, Signal: signal, Injection: null));
+            m_captured.Add(item: new Captured(
+                Sequence: m_sequence++,
+                CaptureTick: signal.CaptureTick,
+                Signal: signal,
+                Injection: null
+            ));
         }
     }
 
@@ -134,7 +143,10 @@ public sealed class InputRouter {
     public bool Activate(int slot, BindingActivation activation) {
         ArgumentNullException.ThrowIfNull(activation);
 
-        if (!m_registry.TryGetId(name: activation.Command, id: out var commandId)) {
+        if (!m_registry.TryGetId(
+            name: activation.Command,
+            id: out var commandId
+        )) {
             return false;
         }
 
@@ -159,15 +171,17 @@ public sealed class InputRouter {
     /// <remarks>Pump-thread only: the held tables mutate inside <see cref="SnapshotForTick"/> and the focus-loss
     /// release on the same single thread that produces frames, so this read is safe there and nowhere else.</remarks>
     public bool IsCommandHeld(int slot, string command) {
-        return (m_registry.TryGetId(
+        return (
+            m_registry.TryGetId(
             name: command,
             id: out var commandId
-        )
-            && m_heldBySlot.TryGetValue(
-                key: slot,
-                value: out var held
-            )
-            && held.ContainsKey(key: commandId));
+        ) &&
+            m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        ) &&
+            held.ContainsKey(key: commandId)
+        );
     }
 
     /// <summary>Gets the simulation tick at which a seat most recently produced a physical or synthesized raw input
@@ -176,7 +190,10 @@ public sealed class InputRouter {
     /// <param name="tick">The last input tick, meaningful only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the seat has produced an input signal.</returns>
     /// <remarks>Pump-thread only, on the same terms as <see cref="IsCommandHeld(int, string)"/>.</remarks>
-    public bool TryGetLastInputTick(int slot, out ulong tick) => m_lastInputTickBySlot.TryGetValue(key: slot, value: out tick);
+    public bool TryGetLastInputTick(int slot, out ulong tick) => m_lastInputTickBySlot.TryGetValue(
+        key: slot,
+        value: out tick
+    );
 
     /// <summary>Queues one deterministic cancellation per carried logical command, then clears every carried digital
     /// and analog value, AND releases every slot's chord/modifier state (<see cref="IInputBindings.ResetAll"/>).
@@ -206,7 +223,10 @@ public sealed class InputRouter {
         m_toggleLatches.Clear();
         m_bindings.ResetAll();
 
-        QueueCancellations(cancellations: cancellations, discardCapturedSignals: true);
+        QueueCancellations(
+            cancellations: cancellations,
+            discardCapturedSignals: true
+        );
     }
 
     /// <summary>Clears one slot's held commands and <see cref="BindingEntryMode.Toggle"/> latches — the input-layer
@@ -267,7 +287,10 @@ public sealed class InputRouter {
             _ = m_heldBySlot.Remove(key: slot);
         }
 
-        QueueCancellations(cancellations: cancellations, discardCapturedSignals: false);
+        QueueCancellations(
+            cancellations: cancellations,
+            discardCapturedSignals: false
+        );
 
         return clearedLatches;
     }
@@ -277,14 +300,20 @@ public sealed class InputRouter {
 
         foreach (var control in m_heldControls) {
             if (control.Device == device) {
-                _ = affected.Add(item: new HeldCommand(Slot: control.Slot, CommandId: control.CommandId));
+                _ = affected.Add(item: new HeldCommand(
+                    Slot: control.Slot,
+                    CommandId: control.CommandId
+                ));
             }
         }
 
         foreach (var (slot, held) in m_heldBySlot) {
             foreach (var entry in held.Values) {
                 if (entry.Device == device) {
-                    _ = affected.Add(item: new HeldCommand(Slot: slot, CommandId: entry.CommandId));
+                    _ = affected.Add(item: new HeldCommand(
+                        Slot: slot,
+                        CommandId: entry.CommandId
+                    ));
                 }
             }
         }
@@ -298,12 +327,24 @@ public sealed class InputRouter {
         var cancellations = new List<CommandInjection>(capacity: affected.Count);
 
         foreach (var affectedCommand in affected) {
-            if (!m_heldBySlot.TryGetValue(key: affectedCommand.Slot, value: out var held) ||
-                !held.TryGetValue(key: affectedCommand.CommandId, value: out var entry)) {
+            if (
+                !m_heldBySlot.TryGetValue(
+                key: affectedCommand.Slot,
+                value: out var held
+            ) ||
+                !held.TryGetValue(
+                key: affectedCommand.CommandId,
+                value: out var entry
+            )
+            ) {
                 continue;
             }
 
-            if (TryGetHeldDevice(slot: affectedCommand.Slot, commandId: affectedCommand.CommandId, device: out var remainingDevice)) {
+            if (TryGetHeldDevice(
+                slot: affectedCommand.Slot,
+                commandId: affectedCommand.CommandId,
+                device: out var remainingDevice
+            )) {
                 // Another physical control still owns this logical hold. Keep it carried and keep its process-local
                 // device annotation truthful for live consumers such as rumble routing.
                 held[affectedCommand.CommandId] = (entry with { Device = remainingDevice, });
@@ -327,17 +368,25 @@ public sealed class InputRouter {
             ));
         }
 
-        QueueCancellations(cancellations: cancellations, discardCapturedSignals: false);
+        QueueCancellations(
+            cancellations: cancellations,
+            discardCapturedSignals: false
+        );
     }
     private void QueueCancellations(List<CommandInjection> cancellations, bool discardCapturedSignals) {
-        if ((cancellations.Count == 0) && !discardCapturedSignals) {
+        if (
+            (cancellations.Count == 0) &&
+            !discardCapturedSignals
+        ) {
             return;
         }
 
         cancellations.Sort(comparison: static (left, right) => {
             var bySlot = left.Slot.CompareTo(value: right.Slot);
 
-            return ((bySlot != 0) ? bySlot : left.CommandId.CompareTo(value: right.CommandId));
+            return ((bySlot != 0)
+                ? bySlot
+                : left.CommandId.CompareTo(value: right.CommandId));
         });
 
         lock (m_captureGate) {
@@ -374,7 +423,12 @@ public sealed class InputRouter {
             : (m_clock?.NowTicks ?? 0UL));
 
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(Sequence: m_sequence++, CaptureTick: captureTick, Signal: null, Injection: injection));
+            m_captured.Add(item: new Captured(
+                Sequence: m_sequence++,
+                CaptureTick: captureTick,
+                Signal: null,
+                Injection: injection
+            ));
         }
     }
 
@@ -409,7 +463,10 @@ public sealed class InputRouter {
                 continue;
             }
 
-            var working = WorkingFor(workingBySlot: m_workingBySlot, slot: slot);
+            var working = WorkingFor(
+                workingBySlot: m_workingBySlot,
+                slot: slot
+            );
 
             foreach (var heldEntry in held.Values) {
                 // The held entry is already phase Active — a held digital re-asserts each tick.
@@ -425,19 +482,35 @@ public sealed class InputRouter {
         // release land exactly one tick after its press with no clock or tick arithmetic involved.
         if (m_chordEdges is not null) {
             foreach (var (slot, edge) in m_chordEdges.DrainScheduledEdges()) {
-                ApplyChordEdge(workingBySlot: m_workingBySlot, slot: slot, device: default, edge: in edge);
+                ApplyChordEdge(
+                    workingBySlot: m_workingBySlot,
+                    slot: slot,
+                    device: default,
+                    edge: in edge
+                );
             }
         }
 
         foreach (var captured in due) {
             if (captured.Signal is InputSignal signal) {
-                ApplySignal(workingBySlot: m_workingBySlot, signal: signal, tick: tick);
+                ApplySignal(
+                    workingBySlot: m_workingBySlot,
+                    signal: signal,
+                    tick: tick
+                );
             } else if (captured.Injection is CommandInjection injection) {
-                ApplyInjection(workingBySlot: m_workingBySlot, injection: injection);
+                ApplyInjection(
+                    workingBySlot: m_workingBySlot,
+                    injection: injection
+                );
             }
         }
 
-        return Build(tick: tick, workingBySlot: m_workingBySlot, principalResolver: m_principalResolver);
+        return Build(
+            tick: tick,
+            workingBySlot: m_workingBySlot,
+            principalResolver: m_principalResolver
+        );
     }
 
     private List<Captured> DrainDue(ulong windowEndTick) {
@@ -460,7 +533,10 @@ public sealed class InputRouter {
                 }
             }
 
-            m_captured.RemoveRange(index: kept, count: (m_captured.Count - kept));
+            m_captured.RemoveRange(
+                index: kept,
+                count: (m_captured.Count - kept)
+            );
         }
 
         return m_due;
@@ -470,7 +546,10 @@ public sealed class InputRouter {
     // bound) and no held bookkeeping: an injection is one-shot, present only in the tick its capture window placed
     // it, with the caller-chosen edge. A held console input is expressed as an explicit Started/Completed pair.
     private static void ApplyInjection(Dictionary<int, List<CommandEntry>> workingBySlot, CommandInjection injection) {
-        var working = WorkingFor(workingBySlot: workingBySlot, slot: injection.Slot);
+        var working = WorkingFor(
+            workingBySlot: workingBySlot,
+            slot: injection.Slot
+        );
 
         working.Add(item: new CommandEntry(
             commandId: injection.CommandId,
@@ -496,13 +575,21 @@ public sealed class InputRouter {
 
         m_lastInputTickBySlot[slot] = tick;
 
-        var bindings = m_bindings.Resolve(slot: slot, signal: signal);
+        var bindings = m_bindings.Resolve(
+            slot: slot,
+            signal: signal
+        );
 
         if (m_chordEdges is not null) {
             // Chord-command edges synthesized by this signal's resolve fold into the same lane with their OWN
             // phase and value (the physical signal's phase may be a mid-sweep Active) — see IChordEdgeSource.
             foreach (var edge in m_chordEdges.DrainChordEdges(slot: slot)) {
-                ApplyChordEdge(workingBySlot: workingBySlot, slot: slot, device: signal.DeviceId, edge: in edge);
+                ApplyChordEdge(
+                    workingBySlot: workingBySlot,
+                    slot: slot,
+                    device: signal.DeviceId,
+                    edge: in edge
+                );
             }
         }
 
@@ -532,12 +619,21 @@ public sealed class InputRouter {
             }
 
             if (!acceptedBinding) {
-                assignedSlot = (m_inputSlotResolver?.CommitSlot(device: signal.DeviceId, slot: slot) ?? false);
+                assignedSlot = (m_inputSlotResolver?.CommitSlot(
+                    device: signal.DeviceId,
+                    slot: slot
+                ) ?? false);
                 acceptedBinding = true;
             }
 
-            var value = ResolveValue(binding: in binding, signal: in signal);
-            var working = WorkingFor(workingBySlot: workingBySlot, slot: slot);
+            var value = ResolveValue(
+                binding: in binding,
+                signal: in signal
+            );
+            var working = WorkingFor(
+                workingBySlot: workingBySlot,
+                slot: slot
+            );
             var isDigital = (value.Kind == CommandValueKind.Digital);
             var phase = signal.Phase;
 
@@ -548,19 +644,27 @@ public sealed class InputRouter {
             // Gated on the SIGNAL's own kind, not `isDigital` (the DESTINATION's resolved value kind): a channel
             // destination's ChannelScale always resolves to Axis1D (see ResolveValue), even from a digital source,
             // so `isDigital` alone would never see Toggle mode's primary case — a digital key toggling a channel.
-            if ((signal.Value.Kind == CommandValueKind.Digital) && (binding.Mode == BindingEntryMode.Toggle)) {
+            if (
+                (signal.Value.Kind == CommandValueKind.Digital) &&
+                (binding.Mode == BindingEntryMode.Toggle)
+            ) {
                 if (signal.Phase != CommandPhase.Started) {
                     continue;
                 }
 
-                if (toggleFlipsThisSignal?.TryGetValue(key: commandId, value: out var memoized) ?? false) {
+                if (toggleFlipsThisSignal?.TryGetValue(
+                    key: commandId,
+                    value: out var memoized
+                ) ?? false) {
                     phase = memoized;
                 } else {
                     var latchKey = (slot, commandId);
                     var turningOn = !m_toggleLatches.GetValueOrDefault(key: latchKey);
 
                     m_toggleLatches[latchKey] = turningOn;
-                    phase = (turningOn ? CommandPhase.Started : CommandPhase.Completed);
+                    phase = (turningOn
+                        ? CommandPhase.Started
+                        : CommandPhase.Completed);
                     (toggleFlipsThisSignal ??= [])[commandId] = phase;
                 }
             }
@@ -575,11 +679,22 @@ public sealed class InputRouter {
                 ? (phase == required)
                 : ((phase is CommandPhase.Started or CommandPhase.Active) ||
                     ((binding.ChannelScale is not null) && (phase is CommandPhase.Completed or CommandPhase.Canceled))));
-            var heldControl = new HeldControl(Slot: slot, Device: signal.DeviceId, Source: signal.Source, CommandId: commandId);
-            var wasCommandHeld = (isDigital && IsCommandHeld(slot: slot, commandId: commandId));
+            var heldControl = new HeldControl(
+                Slot: slot,
+                Device: signal.DeviceId,
+                Source: signal.Source,
+                CommandId: commandId
+            );
+            var wasCommandHeld = (isDigital && IsCommandHeld(
+                slot: slot,
+                commandId: commandId
+            ));
             var active = ((phase is CommandPhase.Started or CommandPhase.Active) && value.IsActive && (signal.Text is null));
 
-            if ((binding.Mode == BindingEntryMode.Toggle) && !active) {
+            if (
+                (binding.Mode == BindingEntryMode.Toggle) &&
+                !active
+            ) {
                 // The toggle-off transition: the flip already decided this is a release, independent of the live
                 // signal's own value (a toggle-off arrives ON a fresh PRESS, so signal.Value still reads active).
                 value = CommandValue.Inactive(kind: value.Kind);
@@ -598,7 +713,10 @@ public sealed class InputRouter {
                     _ = m_heldControls.Remove(item: heldControl);
 
                     // Likewise, the logical release edge fires only when the last bound control goes up.
-                    if (IsCommandHeld(slot: slot, commandId: commandId)) {
+                    if (IsCommandHeld(
+                        slot: slot,
+                        commandId: commandId
+                    )) {
                         dispatch = false;
                         value = m_heldBySlot[slot][commandId].Value;
                         phase = CommandPhase.Active;
@@ -627,8 +745,13 @@ public sealed class InputRouter {
                     Dispatch = (value.Kind != CommandValueKind.Digital),
                     Phase = CommandPhase.Active,
                 });
-            } else if (((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !value.IsActive) &&
-                (!isDigital || !IsCommandHeld(slot: slot, commandId: commandId))) {
+            } else if (
+                ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !value.IsActive) &&
+                (!isDigital || !IsCommandHeld(
+                slot: slot,
+                commandId: commandId
+            ))
+            ) {
                 if (m_heldBySlot.TryGetValue(
                     key: slot,
                     value: out var held
@@ -662,7 +785,9 @@ public sealed class InputRouter {
             }
 
             var axis2 = signal.Value.AsAxis2D;
-            var componentSample = ((component == AxisComponent.X) ? axis2.X : axis2.Y);
+            var componentSample = ((component == AxisComponent.X)
+                ? axis2.X
+                : axis2.Y);
             var componentFixed = FixedQ4816.FromDouble(value: componentSample);
             var componentScale = FixedQ4816.FromDouble(value: channelScale);
 
@@ -682,10 +807,13 @@ public sealed class InputRouter {
     // IsCommandHeld lights and focus-loss cancellation covers a chord-held command); the release clears it. The
     // command-availability gate matches the bound path — an inactive-map command's chord is inert, not an error.
     private void ApplyChordEdge(Dictionary<int, List<CommandEntry>> workingBySlot, int slot, InputDeviceId device, in BindingChordEdge edge) {
-        if (!m_registry.TryGetId(
+        if (
+            !m_registry.TryGetId(
             name: edge.Command,
             id: out var commandId
-        ) || !m_registry.IsSourceCommandActive(commandId: commandId)) {
+        ) ||
+            !m_registry.IsSourceCommandActive(commandId: commandId)
+        ) {
             return;
         }
 
@@ -697,7 +825,10 @@ public sealed class InputRouter {
             value: edge.Value
         );
 
-        WorkingFor(workingBySlot: workingBySlot, slot: slot).Add(item: entry);
+        WorkingFor(
+            workingBySlot: workingBySlot,
+            slot: slot
+        ).Add(item: entry);
 
         // A MOMENTARY press (a Tapped activator's completion — see BindingChordEdge.Momentary) touches neither
         // branch below: it must not be marked held (there is nothing sustaining it — its own release is already
@@ -763,13 +894,19 @@ public sealed class InputRouter {
                     : (entry with { Principal = lanePrincipal, })));
             }
 
-            lanes.Add(item: new CommandLane(entries: entries.DrainToImmutable(), slot: slot));
+            lanes.Add(item: new CommandLane(
+                entries: entries.DrainToImmutable(),
+                slot: slot
+            ));
         }
 
         // Order lanes by slot for a deterministic snapshot layout.
         lanes.Sort(comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
 
-        return new CommandSnapshot(lanes: lanes.DrainToImmutable(), tick: tick);
+        return new CommandSnapshot(
+            lanes: lanes.DrainToImmutable(),
+            tick: tick
+        );
     }
     private static List<CommandEntry> WorkingFor(Dictionary<int, List<CommandEntry>> workingBySlot, int slot) {
         if (!workingBySlot.TryGetValue(
@@ -795,7 +932,10 @@ public sealed class InputRouter {
     }
     private bool IsCommandHeld(int slot, ushort commandId) {
         foreach (var control in m_heldControls) {
-            if ((control.Slot == slot) && (control.CommandId == commandId)) {
+            if (
+                (control.Slot == slot) &&
+                (control.CommandId == commandId)
+            ) {
                 return true;
             }
         }
@@ -804,7 +944,10 @@ public sealed class InputRouter {
     }
     private bool TryGetHeldDevice(int slot, ushort commandId, out InputDeviceId device) {
         foreach (var control in m_heldControls) {
-            if ((control.Slot == slot) && (control.CommandId == commandId)) {
+            if (
+                (control.Slot == slot) &&
+                (control.CommandId == commandId)
+            ) {
                 device = control.Device;
 
                 return true;

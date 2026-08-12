@@ -44,7 +44,12 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     public byte[] EncodeSignedPortion(CarriageEnvelopeHeader header, CarriagePayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
         var writer = new FixedLayoutWriter();
 
-        WriteHeaderAndPayload(writer: writer, header: header, payloadKind: payloadKind, payloadBytes: payloadBytes);
+        WriteHeaderAndPayload(
+            writer: writer,
+            header: header,
+            payloadKind: payloadKind,
+            payloadBytes: payloadBytes
+        );
 
         return writer.ToArray();
     }
@@ -53,7 +58,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     public byte[] EncodeHeader(CarriageEnvelopeHeader header) {
         var writer = new FixedLayoutWriter();
 
-        WriteHeader(writer: writer, header: header);
+        WriteHeader(
+            writer: writer,
+            header: header
+        );
 
         return writer.ToArray();
     }
@@ -62,7 +70,12 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     public byte[] EncodeEnvelope(SignedCarriageEnvelope envelope) {
         var writer = new FixedLayoutWriter();
 
-        WriteHeaderAndPayload(writer: writer, header: envelope.Header, payloadKind: envelope.PayloadKind, payloadBytes: envelope.PayloadBytes.Span);
+        WriteHeaderAndPayload(
+            writer: writer,
+            header: envelope.Header,
+            payloadKind: envelope.PayloadKind,
+            payloadBytes: envelope.PayloadBytes.Span
+        );
         writer.WriteBytes(value: envelope.Signature.Span);
 
         return writer.ToArray();
@@ -80,7 +93,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         var signedPortion = wire[..reader.Position].ToArray();
         var signature = reader.ReadBytes().ToArray();
 
-        RequireFullyConsumed(reader: ref reader, what: "envelope");
+        RequireFullyConsumed(
+            reader: ref reader,
+            what: "envelope"
+        );
 
         var envelope = SignedCarriageEnvelope.FromSignedPortion(
             header: header,
@@ -90,7 +106,11 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
             signedPortion: signedPortion
         );
 
-        RequireCanonical(received: wire, reencoded: EncodeEnvelope(envelope: envelope), what: "envelope");
+        RequireCanonical(
+            received: wire,
+            reencoded: EncodeEnvelope(envelope: envelope),
+            what: "envelope"
+        );
 
         return envelope;
     }
@@ -118,7 +138,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         var keyHash = Convert.ToHexStringLower(bytes: reader.ReadFixedBytes(count: FingerprintLength));
         var spki = reader.ReadBytes().ToArray();
 
-        RequireFullyConsumed(reader: ref reader, what: "key binding payload");
+        RequireFullyConsumed(
+            reader: ref reader,
+            what: "key binding payload"
+        );
 
         var targetId = new KeyId {
             Algorithm = algorithm,
@@ -127,9 +150,16 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
             Subject = subject,
         };
 
-        var payload = new KeyBindingPayload(TargetId: targetId, PublicKeySubjectPublicKeyInfo: spki);
+        var payload = new KeyBindingPayload(
+            TargetId: targetId,
+            PublicKeySubjectPublicKeyInfo: spki
+        );
 
-        RequireCanonical(received: bytes, reencoded: EncodeKeyBindingPayload(payload: payload), what: "key binding payload");
+        RequireCanonical(
+            received: bytes,
+            reencoded: EncodeKeyBindingPayload(payload: payload),
+            what: "key binding payload"
+        );
 
         return payload;
     }
@@ -137,11 +167,17 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     /// <inheritdoc/>
     public byte[] EncodeSealedPayload(SealedPayload payload) {
         if (payload.Nonce.Length != NonceLength) {
-            throw new ArgumentException(message: $"A sealed payload's nonce must be {NonceLength} bytes.", paramName: nameof(payload));
+            throw new ArgumentException(
+                message: $"A sealed payload's nonce must be {NonceLength} bytes.",
+                paramName: nameof(payload)
+            );
         }
 
         if (payload.Tag.Length != TagLength) {
-            throw new ArgumentException(message: $"A sealed payload's tag must be {TagLength} bytes.", paramName: nameof(payload));
+            throw new ArgumentException(
+                message: $"A sealed payload's tag must be {TagLength} bytes.",
+                paramName: nameof(payload)
+            );
         }
 
         var writer = new FixedLayoutWriter();
@@ -163,7 +199,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         var tag = reader.ReadFixedBytes(count: TagLength).ToArray();
         var ciphertext = reader.ReadBytes().ToArray();
 
-        RequireFullyConsumed(reader: ref reader, what: "sealed payload");
+        RequireFullyConsumed(
+            reader: ref reader,
+            what: "sealed payload"
+        );
 
         var payload = new SealedPayload(
             Ciphertext: ciphertext,
@@ -172,7 +211,11 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
             Tag: tag
         );
 
-        RequireCanonical(received: bytes, reencoded: EncodeSealedPayload(payload: payload), what: "sealed payload");
+        RequireCanonical(
+            received: bytes,
+            reencoded: EncodeSealedPayload(payload: payload),
+            what: "sealed payload"
+        );
 
         return payload;
     }
@@ -213,7 +256,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         writer.WriteOptionalUInt64(value: header.Sequence);
     }
     private static void WriteHeaderAndPayload(FixedLayoutWriter writer, CarriageEnvelopeHeader header, CarriagePayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
-        WriteHeader(writer: writer, header: header);
+        WriteHeader(
+            writer: writer,
+            header: header
+        );
         writer.WriteByte(value: (byte)payloadKind);
         writer.WriteBytes(value: payloadBytes);
     }
@@ -238,7 +284,10 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         // outside it MUST be refused by the decoder"). The verifier re-refuses an out-of-set kind on a
         // claim, so this is verdict-neutral today — but only today: a fourth kind, or any codec consumer
         // that does not run the verifier, turns a cast with no range check into an accepted non-kind.
-        if ((payloadKindValue < (byte)CarriagePayloadKind.Opaque) || (payloadKindValue > (byte)CarriagePayloadKind.Sealed)) {
+        if (
+            (payloadKindValue < (byte)CarriagePayloadKind.Opaque) ||
+            (payloadKindValue > (byte)CarriagePayloadKind.Sealed)
+        ) {
             throw new FormatException(message: $"The carriage envelope declares payload kind {payloadKindValue}, which is outside the closed set {{1, 2, 3}}.");
         }
 

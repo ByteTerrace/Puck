@@ -41,7 +41,10 @@ public static class CommandAvailability {
                 return new CommandResult(unavailableMessage);
             }
 
-            if ((isActive is not null) && !isActive(target)) {
+            if (
+                (isActive is not null) &&
+                !isActive(target)
+            ) {
                 return new CommandResult(inactiveMessage!);
             }
 
@@ -62,11 +65,17 @@ public static class CommandAvailability {
                 return new CommandResult(unavailableMessage);
             }
 
-            if ((isActive is not null) && !isActive(target)) {
+            if (
+                (isActive is not null) &&
+                !isActive(target)
+            ) {
                 return new CommandResult(inactiveMessage!);
             }
 
-            return new CommandResult(handler(arg1: target, arg2: args));
+            return new CommandResult(handler(
+                arg1: target,
+                arg2: args
+            ));
         };
     }
 }

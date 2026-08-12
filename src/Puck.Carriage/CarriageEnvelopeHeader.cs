@@ -61,10 +61,10 @@ public sealed record KeyBindingPayload(KeyId TargetId, ReadOnlyMemory<byte> Publ
     /// <summary>Whether <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="TargetId"/>'s <see cref="KeyId.KeyHash"/>.</summary>
     public bool IsSelfCertifying =>
         string.Equals(
-            a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
-            b: TargetId.KeyHash,
-            comparisonType: StringComparison.Ordinal
-        );
+        a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
+        b: TargetId.KeyHash,
+        comparisonType: StringComparison.Ordinal
+    );
 }
 
 /// <summary>
@@ -136,7 +136,13 @@ public sealed record SignedCarriageEnvelope {
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> signedPortion
     ) =>
-        new(header: header, payloadKind: payloadKind, payloadBytes: payloadBytes, signature: signature, signedPortion: signedPortion);
+        new(
+        header: header,
+        payloadKind: payloadKind,
+        payloadBytes: payloadBytes,
+        signature: signature,
+        signedPortion: signedPortion
+    );
 
     /// <summary>
     /// Builds an envelope by encoding the given fields under <paramref name="codec"/> — the wire form a
@@ -157,12 +163,16 @@ public sealed record SignedCarriageEnvelope {
         ReadOnlyMemory<byte> signature
     ) =>
         new(
+        header: header,
+        payloadKind: payloadKind,
+        payloadBytes: payloadBytes,
+        signature: signature,
+        signedPortion: codec.EncodeSignedPortion(
             header: header,
             payloadKind: payloadKind,
-            payloadBytes: payloadBytes,
-            signature: signature,
-            signedPortion: codec.EncodeSignedPortion(header: header, payloadKind: payloadKind, payloadBytes: payloadBytes.Span)
-        );
+            payloadBytes: payloadBytes.Span
+        )
+    );
 
     /// <summary>Gets the canonical context header, always part of the signing input.</summary>
     public CarriageEnvelopeHeader Header { get; }

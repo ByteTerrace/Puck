@@ -42,8 +42,15 @@ public sealed record BindingSessionResult(
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageId);
 
-        if (!document.Chords.Any(predicate: row => string.Equals(a: row.Page?.Id, b: pageId, comparisonType: StringComparison.Ordinal))) {
-            throw new ArgumentException(message: $"the document has no page \"{pageId}\"", paramName: nameof(pageId));
+        if (!document.Chords.Any(predicate: row => string.Equals(
+            a: row.Page?.Id,
+            b: pageId,
+            comparisonType: StringComparison.Ordinal
+        ))) {
+            throw new ArgumentException(
+                message: $"the document has no page \"{pageId}\"",
+                paramName: nameof(pageId)
+            );
         }
 
         var captureByCommand = new Dictionary<string, BindingSessionCapture>(comparer: StringComparer.Ordinal);
@@ -58,7 +65,14 @@ public sealed record BindingSessionResult(
         var rows = new List<BindingChordDefinition>(capacity: document.Chords.Count);
 
         foreach (var row in document.Chords) {
-            if ((row.Page is not { } page) || !string.Equals(a: page.Id, b: pageId, comparisonType: StringComparison.Ordinal)) {
+            if (
+                (row.Page is not { } page) ||
+                !string.Equals(
+                a: page.Id,
+                b: pageId,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 rows.Add(item: row);
 
                 continue;
@@ -68,7 +82,9 @@ public sealed record BindingSessionResult(
             var appliedCommands = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var entry in page.Entries) {
-                var effectiveCommand = ((entry.Channel is { } channel) ? BindingProfile.ChannelCommandName(channel: channel) : entry.Command!);
+                var effectiveCommand = ((entry.Channel is { } channel)
+                    ? BindingProfile.ChannelCommandName(channel: channel)
+                    : entry.Command!);
 
                 if (captureByCommand.TryGetValue(
                     key: effectiveCommand,
@@ -76,7 +92,10 @@ public sealed record BindingSessionResult(
                 )) {
                     entries.Add(item: entry with { Source = capture.Source, });
                     _ = appliedCommands.Add(item: effectiveCommand);
-                } else if ((entry.Source is { } entrySource) && capturedSources.Contains(item: entrySource)) {
+                } else if (
+                    (entry.Source is { } entrySource) &&
+                    capturedSources.Contains(item: entrySource)
+                ) {
                     displacedEntries.Add(item: entry);
                 } else {
                     entries.Add(item: entry);

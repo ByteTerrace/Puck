@@ -64,7 +64,10 @@ public sealed class BindingWheelGestureState {
     /// <param name="position">The spatial input position in its presenter's coordinate space.</param>
     /// <returns><see langword="true"/> only when this call captured the origin.</returns>
     public bool TryCaptureSpatialNeutral(Vector2 position) {
-        if (!Opened || SpatialNeutralKnown) {
+        if (
+            !Opened ||
+            SpatialNeutralKnown
+        ) {
             return false;
         }
 
@@ -79,7 +82,6 @@ public sealed class BindingWheelGestureState {
         AxisKnown = false;
         AxisSequence = 0L;
     }
-
     private void ClearSpatialNeutral() {
         SpatialNeutral = Vector2.Zero;
         SpatialNeutralKnown = false;

@@ -55,9 +55,9 @@ public sealed class CommandRegistry {
     private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_fastPathAlt;
     // The Digital impulse every fast-path verb carries (a WithWireArgs command is always Digital), hoisted to
     // a constant so a fast-path dispatch neither recomputes it nor rebuilds the CommandContext around it.
-    private static readonly CommandValue s_digitalImpulse = CommandValue.Digital(active: true);
+    private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
     // The ONE reused context for every fast-path dispatch: Parse/Phase/Registry are constant on this path and Value is
-    // always s_digitalImpulse, so a single immutable instance serves every wire-native and trailing-args fast dispatch —
+    // always DigitalImpulse, so a single immutable instance serves every wire-native and trailing-args fast dispatch —
     // no per-line context construction. (CommandContext is a readonly record struct, so reusing it is safe.)
     private readonly CommandContext m_fastContext;
     // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
@@ -124,9 +124,21 @@ public sealed class CommandRegistry {
         // declares e.g. "wire.errors" collides and throws exactly like colliding with another module.
         var claimedBy = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        ClaimName(name: HelpCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
-        ClaimName(name: WireAckCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
-        ClaimName(name: WireErrorsCommandName, owner: BuiltInOwnerName, claimedBy: claimedBy);
+        ClaimName(
+            name: HelpCommandName,
+            owner: BuiltInOwnerName,
+            claimedBy: claimedBy
+        );
+        ClaimName(
+            name: WireAckCommandName,
+            owner: BuiltInOwnerName,
+            claimedBy: claimedBy
+        );
+        ClaimName(
+            name: WireErrorsCommandName,
+            owner: BuiltInOwnerName,
+            claimedBy: claimedBy
+        );
 
         foreach (var module in modules) {
             var moduleName = module.GetType().Name;
@@ -141,11 +153,19 @@ public sealed class CommandRegistry {
 
                 m_root.Subcommands.Add(item: definition.TextCommand);
                 m_byTextCommand[definition.TextCommand] = definition;
-                ClaimName(name: definition.Name, owner: moduleName, claimedBy: claimedBy);
+                ClaimName(
+                    name: definition.Name,
+                    owner: moduleName,
+                    claimedBy: claimedBy
+                );
                 m_byName[definition.Name] = definition;
 
                 foreach (var alias in definition.Aliases) {
-                    ClaimName(name: alias, owner: moduleName, claimedBy: claimedBy);
+                    ClaimName(
+                        name: alias,
+                        owner: moduleName,
+                        claimedBy: claimedBy
+                    );
                     m_byName[alias] = definition;
                     definition.TextCommand.Aliases.Add(item: alias);
                 }
@@ -178,7 +198,10 @@ public sealed class CommandRegistry {
         m_nameById = m_byName.Values
             .Select(selector: static definition => definition.Name)
             .Distinct(comparer: StringComparer.OrdinalIgnoreCase)
-            .OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
         for (var id = 0; (id < m_nameById.Length); id++) {
@@ -196,7 +219,10 @@ public sealed class CommandRegistry {
         var fastPath = new Dictionary<string, CommandDefinition>(comparer: StringComparer.Ordinal);
 
         foreach (var (name, definition) in m_byName) {
-            if ((definition.WireArgsHandler is not null) && (definition.Routing == CommandRouting.Immediate)) {
+            if (
+                (definition.WireArgsHandler is not null) &&
+                (definition.Routing == CommandRouting.Immediate)
+            ) {
                 fastPath[name] = definition;
             }
         }
@@ -210,12 +236,15 @@ public sealed class CommandRegistry {
             phase: CommandPhase.Completed,
             principal: CommandPrincipal.Console,
             registry: this,
-            value: s_digitalImpulse
+            value: DigitalImpulse
         );
 
         m_metadata = m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
-            .OrderBy(keySelector: static metadata => metadata.Name, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: static metadata => metadata.Name,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
         var metadataByName = new Dictionary<string, CommandMetadata>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -232,7 +261,10 @@ public sealed class CommandRegistry {
     // error, so a second claim (even by the same module registering itself twice) is a bug in how modules were
     // assembled.
     private static void ClaimName(string name, string owner, Dictionary<string, string> claimedBy) {
-        if (claimedBy.TryGetValue(key: name, value: out var existingOwner)) {
+        if (claimedBy.TryGetValue(
+            key: name,
+            value: out var existingOwner
+        )) {
             throw new InvalidOperationException(message: $"Command name '{name}' is registered by both {existingOwner} and {owner}.");
         }
 
@@ -254,7 +286,10 @@ public sealed class CommandRegistry {
     public bool TryGetId(string name, out ushort id) {
         ArgumentNullException.ThrowIfNull(name);
 
-        return m_idByName.TryGetValue(key: name, value: out id);
+        return m_idByName.TryGetValue(
+            key: name,
+            value: out id
+        );
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
     /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
@@ -268,7 +303,10 @@ public sealed class CommandRegistry {
     public bool TryGetMetadata(string name, out CommandMetadata metadata) {
         ArgumentNullException.ThrowIfNull(name);
 
-        return m_metadataByName.TryGetValue(key: name, value: out metadata);
+        return m_metadataByName.TryGetValue(
+            key: name,
+            value: out metadata
+        );
     }
 
     /// <summary>Gets the distinct registered commands' declared facts, ordinal-sorted by name — the affordance manifest
@@ -284,7 +322,10 @@ public sealed class CommandRegistry {
     /// <returns>The command's canonical name.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is not a valid interned id.</exception>
     public string GetName(ushort id) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: id, other: (ushort)m_nameById.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: id,
+            other: (ushort)m_nameById.Length
+        );
 
         return m_nameById[id];
     }
@@ -314,7 +355,10 @@ public sealed class CommandRegistry {
         var index = 0;
 
         while (index < line.Length) {
-            while ((index < line.Length) && char.IsWhiteSpace(c: line[index])) {
+            while (
+                (index < line.Length) &&
+                char.IsWhiteSpace(c: line[index])
+            ) {
                 index++;
             }
 
@@ -324,7 +368,10 @@ public sealed class CommandRegistry {
 
             var start = index;
 
-            while ((index < line.Length) && !char.IsWhiteSpace(c: line[index])) {
+            while (
+                (index < line.Length) &&
+                !char.IsWhiteSpace(c: line[index])
+            ) {
                 index++;
             }
 
@@ -332,7 +379,10 @@ public sealed class CommandRegistry {
                 return -1;
             }
 
-            tokens[count++] = new Range(start: start, end: index);
+            tokens[count++] = new Range(
+                start: start,
+                end: index
+            );
         }
 
         return count;
@@ -343,7 +393,9 @@ public sealed class CommandRegistry {
     /// <returns>A result echoing the resulting mode, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireAck(string[] mode) {
         if (mode.Length == 0) {
-            return new CommandResult((m_acksQuiet ? "[wire.ack: quiet]" : "[wire.ack: on]"));
+            return new CommandResult((m_acksQuiet
+                ? "[wire.ack: quiet]"
+                : "[wire.ack: on]"));
         }
 
         if (mode.Length > 1) {
@@ -376,7 +428,14 @@ public sealed class CommandRegistry {
             return Reject(text: "[wire.errors: expected no argument or `reset`]");
         }
 
-        if ((mode.Length == 1) && !string.Equals(a: mode[0], b: "reset", comparisonType: StringComparison.Ordinal)) {
+        if (
+            (mode.Length == 1) &&
+            !string.Equals(
+            a: mode[0],
+            b: "reset",
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             return Reject(text: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
         }
 
@@ -415,9 +474,9 @@ public sealed class CommandRegistry {
             separator: '\n',
             values: m_root.Subcommands
                 .OrderBy(
-                    comparer: StringComparer.OrdinalIgnoreCase,
-                    keySelector: command => command.Name
-                )
+                comparer: StringComparer.OrdinalIgnoreCase,
+                keySelector: command => command.Name
+            )
                 .Select(selector: command => $"{command.Name} - {command.Description}")
         );
     }
@@ -461,8 +520,13 @@ public sealed class CommandRegistry {
             return false;
         }
 
-        return (m_byName.TryGetValue(key: m_nameById[commandId], value: out var definition) &&
-            m_activeMaps.Contains(item: definition.Map));
+        return (
+            m_byName.TryGetValue(
+            key: m_nameById[commandId],
+            value: out var definition
+        ) &&
+            m_activeMaps.Contains(item: definition.Map)
+        );
     }
 
     /// <summary>Whether a submitted simulation command is waiting for its fixed-step snapshot to apply.</summary>
@@ -479,10 +543,17 @@ public sealed class CommandRegistry {
         }
 
         var separator = content.IndexOfAny(values: " \t");
-        var verb = ((separator < 0) ? content : content[..separator]);
+        var verb = ((separator < 0)
+            ? content
+            : content[..separator]);
 
-        return (m_byNameAlt.TryGetValue(key: verb, value: out var definition) &&
-            (definition.Routing == CommandRouting.Simulation));
+        return (
+            m_byNameAlt.TryGetValue(
+            key: verb,
+            value: out var definition
+        ) &&
+            (definition.Routing == CommandRouting.Simulation)
+        );
     }
     /// <summary>
     /// Applies one fixed-step tick's <see cref="CommandSnapshot"/>: dispatches edge handlers, gated by the
@@ -515,7 +586,10 @@ public sealed class CommandRegistry {
                             slot: lane.Slot,
                             completesTextSubmission: entry.CompletesTextSubmission
                         );
-                    } else if (entry.CompletesTextSubmission && (m_pendingSimulationSubmissions != 0)) {
+                    } else if (
+                        entry.CompletesTextSubmission &&
+                        (m_pendingSimulationSubmissions != 0)
+                    ) {
                         m_pendingSimulationSubmissions--;
                     }
 
@@ -564,10 +638,18 @@ public sealed class CommandRegistry {
         try {
             var parseResult = m_root.Parse(commandLine: line);
 
-            if ((parseResult.Errors.Count != 0) ||
-                !m_byTextCommand.TryGetValue(key: parseResult.CommandResult.Command, value: out var definition) ||
-                !TryGetId(name: definition.Name, id: out var actualCommandId) ||
-                (actualCommandId != expectedCommandId)) {
+            if (
+                (parseResult.Errors.Count != 0) ||
+                !m_byTextCommand.TryGetValue(
+                key: parseResult.CommandResult.Command,
+                value: out var definition
+            ) ||
+                !TryGetId(
+                name: definition.Name,
+                id: out var actualCommandId
+            ) ||
+                (actualCommandId != expectedCommandId)
+            ) {
                 // A snapshot-routed line that no longer re-parses to the command it was injected as never reaches its
                 // handler. Submit already returned None for it, so this is the only place it can be counted — without
                 // it a Simulation-routed rejection stays invisible to wire.errors.
@@ -589,11 +671,18 @@ public sealed class CommandRegistry {
 
             // Submit returned None when it injected this line, so its handler's verdict lands here rather than at the
             // console call site — count a failure so a deferred mutation's rejection reaches wire.errors too.
-            if (Dispatch(context: in context, definition: definition, suppressWireAck: true).IsError) {
+            if (Dispatch(
+                context: in context,
+                definition: definition,
+                suppressWireAck: true
+            ).IsError) {
                 m_rejections++;
             }
         } finally {
-            if (completesTextSubmission && (m_pendingSimulationSubmissions != 0)) {
+            if (
+                completesTextSubmission &&
+                (m_pendingSimulationSubmissions != 0)
+            ) {
                 m_pendingSimulationSubmissions--;
             }
         }
@@ -606,7 +695,12 @@ public sealed class CommandRegistry {
     private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, bool suppressWireAck = false) {
         var result = definition.Handler(arg: context);
 
-        if (suppressWireAck && m_acksQuiet && definition.AcknowledgementOnly && !result.IsError) {
+        if (
+            suppressWireAck &&
+            m_acksQuiet &&
+            definition.AcknowledgementOnly &&
+            !result.IsError
+        ) {
             result = CommandResult.None;
         }
 
@@ -687,16 +781,32 @@ public sealed class CommandRegistry {
         // array, nothing heap-allocated by the dispatch itself. The context's Parse is null: no fast-path handler reads
         // context.Parse/Value/Phase/DeviceId (they read only their args) — a Verb like the movement keys does, but a
         // Verb never enters this path.
-        if ((line.IndexOf(value: '"') < 0) && (line.IndexOf(value: '@') < 0)) {
+        if (
+            (line.IndexOf(value: '"') < 0) &&
+            (line.IndexOf(value: '@') < 0)
+        ) {
             Span<Range> tokenRanges = stackalloc Range[MaxFastPathTokens];
-            var tokenCount = Tokenize(line: line, tokens: tokenRanges);
+            var tokenCount = Tokenize(
+                line: line,
+                tokens: tokenRanges
+            );
 
-            if ((tokenCount > 0) && m_fastPathAlt.TryGetValue(key: line.AsSpan(range: tokenRanges[0]), value: out var fast)) {
+            if (
+                (tokenCount > 0) &&
+                m_fastPathAlt.TryGetValue(
+                key: line.AsSpan(range: tokenRanges[0]),
+                value: out var fast
+            )
+            ) {
                 var argRanges = tokenRanges[1..tokenCount];
                 var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
                 var result = fast.WireArgsHandler!(
                     arg1: m_fastContext,
-                    arg2: new WireArgs(line: line, ranges: argRanges, echo: !quiet)
+                    arg2: new WireArgs(
+                        line: line,
+                        ranges: argRanges,
+                        echo: !quiet
+                    )
                 );
 
                 // Quiet mode drops a SUCCESSFUL acknowledgement-only echo (the handler already skipped building it via
@@ -741,9 +851,14 @@ public sealed class CommandRegistry {
             // fold it into the snapshot stream rather than run it here. The handler still runs — later, when the
             // host applies that tick's snapshot — so a recording reproduces it. Console impulses inject as a Started
             // edge (the press the snapshot dispatch fires on) on the local slot.
-            if ((definition.Routing == CommandRouting.Simulation) &&
+            if (
+                (definition.Routing == CommandRouting.Simulation) &&
                 (m_injectionSink is { } sink) &&
-                TryGetId(name: definition.Name, id: out var commandId)) {
+                TryGetId(
+                name: definition.Name,
+                id: out var commandId
+            )
+            ) {
                 m_pendingSimulationSubmissions++;
 
                 try {

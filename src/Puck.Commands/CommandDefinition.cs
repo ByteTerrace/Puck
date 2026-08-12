@@ -203,7 +203,10 @@ public sealed record CommandDefinition {
             Name: name,
             Description: description,
             ValueKind: valueKind,
-            TextCommand: new Command(description: description, name: name) {
+            TextCommand: new Command(
+                description: description,
+                name: name
+            ) {
                 rest,
             },
             Bindability: bindability,

@@ -78,28 +78,49 @@ public static class CarriageVerifier {
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedPurpose);
 
-        if (string.Equals(a: expectedPurpose, b: CarriagePurposes.KeyBinding, comparisonType: StringComparison.Ordinal)) {
-            throw new ArgumentException(message: $"'{CarriagePurposes.KeyBinding}' is a reserved purpose; a caller never expects a claim to declare it.", paramName: nameof(expectedPurpose));
+        if (string.Equals(
+            a: expectedPurpose,
+            b: CarriagePurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ArgumentException(
+                message: $"'{CarriagePurposes.KeyBinding}' is a reserved purpose; a caller never expects a claim to declare it.",
+                paramName: nameof(expectedPurpose)
+            );
         }
 
-        if (string.Equals(a: claim.Header.Purpose, b: CarriagePurposes.KeyBinding, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: claim.Header.Purpose,
+            b: CarriagePurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: "a key-binding envelope was presented as a claim (purpose replay)");
         }
 
-        if (!string.Equals(a: claim.Header.Purpose, b: expectedPurpose, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Purpose,
+            b: expectedPurpose,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: $"purpose mismatch: envelope declares '{claim.Header.Purpose}', caller expected '{expectedPurpose}'");
         }
 
         // Purpose separates signature USES; payload kind separates what the bytes MEAN. Both are inside the
         // signed portion, and a claim may only be opaque bytes or a sealed payload — a claim whose payload
         // announces itself as a key binding would hand the engine a chain hop dressed as game data.
-        if ((claim.PayloadKind != CarriagePayloadKind.Opaque) && (claim.PayloadKind != CarriagePayloadKind.Sealed)) {
+        if (
+            (claim.PayloadKind != CarriagePayloadKind.Opaque) &&
+            (claim.PayloadKind != CarriagePayloadKind.Sealed)
+        ) {
             return CarriageVerifyResult.Refuse(reason: $"a claim's payload kind must be opaque or sealed, but this envelope declares '{claim.PayloadKind}'");
         }
 
         // A direct pin is strictly more specific than a domain root, so it is consulted first: pinning a
         // person's own key is a statement about that person, not about whoever minted them.
-        var directTrust = trustList.FindDirectSigner(domain: claim.Header.Domain, subject: claim.Header.Subject);
+        var directTrust = trustList.FindDirectSigner(
+            domain: claim.Header.Domain,
+            subject: claim.Header.Subject
+        );
 
         if (directTrust is not null) {
             return VerifyDirectlyPinned(
@@ -138,15 +159,26 @@ public static class CarriageVerifier {
         string? expectedAudience,
         ISequenceStore? sequenceStore
     ) {
-        if ((chain is not null) && (chain.Count != 0)) {
+        if (
+            (chain is not null) &&
+            (chain.Count != 0)
+        ) {
             return CarriageVerifyResult.Refuse(reason: $"a directly-pinned key vouches for nothing, so its claim must arrive with no bindings, but {chain.Count} arrived");
         }
 
-        if (!string.Equals(a: claim.Header.Algorithm, b: entry.PinnedId.Algorithm, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Algorithm,
+            b: entry.PinnedId.Algorithm,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: $"algorithm confusion: claim declares '{claim.Header.Algorithm}', but the pinned subject key is '{entry.PinnedId.Algorithm}' — the algorithm always comes from the pin, never the envelope");
         }
 
-        if (!VerifySignature(envelope: claim, publicKeySubjectPublicKeyInfo: entry.PublicKeySubjectPublicKeyInfo.Span, pinnedAlgorithm: entry.PinnedId.Algorithm)) {
+        if (!VerifySignature(
+            envelope: claim,
+            publicKeySubjectPublicKeyInfo: entry.PublicKeySubjectPublicKeyInfo.Span,
+            pinnedAlgorithm: entry.PinnedId.Algorithm
+        )) {
             return CarriageVerifyResult.Refuse(reason: "claim signature does not verify against the pinned subject key");
         }
 
@@ -171,7 +203,10 @@ public static class CarriageVerifier {
         string? expectedAudience,
         ISequenceStore? sequenceStore
     ) {
-        if ((chain is null) || (chain.Count == 0)) {
+        if (
+            (chain is null) ||
+            (chain.Count == 0)
+        ) {
             return CarriageVerifyResult.Refuse(reason: "missing chain: the claim arrived with no bindings, and offline verification never fetches the rest");
         }
 
@@ -208,14 +243,22 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: "root-vouches-issuing binding names a key with a subject, but an issuing key must carry none");
         }
 
-        if (!string.Equals(a: issuingId.Domain, b: claim.Header.Domain, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: issuingId.Domain,
+            b: claim.Header.Domain,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: "root-vouches-issuing binding names a key outside the claim's domain (cross-domain)");
         }
 
         // A root that vouches for ITSELF as the issuing key is depth one wearing a two-hop costume: the
         // root would still sign a binding per signup, which is exactly the cost the two-hop shape exists to
         // remove, and the warm key would no longer be replaceable without touching what everyone pinned.
-        if (string.Equals(a: issuingId.KeyHash, b: rootTrust.PinnedId.KeyHash, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: issuingId.KeyHash,
+            b: rootTrust.PinnedId.KeyHash,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: "root-vouches-issuing binding names the root key itself as the issuing key — that is depth one in disguise, and it keeps the cold root signing per subject");
         }
 
@@ -240,19 +283,35 @@ public static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: "issuing-vouches-subject binding names a key with no subject, but a subject key must carry the platform user id");
         }
 
-        if (!string.Equals(a: subjectId.Domain, b: claim.Header.Domain, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: subjectId.Domain,
+            b: claim.Header.Domain,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: "issuing-vouches-subject binding names a key outside the claim's domain (cross-domain)");
         }
 
-        if (!string.Equals(a: claim.Header.Subject, b: subjectId.Subject, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Subject,
+            b: subjectId.Subject,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: "the claim's subject does not match the chain's subject key");
         }
 
-        if (!string.Equals(a: claim.Header.Algorithm, b: subjectId.Algorithm, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: claim.Header.Algorithm,
+            b: subjectId.Algorithm,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return CarriageVerifyResult.Refuse(reason: $"algorithm confusion: claim declares '{claim.Header.Algorithm}', but the pinned subject key is '{subjectId.Algorithm}' — the algorithm always comes from the pin, never the envelope");
         }
 
-        if (!VerifySignature(envelope: claim, publicKeySubjectPublicKeyInfo: issuingHop.TargetSubjectPublicKeyInfo.Span, pinnedAlgorithm: subjectId.Algorithm)) {
+        if (!VerifySignature(
+            envelope: claim,
+            publicKeySubjectPublicKeyInfo: issuingHop.TargetSubjectPublicKeyInfo.Span,
+            pinnedAlgorithm: subjectId.Algorithm
+        )) {
             return CarriageVerifyResult.Refuse(reason: "claim signature does not verify against the pinned subject key");
         }
 
@@ -284,14 +343,22 @@ public static class CarriageVerifier {
         string? expectedAudience,
         ISequenceStore? sequenceStore
     ) {
-        var windowFailure = CheckWindow(header: claim.Header, now: now, maximumAge: maximumAge);
+        var windowFailure = CheckWindow(
+            header: claim.Header,
+            now: now,
+            maximumAge: maximumAge
+        );
 
         if (windowFailure is not null) {
             return CarriageVerifyResult.Refuse(reason: windowFailure);
         }
 
         if (claim.Header.Audience is not null) {
-            if (!string.Equals(a: claim.Header.Audience, b: expectedAudience, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: claim.Header.Audience,
+                b: expectedAudience,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return CarriageVerifyResult.Refuse(reason: $"audience mismatch: claim is bound to '{claim.Header.Audience}', this verifier is '{(expectedAudience ?? "(none)")}'");
             }
         } else if (claim.Header.Sequence is null) {
@@ -315,7 +382,11 @@ public static class CarriageVerifier {
             bool advanced;
 
             try {
-                advanced = sequenceStore.TryAdvance(domain: claim.Header.Domain, subject: subject, sequence: claim.Header.Sequence.Value);
+                advanced = sequenceStore.TryAdvance(
+                    domain: claim.Header.Domain,
+                    subject: subject,
+                    sequence: claim.Header.Sequence.Value
+                );
             } catch (Exception exception) {
                 return CarriageVerifyResult.Refuse(reason: $"the sequence mark store could not decide: {exception.GetType().Name}: {exception.Message} — an unavailable or indeterminate mark store refuses, never admits");
             }
@@ -341,36 +412,88 @@ public static class CarriageVerifier {
         TimeSpan? maximumAge,
         string hopLabel
     ) {
-        if (!string.Equals(a: binding.Header.Purpose, b: CarriagePurposes.KeyBinding, comparisonType: StringComparison.Ordinal)) {
-            return new BindingHopResult(Refusal: $"{hopLabel} does not declare purpose '{CarriagePurposes.KeyBinding}'", TargetId: null, TargetSubjectPublicKeyInfo: default);
+        if (!string.Equals(
+            a: binding.Header.Purpose,
+            b: CarriagePurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return new BindingHopResult(
+                Refusal: $"{hopLabel} does not declare purpose '{CarriagePurposes.KeyBinding}'",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
-        if (!string.Equals(a: binding.Header.Domain, b: expectedDomain, comparisonType: StringComparison.Ordinal)) {
-            return new BindingHopResult(Refusal: $"{hopLabel} is minted for a different domain than the claim (cross-domain)", TargetId: null, TargetSubjectPublicKeyInfo: default);
+        if (!string.Equals(
+            a: binding.Header.Domain,
+            b: expectedDomain,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return new BindingHopResult(
+                Refusal: $"{hopLabel} is minted for a different domain than the claim (cross-domain)",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
-        if (!string.Equals(a: binding.Header.Subject, b: pinnedSignerId.Subject, comparisonType: StringComparison.Ordinal)) {
-            return new BindingHopResult(Refusal: $"{hopLabel}'s declared signer subject does not match the pinned signer", TargetId: null, TargetSubjectPublicKeyInfo: default);
+        if (!string.Equals(
+            a: binding.Header.Subject,
+            b: pinnedSignerId.Subject,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return new BindingHopResult(
+                Refusal: $"{hopLabel}'s declared signer subject does not match the pinned signer",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
-        if (!string.Equals(a: binding.Header.Algorithm, b: pinnedSignerId.Algorithm, comparisonType: StringComparison.Ordinal)) {
-            return new BindingHopResult(Refusal: $"algorithm confusion: {hopLabel} declares '{binding.Header.Algorithm}', but the pinned signer is '{pinnedSignerId.Algorithm}'", TargetId: null, TargetSubjectPublicKeyInfo: default);
+        if (!string.Equals(
+            a: binding.Header.Algorithm,
+            b: pinnedSignerId.Algorithm,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return new BindingHopResult(
+                Refusal: $"algorithm confusion: {hopLabel} declares '{binding.Header.Algorithm}', but the pinned signer is '{pinnedSignerId.Algorithm}'",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
         if (binding.PayloadKind != CarriagePayloadKind.KeyBinding) {
-            return new BindingHopResult(Refusal: $"{hopLabel}'s payload is not a key binding", TargetId: null, TargetSubjectPublicKeyInfo: default);
+            return new BindingHopResult(
+                Refusal: $"{hopLabel}'s payload is not a key binding",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
         // Signature first, payload second: everything below this line reads attacker-supplied bytes, and
         // the only thing that makes them safe to read is that the pinned signer committed to them.
-        if (!VerifySignature(envelope: binding, publicKeySubjectPublicKeyInfo: pinnedSignerSpki, pinnedAlgorithm: pinnedSignerId.Algorithm)) {
-            return new BindingHopResult(Refusal: $"{hopLabel} signature does not verify against the pinned signer key", TargetId: null, TargetSubjectPublicKeyInfo: default);
+        if (!VerifySignature(
+            envelope: binding,
+            publicKeySubjectPublicKeyInfo: pinnedSignerSpki,
+            pinnedAlgorithm: pinnedSignerId.Algorithm
+        )) {
+            return new BindingHopResult(
+                Refusal: $"{hopLabel} signature does not verify against the pinned signer key",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
-        var windowFailure = CheckWindow(header: binding.Header, now: now, maximumAge: maximumAge);
+        var windowFailure = CheckWindow(
+            header: binding.Header,
+            now: now,
+            maximumAge: maximumAge
+        );
 
         if (windowFailure is not null) {
-            return new BindingHopResult(Refusal: $"{hopLabel}: {windowFailure}", TargetId: null, TargetSubjectPublicKeyInfo: default);
+            return new BindingHopResult(
+                Refusal: $"{hopLabel}: {windowFailure}",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
         KeyBindingPayload payload;
@@ -378,18 +501,34 @@ public static class CarriageVerifier {
         try {
             payload = codec.DecodeKeyBindingPayload(bytes: binding.PayloadBytes.Span);
         } catch (FormatException exception) {
-            return new BindingHopResult(Refusal: $"{hopLabel}'s payload does not decode: {exception.Message}", TargetId: null, TargetSubjectPublicKeyInfo: default);
+            return new BindingHopResult(
+                Refusal: $"{hopLabel}'s payload does not decode: {exception.Message}",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
         if (!CarriageAlgorithms.IsKnown(algorithm: payload.TargetId.Algorithm)) {
-            return new BindingHopResult(Refusal: $"{hopLabel} vouches for a key naming algorithm '{payload.TargetId.Algorithm}', which is not a carriage algorithm", TargetId: null, TargetSubjectPublicKeyInfo: default);
+            return new BindingHopResult(
+                Refusal: $"{hopLabel} vouches for a key naming algorithm '{payload.TargetId.Algorithm}', which is not a carriage algorithm",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
         if (!payload.IsSelfCertifying) {
-            return new BindingHopResult(Refusal: $"{hopLabel}'s payload key does not hash to its own claimed id (not self-certifying)", TargetId: null, TargetSubjectPublicKeyInfo: default);
+            return new BindingHopResult(
+                Refusal: $"{hopLabel}'s payload key does not hash to its own claimed id (not self-certifying)",
+                TargetId: null,
+                TargetSubjectPublicKeyInfo: default
+            );
         }
 
-        return new BindingHopResult(Refusal: null, TargetId: payload.TargetId, TargetSubjectPublicKeyInfo: payload.PublicKeySubjectPublicKeyInfo);
+        return new BindingHopResult(
+            Refusal: null,
+            TargetId: payload.TargetId,
+            TargetSubjectPublicKeyInfo: payload.PublicKeySubjectPublicKeyInfo
+        );
     }
 
     /// <summary>
@@ -411,19 +550,28 @@ public static class CarriageVerifier {
     private static bool VerifySignature(SignedCarriageEnvelope envelope, ReadOnlySpan<byte> publicKeySubjectPublicKeyInfo, string pinnedAlgorithm) {
         var descriptor = CarriageAlgorithms.Resolve(algorithm: pinnedAlgorithm);
 
-        if ((descriptor.Role != CarriageKeyRole.Signing) || (descriptor.SignatureHash is null)) {
+        if (
+            (descriptor.Role != CarriageKeyRole.Signing) ||
+            (descriptor.SignatureHash is null)
+        ) {
             return false;
         }
 
         using var ecdsa = ECDsa.Create();
 
         try {
-            ecdsa.ImportSubjectPublicKeyInfo(source: publicKeySubjectPublicKeyInfo, bytesRead: out _);
+            ecdsa.ImportSubjectPublicKeyInfo(
+                source: publicKeySubjectPublicKeyInfo,
+                bytesRead: out _
+            );
         } catch (CryptographicException) {
             return false;
         }
 
-        if (!CarriageCurves.Matches(key: ecdsa.ExportParameters(includePrivateParameters: false).Curve, expected: descriptor.Curve)) {
+        if (!CarriageCurves.Matches(
+            key: ecdsa.ExportParameters(includePrivateParameters: false).Curve,
+            expected: descriptor.Curve
+        )) {
             return false;
         }
 
@@ -431,7 +579,12 @@ public static class CarriageVerifier {
         // alternate DER encoding of the same (r, s) is even a candidate. What this does NOT buy is signature
         // uniqueness — (r, s) and (r, n-s) are both valid for the same message, so signature bytes are never
         // an identity. Replay is defended by the sequence mark and the audience, never by signature equality.
-        return ecdsa.VerifyData(data: envelope.SignedPortion.Span, signature: envelope.Signature.Span, hashAlgorithm: descriptor.SignatureHash.Value, signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return ecdsa.VerifyData(
+            data: envelope.SignedPortion.Span,
+            signature: envelope.Signature.Span,
+            hashAlgorithm: descriptor.SignatureHash.Value,
+            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
+        );
     }
 
     /// <summary>
