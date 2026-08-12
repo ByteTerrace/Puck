@@ -33,7 +33,10 @@ public sealed class ScriptingEngine : IDisposable {
             .WithFuelConsumption(enable: true)
             .WithWasmThreads(enable: false)
             .WithSIMD(enable: false)
-            .WithRelaxedSIMD(deterministic: false, enable: false)
+            .WithRelaxedSIMD(
+            deterministic: false,
+            enable: false
+        )
             .WithCraneliftNaNCanonicalization(enable: true)
             .WithCompilerStrategy(strategy: CompilerStrategy.Cranelift)
             .WithOptimizationLevel(level: OptimizationLevel.Speed)

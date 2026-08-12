@@ -33,8 +33,8 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     private const byte ReadBackHighBits = 0x3E;
     // The data-read-enable gate: light is reported on bit 1 only when bits 7-6 are BOTH set.
     private const byte DataReadEnableMask = 0xC0;
-    private const byte ReceivedLightBit = 0x02;
     private const byte LedOutBit = 0x01;
+    private const byte ReceivedLightBit = 0x02;
 
     // The last value written to RP. Only bits 7-6 and bit 0 survive a read-back, but the full byte is kept because that
     // matches how the register behaves on real hardware.
@@ -109,7 +109,10 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
         var value = (byte)((m_register & ReadBackKeepMask) | ReadBackHighBits);
 
         // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND a peer LED is lit.
-        if (((m_register & DataReadEnableMask) == DataReadEnableMask) && ReceivedLight) {
+        if (
+            ((m_register & DataReadEnableMask) == DataReadEnableMask) &&
+            ReceivedLight
+        ) {
             value &= unchecked((byte)~ReceivedLightBit);
         }
 
@@ -134,11 +137,20 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     // connected pair must also be STEPPED as a pair (the interleave keeps their light levels coherent) — the session owns
     // both halves. Guarded against double-linking exactly like the serial cable.
     internal static void Connect(InfraredPort first, InfraredPort second) {
-        if (ReferenceEquals(objA: first, objB: second)) {
-            throw new ArgumentException(message: "An infrared port cannot be linked to itself.", paramName: nameof(second));
+        if (ReferenceEquals(
+            objA: first,
+            objB: second
+        )) {
+            throw new ArgumentException(
+                message: "An infrared port cannot be linked to itself.",
+                paramName: nameof(second)
+            );
         }
 
-        if ((first.m_peer is not null) || (second.m_peer is not null)) {
+        if (
+            (first.m_peer is not null) ||
+            (second.m_peer is not null)
+        ) {
             throw new InvalidOperationException(message: "An infrared port is already linked; disconnect its session first.");
         }
 

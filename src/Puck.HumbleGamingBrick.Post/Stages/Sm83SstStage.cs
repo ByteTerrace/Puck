@@ -71,7 +71,10 @@ internal sealed class Sm83SstStage : IPostStage {
         foreach (var familyPath in families) {
             var familyName = Path.GetFileNameWithoutExtension(path: familyPath);
 
-            if (ConflictSkippedFamilies.TryGetValue(key: familyName, value: out var reason)) {
+            if (ConflictSkippedFamilies.TryGetValue(
+                key: familyName,
+                value: out var reason
+            )) {
                 skippedFamilies.Add(item: $"{familyName} [{Sm83SstVectorFile.Load(path: familyPath).Count} vectors] ({reason})");
 
                 continue;
@@ -101,11 +104,19 @@ internal sealed class Sm83SstStage : IPostStage {
             }
         }
 
-        var skipNote = ((skippedFamilies.Count > 0) ? $"; {skippedFamilies.Count} documented oracle-conflict skips: {string.Join(separator: ", ", values: skippedFamilies)}" : string.Empty);
+        var skipNote = ((skippedFamilies.Count > 0)
+            ? $"; {skippedFamilies.Count} documented oracle-conflict skips: {string.Join(
+            separator: ", ",
+            values: skippedFamilies
+        )}"
+            : string.Empty);
         var detail = $"{vectorsPassed}/{vectorsRun} vectors passed across {familiesRun} families{skipNote}";
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: detail)
-            : PostStageOutcome.Fail(detail: $"{detail}; failed families: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{detail}; failed families: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

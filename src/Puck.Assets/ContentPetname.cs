@@ -41,20 +41,43 @@ public static class ContentPetname {
     public static string From(string hashHex) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: hashHex);
 
-        var hex = (hashHex.StartsWith(value: "sha256/", comparisonType: StringComparison.Ordinal) ? hashHex["sha256/".Length..] : hashHex);
+        var hex = (hashHex.StartsWith(
+            value: "sha256/",
+            comparisonType: StringComparison.Ordinal
+        )
+            ? hashHex["sha256/".Length..]
+            : hashHex);
 
         if (hex.Length < 6) {
-            throw new ArgumentException(message: $"'{hashHex}' is too short to derive a petname from (need at least 6 hex characters).", paramName: nameof(hashHex));
+            throw new ArgumentException(
+                message: $"'{hashHex}' is too short to derive a petname from (need at least 6 hex characters).",
+                paramName: nameof(hashHex)
+            );
         }
 
-        var firstIndex = (ParseByte(hex: hex, offset: 0) % FirstWords.Length);
-        var secondIndex = (ParseByte(hex: hex, offset: 2) % SecondWords.Length);
-        var numberIndex = (ParseByte(hex: hex, offset: 4) % NumberWords.Length);
+        var firstIndex = (ParseByte(
+            hex: hex,
+            offset: 0
+        ) % FirstWords.Length);
+        var secondIndex = (ParseByte(
+            hex: hex,
+            offset: 2
+        ) % SecondWords.Length);
+        var numberIndex = (ParseByte(
+            hex: hex,
+            offset: 4
+        ) % NumberWords.Length);
 
         return $"{FirstWords[firstIndex]}-{SecondWords[secondIndex]}-{NumberWords[numberIndex]}";
     }
 
     // Parses a two-hex-character byte at the given character offset (offsets are always even, from hex64 input).
     private static int ParseByte(string hex, int offset) =>
-        byte.Parse(s: hex.AsSpan(start: offset, length: 2), style: System.Globalization.NumberStyles.HexNumber);
+        byte.Parse(
+        s: hex.AsSpan(
+            start: offset,
+            length: 2
+        ),
+        style: System.Globalization.NumberStyles.HexNumber
+    );
 }

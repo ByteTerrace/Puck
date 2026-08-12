@@ -43,21 +43,40 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             return;
         }
 
-        OverlaySeatLoop.Emit(builder: builder, seats: frame.Seats.Span, writerName: nameof(CursorWriter), writer: this);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: frame.Seats.Span,
+            writerName: nameof(CursorWriter),
+            writer: this
+        );
     }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) {
         var region = seat.Viewport;
 
-        if ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
+        if (
+            (region.Width < MinRegionExtent) ||
+            (region.Height < MinRegionExtent)
+        ) {
             return;
         }
 
         // Hover lights the accent tier; the bare cursor keeps the seat's world-authored hue. Geometry scales off
         // the authored ring radius: the center dot rides at roughly a fifth of it, the label clear of the ring.
-        var role = (seat.Hover ? OverlayColorRole.Accent : seat.Role);
-        var ringRadius = Math.Clamp(value: seat.SizePx, min: 1f, max: MaxSizePx);
-        var dotHalf = Math.Clamp(value: (ringRadius * 0.22f), min: 1f, max: 4f);
+        var role = (seat.Hover
+            ? OverlayColorRole.Accent
+            : seat.Role
+        );
+        var ringRadius = Math.Clamp(
+            value: seat.SizePx,
+            min: 1f,
+            max: MaxSizePx
+        );
+        var dotHalf = Math.Clamp(
+            value: (ringRadius * 0.22f),
+            min: 1f,
+            max: 4f
+        );
         var labelOffset = (ringRadius + 5f);
 
         builder.BeginClip(
@@ -66,7 +85,13 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             x: (region.X * builder.Width),
             y: (region.Y * builder.Height)
         );
-        builder.WriteRing(alpha: CursorAlpha, centerX: seat.X, centerY: seat.Y, radius: ringRadius, role: role);
+        builder.WriteRing(
+            alpha: CursorAlpha,
+            centerX: seat.X,
+            centerY: seat.Y,
+            radius: ringRadius,
+            role: role
+        );
         builder.WriteRect(
             alpha: 1f,
             h: (dotHalf * 2f),
@@ -95,5 +120,8 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     }
 
     void IOverlaySeatEmitter<OverlayCursorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) =>
-        EmitSeat(builder: builder, seat: in seat);
+        EmitSeat(
+            builder: builder,
+            seat: in seat
+        );
 }

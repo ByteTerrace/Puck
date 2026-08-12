@@ -21,13 +21,19 @@ internal sealed class AgsStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var romPath = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_AGS");
 
-        if (string.IsNullOrEmpty(value: romPath) || !File.Exists(path: romPath)) {
+        if (
+            string.IsNullOrEmpty(value: romPath) ||
+            !File.Exists(path: romPath)
+        ) {
             return PostStageOutcome.Skip(detail: "no AGS aging-cartridge ROM (set PUCK_AGB_AGS to the TCHK10 dump)");
         }
 
         Diagnostics.BiosImage = context.BiosImage;
 
-        var failed = Diagnostics.RunAgs(romPath: romPath, name: Path.GetFileName(path: romPath));
+        var failed = Diagnostics.RunAgs(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath)
+        );
 
         return ((failed == 0)
             ? PostStageOutcome.Pass(detail: "all captured AGS cells passed (measurement — accuracy frontier, not a gate)")

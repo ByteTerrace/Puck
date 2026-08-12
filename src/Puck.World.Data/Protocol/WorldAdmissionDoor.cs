@@ -40,7 +40,7 @@ public enum WorldAdmissionRefusal : byte {
 /// document's <see cref="WorldAdmissionEntry"/> rows, which is why it is safe to run there (mirrors
 /// <see cref="WorldHelloDoor"/>'s own off-tick-thread reasoning; see <c>WorldTcpHost</c>'s class remarks).
 /// <para><b>Freshness is the challenge nonce, not carriage's own audience/sequence machinery.</b> The claim is
-/// directed (<see cref="Audience"/>-bound) and carries no sequence, which <c>Puck.Carriage.CarriageVerifier</c>'s
+/// directed (<see cref="Audience"/>-bound) and carries no sequence, which <see cref="CarriageConformanceProfile"/>'s
 /// own docs call "replayable at its own audience" for a durable carried claim. That is fine here because this is
 /// not a durable carried claim: <see cref="NewChallenge"/> mints a fresh cryptographically random nonce per
 /// connection attempt, and this door additionally requires the claim's own payload bytes to equal that exact nonce
@@ -51,6 +51,9 @@ public enum WorldAdmissionRefusal : byte {
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
+    private static readonly ICarriageCodec s_codec = new CborCarriageCodec();
+    private static readonly CarriageConformanceProfile s_profile = CarriageConformanceProfile.Base;
+
     /// <summary>The fixed purpose every admission claim must declare — stops a claim minted for anything else (a
     /// different game, a different purpose within this one) being replayed here as an admission proof.</summary>
     public const string Purpose = "puck.world.tcp-admission";
@@ -93,24 +96,24 @@ public static class WorldAdmissionDoor {
     /// <summary>Mints a fresh, cryptographically random challenge nonce.</summary>
     public static byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: ChallengeBytes);
 
+    /// <summary>Decodes one admission envelope under the door-owned mandatory base CBOR profile.</summary>
+    public static SignedCarriageEnvelope DecodeEnvelope(ReadOnlySpan<byte> wire) => s_profile.DecodeEnvelope(codec: s_codec, wire: wire);
+
     /// <summary>Verifies one connecting peer's presented identity against this world's authored admission entries.</summary>
     /// <param name="entries">The document's current <c>admission</c> rows (a snapshot; see this class's remarks).</param>
     /// <param name="challenge">The exact nonce <see cref="NewChallenge"/> minted for this connection attempt.</param>
-    /// <param name="codec">The carriage serialisation the claim/chain bytes were decoded with.</param>
     /// <param name="claim">The peer's signed claim envelope.</param>
     /// <param name="chain">The peer's presented chain (0, 1, or 2 bindings — carriage's own depth rule governs which
     /// counts are even reachable for a given trust entry).</param>
     /// <param name="now">The verification instant — an admission-boundary read, never a mid-tick one; see
-    /// <c>Puck.Carriage.CarriageVerifier.VerifyChain</c>'s own remarks on why that is legitimate here.</param>
+    /// carriage verification contract's own remarks on why that is legitimate here.</param>
     public static AdmissionOutcome TryAdmit(
         IReadOnlyList<WorldAdmissionEntry>? entries,
         ReadOnlySpan<byte> challenge,
-        ICarriageCodec codec,
         SignedCarriageEnvelope claim,
         IReadOnlyList<SignedCarriageEnvelope> chain,
         DateTimeOffset now
     ) {
-        ArgumentNullException.ThrowIfNull(argument: codec);
         ArgumentNullException.ThrowIfNull(argument: claim);
         ArgumentNullException.ThrowIfNull(argument: chain);
 
@@ -129,18 +132,17 @@ public static class WorldAdmissionDoor {
             return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChainRefused, $"this world's authored admission entries do not form a valid trust list: {exception.Message}");
         }
 
-        var result = CarriageVerifier.VerifyChain(
-            codec: codec,
+        var result = s_profile.VerifyChain(
+            codec: s_codec,
             claim: claim,
             chain: chain,
             trustList: trustList,
             now: now,
             expectedPurpose: Purpose,
-            expectedAudience: Audience,
-            sequenceStore: null
+            expectedAudience: Audience
         );
 
-        if (!result.Verified) {
+        if (!result.Verified || result.RequiresReplayCommit) {
             return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChainRefused, (result.RefusalReason ?? "refused"));
         }
 
@@ -272,6 +274,12 @@ public static class WorldAdmissionDoor {
             ));
         }
 
-        return new TrustList(entries: list, defaultMaximumAge: null);
+        return new TrustList(
+            entries: list,
+            defaultMaximumAge: null,
+            defaultRootBindingMaximumAge: null,
+            defaultSubjectBindingMaximumAge: null,
+            replayAcceptanceHorizon: null
+        );
     }
 }

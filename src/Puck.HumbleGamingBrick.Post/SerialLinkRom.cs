@@ -31,7 +31,9 @@ internal static class SerialLinkRom {
     /// <param name="sendBase">The first byte of this side's counting send sequence (incremented per transfer).</param>
     /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point runs the exchange protocol.</returns>
     public static byte[] Create(bool internalClock, byte sendBase) {
-        var control = (byte)(internalClock ? 0x81 : 0x80);
+        var control = (byte)(internalClock
+            ? 0x81
+            : 0x80);
 
         // The exchange protocol at the post-boot entry point 0x0100 (registers: B = transfers remaining, C = next
         // byte to send, D = serial-interrupt observations, HL = receive-buffer cursor):
@@ -99,7 +101,10 @@ internal static class SerialLinkRom {
         // A zero-filled image already carries a valid ROM-only header (see SyntheticRom); only the program is written.
         var rom = new byte[RomSize];
 
-        program.CopyTo(array: rom, index: EntryPoint);
+        program.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
 
         return rom;
     }
@@ -116,7 +121,9 @@ internal static class SerialLinkRom {
     /// loop treats 0 as 256 iterations — pass 1 for the shortest delay).</param>
     /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point runs the gapped exchange protocol.</returns>
     public static byte[] CreateChurn(bool internalClock, byte sendBase, byte transferCount, byte idleDelay) {
-        var control = (byte)(internalClock ? 0x81 : 0x80);
+        var control = (byte)(internalClock
+            ? 0x81
+            : 0x80);
 
         // The gapped exchange protocol (registers: B = transfers remaining, C = next byte, D = serial-interrupt
         // observations, E = idle-delay counter, HL = receive-buffer cursor). It mirrors Create's loop with an idle
@@ -190,7 +197,10 @@ internal static class SerialLinkRom {
 
         var rom = new byte[RomSize];
 
-        program.CopyTo(array: rom, index: EntryPoint);
+        program.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
 
         return rom;
     }

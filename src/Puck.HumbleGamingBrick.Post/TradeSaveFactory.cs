@@ -112,7 +112,7 @@ internal static class TradeSaveFactory {
     // (MapSetupScript_Continue rebuilds the on-screen blocks via LoadBlockData + BufferScreen from
     // wOverworldMapBlocks; wScreenSave/RestoreScreen is used only by MapSetupScript_Connection). Kept because a real
     // save at (5,3) holds it and writing the true values is harmless.
-    private static ReadOnlySpan<byte> s_pokecenter2FScreenSaveAt5x3 =>
+    private static ReadOnlySpan<byte> Pokecenter2FScreenSaveAt5x3 =>
     [
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x13, 0x31, 0x2B, 0x0B, 0x0A, 0x0B,
@@ -125,19 +125,19 @@ internal static class TradeSaveFactory {
     /// single level-5 RATTATA (distinct from side B's lead).</summary>
     public static TradeTrainer SideA =>
         new(
-            Name: "GOLD",
-            TrainerId: 0x1234,
-            Party: [TradePartyMember.Level5(species: TradeSpecies.Rattata)]
-        );
+        Name: "GOLD",
+        TrainerId: 0x1234,
+        Party: [TradePartyMember.Level5(species: TradeSpecies.Rattata)]
+    );
 
     /// <summary>The trade harness's second trainer: a Cgb player named SILVER standing at the Trade Center attendant with
     /// a single level-5 PIDGEY (distinct from side A's lead).</summary>
     public static TradeTrainer SideB =>
         new(
-            Name: "SILVER",
-            TrainerId: 0x5678,
-            Party: [TradePartyMember.Level5(species: TradeSpecies.Pidgey)]
-        );
+        Name: "SILVER",
+        TrainerId: 0x5678,
+        Party: [TradePartyMember.Level5(species: TradeSpecies.Pidgey)]
+    );
 
     /// <summary>Builds the full <c>.sav</c> file (SRAM + RTC footer) for a trainer, ready to write to disk or import via
     /// <see cref="CartridgeBase.ImportExternalRam"/> + <see cref="Mbc3Cartridge.ImportPersistentClock"/>.</summary>
@@ -145,9 +145,15 @@ internal static class TradeSaveFactory {
     /// <returns>A <see cref="SaveFileByteCount"/>-byte save-file image.</returns>
     public static byte[] CreateSaveFile(TradeTrainer trainer) {
         var file = new byte[SaveFileByteCount];
-        var sram = file.AsSpan(start: 0, length: SramByteCount);
+        var sram = file.AsSpan(
+            start: 0,
+            length: SramByteCount
+        );
 
-        WriteSram(trainer: trainer, sram: sram);
+        WriteSram(
+            trainer: trainer,
+            sram: sram
+        );
 
         // The RTC footer is all-zero (halt bit 6 = 0, day-carry bit 7 = 0 in both the live and latched Day-High words,
         // every counter zero, the trailing UNIX timestamp ignored on import). Per §2.3/§2.4 this boots clean — no
@@ -164,14 +170,20 @@ internal static class TradeSaveFactory {
     /// <param name="x">The player X coordinate.</param>
     /// <returns>The same array, with a valid checksum.</returns>
     public static byte[] PatchSpawn(byte[] saveFile, byte group, byte map, byte y, byte x) {
-        var sram = saveFile.AsSpan(start: 0, length: SramByteCount);
+        var sram = saveFile.AsSpan(
+            start: 0,
+            length: SramByteCount
+        );
 
         sram[OffsetMapGroup] = group;
         sram[OffsetMapNumber] = map;
         sram[OffsetYCoord] = y;
         sram[OffsetXCoord] = x;
 
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: sram[OffsetChecksum..], value: ComputeChecksum(sram: sram));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: sram[OffsetChecksum..],
+            value: ComputeChecksum(sram: sram)
+        );
 
         return saveFile;
     }
@@ -180,9 +192,15 @@ internal static class TradeSaveFactory {
     /// patch to the checksummed region.</summary>
     /// <param name="saveFile">A crafted save file (mutated in place).</param>
     public static void RewriteChecksum(byte[] saveFile) {
-        var sram = saveFile.AsSpan(start: 0, length: SramByteCount);
+        var sram = saveFile.AsSpan(
+            start: 0,
+            length: SramByteCount
+        );
 
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: sram[OffsetChecksum..], value: ComputeChecksum(sram: sram));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: sram[OffsetChecksum..],
+            value: ComputeChecksum(sram: sram)
+        );
     }
 
     /// <summary>Builds just the 32&#160;KiB SRAM image (no RTC footer) — the slice a checksum re-verification or a WRAM
@@ -192,7 +210,10 @@ internal static class TradeSaveFactory {
     public static byte[] CreateSram(TradeTrainer trainer) {
         var sram = new byte[SramByteCount];
 
-        WriteSram(trainer: trainer, sram: sram);
+        WriteSram(
+            trainer: trainer,
+            sram: sram
+        );
 
         return sram;
     }
@@ -211,9 +232,11 @@ internal static class TradeSaveFactory {
         var expected = ComputeChecksum(sram: sram);
         var stored = BinaryPrimitives.ReadUInt16LittleEndian(source: sram[OffsetChecksum..]);
 
-        return ((stored == expected)
-            && (sram[OffsetCheckValue1] == CheckValue1)
-            && (sram[OffsetCheckValue2] == CheckValue2));
+        return (
+            (stored == expected) &&
+            (sram[OffsetCheckValue1] == CheckValue1) &&
+            (sram[OffsetCheckValue2] == CheckValue2)
+        );
     }
 
     /// <summary>Reads the lead party mon's species from a 32&#160;KiB SRAM image — the observable a completed trade moves
@@ -226,24 +249,45 @@ internal static class TradeSaveFactory {
     private static void WriteSram(TradeTrainer trainer, Span<byte> sram) {
         ArgumentNullException.ThrowIfNull(argument: trainer);
 
-        if ((trainer.Party.Count < 1) || (trainer.Party.Count > 6)) {
-            throw new ArgumentException(message: "a party must hold 1..6 mons.", paramName: nameof(trainer));
+        if (
+            (trainer.Party.Count < 1) ||
+            (trainer.Party.Count > 6)
+        ) {
+            throw new ArgumentException(
+                message: "a party must hold 1..6 mons.",
+                paramName: nameof(trainer)
+            );
         }
 
         // sOptions is cosmetic; a zero byte set is a legal, fastest-text-speed configuration.
         sram[OffsetCheckValue1] = CheckValue1;
         sram[OffsetCheckValue2] = CheckValue2;
 
-        BinaryPrimitives.WriteUInt16BigEndian(destination: sram[OffsetPlayerId..], value: trainer.TrainerId);
-        WriteName(destination: sram[OffsetPlayerName..(OffsetPlayerName + NameLength)], text: trainer.Name);
-        WriteName(destination: sram[OffsetMomsName..(OffsetMomsName + NameLength)], text: "MOM");
-        WriteName(destination: sram[OffsetRivalName..(OffsetRivalName + NameLength)], text: "RIVAL");
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: sram[OffsetPlayerId..],
+            value: trainer.TrainerId
+        );
+        WriteName(
+            destination: sram[OffsetPlayerName..(OffsetPlayerName + NameLength)],
+            text: trainer.Name
+        );
+        WriteName(
+            destination: sram[OffsetMomsName..(OffsetMomsName + NameLength)],
+            text: "MOM"
+        );
+        WriteName(
+            destination: sram[OffsetRivalName..(OffsetRivalName + NameLength)],
+            text: "RIVAL"
+        );
 
         // The single Cable Club gate (§2.3): force EVENT_GAVE_MYSTERY_EGG_TO_ELM (bit 31 → byte 3 of wEventFlags, bit
         // 0x80). No badges, starter, or further story flags are checked for trade access.
         sram[OffsetEventFlags] = EventGaveMysteryEggBit;
 
-        WriteUInt24BigEndian(destination: sram[OffsetMoney..], value: StartMoney);
+        WriteUInt24BigEndian(
+            destination: sram[OffsetMoney..],
+            value: StartMoney
+        );
 
         // Spawn directly inside the shared POKECENTER_2F Cable Club floor (group 20, map 1), one tile below the Trade
         // Center receptionist at (5,2) — §2.5. Facing is NOT craftable (object structs regenerate to default DOWN); the
@@ -259,16 +303,25 @@ internal static class TradeSaveFactory {
         // visible map with border block 0 (impassable collision everywhere). These 30 bytes are the exact window a
         // real save at POKECENTER_2F (5,3) holds, verified against the shipping ROM's block data (group 20 / map 1,
         // tileset 0x25); restoring it is a no-op that leaves the loaded map intact.
-        s_pokecenter2FScreenSaveAt5x3.CopyTo(destination: sram[OffsetScreenSave..(OffsetScreenSave + ScreenSaveLength)]);
+        Pokecenter2FScreenSaveAt5x3.CopyTo(destination: sram[OffsetScreenSave..(OffsetScreenSave + ScreenSaveLength)]);
 
         WriteObjects(sram: sram);
-        WriteParty(trainer: trainer, sram: sram);
+        WriteParty(
+            trainer: trainer,
+            sram: sram
+        );
 
         var checksum = ComputeChecksum(sram: sram);
 
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: sram[OffsetChecksum..], value: checksum);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: sram[OffsetChecksum..],
+            value: checksum
+        );
 
-        Validate(trainer: trainer, sram: sram);
+        Validate(
+            trainer: trainer,
+            sram: sram
+        );
     }
 
     // The player (object 0) spawn coordinates in tile units, and the +4 map-coordinate border offset the object system
@@ -284,7 +337,7 @@ internal static class TradeSaveFactory {
     // (OBJECT_ACTION_STAND), [16..21]=MapX/MapY/LastMapX/LastMapY/InitX/InitY (patched from the spawn),
     // [23..24]=screen sprite X/Y (player is always screen-centred). Restoring this makes the player a live, movable
     // object; without it GetMovementPermissions reads collision at a stale (0,0) map coord and every tile bumps.
-    private static ReadOnlySpan<byte> s_playerObjectStructTemplate =>
+    private static ReadOnlySpan<byte> PlayerObjectStructTemplate =>
     [
         0x01, 0x00, 0x00, 0x0B, 0x02, 0x00, 0x00, 0xFF, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -294,7 +347,7 @@ internal static class TradeSaveFactory {
     // The player's map object (MapObjectLength bytes): structId 0, SPRITE_CHRIS, Y/X coords (map units),
     // SPRITEMOVEDATA_PLAYER, then radius/hours/type/sight $FF/0 and no script/event. wMapObjects is likewise not
     // re-read on CONTINUE, so the player's map object must be present too (the movement code writes coords back to it).
-    private static ReadOnlySpan<byte> s_playerMapObjectTemplate =>
+    private static ReadOnlySpan<byte> PlayerMapObjectTemplate =>
     [
         0x00, 0x01, 0x00, 0x00, 0x0B, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
     ];
@@ -306,7 +359,7 @@ internal static class TradeSaveFactory {
     // DOWN 0, [9]=StepType 0 (RESET, as a fresh spawn has), [11]=Action OBJECT_ACTION_STAND 1, [16..21]=Map/Last/Init
     // X/Y (patched to the (5,2) attendant tile). SpriteTile/palette/screen X/Y self-correct via RefreshMapSprites,
     // which runs on CONTINUE. This makes the attendant a real, interactable object at (5,2).
-    private static ReadOnlySpan<byte> s_receptionistObjectStructTemplate =>
+    private static ReadOnlySpan<byte> ReceptionistObjectStructTemplate =>
     [
         0x38, 0x01, 0x24, 0x06, 0x00, 0x00, 0x02, 0xFF, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x30, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -319,7 +372,7 @@ internal static class TradeSaveFactory {
     // [8]=(PAL_NPC_GREEN<<4)|OBJECTTYPE_SCRIPT = 0xA0, [9]=sight 0, [10..11]=script pointer
     // (LinkReceptionistScript_Trade = bank 0x5C : 0x4D6F, stored LE), [12..13]=event flag -1 (always appears). This
     // is what A-on-the-attendant jumps to.
-    private static ReadOnlySpan<byte> s_receptionistMapObjectTemplate =>
+    private static ReadOnlySpan<byte> ReceptionistMapObjectTemplate =>
     [
         0x01, 0x38, 0x06, 0x09, 0x06, 0x00, 0xFF, 0xFF, 0xA0, 0x00, 0x6F, 0x4D, 0xFF, 0xFF, 0x00, 0x00,
     ];
@@ -339,7 +392,7 @@ internal static class TradeSaveFactory {
 
         var playerStruct = sram[OffsetPlayerObjectStruct..(OffsetPlayerObjectStruct + ObjectStructLength)];
 
-        s_playerObjectStructTemplate.CopyTo(destination: playerStruct);
+        PlayerObjectStructTemplate.CopyTo(destination: playerStruct);
         playerStruct[16] = playerMapX; // MapX
         playerStruct[17] = playerMapY; // MapY
         playerStruct[18] = playerMapX; // LastMapX
@@ -349,7 +402,7 @@ internal static class TradeSaveFactory {
 
         var playerMapObject = sram[OffsetPlayerMapObject..(OffsetPlayerMapObject + MapObjectLength)];
 
-        s_playerMapObjectTemplate.CopyTo(destination: playerMapObject);
+        PlayerMapObjectTemplate.CopyTo(destination: playerMapObject);
         playerMapObject[2] = playerMapY; // ObjectYCoord
         playerMapObject[3] = playerMapX; // ObjectXCoord
 
@@ -359,7 +412,7 @@ internal static class TradeSaveFactory {
 
         var receptionistStruct = sram[OffsetObject1Struct..(OffsetObject1Struct + ObjectStructLength)];
 
-        s_receptionistObjectStructTemplate.CopyTo(destination: receptionistStruct);
+        ReceptionistObjectStructTemplate.CopyTo(destination: receptionistStruct);
         receptionistStruct[16] = recMapX; // MapX
         receptionistStruct[17] = recMapY; // MapY
         receptionistStruct[18] = recMapX; // LastMapX
@@ -367,14 +420,16 @@ internal static class TradeSaveFactory {
         receptionistStruct[20] = recMapX; // InitX
         receptionistStruct[21] = recMapY; // InitY
 
-        s_receptionistMapObjectTemplate.CopyTo(destination: sram[OffsetMap1Object..(OffsetMap1Object + MapObjectLength)]);
+        ReceptionistMapObjectTemplate.CopyTo(destination: sram[OffsetMap1Object..(OffsetMap1Object + MapObjectLength)]);
     }
     private static void WriteParty(TradeTrainer trainer, Span<byte> sram) {
         sram[OffsetPartyCount] = (byte)trainer.Party.Count;
 
         // wPartySpecies mirrors each mon's species and is $FF-terminated after the count, and wPartyEnd is a fixed $FF.
         for (var slot = 0; (slot < 6); ++slot) {
-            sram[(OffsetPartySpecies + slot)] = ((slot < trainer.Party.Count) ? (byte)trainer.Party[slot].Species : SpeciesTerminator);
+            sram[(OffsetPartySpecies + slot)] = ((slot < trainer.Party.Count)
+                ? (byte)trainer.Party[slot].Species
+                : SpeciesTerminator);
         }
 
         sram[OffsetPartyEnd] = SpeciesTerminator;
@@ -383,25 +438,44 @@ internal static class TradeSaveFactory {
             var mon = trainer.Party[slot];
             var structOffset = (OffsetPartyMons + (slot * PartyMonStructLength));
 
-            WriteMon(destination: sram[structOffset..(structOffset + PartyMonStructLength)], mon: mon, trainerId: trainer.TrainerId);
+            WriteMon(
+                destination: sram[structOffset..(structOffset + PartyMonStructLength)],
+                mon: mon,
+                trainerId: trainer.TrainerId
+            );
 
             // OT name = the trainer's own name (a caught/starter mon), nickname = the species' default (left blank here
             // — a $50-terminated empty name renders as the species name in-game, which is legal).
             var otOffset = (OffsetPartyOtNames + (slot * NameLength));
             var nickOffset = (OffsetPartyNicknames + (slot * NameLength));
 
-            WriteName(destination: sram[otOffset..(otOffset + NameLength)], text: trainer.Name);
-            WriteName(destination: sram[nickOffset..(nickOffset + NameLength)], text: mon.Species.ToString().ToUpperInvariant());
+            WriteName(
+                destination: sram[otOffset..(otOffset + NameLength)],
+                text: trainer.Name
+            );
+            WriteName(
+                destination: sram[nickOffset..(nickOffset + NameLength)],
+                text: mon.Species.ToString().ToUpperInvariant()
+            );
         }
     }
     private static void WriteMon(Span<byte> destination, TradePartyMember mon, ushort trainerId) {
-        var stats = ComputeStats(species: mon.Species, level: mon.Level);
+        var stats = ComputeStats(
+            species: mon.Species,
+            level: mon.Level
+        );
 
         destination[MonSpecies] = (byte)mon.Species;
         destination[MonHeldItem] = 0;
         destination[MonMoves] = mon.Move;            // move 1; the remaining three move slots stay empty (0).
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[MonOtId..], value: trainerId);
-        WriteUInt24BigEndian(destination: destination[MonExperience..], value: (uint)((mon.Level * mon.Level) * mon.Level));
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[MonOtId..],
+            value: trainerId
+        );
+        WriteUInt24BigEndian(
+            destination: destination[MonExperience..],
+            value: (uint)((mon.Level * mon.Level) * mon.Level)
+        );
         // Stat exp (EVs) all zero — already zero-filled.
         destination[MonDvs] = 0xFF;                  // DVs: Atk=15,Def=15 → 0xFF.
         destination[(MonDvs + 1)] = 0xFF;              // DVs: Spd=15,Spc=15 → 0xFF (HP DV = 15). Max, legal, non-corrupt.
@@ -409,13 +483,34 @@ internal static class TradeSaveFactory {
         destination[MonHappiness] = BaseHappiness;
         destination[MonLevel] = mon.Level;
         destination[MonStatusCondition] = 0;
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[MonCurrentHp..], value: stats.Hp);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[MonMaxHp..], value: stats.Hp);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[(MonBattleStats + 0)..], value: stats.Attack);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[(MonBattleStats + 2)..], value: stats.Defense);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[(MonBattleStats + 4)..], value: stats.Speed);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[(MonBattleStats + 6)..], value: stats.SpecialAttack);
-        BinaryPrimitives.WriteUInt16BigEndian(destination: destination[(MonBattleStats + 8)..], value: stats.SpecialDefense);
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[MonCurrentHp..],
+            value: stats.Hp
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[MonMaxHp..],
+            value: stats.Hp
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[(MonBattleStats + 0)..],
+            value: stats.Attack
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[(MonBattleStats + 2)..],
+            value: stats.Defense
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[(MonBattleStats + 4)..],
+            value: stats.Speed
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[(MonBattleStats + 6)..],
+            value: stats.SpecialAttack
+        );
+        BinaryPrimitives.WriteUInt16BigEndian(
+            destination: destination[(MonBattleStats + 8)..],
+            value: stats.SpecialDefense
+        );
     }
 
     // The era's stat formula with DV = 15 and stat-exp = 0 (so the sqrt term drops out): a stat is
@@ -430,24 +525,66 @@ internal static class TradeSaveFactory {
         static ushort Health(int baseStat, int dv, int level) =>
             (ushort)(((((2 * (baseStat + dv)) * level) / 100) + level) + 10);
 
-        const int dv = 15;
+        const int Dv = 15;
 
         return new MonStats(
-            Hp: Health(baseStat: @base.Hp, dv: dv, level: level),
-            Attack: Regular(baseStat: @base.Attack, dv: dv, level: level),
-            Defense: Regular(baseStat: @base.Defense, dv: dv, level: level),
-            Speed: Regular(baseStat: @base.Speed, dv: dv, level: level),
-            SpecialAttack: Regular(baseStat: @base.SpecialAttack, dv: dv, level: level),
-            SpecialDefense: Regular(baseStat: @base.SpecialDefense, dv: dv, level: level)
+            Hp: Health(
+                baseStat: @base.Hp,
+                dv: Dv,
+                level: level
+            ),
+            Attack: Regular(
+                baseStat: @base.Attack,
+                dv: Dv,
+                level: level
+            ),
+            Defense: Regular(
+                baseStat: @base.Defense,
+                dv: Dv,
+                level: level
+            ),
+            Speed: Regular(
+                baseStat: @base.Speed,
+                dv: Dv,
+                level: level
+            ),
+            SpecialAttack: Regular(
+                baseStat: @base.SpecialAttack,
+                dv: Dv,
+                level: level
+            ),
+            SpecialDefense: Regular(
+                baseStat: @base.SpecialDefense,
+                dv: Dv,
+                level: level
+            )
         );
     }
 
     // Base stats for the handful of species the harness uses (index = the cart's internal species index).
     private static MonStats TradeSpecies_Base(TradeSpecies species) =>
         species switch {
-            TradeSpecies.Rattata => new MonStats(Hp: 30, Attack: 56, Defense: 35, Speed: 72, SpecialAttack: 25, SpecialDefense: 35),
-            TradeSpecies.Pidgey => new MonStats(Hp: 40, Attack: 45, Defense: 40, Speed: 56, SpecialAttack: 35, SpecialDefense: 35),
-            _ => throw new ArgumentOutOfRangeException(paramName: nameof(species), actualValue: species, message: "no base-stat entry for this species."),
+            TradeSpecies.Rattata => new MonStats(
+        Hp: 30,
+        Attack: 56,
+        Defense: 35,
+        Speed: 72,
+        SpecialAttack: 25,
+        SpecialDefense: 35
+    ),
+            TradeSpecies.Pidgey => new MonStats(
+        Hp: 40,
+        Attack: 45,
+        Defense: 40,
+        Speed: 56,
+        SpecialAttack: 35,
+        SpecialDefense: 35
+    ),
+            _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(species),
+        actualValue: species,
+        message: "no base-stat entry for this species."
+    ),
         };
     private static ushort ComputeChecksum(ReadOnlySpan<byte> sram) {
         var sum = 0;
@@ -462,17 +599,41 @@ internal static class TradeSaveFactory {
     // Asserts every mandated crafted-save invariant on the finished SRAM; a violation is a factory bug, not a runtime
     // condition, so it throws rather than returning a verdict.
     private static void Validate(TradeTrainer trainer, ReadOnlySpan<byte> sram) {
-        Require(condition: (sram[OffsetCheckValue1] == CheckValue1), message: "sCheckValue1 must be 0x63.");
-        Require(condition: (sram[OffsetCheckValue2] == CheckValue2), message: "sCheckValue2 must be 0x7F.");
-        Require(condition: ((sram[OffsetEventFlags] & EventGaveMysteryEggBit) != 0), message: "the Mystery-Egg Cable Club gate flag must be set.");
-        Require(condition: ((sram[OffsetMapGroup] == 20) && (sram[OffsetMapNumber] == 1)), message: "spawn must be POKECENTER_2F (group 20, map 1).");
-        Require(condition: ((sram[OffsetXCoord] == 5) && (sram[OffsetYCoord] == 3)), message: "spawn must be (X=5, Y=3), one tile below the attendant.");
-        Require(condition: VerifyChecksum(sram: sram), message: "the crafted save's checksum/check-byte contract is inconsistent.");
+        Require(
+            condition: (sram[OffsetCheckValue1] == CheckValue1),
+            message: "sCheckValue1 must be 0x63."
+        );
+        Require(
+            condition: (sram[OffsetCheckValue2] == CheckValue2),
+            message: "sCheckValue2 must be 0x7F."
+        );
+        Require(
+            condition: ((sram[OffsetEventFlags] & EventGaveMysteryEggBit) != 0),
+            message: "the Mystery-Egg Cable Club gate flag must be set."
+        );
+        Require(
+            condition: ((sram[OffsetMapGroup] == 20) && (sram[OffsetMapNumber] == 1)),
+            message: "spawn must be POKECENTER_2F (group 20, map 1)."
+        );
+        Require(
+            condition: ((sram[OffsetXCoord] == 5) && (sram[OffsetYCoord] == 3)),
+            message: "spawn must be (X=5, Y=3), one tile below the attendant."
+        );
+        Require(
+            condition: VerifyChecksum(sram: sram),
+            message: "the crafted save's checksum/check-byte contract is inconsistent."
+        );
 
         var count = sram[OffsetPartyCount];
 
-        Require(condition: (count == trainer.Party.Count), message: "wPartyCount must equal the crafted party size.");
-        Require(condition: (sram[OffsetPartyEnd] == SpeciesTerminator), message: "wPartyEnd must be the 0xFF terminator.");
+        Require(
+            condition: (count == trainer.Party.Count),
+            message: "wPartyCount must equal the crafted party size."
+        );
+        Require(
+            condition: (sram[OffsetPartyEnd] == SpeciesTerminator),
+            message: "wPartyEnd must be the 0xFF terminator."
+        );
 
         for (var slot = 0; (slot < count); ++slot) {
             var mon = trainer.Party[slot];
@@ -482,14 +643,29 @@ internal static class TradeSaveFactory {
             var currentHp = BinaryPrimitives.ReadUInt16BigEndian(source: sram[(structOffset + MonCurrentHp)..]);
             var maxHp = BinaryPrimitives.ReadUInt16BigEndian(source: sram[(structOffset + MonMaxHp)..]);
 
-            Require(condition: (species == (byte)mon.Species), message: $"party slot {slot} species must match the struct.");
-            Require(condition: (sram[(OffsetPartySpecies + slot)] == species), message: $"wPartySpecies[{slot}] must mirror the struct species.");
-            Require(condition: ((level >= 1) && (level <= 100)), message: $"party slot {slot} level must be 1..100.");
-            Require(condition: ((currentHp == maxHp) && (maxHp > 0)), message: $"party slot {slot} current HP must equal max HP > 0.");
+            Require(
+                condition: (species == (byte)mon.Species),
+                message: $"party slot {slot} species must match the struct."
+            );
+            Require(
+                condition: (sram[(OffsetPartySpecies + slot)] == species),
+                message: $"wPartySpecies[{slot}] must mirror the struct species."
+            );
+            Require(
+                condition: ((level >= 1) && (level <= 100)),
+                message: $"party slot {slot} level must be 1..100."
+            );
+            Require(
+                condition: ((currentHp == maxHp) && (maxHp > 0)),
+                message: $"party slot {slot} current HP must equal max HP > 0."
+            );
         }
 
         // Distinct lead species per side is a two-save property; asserted here only that the lead is a real species byte.
-        Require(condition: ((sram[(OffsetPartySpecies + count)] == SpeciesTerminator) || (count == 6)), message: "wPartySpecies must be 0xFF-terminated after the party count.");
+        Require(
+            condition: ((sram[(OffsetPartySpecies + count)] == SpeciesTerminator) || (count == 6)),
+            message: "wPartySpecies must be 0xFF-terminated after the party count."
+        );
     }
     private static void Require(bool condition, string message) {
         if (!condition) {
@@ -501,7 +677,10 @@ internal static class TradeSaveFactory {
     private static void WriteName(Span<byte> destination, string text) {
         destination.Fill(value: 0x50);
 
-        var limit = Math.Min(val1: text.Length, val2: (destination.Length - 1));
+        var limit = Math.Min(
+            val1: text.Length,
+            val2: (destination.Length - 1)
+        );
 
         for (var index = 0; (index < limit); ++index) {
             destination[index] = EncodeChar(character: text[index]);
@@ -555,7 +734,12 @@ internal readonly record struct TradePartyMember(TradeSpecies Species, byte Leve
     /// <param name="species">The species.</param>
     /// <returns>The party mon.</returns>
     public static TradePartyMember Level5(TradeSpecies species) =>
-        new(Species: species, Level: 5, Move: TackleMoveId, Pp: TackleBasePp);
+        new(
+        Species: species,
+        Level: 5,
+        Move: TackleMoveId,
+        Pp: TackleBasePp
+    );
 }
 
 /// <summary>A crafted trade-cart trainer: name, trainer ID, and party — the input to

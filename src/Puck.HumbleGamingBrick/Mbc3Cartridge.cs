@@ -53,7 +53,10 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mbc3Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
+        : base(
+        rom: rom,
+        header: header
+    ) {
         m_latchTrigger = 0xFF;
         m_romBank = 1;
     }
@@ -77,17 +80,58 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
         var footer = new byte[PersistentClockFooterByteCount];
         var span = footer.AsSpan();
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[0..], value: (uint)m_seconds);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[4..], value: (uint)m_minutes);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[8..], value: (uint)m_hours);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[12..], value: (uint)(m_dayCounter & 0xFF));
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[16..], value: PackDayHigh(dayCounter: m_dayCounter, halted: m_halted, dayCarry: m_dayCarry));
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[20..], value: (uint)m_latchedSeconds);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[24..], value: (uint)m_latchedMinutes);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[28..], value: (uint)m_latchedHours);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[32..], value: (uint)(m_latchedDayCounter & 0xFF));
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[36..], value: PackDayHigh(dayCounter: m_latchedDayCounter, halted: m_halted, dayCarry: m_latchedDayCarry));
-        BinaryPrimitives.WriteInt64LittleEndian(destination: span[40..], value: unixTimestampSeconds);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[0..],
+            value: (uint)m_seconds
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[4..],
+            value: (uint)m_minutes
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[8..],
+            value: (uint)m_hours
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[12..],
+            value: (uint)(m_dayCounter & 0xFF)
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[16..],
+            value: PackDayHigh(
+                dayCounter: m_dayCounter,
+                halted: m_halted,
+                dayCarry: m_dayCarry
+            )
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[20..],
+            value: (uint)m_latchedSeconds
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[24..],
+            value: (uint)m_latchedMinutes
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[28..],
+            value: (uint)m_latchedHours
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[32..],
+            value: (uint)(m_latchedDayCounter & 0xFF)
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[36..],
+            value: PackDayHigh(
+                dayCounter: m_latchedDayCounter,
+                halted: m_halted,
+                dayCarry: m_latchedDayCarry
+            )
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: span[40..],
+            value: unixTimestampSeconds
+        );
 
         return footer;
     }
@@ -123,7 +167,9 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     }
 
     private static uint PackDayHigh(int dayCounter, bool halted, int dayCarry) =>
-        (uint)(((dayCounter >> 8) & 0x01) | (halted ? 0x40 : 0x00) | ((dayCarry & 0x01) << 7));
+        (uint)(((dayCounter >> 8) & 0x01) | (halted
+        ? 0x40
+        : 0x00) | ((dayCarry & 0x01) << 7));
 
     private bool RtcRegisterSelected =>
         (m_ramBankOrRtcRegister >= 0x08);
@@ -163,7 +209,10 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
 
                 break;
             default: // 0x6000-0x7FFF: latch clock on a 0-then-1 write
-                if ((m_latchTrigger == 0x00) && (value == 0x01)) {
+                if (
+                    (m_latchTrigger == 0x00) &&
+                    (value == 0x01)
+                ) {
                     LatchClock();
                 }
 
@@ -180,7 +229,9 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
             return 0xFF;
         }
 
-        return (RtcRegisterSelected ? ReadRtcRegister() : base.ReadRam(address: address));
+        return (RtcRegisterSelected
+            ? ReadRtcRegister()
+            : base.ReadRam(address: address));
     }
     /// <summary>Writes to the external window: an RTC register when one is selected, otherwise banked RAM.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
@@ -196,7 +247,10 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
             return;
         }
 
-        base.WriteRam(address: address, value: value);
+        base.WriteRam(
+            address: address,
+            value: value
+        );
     }
     /// <inheritdoc/>
     /// <remarks>Overridden: the window is mode-selected between banked RAM and an RTC register, and reading the
@@ -211,8 +265,8 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBankOrRtcRegister & 0x03) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
@@ -295,7 +349,9 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
             0x09 => (byte)m_latchedMinutes,
             0x0A => (byte)m_latchedHours,
             0x0B => (byte)m_latchedDayCounter,
-            0x0C => (byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted ? 0x40 : 0x00) | (m_latchedDayCarry << 7)),
+            0x0C => (byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted
+        ? 0x40
+        : 0x00) | (m_latchedDayCarry << 7)),
             _ => 0xFF,
         };
     private void WriteRtcRegister(byte value) {

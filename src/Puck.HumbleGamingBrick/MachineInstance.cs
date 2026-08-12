@@ -60,7 +60,10 @@ public sealed class MachineInstance : IDisposable {
     /// <param name="pokes">The per-ROM hardware-detection pokes that flip a GB-compatible game onto the target model's
     /// code path (empty = a bare capability flip with no code-path change).</param>
     public void SwitchModel(ConsoleModel model, ReadOnlySpan<ModePoke> pokes) =>
-        Machine.SwitchModel(model: model, pokes: pokes);
+        Machine.SwitchModel(
+        model: model,
+        pokes: pokes
+    );
 
     /// <summary>Builds (or rents from this instance's pool) an independent sibling machine from the same configuration
     /// and loads this instance's current state into it. The two machines share nothing afterward, so stepping or running
@@ -70,7 +73,10 @@ public sealed class MachineInstance : IDisposable {
     /// The caller owns it and must dispose it (dispose returns the underlying sibling to the pool). The pooled machine is
     /// never handed out directly, so a stale handle over an earlier rental can never reach a later renter's machine.</returns>
     public MachineFork Fork() {
-        m_forkPool ??= new MachineInstancePool(configuration: Configuration, compose: m_compose);
+        m_forkPool ??= new MachineInstancePool(
+            configuration: Configuration,
+            compose: m_compose
+        );
 
         var fork = m_forkPool.Rent();
 
@@ -102,7 +108,10 @@ public sealed class MachineInstance : IDisposable {
     internal MachineFork Arm() {
         m_rented = true;
 
-        return new MachineFork(instance: this, generation: ++m_rentalGeneration);
+        return new MachineFork(
+            instance: this,
+            generation: ++m_rentalGeneration
+        );
     }
     // A MachineFork is the CURRENT rental iff this instance is still alive, still rented, and rented under that exact
     // generation. A handle over a returned or superseded rental resolves false and can touch nothing.
@@ -110,7 +119,10 @@ public sealed class MachineInstance : IDisposable {
         (!m_disposed && m_rented && (m_rentalGeneration == generation));
     // Routes the current rental handle's dispose to its pool, which resolves the generation under its gate.
     internal void ReturnRental(int generation) =>
-        (m_returnPool ?? throw new InvalidOperationException(message: "A pooled fork has no return pool.")).Return(instance: this, generation: generation);
+        (m_returnPool ?? throw new InvalidOperationException(message: "A pooled fork has no return pool.")).Return(
+        instance: this,
+        generation: generation
+    );
     // Marks this belonging to a fork pool: its handle's Dispose parks it there instead of tearing down its container.
     // Set once, when the pool builds the instance.
     internal void SetReturnPool(MachineInstancePool pool) =>

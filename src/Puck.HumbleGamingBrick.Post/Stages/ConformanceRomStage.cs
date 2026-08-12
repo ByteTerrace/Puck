@@ -34,7 +34,12 @@ internal sealed class ConformanceRomStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var cases = RomCatalog.ConformanceRoms(root: context.TestRomRoot, group: m_group, subPath: m_subPath, model: m_model);
+        var cases = RomCatalog.ConformanceRoms(
+            root: context.TestRomRoot,
+            group: m_group,
+            subPath: m_subPath,
+            model: m_model
+        );
 
         if (cases.Count == 0) {
             return PostStageOutcome.Skip(detail: $"no ROMs under the on-disk blargg/{m_subPath} (set PUCK_GB_TESTROMS)");
@@ -59,6 +64,9 @@ internal sealed class ConformanceRomStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{passed}/{cases.Count} passed on {m_model}")
-            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed on {m_model}; failed: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed on {m_model}; failed: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

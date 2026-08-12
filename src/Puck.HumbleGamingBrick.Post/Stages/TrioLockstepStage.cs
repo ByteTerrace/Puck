@@ -26,13 +26,28 @@ internal sealed class TrioLockstepStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var rom = SyntheticRom.Create();
 
-        using var dmg = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
-        using var dmgTwin = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
-        using var cgb = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
-        using var agb = PostMachine.Build(model: ConsoleModel.Agb, rom: rom);
+        using var dmg = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
+        using var dmgTwin = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
+        using var cgb = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
+        using var agb = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
 
         MachineInstance[] machines = [dmg, dmgTwin, cgb, agb];
-        var joypads = Array.ConvertAll(array: machines, converter: static machine => machine.GetRequiredService<IJoypad>());
+        var joypads = Array.ConvertAll(
+            array: machines,
+            converter: static machine => machine.GetRequiredService<IJoypad>()
+        );
         var stopwatch = Stopwatch.StartNew();
 
         for (var frame = 0; (frame < Frames); frame++) {
@@ -66,8 +81,6 @@ internal sealed class TrioLockstepStage : IPostStage {
         // 4 machines * Frames emulated frames in the measured wall time = the frames/second one thread sustains.
         var framesPerSecond = ((4.0 * Frames) / stopwatch.Elapsed.TotalSeconds);
 
-        return PostStageOutcome.Pass(
-            detail: $"Dmg pair byte-identical and Cgb≡Agb at the pixels under a shared {Frames}-frame joypad script; {framesPerSecond:F0} machine-frames/s single-threaded ({(framesPerSecond / PostMachine.HardwareFps):F1} machines at realtime)"
-        );
+        return PostStageOutcome.Pass(detail: $"Dmg pair byte-identical and Cgb≡Agb at the pixels under a shared {Frames}-frame joypad script; {framesPerSecond:F0} machine-frames/s single-threaded ({(framesPerSecond / PostMachine.HardwareFps):F1} machines at realtime)");
     }
 }

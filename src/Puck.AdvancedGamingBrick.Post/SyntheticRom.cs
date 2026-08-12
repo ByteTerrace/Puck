@@ -39,7 +39,10 @@ internal static class SyntheticRom {
         var rom = new byte[RomSize];
 
         for (var index = 0; (index < Program.Length); ++index) {
-            _ = BitConverter.TryWriteBytes(destination: rom.AsSpan(start: (index * 4)), value: Program[index]);
+            _ = BitConverter.TryWriteBytes(
+                destination: rom.AsSpan(start: (index * 4)),
+                value: Program[index]
+            );
         }
 
         return rom;

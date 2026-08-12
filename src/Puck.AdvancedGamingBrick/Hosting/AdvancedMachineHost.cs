@@ -30,25 +30,38 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     /// a silent host performs zero presentation-side audio synthesis.</param>
     public AdvancedMachineHost(byte[]? cartridgeRom = null, string? savePath = null, byte[]? biosImage = null, int audioSampleRate = 0)
         : base(
-            width: ScreenWidth,
-            height: ScreenHeight,
-            maximumPendingSteps: DefaultMaximumPendingSteps,
-            workerName: "Puck AdvancedGamingBrick",
-            audioSampleRate: audioSampleRate,
-            savePath: savePath
+        width: ScreenWidth,
+        height: ScreenHeight,
+        maximumPendingSteps: DefaultMaximumPendingSteps,
+        workerName: "Puck AdvancedGamingBrick",
+        audioSampleRate: audioSampleRate,
+        savePath: savePath
+    ) {
+        if (
+            (biosImage is not null) &&
+            (biosImage.Length != ReplacementBios.ImageSize)
         ) {
-        if ((biosImage is not null) && (biosImage.Length != ReplacementBios.ImageSize)) {
-            throw new ArgumentException(message: $"The BIOS image must be {ReplacementBios.ImageSize} bytes; got {biosImage.Length}.", paramName: nameof(biosImage));
+            throw new ArgumentException(
+                message: $"The BIOS image must be {ReplacementBios.ImageSize} bytes; got {biosImage.Length}.",
+                paramName: nameof(biosImage)
+            );
         }
 
         m_bios = (biosImage?.ToArray() ?? new byte[ReplacementBios.ImageSize]);
 
         if (cartridgeRom is not null) {
-            LoadContent(data: cartridgeRom, savePath: savePath);
+            LoadContent(
+                data: cartridgeRom,
+                savePath: savePath
+            );
         }
     }
 
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
-        new AdvancedGamingBrickCore(bios: m_bios, cartridgeRom: data, savePath: savePath);
+        new AdvancedGamingBrickCore(
+        bios: m_bios,
+        cartridgeRom: data,
+        savePath: savePath
+    );
 }

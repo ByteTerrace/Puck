@@ -120,9 +120,16 @@ internal sealed class ScriptedTradeDriver {
         Action<TradeFrame>? onFrame = null,
         bool attemptTrade = true
     ) {
-        var driver = new ScriptedTradeDriver(rom: rom, attemptTrade: attemptTrade);
+        var driver = new ScriptedTradeDriver(
+            rom: rom,
+            attemptTrade: attemptTrade
+        );
 
-        return driver.Drive(churnAtStep: churnAtStep, probes: probes, onFrame: onFrame);
+        return driver.Drive(
+            churnAtStep: churnAtStep,
+            probes: probes,
+            onFrame: onFrame
+        );
     }
 
     private readonly byte[] m_rom;
@@ -141,8 +148,14 @@ internal sealed class ScriptedTradeDriver {
     private ScriptedTradeDriver(byte[] rom, bool attemptTrade) {
         m_rom = rom;
         m_attemptTrade = attemptTrade;
-        m_a = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
-        m_b = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideB);
+        m_a = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        m_b = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideB
+        );
     }
 
     private TradeResult Drive(int churnAtStep, List<TradeProbe>? probes, Action<TradeFrame>? onFrame) {
@@ -150,8 +163,14 @@ internal sealed class ScriptedTradeDriver {
         var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
         var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
 
-        Observe(instance: m_a, tally: m_tallyA);
-        Observe(instance: m_b, tally: m_tallyB);
+        Observe(
+            instance: m_a,
+            tally: m_tallyA
+        );
+        Observe(
+            instance: m_b,
+            tally: m_tallyB
+        );
 
         // Required symmetry break: two identical Cgb machines connected at identical post-boot state, and
         // then pair-stepped to equal cumulative CycleCount by the SerialLinkSession, have identical free-running DIV
@@ -163,13 +182,20 @@ internal sealed class ScriptedTradeDriver {
         // A frame stagger alone does not work: the session balances CycleCount, erasing any frame-level lead.
         m_b.Machine.Run(tCycles: RendezvousDivOffsetCycles);
 
-        var session = new SerialLinkSession(first: m_a, second: m_b);
+        var session = new SerialLinkSession(
+            first: m_a,
+            second: m_b
+        );
 
         try {
             for (var frame = 0; ((m_phase != Phase.Done) && (m_phase != Phase.Failed)); ++frame) {
                 var localFrame = (frame - m_phaseStart);
 
-                probes?.Add(item: new TradeProbe(Phase: m_phase, Idle: IsIdle(), Completed: m_tallyA.Completions));
+                probes?.Add(item: new TradeProbe(
+                    Phase: m_phase,
+                    Idle: IsIdle(),
+                    Completed: m_tallyA.Completions
+                ));
 
                 if (frame == churnAtStep) {
                     if (!IsIdle()) {
@@ -179,22 +205,44 @@ internal sealed class ScriptedTradeDriver {
                     session = Churn(session: session);
                 }
 
-                var (buttonsA, buttonsB) = Inputs(frame: frame, localFrame: localFrame, continueScript: continueScript);
+                var (buttonsA, buttonsB) = Inputs(
+                    frame: frame,
+                    localFrame: localFrame,
+                    continueScript: continueScript
+                );
 
                 m_a.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsA);
                 m_b.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsB);
                 session.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
 
                 CaptureRoles();
-                onFrame?.Invoke(obj: new TradeFrame(Frame: frame, Phase: m_phase, LocalFrame: localFrame, ButtonsA: buttonsA, ButtonsB: buttonsB, Driver: this));
-                Advance(frame: frame, localFrame: localFrame, expectedLeadA: expectedLeadA, expectedLeadB: expectedLeadB);
+                onFrame?.Invoke(obj: new TradeFrame(
+                    Frame: frame,
+                    Phase: m_phase,
+                    LocalFrame: localFrame,
+                    ButtonsA: buttonsA,
+                    ButtonsB: buttonsB,
+                    Driver: this
+                ));
+                Advance(
+                    frame: frame,
+                    localFrame: localFrame,
+                    expectedLeadA: expectedLeadA,
+                    expectedLeadB: expectedLeadB
+                );
             }
 
             return new TradeResult(
                 Completed: (m_phase == Phase.Done),
                 ReachedTradeCenter: m_reachedTradeCenter,
-                LinkModeA: ScriptedTradeHarness.Peek(machine: m_a, address: ScriptedTradeHarness.LinkModeAddress),
-                LinkModeB: ScriptedTradeHarness.Peek(machine: m_b, address: ScriptedTradeHarness.LinkModeAddress),
+                LinkModeA: ScriptedTradeHarness.Peek(
+                    machine: m_a,
+                    address: ScriptedTradeHarness.LinkModeAddress
+                ),
+                LinkModeB: ScriptedTradeHarness.Peek(
+                    machine: m_b,
+                    address: ScriptedTradeHarness.LinkModeAddress
+                ),
                 RolesResolved: (m_rolesSeen && (((m_roleA == ScriptedTradeHarness.UsingExternalClock) && (m_roleB == ScriptedTradeHarness.UsingInternalClock)) || ((m_roleA == ScriptedTradeHarness.UsingInternalClock) && (m_roleB == ScriptedTradeHarness.UsingExternalClock)))),
                 RoleA: m_roleA,
                 RoleB: m_roleB,
@@ -223,8 +271,14 @@ internal sealed class ScriptedTradeDriver {
         var token = session.Suspend();
         var stateA = m_a.Machine.Snapshot();
         var stateB = m_b.Machine.Snapshot();
-        var freshA = ScriptedTradeHarness.Build(rom: m_rom, trainer: TradeSaveFactory.SideA);
-        var freshB = ScriptedTradeHarness.Build(rom: m_rom, trainer: TradeSaveFactory.SideB);
+        var freshA = ScriptedTradeHarness.Build(
+            rom: m_rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        var freshB = ScriptedTradeHarness.Build(
+            rom: m_rom,
+            trainer: TradeSaveFactory.SideB
+        );
 
         freshA.Machine.Restore(snapshot: stateA);
         freshB.Machine.Restore(snapshot: stateB);
@@ -232,10 +286,20 @@ internal sealed class ScriptedTradeDriver {
         m_b.Dispose();
         m_a = freshA;
         m_b = freshB;
-        Observe(instance: m_a, tally: m_tallyA);
-        Observe(instance: m_b, tally: m_tallyB);
+        Observe(
+            instance: m_a,
+            tally: m_tallyA
+        );
+        Observe(
+            instance: m_b,
+            tally: m_tallyB
+        );
 
-        return new SerialLinkSession(first: m_a, second: m_b, resumeToken: token);
+        return new SerialLinkSession(
+            first: m_a,
+            second: m_b,
+            resumeToken: token
+        );
     }
 
     // The per-side held-button state for a frame, dispatched on the current phase. Directional turns are single-press
@@ -251,10 +315,26 @@ internal sealed class ScriptedTradeDriver {
             // (side A: (6,4) facing LEFT toward console (5,4); side B: (3,4) facing RIGHT toward console (4,4)). Facing
             // any other way does NOT fire the console — a directional bg_event only matches its own facing. The A-press
             // that fires `special TradeCenter` is the Console phase's mash, once BOTH sides are seated.
-            Phase.Approach => (ApproachSide(machine: m_a, seatX: SideASeatX, wantDir: FacingLeft, localFrame: localFrame), ApproachSide(machine: m_b, seatX: SideBSeatX, wantDir: FacingRight, localFrame: localFrame)),
+            Phase.Approach => (ApproachSide(
+        machine: m_a,
+        seatX: SideASeatX,
+        wantDir: FacingLeft,
+        localFrame: localFrame
+    ), ApproachSide(
+        machine: m_b,
+        seatX: SideBSeatX,
+        wantDir: FacingRight,
+        localFrame: localFrame
+    )),
             // Seated and facing the console: mash A (only) until this side's script engine reports the console script
             // running — the press that lands after the turn animation settles fires `special TradeCenter`.
-            Phase.Console => (ConsoleSide(machine: m_a, localFrame: localFrame), ConsoleSide(machine: m_b, localFrame: localFrame)),
+            Phase.Console => (ConsoleSide(
+        machine: m_a,
+        localFrame: localFrame
+    ), ConsoleSide(
+        machine: m_b,
+        localFrame: localFrame
+    )),
             // `special TradeCenter` runs the block exchange and the party-selection / confirm UI internally. Plain A-mash
             // does not trade: pressing A on a party mon opens a horizontal STATS|TRADE submenu with the cursor on STATS, so
             // A there just opens the stats screen and loops (the cart's link menu loop). The trade is
@@ -274,8 +354,15 @@ internal sealed class ScriptedTradeDriver {
             case Phase.Continue:
                 // Wait for BOTH the map to load AND the overworld to fully settle (fade-in complete, input accepted) —
                 // transitioning the instant the map loads leaves the player unable to turn (input still queued/ignored).
-                if (ScriptedTradeHarness.IsAtCableClubFloor(machine: m_a) && ScriptedTradeHarness.IsAtCableClubFloor(machine: m_b) && (frame >= ContinueSettleFrame)) {
-                    Transition(next: Phase.FaceUp, frame: frame);
+                if (
+                    ScriptedTradeHarness.IsAtCableClubFloor(machine: m_a) &&
+                    ScriptedTradeHarness.IsAtCableClubFloor(machine: m_b) &&
+                    (frame >= ContinueSettleFrame)
+                ) {
+                    Transition(
+                        next: Phase.FaceUp,
+                        frame: frame
+                    );
                 } else if (localFrame >= ContinueBudget) {
                     m_phase = Phase.Failed;
                 }
@@ -283,9 +370,20 @@ internal sealed class ScriptedTradeDriver {
                 break;
             case Phase.FaceUp:
                 // Turned to face the attendant (wPlayerDirection UP = 4) — proceed to mash A through the dialogue.
-                if ((ScriptedTradeHarness.Peek(machine: m_a, address: ScriptedTradeHarness.PlayerDirectionAddress) == PlayerDirectionUp)
-                    && (ScriptedTradeHarness.Peek(machine: m_b, address: ScriptedTradeHarness.PlayerDirectionAddress) == PlayerDirectionUp)) {
-                    Transition(next: Phase.Receptionist, frame: frame);
+                if (
+                    (ScriptedTradeHarness.Peek(
+                    machine: m_a,
+                    address: ScriptedTradeHarness.PlayerDirectionAddress
+                ) == PlayerDirectionUp) &&
+                    (ScriptedTradeHarness.Peek(
+                    machine: m_b,
+                    address: ScriptedTradeHarness.PlayerDirectionAddress
+                ) == PlayerDirectionUp)
+                ) {
+                    Transition(
+                        next: Phase.Receptionist,
+                        frame: frame
+                    );
                 } else if (localFrame >= FaceUpBudget) {
                     m_phase = Phase.Failed;
                 }
@@ -295,13 +393,25 @@ internal sealed class ScriptedTradeDriver {
                 // Both players warped into TRADE_CENTER with the link established (wLinkMode = LINK_TRADECENTER) — the
                 // observable established-link condition. The non-trade path stops here; the trade path continues into
                 // the console navigation + mon-selection trade.
-                if (AtTradeCenter(machine: m_a) && AtTradeCenter(machine: m_b)
-                    && (ScriptedTradeHarness.Peek(machine: m_a, address: ScriptedTradeHarness.LinkModeAddress) == LinkTradeCenter)
-                    && (ScriptedTradeHarness.Peek(machine: m_b, address: ScriptedTradeHarness.LinkModeAddress) == LinkTradeCenter)) {
+                if (
+                    AtTradeCenter(machine: m_a) &&
+                    AtTradeCenter(machine: m_b) &&
+                    (ScriptedTradeHarness.Peek(
+                    machine: m_a,
+                    address: ScriptedTradeHarness.LinkModeAddress
+                ) == LinkTradeCenter) &&
+                    (ScriptedTradeHarness.Peek(
+                    machine: m_b,
+                    address: ScriptedTradeHarness.LinkModeAddress
+                ) == LinkTradeCenter)
+                ) {
                     m_reachedTradeCenter = true;
 
                     if (m_attemptTrade) {
-                        Transition(next: Phase.Approach, frame: frame);
+                        Transition(
+                            next: Phase.Approach,
+                            frame: frame
+                        );
                     } else {
                         m_phase = Phase.Done;
                     }
@@ -313,8 +423,22 @@ internal sealed class ScriptedTradeDriver {
             case Phase.Approach:
                 // Both players seated at their own console facing it — the Console phase's A-mash can now fire
                 // `special TradeCenter`.
-                if (Seated(machine: m_a, seatX: SideASeatX, wantDir: FacingLeft) && Seated(machine: m_b, seatX: SideBSeatX, wantDir: FacingRight)) {
-                    Transition(next: Phase.Console, frame: frame);
+                if (
+                    Seated(
+                    machine: m_a,
+                    seatX: SideASeatX,
+                    wantDir: FacingLeft
+                ) &&
+                    Seated(
+                    machine: m_b,
+                    seatX: SideBSeatX,
+                    wantDir: FacingRight
+                )
+                ) {
+                    Transition(
+                        next: Phase.Console,
+                        frame: frame
+                    );
                 } else if (localFrame >= ApproachBudget) {
                     m_phase = Phase.Failed;
                 }
@@ -323,8 +447,14 @@ internal sealed class ScriptedTradeDriver {
             case Phase.Console:
                 // Both consoles fired: each side is inside `special TradeCenter` (sprite updates disabled for the whole
                 // trade UI) — the menu drive can begin.
-                if (TradeUiOpen(machine: m_a) && TradeUiOpen(machine: m_b)) {
-                    Transition(next: Phase.TradeMenu, frame: frame);
+                if (
+                    TradeUiOpen(machine: m_a) &&
+                    TradeUiOpen(machine: m_b)
+                ) {
+                    Transition(
+                        next: Phase.TradeMenu,
+                        frame: frame
+                    );
                 } else if (localFrame >= ConsoleBudget) {
                     m_phase = Phase.Failed;
                 }
@@ -334,8 +464,14 @@ internal sealed class ScriptedTradeDriver {
                 // The whole trade — block exchange, mon offer/confirm, animation, and the auto-save that swaps the leads —
                 // runs inside `special TradeCenter`; the observable that it committed is each side's exported SRAM lead
                 // species becoming the OTHER side's original (the auto-save writes it before the loop-back).
-                if (TradeCommitted(expectedLeadA: expectedLeadA, expectedLeadB: expectedLeadB)) {
-                    Transition(next: Phase.Cancel, frame: frame);
+                if (TradeCommitted(
+                    expectedLeadA: expectedLeadA,
+                    expectedLeadB: expectedLeadB
+                )) {
+                    Transition(
+                        next: Phase.Cancel,
+                        frame: frame
+                    );
                 } else if (localFrame >= TradeMenuBudget) {
                     m_phase = Phase.Failed;
                 }
@@ -347,7 +483,12 @@ internal sealed class ScriptedTradeDriver {
                 // overworld. hSerialConnectionStatus deliberately STAYS $01/$02 here — the game only resets it to $FF
                 // (Link_ResetSerialRegistersAfterLinkClosure) when the player walks out through the Pokécenter door, so
                 // waiting for $FF inside the room would never terminate.
-                if (!TradeUiOpen(machine: m_a) && !TradeUiOpen(machine: m_b) && AtTradeCenter(machine: m_a) && AtTradeCenter(machine: m_b)) {
+                if (
+                    !TradeUiOpen(machine: m_a) &&
+                    !TradeUiOpen(machine: m_b) &&
+                    AtTradeCenter(machine: m_a) &&
+                    AtTradeCenter(machine: m_b)
+                ) {
                     m_phase = Phase.Done;
                 } else if (localFrame >= CancelBudget) {
                     m_phase = Phase.Failed;
@@ -373,8 +514,10 @@ internal sealed class ScriptedTradeDriver {
         var a = ScriptedTradeHarness.ConnectionStatus(machine: m_a);
         var b = ScriptedTradeHarness.ConnectionStatus(machine: m_b);
 
-        if (((a == ScriptedTradeHarness.UsingExternalClock) && (b == ScriptedTradeHarness.UsingInternalClock))
-            || ((a == ScriptedTradeHarness.UsingInternalClock) && (b == ScriptedTradeHarness.UsingExternalClock))) {
+        if (
+            ((a == ScriptedTradeHarness.UsingExternalClock) && (b == ScriptedTradeHarness.UsingInternalClock)) ||
+            ((a == ScriptedTradeHarness.UsingInternalClock) && (b == ScriptedTradeHarness.UsingExternalClock))
+        ) {
             m_roleA = a;
             m_roleB = b;
             m_rolesSeen = true;
@@ -384,7 +527,10 @@ internal sealed class ScriptedTradeDriver {
         var leadA = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_a));
         var leadB = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_b));
 
-        return ((leadA == expectedLeadB) && (leadB == expectedLeadA));
+        return (
+            (leadA == expectedLeadB) &&
+            (leadB == expectedLeadA)
+        );
     }
     private static bool AtTradeCenter(MachineInstance machine) =>
         ((ScriptedTradeHarness.LiveMapGroup(machine: machine) == TradeCenterGroup) && (ScriptedTradeHarness.LiveMapNumber(machine: machine) == TradeCenterMap));
@@ -395,9 +541,13 @@ internal sealed class ScriptedTradeDriver {
     // Tap UP on the first two local frames of the FaceUp phase, then release — a brief tap turns in place toward the
     // attendant (a held direction would walk or bump-shuffle).
     private static JoypadButtons FaceTap(int localFrame) =>
-        ((localFrame < 2) ? JoypadButtons.Up : JoypadButtons.None);
+        ((localFrame < 2)
+        ? JoypadButtons.Up
+        : JoypadButtons.None);
     private static JoypadButtons MashA(int localFrame) =>
-        (((localFrame >= 0) && ((localFrame % MashPeriod) < MashPress)) ? JoypadButtons.A : JoypadButtons.None);
+        (((localFrame >= 0) && ((localFrame % MashPeriod) < MashPress))
+        ? JoypadButtons.A
+        : JoypadButtons.None);
 
     // One cycle of the trade-menu drive: A (0..2) -> settle -> RIGHT (30..32) -> settle -> A (45..47) -> long settle.
     private static JoypadButtons TradeMenu(int localFrame) {
@@ -429,9 +579,18 @@ internal sealed class ScriptedTradeDriver {
     // also depends on VRAM reads unlocking with the mode-0 STAT transition at dot offset +4 and on the crafted save
     // initializing wObjectFollow_* to $FF (see TradeSaveFactory.OffsetObjectFollowLeader).
     private static JoypadButtons ApproachSide(MachineInstance machine, byte seatX, byte wantDir, int localFrame) {
-        var x = ScriptedTradeHarness.Peek(machine: machine, address: WXCoordAddress);
-        var y = ScriptedTradeHarness.Peek(machine: machine, address: WYCoordAddress);
-        var dir = ScriptedTradeHarness.Peek(machine: machine, address: ScriptedTradeHarness.PlayerDirectionAddress);
+        var x = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: WXCoordAddress
+        );
+        var y = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: WYCoordAddress
+        );
+        var dir = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: ScriptedTradeHarness.PlayerDirectionAddress
+        );
 
         // Climb off the entry / exit-warp row (Y=7) FIRST, to an open corridor row (Y=5), before shifting columns —
         // walking along Y=7 re-triggers the TRADE_CENTER exit warp at (4,7)/(5,7).
@@ -464,9 +623,13 @@ internal sealed class ScriptedTradeDriver {
             // TAP the turn (an edge, then release), never a hold: a held direction into the solid console furniture
             // walks/bumps every frame (a continuous bump-shuffle animation), whereas a clean tap turns in place toward
             // the console without a bump. Mirrors FaceUp's FaceTap.
-            var turn = ((wantDir == FacingLeft) ? JoypadButtons.Left : JoypadButtons.Right);
+            var turn = ((wantDir == FacingLeft)
+                ? JoypadButtons.Left
+                : JoypadButtons.Right);
 
-            return (((localFrame % MashPeriod) < MashPress) ? turn : JoypadButtons.None);
+            return (((localFrame % MashPeriod) < MashPress)
+                ? turn
+                : JoypadButtons.None);
         }
 
         // Seated and facing the console: HOLD (no A). The A-press that fires `special TradeCenter` is deferred to the
@@ -478,16 +641,30 @@ internal sealed class ScriptedTradeDriver {
     // Mash A until this side's console script fires (a press mid-turn-animation is eaten; once the trade UI opens,
     // further presses stop so the menu drive begins from a quiet pad).
     private static JoypadButtons ConsoleSide(MachineInstance machine, int localFrame) =>
-        (TradeUiOpen(machine: machine) ? JoypadButtons.None : MashA(localFrame: localFrame));
+        (TradeUiOpen(machine: machine)
+        ? JoypadButtons.None
+        : MashA(localFrame: localFrame));
 
     // `special TradeCenter` disables overworld sprite updates for its whole run — the discriminator that the console
     // fired and the trade UI owns the machine.
     private static bool TradeUiOpen(MachineInstance machine) =>
-        (ScriptedTradeHarness.Peek(machine: machine, address: ScriptedTradeHarness.SpriteUpdatesEnabledAddress) == 0);
+        (ScriptedTradeHarness.Peek(
+        machine: machine,
+        address: ScriptedTradeHarness.SpriteUpdatesEnabledAddress
+    ) == 0);
     private bool Seated(MachineInstance machine, byte seatX, byte wantDir) =>
-        ((ScriptedTradeHarness.Peek(machine: machine, address: WXCoordAddress) == seatX)
-            && (ScriptedTradeHarness.Peek(machine: machine, address: WYCoordAddress) == SeatY)
-            && (ScriptedTradeHarness.Peek(machine: machine, address: ScriptedTradeHarness.PlayerDirectionAddress) == wantDir));
+        ((ScriptedTradeHarness.Peek(
+        machine: machine,
+        address: WXCoordAddress
+    ) == seatX)
+            && (ScriptedTradeHarness.Peek(
+        machine: machine,
+        address: WYCoordAddress
+    ) == SeatY)
+            && (ScriptedTradeHarness.Peek(
+        machine: machine,
+        address: ScriptedTradeHarness.PlayerDirectionAddress
+    ) == wantDir));
     private static void Observe(MachineInstance instance, TrafficTally tally) {
         var port = instance.GetRequiredService<SerialComponent>();
 
@@ -530,7 +707,11 @@ internal sealed class ScriptedTradeDriver {
         public void OnSend(byte value) =>
             ++MasterSends;
         public LinkSideTraffic ToTraffic() =>
-            new(MasterSends: MasterSends, Completions: Completions, TrafficHash: Hash.Value);
+            new(
+            MasterSends: MasterSends,
+            Completions: Completions,
+            TrafficHash: Hash.Value
+        );
     }
 }
 

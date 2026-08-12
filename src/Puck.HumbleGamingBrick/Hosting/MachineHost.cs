@@ -45,18 +45,21 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// a silent host performs zero presentation-side audio synthesis.</param>
     public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0)
         : base(
-            width: ScreenWidth,
-            height: ScreenHeight,
-            maximumPendingSteps: DefaultMaximumPendingSteps,
-            workerName: "Puck GamingBrick",
-            audioSampleRate: audioSampleRate,
-            savePath: savePath
-        ) {
+        width: ScreenWidth,
+        height: ScreenHeight,
+        maximumPendingSteps: DefaultMaximumPendingSteps,
+        workerName: "Puck GamingBrick",
+        audioSampleRate: audioSampleRate,
+        savePath: savePath
+    ) {
         m_model = model;
         m_dmgSpeed = dmgSpeed;
 
         if (cartridgeRom is not null) {
-            LoadContent(data: cartridgeRom, savePath: savePath);
+            LoadContent(
+                data: cartridgeRom,
+                savePath: savePath
+            );
         }
     }
 
@@ -66,11 +69,17 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
 
     /// <inheritdoc/>
     public void PokeByte(int address, byte value) =>
-        Worker.PokeByte(address: address, value: value);
+        Worker.PokeByte(
+        address: address,
+        value: value
+    );
 
     /// <inheritdoc/>
     public string Options =>
-        GamingBrickEngine.FormatOptions(model: m_model, dmgSpeed: m_dmgSpeed);
+        GamingBrickEngine.FormatOptions(
+        model: m_model,
+        dmgSpeed: m_dmgSpeed
+    );
 
     /// <inheritdoc/>
     public bool TryReconfigure(string? options, out string reason) {
@@ -100,5 +109,10 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
 
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
-        new HumbleGamingBrickCore(model: m_model, cartridgeRom: data, savePath: savePath, dmgSpeed: m_dmgSpeed);
+        new HumbleGamingBrickCore(
+        model: m_model,
+        cartridgeRom: data,
+        savePath: savePath,
+        dmgSpeed: m_dmgSpeed
+    );
 }

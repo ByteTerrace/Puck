@@ -96,7 +96,11 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     public void OnCpuWoke() {
         m_cpuHalted = false;
 
-        if ((m_state == StatePaused) && m_allowWakeArm && (m_ppu.Mode == HBlankMode)) {
+        if (
+            (m_state == StatePaused) &&
+            m_allowWakeArm &&
+            (m_ppu.Mode == HBlankMode)
+        ) {
             m_state = StateRequested;
         }
     }
@@ -110,15 +114,24 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
         m_previousMode = mode;
 
-        if (m_key1.IsStopped || m_key1.IsHdmaBlocked) {
+        if (
+            m_key1.IsStopped ||
+            m_key1.IsHdmaBlocked
+        ) {
             return;
         }
 
-        if ((m_state == StatePaused) && enteredHBlank && !m_cpuHalted) {
+        if (
+            (m_state == StatePaused) &&
+            enteredHBlank &&
+            !m_cpuHalted
+        ) {
             m_state = StateRequested;
         }
 
-        if (++m_stepCounter < (m_key1.IsDoubleSpeed ? StepTCyclesDouble : StepTCyclesNormal)) {
+        if (++m_stepCounter < (m_key1.IsDoubleSpeed
+            ? StepTCyclesDouble
+            : StepTCyclesNormal)) {
             return;
         }
 
@@ -134,7 +147,9 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
         // Bit 7 is clear while a transfer is live (including parked between HBlank blocks); the low bits are the
         // remaining block count minus one. A completed transfer reads 0xFF, a stopped one 0x80 | remaining.
-        return (byte)(((m_state != StateNone) ? 0x00 : 0x80) | (m_chunks & 0x7F));
+        return (byte)(((m_state != StateNone)
+            ? 0x00
+            : 0x80) | (m_chunks & 0x7F));
     }
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
@@ -243,10 +258,19 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         var source = (ushort)(SourceAddress() + m_sourceCursor);
         // A source inside VRAM cannot be read by the unit (it owns VRAM as its destination); those bytes read open bus.
         var invalidSource = ((source >= MemoryMap.VideoRamStart) && (source <= MemoryMap.VideoRamEnd));
-        var value = (invalidSource ? (byte)0xFF : DmaSource.Read(cartridgeSlot: m_cartridgeSlot, memory: m_memory, address: source));
+        var value = (invalidSource
+            ? (byte)0xFF
+            : DmaSource.Read(
+            cartridgeSlot: m_cartridgeSlot,
+            memory: m_memory,
+            address: source
+        ));
         var destination = (ushort)(MemoryMap.VideoRamStart | ((DestinationAddress() + m_destinationCursor) & 0x1FFF));
 
-        m_memory.WriteVideoRam(address: destination, value: value);
+        m_memory.WriteVideoRam(
+            address: destination,
+            value: value
+        );
 
         ++m_sourceCursor;
         ++m_destinationCursor;
@@ -294,7 +318,9 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
         if (hblankMode) {
             m_hblankMode = true;
-            m_state = ((m_ppu.Mode == HBlankMode) ? StateRequested : StatePaused);
+            m_state = ((m_ppu.Mode == HBlankMode)
+                ? StateRequested
+                : StatePaused);
         } else {
             m_hblankMode = false;
             m_state = StateRequested;

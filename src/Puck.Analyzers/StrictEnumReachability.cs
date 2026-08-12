@@ -35,7 +35,12 @@ internal sealed class StrictEnumReachability {
     /// <summary>Walks one <c>[JsonSerializable]</c> root and everything reachable from it.</summary>
     /// <param name="type">The root type.</param>
     public void Walk(ITypeSymbol type) =>
-        WalkMember(type: type, ownerDisplay: m_context.Name, memberDisplay: "(root)", location: ContextLocation());
+        WalkMember(
+        type: type,
+        ownerDisplay: m_context.Name,
+        memberDisplay: "(root)",
+        location: ContextLocation()
+    );
 
     /// <summary>Every <c>typeof(...)</c> argument of a <c>[JsonSerializable(typeof(X))]</c> attribute on <paramref name="context"/>.</summary>
     public static IReadOnlyList<ITypeSymbol> CollectSerializableRoots(INamedTypeSymbol context, StrictEnumKnownTypes knownTypes) {
@@ -46,11 +51,17 @@ internal sealed class StrictEnumReachability {
         var roots = new List<ITypeSymbol>();
 
         foreach (var attribute in context.GetAttributes()) {
-            if (!SymbolEqualityComparer.Default.Equals(x: attribute.AttributeClass, y: knownTypes.JsonSerializableAttributeType)) {
+            if (!SymbolEqualityComparer.Default.Equals(
+                x: attribute.AttributeClass,
+                y: knownTypes.JsonSerializableAttributeType
+            )) {
                 continue;
             }
 
-            if ((attribute.ConstructorArguments.Length > 0) && (attribute.ConstructorArguments[0].Value is ITypeSymbol root)) {
+            if (
+                (attribute.ConstructorArguments.Length > 0) &&
+                (attribute.ConstructorArguments[0].Value is ITypeSymbol root)
+            ) {
                 roots.Add(item: root);
             }
         }
@@ -71,22 +82,38 @@ internal sealed class StrictEnumReachability {
     public static HashSet<ITypeSymbol> CollectRegisteredConverters(INamedTypeSymbol context, StrictEnumKnownTypes knownTypes) {
         var targets = new HashSet<ITypeSymbol>(comparer: SymbolEqualityComparer.Default);
 
-        if ((knownTypes.JsonSourceGenerationOptionsAttributeType is null) || (knownTypes.JsonConverterOpenGenericType is null)) {
+        if (
+            (knownTypes.JsonSourceGenerationOptionsAttributeType is null) ||
+            (knownTypes.JsonConverterOpenGenericType is null)
+        ) {
             return targets;
         }
 
         foreach (var attribute in context.GetAttributes()) {
-            if (!SymbolEqualityComparer.Default.Equals(x: attribute.AttributeClass, y: knownTypes.JsonSourceGenerationOptionsAttributeType)) {
+            if (!SymbolEqualityComparer.Default.Equals(
+                x: attribute.AttributeClass,
+                y: knownTypes.JsonSourceGenerationOptionsAttributeType
+            )) {
                 continue;
             }
 
             foreach (var namedArgument in attribute.NamedArguments) {
-                if (!string.Equals(a: namedArgument.Key, b: "Converters", comparisonType: StringComparison.Ordinal)) {
+                if (!string.Equals(
+                    a: namedArgument.Key,
+                    b: "Converters",
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     continue;
                 }
 
                 foreach (var element in namedArgument.Value.Values) {
-                    if ((element.Value is ITypeSymbol converterType) && (ConvertedType(converterType: converterType, knownTypes: knownTypes) is { } converted)) {
+                    if (
+                        (element.Value is ITypeSymbol converterType) &&
+                        (ConvertedType(
+                        converterType: converterType,
+                        knownTypes: knownTypes
+                    ) is { } converted)
+                    ) {
                         targets.Add(item: converted);
                     }
                 }
@@ -99,7 +126,10 @@ internal sealed class StrictEnumReachability {
     /// <summary>Whether <paramref name="type"/> derives (directly or transitively) from <paramref name="jsonSerializerContextType"/>.</summary>
     public static bool DerivesFromJsonSerializerContext(INamedTypeSymbol type, INamedTypeSymbol jsonSerializerContextType) {
         for (var current = type.BaseType; (current is not null); current = current.BaseType) {
-            if (SymbolEqualityComparer.Default.Equals(x: current, y: jsonSerializerContextType)) {
+            if (SymbolEqualityComparer.Default.Equals(
+                x: current,
+                y: jsonSerializerContextType
+            )) {
                 return true;
             }
         }
@@ -119,12 +149,23 @@ internal sealed class StrictEnumReachability {
     /// </summary>
     private static ITypeSymbol? ConvertedType(ITypeSymbol converterType, StrictEnumKnownTypes knownTypes) {
         for (var current = (converterType as INamedTypeSymbol); (current is not null); current = current.BaseType) {
-            if (!current.IsGenericType || (current.TypeArguments.Length != 1)) {
+            if (
+                !current.IsGenericType ||
+                (current.TypeArguments.Length != 1)
+            ) {
                 continue;
             }
 
-            if (SymbolEqualityComparer.Default.Equals(x: current.OriginalDefinition, y: knownTypes.JsonConverterOpenGenericType)
-                || SymbolEqualityComparer.Default.Equals(x: current.OriginalDefinition, y: knownTypes.JsonStringEnumConverterOpenGenericType)) {
+            if (
+                SymbolEqualityComparer.Default.Equals(
+                x: current.OriginalDefinition,
+                y: knownTypes.JsonConverterOpenGenericType
+            ) ||
+                SymbolEqualityComparer.Default.Equals(
+                x: current.OriginalDefinition,
+                y: knownTypes.JsonStringEnumConverterOpenGenericType
+            )
+            ) {
                 return current.TypeArguments[0];
             }
         }
@@ -141,46 +182,86 @@ internal sealed class StrictEnumReachability {
         // Nullable<T>: a value-type "?" annotation is a distinct wrapper type; a reference-type "?" is the SAME
         // symbol with only its NullableAnnotation changed, so it falls through to the checks below unchanged.
         if ((type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable)) {
-            WalkMember(type: nullable.TypeArguments[0], ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location);
+            WalkMember(
+                type: nullable.TypeArguments[0],
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location
+            );
 
             return;
         }
 
         if (type is IArrayTypeSymbol array) {
-            WalkMember(type: array.ElementType, ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location);
+            WalkMember(
+                type: array.ElementType,
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location
+            );
 
             return;
         }
 
         if (type.SpecialType == SpecialType.System_Object) {
-            Report002(ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location, reason: "its declared type is System.Object, which could hide any runtime type including an unconverted enum");
+            Report002(
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location,
+                reason: "its declared type is System.Object, which could hide any runtime type including an unconverted enum"
+            );
 
             return;
         }
 
-        if (IsPrimitiveLeaf(type: type) || StrictEnumKnownTypes.IsKnownLeaf(type: type)) {
+        if (
+            IsPrimitiveLeaf(type: type) ||
+            StrictEnumKnownTypes.IsKnownLeaf(type: type)
+        ) {
             return;
         }
 
-        if (TryGetEnumerableElementType(type: type, elementType: out var elementType)) {
-            WalkMember(type: elementType, ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location);
+        if (TryGetEnumerableElementType(
+            type: type,
+            elementType: out var elementType
+        )) {
+            WalkMember(
+                type: elementType,
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location
+            );
 
             return;
         }
 
         if (type.TypeKind == TypeKind.Enum) {
-            WalkEnum(enumType: (INamedTypeSymbol)type, ownerDisplay: ownerDisplay, memberDisplay: memberDisplay);
+            WalkEnum(
+                enumType: (INamedTypeSymbol)type,
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay
+            );
 
             return;
         }
 
         if (type.TypeKind is TypeKind.Class or TypeKind.Struct or TypeKind.Interface) {
-            WalkClassLike(type: type, ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location);
+            WalkClassLike(
+                type: type,
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location
+            );
 
             return;
         }
 
-        Report002(ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location, reason: $"its declared type '{type}' ({type.TypeKind}) is neither a class, a struct, an interface, nor an enum");
+        Report002(
+            ownerDisplay: ownerDisplay,
+            memberDisplay: memberDisplay,
+            location: location,
+            reason: $"its declared type '{type}' ({type.TypeKind}) is neither a class, a struct, an interface, nor an enum"
+        );
     }
     private void WalkEnum(INamedTypeSymbol enumType, string ownerDisplay, string memberDisplay) {
         if (!m_visited.Add(item: enumType)) {
@@ -196,7 +277,8 @@ internal sealed class StrictEnumReachability {
         m_symbolContext.ReportDiagnostic(diagnostic: Diagnostic.Create(
             descriptor: StrictEnumAnalyzer.Enum001EnumNotExplicitlyConverted,
             location: location,
-            messageArgs: [enumType.ToDisplayString(), m_context.Name, ownerDisplay, memberDisplay]));
+            messageArgs: [enumType.ToDisplayString(), m_context.Name, ownerDisplay, memberDisplay]
+        ));
     }
     private void WalkClassLike(ITypeSymbol type, string ownerDisplay, string memberDisplay, Location location) {
         if (!m_visited.Add(item: type)) {
@@ -213,8 +295,16 @@ internal sealed class StrictEnumReachability {
 
         var derivedTypes = GetJsonDerivedTypes(type: type);
 
-        if ((type.TypeKind == TypeKind.Interface) && (derivedTypes.Count == 0)) {
-            Report002(ownerDisplay: ownerDisplay, memberDisplay: memberDisplay, location: location, reason: $"'{type}' is an interface with no [JsonPolymorphic]/[JsonDerivedType] family and no converter of its own");
+        if (
+            (type.TypeKind == TypeKind.Interface) &&
+            (derivedTypes.Count == 0)
+        ) {
+            Report002(
+                ownerDisplay: ownerDisplay,
+                memberDisplay: memberDisplay,
+                location: location,
+                reason: $"'{type}' is an interface with no [JsonPolymorphic]/[JsonDerivedType] family and no converter of its own"
+            );
 
             return;
         }
@@ -228,18 +318,29 @@ internal sealed class StrictEnumReachability {
 
             var propertyLocation = (property.Locations.FirstOrDefault(predicate: candidate => candidate.IsInSource) ?? location);
 
-            WalkMember(type: property.Type, ownerDisplay: type.Name, memberDisplay: property.Name, location: propertyLocation);
+            WalkMember(
+                type: property.Type,
+                ownerDisplay: type.Name,
+                memberDisplay: property.Name,
+                location: propertyLocation
+            );
         }
 
         foreach (var derived in derivedTypes) {
-            WalkMember(type: derived, ownerDisplay: type.Name, memberDisplay: $"$type:{derived.Name}", location: location);
+            WalkMember(
+                type: derived,
+                ownerDisplay: type.Name,
+                memberDisplay: $"$type:{derived.Name}",
+                location: location
+            );
         }
     }
     private void Report002(string ownerDisplay, string memberDisplay, Location location, string reason) {
         m_symbolContext.ReportDiagnostic(diagnostic: Diagnostic.Create(
             descriptor: StrictEnumAnalyzer.Enum002UnclassifiableJsonShape,
             location: location,
-            messageArgs: [ownerDisplay, memberDisplay, reason]));
+            messageArgs: [ownerDisplay, memberDisplay, reason]
+        ));
     }
     private bool IsExplicitlyConverted(ITypeSymbol type) {
         if (m_registeredConverterTargets.Contains(item: type)) {
@@ -251,7 +352,10 @@ internal sealed class StrictEnumReachability {
         }
 
         foreach (var attribute in type.GetAttributes()) {
-            if (SymbolEqualityComparer.Default.Equals(x: attribute.AttributeClass, y: m_knownTypes.JsonConverterAttributeType)) {
+            if (SymbolEqualityComparer.Default.Equals(
+                x: attribute.AttributeClass,
+                y: m_knownTypes.JsonConverterAttributeType
+            )) {
                 return true;
             }
         }
@@ -264,15 +368,25 @@ internal sealed class StrictEnumReachability {
         }
 
         foreach (var attribute in property.GetAttributes()) {
-            if (!SymbolEqualityComparer.Default.Equals(x: attribute.AttributeClass, y: m_knownTypes.JsonIgnoreAttributeType)) {
+            if (!SymbolEqualityComparer.Default.Equals(
+                x: attribute.AttributeClass,
+                y: m_knownTypes.JsonIgnoreAttributeType
+            )) {
                 continue;
             }
 
             foreach (var namedArgument in attribute.NamedArguments) {
-                if (string.Equals(a: namedArgument.Key, b: "Condition", StringComparison.Ordinal)) {
+                if (string.Equals(
+                    a: namedArgument.Key,
+                    b: "Condition",
+                    StringComparison.Ordinal
+                )) {
                     // JsonIgnoreCondition.Always == 0; any other named value (Never/WhenWritingDefault/WhenWritingNull)
                     // still lets the member reach the wire under some condition, so it must still be walked.
-                    return ((namedArgument.Value.Value is int conditionValue) && (conditionValue == 0));
+                    return (
+                        (namedArgument.Value.Value is int conditionValue) &&
+                        (conditionValue == 0)
+                    );
                 }
             }
 
@@ -290,11 +404,17 @@ internal sealed class StrictEnumReachability {
         }
 
         foreach (var attribute in type.GetAttributes()) {
-            if (!SymbolEqualityComparer.Default.Equals(x: attribute.AttributeClass, y: m_knownTypes.JsonDerivedTypeAttributeType)) {
+            if (!SymbolEqualityComparer.Default.Equals(
+                x: attribute.AttributeClass,
+                y: m_knownTypes.JsonDerivedTypeAttributeType
+            )) {
                 continue;
             }
 
-            if ((attribute.ConstructorArguments.Length > 0) && (attribute.ConstructorArguments[0].Value is ITypeSymbol derivedType)) {
+            if (
+                (attribute.ConstructorArguments.Length > 0) &&
+                (attribute.ConstructorArguments[0].Value is ITypeSymbol derivedType)
+            ) {
                 derived.Add(item: derivedType);
             }
         }
@@ -318,7 +438,10 @@ internal sealed class StrictEnumReachability {
 
         for (var current = type; ((current is not null) && (current.SpecialType != SpecialType.System_Object)); current = current.BaseType) {
             foreach (var member in current.GetMembers()) {
-                if ((member is IPropertySymbol { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public, GetMethod: not null } property) && seenNames.Add(item: property.Name)) {
+                if (
+                    (member is IPropertySymbol { IsStatic: false, IsIndexer: false, DeclaredAccessibility: Accessibility.Public, GetMethod: not null } property) &&
+                    seenNames.Add(item: property.Name)
+                ) {
                     properties.Add(item: property);
                 }
             }
@@ -344,14 +467,26 @@ internal sealed class StrictEnumReachability {
             or SpecialType.System_DateTime);
     private bool TryGetEnumerableElementType(ITypeSymbol type, out ITypeSymbol elementType) {
         if (m_knownTypes.EnumerableOpenGenericType is { } enumerableType) {
-            if ((type is INamedTypeSymbol { IsGenericType: true } named) && SymbolEqualityComparer.Default.Equals(x: named.OriginalDefinition, y: enumerableType)) {
+            if (
+                (type is INamedTypeSymbol { IsGenericType: true } named) &&
+                SymbolEqualityComparer.Default.Equals(
+                x: named.OriginalDefinition,
+                y: enumerableType
+            )
+            ) {
                 elementType = named.TypeArguments[0];
 
                 return true;
             }
 
             foreach (var candidate in type.AllInterfaces) {
-                if (candidate.IsGenericType && SymbolEqualityComparer.Default.Equals(x: candidate.OriginalDefinition, y: enumerableType)) {
+                if (
+                    candidate.IsGenericType &&
+                    SymbolEqualityComparer.Default.Equals(
+                    x: candidate.OriginalDefinition,
+                    y: enumerableType
+                )
+                ) {
                     elementType = candidate.TypeArguments[0];
 
                     return true;

@@ -26,13 +26,22 @@ internal sealed class BatterySaveStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var rom = SyntheticRom.Create(cartridgeType: 0x13, ramSize: 0x03); // MBC3+RAM+BATTERY, 32 KiB RAM
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0x13,
+            ramSize: 0x03
+        ); // MBC3+RAM+BATTERY, 32 KiB RAM
 
-        using var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
         var cartridge = machine.GetRequiredService<ICartridge>();
 
-        if (!cartridge.Header.HasBattery || (cartridge.ExternalRamByteCount != 0x8000)) {
+        if (
+            !cartridge.Header.HasBattery ||
+            (cartridge.ExternalRamByteCount != 0x8000)
+        ) {
             return PostStageOutcome.Fail(detail: $"the synthetic MBC3 header decoded wrong: battery {cartridge.Header.HasBattery}, RAM {cartridge.ExternalRamByteCount} bytes (expected battery-backed 32768)");
         }
 
@@ -41,11 +50,20 @@ internal sealed class BatterySaveStage : IPostStage {
         }
 
         // Enable the RAM window and select bank 0 (the MBC3 protocol), then store a recognizable pattern.
-        cartridge.WriteControl(address: 0x0000, value: 0x0A);
-        cartridge.WriteControl(address: 0x4000, value: 0x00);
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0A
+        );
+        cartridge.WriteControl(
+            address: 0x4000,
+            value: 0x00
+        );
 
         for (var index = 0; (index < PatternLength); index++) {
-            cartridge.WriteRam(address: (ushort)(0xA000 + index), value: (byte)(0xA5 ^ index));
+            cartridge.WriteRam(
+                address: (ushort)(0xA000 + index),
+                value: (byte)(0xA5 ^ index)
+            );
         }
 
         if (!cartridge.ExternalRamDirty) {
@@ -65,7 +83,10 @@ internal sealed class BatterySaveStage : IPostStage {
         }
 
         // The power-on load: a fresh machine imports the exported save and must expose the identical bytes.
-        using var reboot = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var reboot = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
         var rebootCartridge = reboot.GetRequiredService<ICartridge>();
 
@@ -75,8 +96,14 @@ internal sealed class BatterySaveStage : IPostStage {
             return PostStageOutcome.Fail(detail: "ImportExternalRam left the dirty flag set — a just-loaded save would immediately re-flush");
         }
 
-        rebootCartridge.WriteControl(address: 0x0000, value: 0x0A);
-        rebootCartridge.WriteControl(address: 0x4000, value: 0x00);
+        rebootCartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0A
+        );
+        rebootCartridge.WriteControl(
+            address: 0x4000,
+            value: 0x00
+        );
 
         for (var index = 0; (index < PatternLength); index++) {
             var expected = (byte)(0xA5 ^ index);
@@ -97,8 +124,14 @@ internal sealed class BatterySaveStage : IPostStage {
         (byte Register, byte Value)[] clock = [(0x08, 30), (0x09, 5), (0x0A, 3), (0x0B, 0x2A)];
 
         foreach (var (register, value) in clock) {
-            cartridge.WriteControl(address: 0x4000, value: register);
-            cartridge.WriteRam(address: 0xA000, value: value);
+            cartridge.WriteControl(
+                address: 0x4000,
+                value: register
+            );
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: value
+            );
         }
 
         var footer = cartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp);
@@ -112,11 +145,20 @@ internal sealed class BatterySaveStage : IPostStage {
         }
 
         rebootCartridge.ImportPersistentClock(source: footer);
-        rebootCartridge.WriteControl(address: 0x6000, value: 0x00);
-        rebootCartridge.WriteControl(address: 0x6000, value: 0x01);
+        rebootCartridge.WriteControl(
+            address: 0x6000,
+            value: 0x00
+        );
+        rebootCartridge.WriteControl(
+            address: 0x6000,
+            value: 0x01
+        );
 
         foreach (var (register, expected) in clock) {
-            rebootCartridge.WriteControl(address: 0x4000, value: register);
+            rebootCartridge.WriteControl(
+                address: 0x4000,
+                value: register
+            );
 
             var actual = rebootCartridge.ReadRam(address: 0xA000);
 
@@ -136,9 +178,15 @@ internal sealed class BatterySaveStage : IPostStage {
     }
 
     private static string? RunHuC3ClockLeg() {
-        var rom = SyntheticRom.Create(cartridgeType: 0xFE, ramSize: 0x03); // HuC3 (RAM + battery per the type decode)
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFE,
+            ramSize: 0x03
+        ); // HuC3 (RAM + battery per the type decode)
 
-        using var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
         var cartridge = machine.GetRequiredService<ICartridge>();
 
@@ -147,10 +195,16 @@ internal sealed class BatterySaveStage : IPostStage {
         }
 
         // minutes = 0x4D2 (1234), days = 0xABC — stored LSB-nibble first at access indices 0..2 and 3..6.
-        cartridge.WriteControl(address: 0x0000, value: 0x0B);
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0B
+        );
 
         foreach (var command in (byte[])[0x40, 0x50, 0x32, 0x3D, 0x34, 0x3C, 0x3B, 0x3A, 0x30]) {
-            cartridge.WriteRam(address: 0xA000, value: command);
+            cartridge.WriteRam(
+                address: 0xA000,
+                value: command
+            );
         }
 
         var footer = cartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp);
@@ -159,24 +213,48 @@ internal sealed class BatterySaveStage : IPostStage {
             return "the HuC3 clock footer did not stamp the host's interop timestamp at offset 8";
         }
 
-        using var reboot = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var reboot = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
         var rebootCartridge = reboot.GetRequiredService<ICartridge>();
 
         rebootCartridge.ImportPersistentClock(source: footer);
 
         // Protocol read-back of nibble 0 (minutes' low nibble, 2): fetch post-increment in command mode, then read.
-        rebootCartridge.WriteControl(address: 0x0000, value: 0x0B);
-        rebootCartridge.WriteRam(address: 0xA000, value: 0x40);
-        rebootCartridge.WriteRam(address: 0xA000, value: 0x50);
-        rebootCartridge.WriteRam(address: 0xA000, value: 0x10);
-        rebootCartridge.WriteControl(address: 0x0000, value: 0x0C);
+        rebootCartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0B
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x40
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x50
+        );
+        rebootCartridge.WriteRam(
+            address: 0xA000,
+            value: 0x10
+        );
+        rebootCartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0C
+        );
 
         if (rebootCartridge.ReadRam(address: 0xA000) != 0x02) {
             return "the imported HuC3 clock's minutes low nibble did not read back 2 through the protocol";
         }
 
-        if (!footer.AsSpan(start: 0, length: 8).SequenceEqual(other: rebootCartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp).AsSpan(start: 0, length: 8))) {
+        if (!footer.AsSpan(
+            start: 0,
+            length: 8
+        ).SequenceEqual(other: rebootCartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp).AsSpan(
+            start: 0,
+            length: 8
+        ))) {
             return "the imported HuC3 clock's re-exported minutes/days diverged from the original footer";
         }
 

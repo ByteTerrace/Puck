@@ -2135,6 +2135,34 @@ public static class WorldDefinitionValidator {
                 errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
             }
 
+            if (!CarriageConformanceProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
+                errors.Add(item: $"{path}.algorithm must be '{CarriageAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory carriage-v1-base profile.");
+            }
+
+            if (
+                (row.Subject is not null) &&
+                (Encoding.UTF8.GetByteCount(s: row.Subject) > CarriageResourceLimits.TextStringUtf8Bytes)
+            ) {
+                errors.Add(item: $"{path}.subject exceeds the carriage-v1-base limit of {CarriageResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
+            }
+
+            try {
+                var domainBytes = Convert.FromHexString(s: (row.Domain ?? string.Empty));
+
+                if (
+                    (domainBytes.Length != 32) ||
+                    !string.Equals(
+                        a: row.Domain,
+                        b: Convert.ToHexStringLower(bytes: domainBytes),
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    errors.Add(item: $"{path}.domain must be exactly 32 bytes of lowercase hexadecimal.");
+                }
+            } catch (FormatException) {
+                errors.Add(item: $"{path}.domain must be exactly 32 bytes of lowercase hexadecimal.");
+            }
+
             byte[]? spki = null;
 
             if (row.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
@@ -2154,6 +2182,10 @@ public static class WorldDefinitionValidator {
             }
 
             if (spki is { Length: > 0 }) {
+                if (spki.Length > CarriageResourceLimits.SubjectPublicKeyInfoBytes) {
+                    errors.Add(item: $"{path}.publicKey is {spki.Length} bytes; carriage-v1-base permits at most {CarriageResourceLimits.SubjectPublicKeyInfoBytes} DER SPKI bytes.");
+                }
+
                 try {
                     var pinnedId = new KeyId {
                         Algorithm = (row.Algorithm ?? string.Empty),

@@ -31,7 +31,10 @@ public sealed partial class Arm7Tdmi {
     // The barrel shifter. Returns the shifted value and updates carryOut. byRegister selects the
     // register-specified-amount semantics (different handling of zero and amounts >= 32).
     private static uint BarrelShift(Arm7Tdmi cpu, uint value, ShiftType type, int amount, bool byRegister, ref bool carryOut) {
-        if (byRegister && (amount == 0)) {
+        if (
+            byRegister &&
+            (amount == 0)
+        ) {
             return value;
         }
 
@@ -52,7 +55,10 @@ public sealed partial class Arm7Tdmi {
                 return 0u;
 
             case ShiftType.LogicalRight:
-                if ((amount == 0) || (amount == 32)) {
+                if (
+                    (amount == 0) ||
+                    (amount == 32)
+                ) {
                     carryOut = ((value & 0x80000000u) != 0u);
 
                     return 0u;
@@ -69,7 +75,10 @@ public sealed partial class Arm7Tdmi {
                 return 0u;
 
             case ShiftType.ArithmeticRight:
-                if ((amount == 0) || (amount >= 32)) {
+                if (
+                    (amount == 0) ||
+                    (amount >= 32)
+                ) {
                     carryOut = ((value & 0x80000000u) != 0u);
 
                     return (uint)((int)value >> 31);
@@ -86,7 +95,9 @@ public sealed partial class Arm7Tdmi {
 
                     carryOut = ((value & 1u) != 0u);
 
-                    return (value >> 1) | (oldCarry ? 0x80000000u : 0u);
+                    return (value >> 1) | (oldCarry
+                        ? 0x80000000u
+                        : 0u);
                 }
 
                 var rotate = amount & 31;
@@ -103,35 +114,61 @@ public sealed partial class Arm7Tdmi {
         }
     }
     private static void SetNZ(Arm7Tdmi cpu, uint result) {
-        cpu.m_cpsr = (cpu.m_cpsr & ~(FlagN | FlagZ)) | (result & FlagN) | ((result == 0u) ? FlagZ : 0u);
+        cpu.m_cpsr = (cpu.m_cpsr & ~(FlagN | FlagZ)) | (result & FlagN) | ((result == 0u)
+            ? FlagZ
+            : 0u);
     }
     private static void SetCarry(Arm7Tdmi cpu, bool carry) {
-        cpu.m_cpsr = (carry ? cpu.m_cpsr | FlagC : cpu.m_cpsr & ~FlagC);
+        cpu.m_cpsr = (carry
+            ? cpu.m_cpsr | FlagC
+            : cpu.m_cpsr & ~FlagC);
     }
     private static void SetOverflow(Arm7Tdmi cpu, bool overflow) {
-        cpu.m_cpsr = (overflow ? cpu.m_cpsr | FlagV : cpu.m_cpsr & ~FlagV);
+        cpu.m_cpsr = (overflow
+            ? cpu.m_cpsr | FlagV
+            : cpu.m_cpsr & ~FlagV);
     }
     private static uint Add(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
         var wide = ((ulong)a + b);
         var result = (uint)wide;
 
         if (setFlags) {
-            SetNZ(cpu: cpu, result: result);
-            SetCarry(cpu: cpu, carry: (wide > 0xFFFFFFFFul));
-            SetOverflow(cpu: cpu, overflow: (((a ^ result) & (b ^ result) & 0x80000000u) != 0u));
+            SetNZ(
+                cpu: cpu,
+                result: result
+            );
+            SetCarry(
+                cpu: cpu,
+                carry: (wide > 0xFFFFFFFFul)
+            );
+            SetOverflow(
+                cpu: cpu,
+                overflow: (((a ^ result) & (b ^ result) & 0x80000000u) != 0u)
+            );
         }
 
         return result;
     }
     private static uint AddWithCarry(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
-        var carryIn = (((cpu.m_cpsr & FlagC) != 0u) ? 1ul : 0ul);
+        var carryIn = (((cpu.m_cpsr & FlagC) != 0u)
+            ? 1ul
+            : 0ul);
         var wide = (((ulong)a + b) + carryIn);
         var result = (uint)wide;
 
         if (setFlags) {
-            SetNZ(cpu: cpu, result: result);
-            SetCarry(cpu: cpu, carry: (wide > 0xFFFFFFFFul));
-            SetOverflow(cpu: cpu, overflow: (((a ^ result) & (b ^ result) & 0x80000000u) != 0u));
+            SetNZ(
+                cpu: cpu,
+                result: result
+            );
+            SetCarry(
+                cpu: cpu,
+                carry: (wide > 0xFFFFFFFFul)
+            );
+            SetOverflow(
+                cpu: cpu,
+                overflow: (((a ^ result) & (b ^ result) & 0x80000000u) != 0u)
+            );
         }
 
         return result;
@@ -140,22 +177,42 @@ public sealed partial class Arm7Tdmi {
         var result = (a - b);
 
         if (setFlags) {
-            SetNZ(cpu: cpu, result: result);
-            SetCarry(cpu: cpu, carry: (a >= b));
-            SetOverflow(cpu: cpu, overflow: (((a ^ b) & (a ^ result) & 0x80000000u) != 0u));
+            SetNZ(
+                cpu: cpu,
+                result: result
+            );
+            SetCarry(
+                cpu: cpu,
+                carry: (a >= b)
+            );
+            SetOverflow(
+                cpu: cpu,
+                overflow: (((a ^ b) & (a ^ result) & 0x80000000u) != 0u)
+            );
         }
 
         return result;
     }
     private static uint SubtractWithCarry(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
-        var borrow = (((cpu.m_cpsr & FlagC) != 0u) ? 0ul : 1ul);
+        var borrow = (((cpu.m_cpsr & FlagC) != 0u)
+            ? 0ul
+            : 1ul);
         var wide = (((ulong)a - b) - borrow);
         var result = (uint)wide;
 
         if (setFlags) {
-            SetNZ(cpu: cpu, result: result);
-            SetCarry(cpu: cpu, carry: ((ulong)a >= ((ulong)b + borrow)));
-            SetOverflow(cpu: cpu, overflow: (((a ^ b) & (a ^ result) & 0x80000000u) != 0u));
+            SetNZ(
+                cpu: cpu,
+                result: result
+            );
+            SetCarry(
+                cpu: cpu,
+                carry: ((ulong)a >= ((ulong)b + borrow))
+            );
+            SetOverflow(
+                cpu: cpu,
+                overflow: (((a ^ b) & (a ^ result) & 0x80000000u) != 0u)
+            );
         }
 
         return result;
@@ -167,15 +224,24 @@ public sealed partial class Arm7Tdmi {
     private static int MultiplyCycles(uint multiplier, bool signedMultiplier) {
         var cycles = 1;
 
-        if (((multiplier >> 8) != 0u) && (!signedMultiplier || ((multiplier >> 8) != 0x00FFFFFFu))) {
+        if (
+            ((multiplier >> 8) != 0u) &&
+            (!signedMultiplier || ((multiplier >> 8) != 0x00FFFFFFu))
+        ) {
             ++cycles;
         }
 
-        if (((multiplier >> 16) != 0u) && (!signedMultiplier || ((multiplier >> 16) != 0x0000FFFFu))) {
+        if (
+            ((multiplier >> 16) != 0u) &&
+            (!signedMultiplier || ((multiplier >> 16) != 0x0000FFFFu))
+        ) {
             ++cycles;
         }
 
-        if (((multiplier >> 24) != 0u) && (!signedMultiplier || ((multiplier >> 24) != 0x000000FFu))) {
+        if (
+            ((multiplier >> 24) != 0u) &&
+            (!signedMultiplier || ((multiplier >> 24) != 0x000000FFu))
+        ) {
             ++cycles;
         }
 

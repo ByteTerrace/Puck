@@ -32,7 +32,10 @@ public sealed class GamePrinterLinkSession : IDisposable {
 
         var port = machine.GetRequiredService<SerialComponent>();
 
-        SerialComponent.AttachPeer(port: port, peer: printer);
+        SerialComponent.AttachPeer(
+            port: port,
+            peer: printer
+        );
 
         m_machine = machine.Machine;
         m_port = port;
@@ -44,7 +47,10 @@ public sealed class GamePrinterLinkSession : IDisposable {
     /// <param name="tCycles">The number of T-cycles to advance this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
     public void Run(ulong tCycles) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         m_machine.Run(tCycles: tCycles);
         m_printer.AdvanceBusy(tCycles: tCycles);

@@ -20,9 +20,16 @@ public sealed class GpuPushConstantBinding {
     /// <param name="data">The push constant data to upload.</param>
     public GpuPushConstantBinding(uint offset, GpuShaderStage stageFlags, ReadOnlyMemory<byte> data) {
         if (stageFlags == GpuShaderStage.None) {
-            throw new ArgumentOutOfRangeException(actualValue: stageFlags, message: "The push constant range must name at least one shader stage.", paramName: nameof(stageFlags));
+            throw new ArgumentOutOfRangeException(
+                actualValue: stageFlags,
+                message: "The push constant range must name at least one shader stage.",
+                paramName: nameof(stageFlags)
+            );
         }
-        ArgumentOutOfRangeException.ThrowIfZero(value: data.Length, paramName: nameof(data));
+        ArgumentOutOfRangeException.ThrowIfZero(
+            value: data.Length,
+            paramName: nameof(data)
+        );
 
         Offset = offset;
         StageFlags = stageFlags;

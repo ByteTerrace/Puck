@@ -100,7 +100,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         m_supportsColor = configuration.Model.SupportsColor();
         m_timer = timer;
 
-        Array.Fill(array: m_ioRegisters, value: (byte)0xFF);
+        Array.Fill(
+            array: m_ioRegisters,
+            value: (byte)0xFF
+        );
 
         RefreshCartridgeWindowCache();
     }
@@ -115,8 +118,18 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
         // On Color, a running OAM DMA occupies its source's bus; a CPU read that collides is hijacked — it sees open
         // bus or the DMA's own bus (read on the DMA's path, so the redirect cannot recurse).
-        if (m_oamDma.TryReadConflict(address: address, forceOpenBus: out var forceOpenBus, redirect: out var redirect)) {
-            return (forceOpenBus ? (byte)0xFF : DmaSource.Read(cartridgeSlot: m_cartridgeSlot, memory: m_memory, address: redirect));
+        if (m_oamDma.TryReadConflict(
+            address: address,
+            forceOpenBus: out var forceOpenBus,
+            redirect: out var redirect
+        )) {
+            return (forceOpenBus
+                ? (byte)0xFF
+                : DmaSource.Read(
+                cartridgeSlot: m_cartridgeSlot,
+                memory: m_memory,
+                address: redirect
+            ));
         }
 
         if (address <= MemoryMap.RomBankNEnd) {
@@ -132,14 +145,20 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             // bus. A -1 offset means this cartridge/bank combination was not cacheable (out-of-range image), so the
             // read falls back to the interface path, still bit-identical.
             return ((address <= MemoryMap.RomBank0End)
-                ? ((m_romBank0Offset >= 0) ? m_romImage[(m_romBank0Offset + address)] : m_cartridgeSlot.Cartridge.ReadRom(address: address))
-                : ((m_romBankNOffset >= 0) ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))] : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
+                ? ((m_romBank0Offset >= 0)
+                    ? m_romImage[(m_romBank0Offset + address)]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address))
+                : ((m_romBankNOffset >= 0)
+                    ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
         }
 
         if (address <= MemoryMap.VideoRamEnd) {
             // The PPU owns VRAM during drawing (mode 3), so the CPU reads open bus there; the release trails the
             // internal mode-0 edge by the PPU's unlock lag.
-            return (m_ppu.BlocksVideoRamReads ? (byte)0xFF : m_memory.ReadVideoRam(address: address));
+            return (m_ppu.BlocksVideoRamReads
+                ? (byte)0xFF
+                : m_memory.ReadVideoRam(address: address));
         }
 
         if (address <= MemoryMap.ExternalRamEnd) {
@@ -164,7 +183,9 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
             // OAM is unreadable to the CPU while a DMA copies into it, or while the PPU holds its read lock (the scan,
             // drawing, and the trailing unlock lag).
-            return ((m_oamDma.IsActive || m_ppu.BlocksOamReads) ? (byte)0xFF : m_memory.ReadObjectAttributeMemory(address: address));
+            return ((m_oamDma.IsActive || m_ppu.BlocksOamReads)
+                ? (byte)0xFF
+                : m_memory.ReadObjectAttributeMemory(address: address));
         }
 
         if (address <= MemoryMap.UnusableEnd) {
@@ -177,8 +198,13 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             }
 
             // The Color-only PCM output registers route to the APU; on a DMG they read as open bus.
-            if ((address == MemoryMap.PcmAmplitude12) || (address == MemoryMap.PcmAmplitude34)) {
-                return (m_supportsColor ? m_apu.ReadPcm(address: address) : (byte)0xFF);
+            if (
+                (address == MemoryMap.PcmAmplitude12) ||
+                (address == MemoryMap.PcmAmplitude34)
+            ) {
+                return (m_supportsColor
+                    ? m_apu.ReadPcm(address: address)
+                    : (byte)0xFF);
             }
 
             return ReadIoRegister(address: address);
@@ -194,21 +220,33 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     public void WriteByte(ushort address, byte value) {
         // Debug write watchpoints: dormant until a hgb.watch arms one (the read side documents the zero-cost guard).
         if (m_watchArmed) {
-            TrackWatchWrite(address: address, value: value);
+            TrackWatchWrite(
+                address: address,
+                value: value
+            );
         }
 
         // On Color, a CPU write that collides with a running OAM DMA's bus is dropped, lands on the DMA's bus instead,
         // or additionally zeroes the OAM byte in flight. The redirected store goes straight to memory — the target is
         // the DMA's own bus, which by construction is not re-classified.
-        switch (m_oamDma.ClassifyWriteConflict(address: address, target: out var conflictTarget)) {
+        switch (m_oamDma.ClassifyWriteConflict(
+            address: address,
+            target: out var conflictTarget
+        )) {
             case OamDmaWriteConflict.Drop:
                 return;
             case OamDmaWriteConflict.Store:
-                WriteConflictTarget(address: conflictTarget, value: value);
+                WriteConflictTarget(
+                    address: conflictTarget,
+                    value: value
+                );
 
                 return;
             case OamDmaWriteConflict.StoreAndPoisonOam:
-                WriteConflictTarget(address: conflictTarget, value: value);
+                WriteConflictTarget(
+                    address: conflictTarget,
+                    value: value
+                );
                 m_oamDma.PoisonCurrentOamByte();
 
                 return;
@@ -221,12 +259,18 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             // switch and MMM01's lock/multiplex bits, are only reachable through this call), so it uniformly refreshes
             // the derived window cache — no per-mapper "does this register affect banking" tracking needed, and a
             // future mapper gets the invalidation for free.
-            m_cartridgeSlot.Cartridge.WriteControl(address: address, value: value);
+            m_cartridgeSlot.Cartridge.WriteControl(
+                address: address,
+                value: value
+            );
             RefreshCartridgeWindowCache();
         } else if (address <= MemoryMap.VideoRamEnd) {
             // Writes are dropped while the PPU owns VRAM (drawing plus the trailing unlock lag).
             if (!m_ppu.BlocksVideoRamWrites) {
-                m_memory.WriteVideoRam(address: address, value: value);
+                m_memory.WriteVideoRam(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.ExternalRamEnd) {
             var ramRelative = (address - MemoryMap.ExternalRamStart);
@@ -235,28 +279,52 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
                 m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
             } else {
-                m_cartridgeSlot.Cartridge.WriteRam(address: address, value: value);
+                m_cartridgeSlot.Cartridge.WriteRam(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.WorkRamBankNEnd) {
-            m_memory.WriteWorkRam(address: address, value: value);
+            m_memory.WriteWorkRam(
+                address: address,
+                value: value
+            );
         } else if (address <= MemoryMap.EchoRamEnd) {
-            m_memory.WriteWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset), value: value);
+            m_memory.WriteWorkRam(
+                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                value: value
+            );
         } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
             // The CPU cannot reach OAM while a DMA transfer owns it — including the transfer's warm-up delay — or
             // while the PPU holds its write lock (which briefly opens between the scan and the pipeline engaging).
-            if (!m_oamDma.IsActiveOrWarmingUp && !m_ppu.BlocksOamWrites) {
-                m_memory.WriteObjectAttributeMemory(address: address, value: value);
+            if (
+                !m_oamDma.IsActiveOrWarmingUp &&
+                !m_ppu.BlocksOamWrites
+            ) {
+                m_memory.WriteObjectAttributeMemory(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.UnusableEnd) {
             // The unusable region drops writes.
         } else if (address <= MemoryMap.IoRegistersEnd) {
             if (IsAudioBlock(address: address)) {
-                m_apu.WriteRegister(address: address, value: value);
+                m_apu.WriteRegister(
+                    address: address,
+                    value: value
+                );
             } else {
-                WriteIoRegister(address: address, value: value);
+                WriteIoRegister(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.HighRamEnd) {
-            m_memory.WriteHighRam(address: address, value: value);
+            m_memory.WriteHighRam(
+                address: address,
+                value: value
+            );
         } else {
             m_interrupts.Enabled = (InterruptKind)value;
         }
@@ -285,8 +353,12 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             }
 
             return ((address <= MemoryMap.RomBank0End)
-                ? ((m_romBank0Offset >= 0) ? m_romImage[(m_romBank0Offset + address)] : m_cartridgeSlot.Cartridge.ReadRom(address: address))
-                : ((m_romBankNOffset >= 0) ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))] : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
+                ? ((m_romBank0Offset >= 0)
+                    ? m_romImage[(m_romBank0Offset + address)]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address))
+                : ((m_romBankNOffset >= 0)
+                    ? m_romImage[(m_romBankNOffset + (address - MemoryMap.RomBankNStart))]
+                    : m_cartridgeSlot.Cartridge.ReadRom(address: address)));
         }
 
         if (address <= MemoryMap.VideoRamEnd) {
@@ -322,8 +394,13 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 return m_apu.ReadRegister(address: address);
             }
 
-            if ((address == MemoryMap.PcmAmplitude12) || (address == MemoryMap.PcmAmplitude34)) {
-                return (m_supportsColor ? m_apu.ReadPcm(address: address) : (byte)0xFF);
+            if (
+                (address == MemoryMap.PcmAmplitude12) ||
+                (address == MemoryMap.PcmAmplitude34)
+            ) {
+                return (m_supportsColor
+                    ? m_apu.ReadPcm(address: address)
+                    : (byte)0xFF);
             }
 
             return ReadIoRegister(address: address);
@@ -348,7 +425,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         }
 
         if (address <= MemoryMap.VideoRamEnd) {
-            m_memory.WriteVideoRam(address: address, value: value);
+            m_memory.WriteVideoRam(
+                address: address,
+                value: value
+            );
         } else if (address <= MemoryMap.ExternalRamEnd) {
             var ramRelative = (address - MemoryMap.ExternalRamStart);
 
@@ -356,20 +436,35 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
                 m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
             } else {
-                m_cartridgeSlot.Cartridge.WriteRam(address: address, value: value);
+                m_cartridgeSlot.Cartridge.WriteRam(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.WorkRamBankNEnd) {
-            m_memory.WriteWorkRam(address: address, value: value);
+            m_memory.WriteWorkRam(
+                address: address,
+                value: value
+            );
         } else if (address <= MemoryMap.EchoRamEnd) {
-            m_memory.WriteWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset), value: value);
+            m_memory.WriteWorkRam(
+                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                value: value
+            );
         } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
-            m_memory.WriteObjectAttributeMemory(address: address, value: value);
+            m_memory.WriteObjectAttributeMemory(
+                address: address,
+                value: value
+            );
         } else if (address <= MemoryMap.UnusableEnd) {
             // Dropped: the unusable region is not memory.
         } else if (address <= MemoryMap.IoRegistersEnd) {
             // Refused: an I/O poke would drive hardware, not memory.
         } else if (address <= MemoryMap.HighRamEnd) {
-            m_memory.WriteHighRam(address: address, value: value);
+            m_memory.WriteHighRam(
+                address: address,
+                value: value
+            );
         } else {
             m_interrupts.Enabled = (InterruptKind)value;
         }
@@ -438,10 +533,17 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         for (var index = 0; (index < m_watches.Count); ++index) {
             var watch = m_watches[index];
 
-            parts[index] = $"0x{watch.Address:X4}:{(watch.Read ? "r" : "")}{(watch.Write ? "w" : "")}";
+            parts[index] = $"0x{watch.Address:X4}:{(watch.Read
+                ? "r"
+                : "")}{(watch.Write
+                ? "w"
+                : "")}";
         }
 
-        return string.Join(separator: ' ', values: parts);
+        return string.Join(
+            separator: ' ',
+            values: parts
+        );
     }
 
     /// <summary>Takes the one pending watch hit (if any), reporting its address, the byte, whether it was a write, and
@@ -476,7 +578,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         }
 
         foreach (var watch in m_watches) {
-            if (watch.Read && (watch.Address == address)) {
+            if (
+                watch.Read &&
+                (watch.Address == address)
+            ) {
                 m_watchHit = true;
                 m_watchHitAddress = address;
                 m_watchHitValue = DebugReadByte(address: address);
@@ -487,14 +592,16 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             }
         }
     }
-
     private void TrackWatchWrite(ushort address, byte value) {
         if (m_watchHit) {
             return;
         }
 
         foreach (var watch in m_watches) {
-            if (watch.Write && (watch.Address == address)) {
+            if (
+                watch.Write &&
+                (watch.Address == address)
+            ) {
                 m_watchHit = true;
                 m_watchHitAddress = address;
                 m_watchHitValue = value;
@@ -520,23 +627,34 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // Whether an address falls inside the boot overlay's read windows while it is still mapped. The image itself is
     // immutable configuration; only the FF50 latch is machine state.
     private bool IsBootRomAddress(ushort address) {
-        if (!m_bootRomMapped || (m_bootRom is null)) {
+        if (
+            !m_bootRomMapped ||
+            (m_bootRom is null)
+        ) {
             return false;
         }
 
-        return ((address <= BootRomLowEnd)
-            || (m_supportsColor && (address >= CgbBootRomHighStart) && (address <= CgbBootRomHighEnd)));
+        return (
+            (address <= BootRomLowEnd) ||
+            (m_supportsColor && (address >= CgbBootRomHighStart) && (address <= CgbBootRomHighEnd))
+        );
     }
 
     // Land a conflict-redirected store directly on the DMA's bus: the mapper for the ROM region, then VRAM (still
     // subject to the PPU's drawing lock), external RAM, and work RAM with its echo fold.
     private void WriteConflictTarget(ushort address, byte value) {
         if (address <= MemoryMap.RomBankNEnd) {
-            m_cartridgeSlot.Cartridge.WriteControl(address: address, value: value);
+            m_cartridgeSlot.Cartridge.WriteControl(
+                address: address,
+                value: value
+            );
             RefreshCartridgeWindowCache();
         } else if (address <= MemoryMap.VideoRamEnd) {
             if (!m_ppu.BlocksVideoRamWrites) {
-                m_memory.WriteVideoRam(address: address, value: value);
+                m_memory.WriteVideoRam(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.ExternalRamEnd) {
             var ramRelative = (address - MemoryMap.ExternalRamStart);
@@ -545,12 +663,21 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 m_ramImage[(m_ramWindowOffset + ramRelative)] = value;
                 m_cartridgeSlot.Cartridge.MarkExternalRamDirty();
             } else {
-                m_cartridgeSlot.Cartridge.WriteRam(address: address, value: value);
+                m_cartridgeSlot.Cartridge.WriteRam(
+                    address: address,
+                    value: value
+                );
             }
         } else if (address <= MemoryMap.WorkRamBankNEnd) {
-            m_memory.WriteWorkRam(address: address, value: value);
+            m_memory.WriteWorkRam(
+                address: address,
+                value: value
+            );
         } else {
-            m_memory.WriteWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset), value: value);
+            m_memory.WriteWorkRam(
+                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                value: value
+            );
         }
     }
     // Recomputes the derived ROM/RAM window cache from the currently-inserted cartridge's live bank registers. A
@@ -562,16 +689,26 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
         m_romImage = cartridge.RomImage;
 
-        cartridge.ComputeRomWindows(bank0Offset: out var bank0Offset, bankNOffset: out var bankNOffset);
+        cartridge.ComputeRomWindows(
+            bank0Offset: out var bank0Offset,
+            bankNOffset: out var bankNOffset
+        );
 
         var romLength = m_romImage.Length;
 
-        m_romBank0Offset = (((bank0Offset >= 0) && ((bank0Offset + RomWindowByteCount) <= romLength)) ? bank0Offset : -1);
-        m_romBankNOffset = (((bankNOffset >= 0) && ((bankNOffset + RomWindowByteCount) <= romLength)) ? bankNOffset : -1);
+        m_romBank0Offset = (((bank0Offset >= 0) && ((bank0Offset + RomWindowByteCount) <= romLength))
+            ? bank0Offset
+            : -1);
+        m_romBankNOffset = (((bankNOffset >= 0) && ((bankNOffset + RomWindowByteCount) <= romLength))
+            ? bankNOffset
+            : -1);
 
         m_ramImage = cartridge.RamImage;
 
-        if (cartridge.TryComputeRamWindow(offset: out var ramOffset, length: out var ramLength)) {
+        if (cartridge.TryComputeRamWindow(
+            offset: out var ramOffset,
+            length: out var ramLength
+        )) {
             m_ramWindowOffset = ramOffset;
             m_ramWindowLength = ramLength;
         } else {
@@ -613,7 +750,9 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 return (byte)(0xE0 | (byte)m_interrupts.Requested);
             case MemoryMap.BootRomDisable:
                 // Bit 0 is the latch (set once the overlay is gone); the undecoded bits read high.
-                return (byte)(0xFE | (m_bootRomMapped ? 0x00 : 0x01));
+                return (byte)(0xFE | (m_bootRomMapped
+                    ? 0x00
+                    : 0x01));
             default:
                 return ReadColorIoRegister(address: address);
         }
@@ -665,14 +804,20 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 break;
             case MemoryMap.SerialData:
             case MemoryMap.SerialControl:
-                m_serial.WriteRegister(address: address, value: value);
+                m_serial.WriteRegister(
+                    address: address,
+                    value: value
+                );
 
                 break;
             case MemoryMap.Divider:
             case MemoryMap.TimerCounter:
             case MemoryMap.TimerModulo:
             case MemoryMap.TimerControl:
-                m_timer.WriteRegister(address: address, value: value);
+                m_timer.WriteRegister(
+                    address: address,
+                    value: value
+                );
 
                 break;
             case MemoryMap.OamDmaSource:
@@ -690,7 +835,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.ObjectPalette1:
             case MemoryMap.WindowY:
             case MemoryMap.WindowX:
-                m_ppu.WriteRegister(address: address, value: value);
+                m_ppu.WriteRegister(
+                    address: address,
+                    value: value
+                );
 
                 break;
             case MemoryMap.InterruptFlag:
@@ -706,7 +854,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
                 break;
             default:
-                WriteColorIoRegister(address: address, value: value);
+                WriteColorIoRegister(
+                    address: address,
+                    value: value
+                );
 
                 break;
         }
@@ -720,7 +871,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.ObjectColorPaletteIndex:
             case MemoryMap.ObjectColorPaletteData:
                 if (m_supportsColor) {
-                    m_ppu.WriteRegister(address: address, value: value);
+                    m_ppu.WriteRegister(
+                        address: address,
+                        value: value
+                    );
                 }
 
                 break;
@@ -736,7 +890,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.HdmaDestinationLow:
             case MemoryMap.HdmaControl:
                 if (m_supportsColor) {
-                    m_hdma.WriteRegister(address: address, value: value);
+                    m_hdma.WriteRegister(
+                        address: address,
+                        value: value
+                    );
                 }
 
                 break;

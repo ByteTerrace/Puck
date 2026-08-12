@@ -7,8 +7,8 @@ namespace Puck.HumbleGamingBrick.Post;
 /// LINQ-in-a-mapper regression surfaces as a red battery instead of a demo GC spike.
 /// </summary>
 internal sealed class AllocationStage : IPostStage {
-    private const int WarmFrames = 120;
     private const int MeasureFrames = 600;
+    private const int WarmFrames = 120;
 
     /// <inheritdoc/>
     public string Name =>
@@ -20,13 +20,22 @@ internal sealed class AllocationStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: SyntheticRom.Create()
+        );
 
-        PostMachine.RunFrames(instance: machine, frames: WarmFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: WarmFrames
+        );
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
-        PostMachine.RunFrames(instance: machine, frames: MeasureFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: MeasureFrames
+        );
 
         var delta = (GC.GetAllocatedBytesForCurrentThread() - before);
 

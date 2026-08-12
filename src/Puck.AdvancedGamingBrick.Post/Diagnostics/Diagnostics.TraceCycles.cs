@@ -3,7 +3,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the cosim oracle.
 internal static partial class Diagnostics {
     public static void TraceCycles(string romPath, long steps) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 
@@ -36,7 +40,10 @@ internal static partial class Diagnostics {
                 lastPc = pc;
             }
 
-            Console.WriteLine(value: $"RESULT[0x02000000] = 0x{machine.Bus.Read32(address: 0x02000000u, access: BusAccessType.NonSequential):X8} (timer value the test reads)");
+            Console.WriteLine(value: $"RESULT[0x02000000] = 0x{machine.Bus.Read32(
+                address: 0x02000000u,
+                access: BusAccessType.NonSequential
+            ):X8} (timer value the test reads)");
         }
     }
 }

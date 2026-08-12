@@ -24,7 +24,6 @@ internal sealed class PostMachine : IDisposable {
         m_instance = instance;
         Machine = instance.Machine;
     }
-
     private PostMachine(AgbMachineFork fork) {
         m_fork = fork;
         Machine = fork.Machine;
@@ -39,7 +38,10 @@ internal sealed class PostMachine : IDisposable {
     /// <param name="rom">The cartridge ROM image.</param>
     /// <returns>The assembled, direct-booted machine instance. The caller owns it and must dispose it.</returns>
     public static PostMachine Build(ReadOnlyMemory<byte> bios, byte[] rom) {
-        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: rom));
+        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: rom
+        ));
 
         instance.Machine.DirectBoot();
 

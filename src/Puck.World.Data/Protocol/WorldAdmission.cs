@@ -95,8 +95,9 @@ public sealed record WorldAdmissionVerdict {
 /// and refused for <see cref="WorldAdmissionTrustMode.Vouches"/> (a root vouches for every subject its two-hop chain
 /// resolves, never one named here).</param>
 /// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
-/// <param name="Algorithm">One of <c>Puck.Carriage.CarriageAlgorithms</c>'s SIGNING names (e.g.
-/// <c>ecdsa-p256-sha256</c>) — never a sealing algorithm; a sealing key can never admit a claim.</param>
+/// <param name="Algorithm">Exactly <c>ecdsa-p256-sha256</c>, the only signing algorithm enabled by the
+/// admission door's mandatory <c>carriage-v1-base</c> profile. Sealing algorithms and optional signing
+/// extensions are refused by document validation.</param>
 /// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
 /// alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed
 /// carriage": consulting the issuer at verification time is a ruled-out design).</param>

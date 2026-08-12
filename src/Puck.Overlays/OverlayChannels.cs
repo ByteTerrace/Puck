@@ -64,7 +64,7 @@ public readonly record struct OverlayChannelUsage(
     int Clips
 ) {
     /// <summary>Gets whether every count is zero.</summary>
-    public bool IsEmpty => (((Elements | TextWords) | (Panels | Clips)) == 0);
+    public bool IsEmpty => ((Elements | TextWords | Panels | Clips) == 0);
 }
 
 /// <summary>
@@ -135,10 +135,10 @@ public static class OverlayChannelLeases {
     // still a valid upper bound alone. One clip per PANEL (HudWriter.EmitPanel/EmitSeatPanel scopes every
     // panel — world or seat — to its own rect), so the clip reservation is simply the panel count.
     private const int HudMaxWorldPanels = 4;
-    private const int HudMaxElementsPerPanel = 24;
-    private const int HudSeatPanelsPerSeat = 1;
-    private const int HudMaxElementsPerSeatPanel = 12;
     private const int HudGaugeElementCost = 3;
+    private const int HudMaxElementsPerPanel = 24;
+    private const int HudMaxElementsPerSeatPanel = 12;
+    private const int HudSeatPanelsPerSeat = 1;
     // Read from the writer's own clamp (the EditorHudTitleChars precedent above) rather than restated: the number
     // multiplied into the reservation and the number a text run is actually clipped to are then one constant.
     private const int HudTextWordCost = HudWriter.TextRunChars;
@@ -153,12 +153,11 @@ public static class OverlayChannelLeases {
     // scope. Every count and clamp reads the writer's own declared caps (the CursorWriter discipline), so a cap
     // change moves the reservation with it. No panel.
     private const int WheelElementsPerSeat = ((1 + (WheelWriter.MaxRings + 1)) + ((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) + (1 + 1)));
-    private const int WheelTextWordsPerSeat = (((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
-
-    private const int HudPanels = (HudMaxWorldPanels + (HudSeatPanelsPerSeat * MaxSeats));
-    private const int HudElements = ((HudMaxWorldPanels * HudMaxElementsPerPanel * HudGaugeElementCost) + (MaxSeats * HudMaxElementsPerSeatPanel * HudGaugeElementCost));
-    private const int HudTextWords = ((HudMaxWorldPanels * HudMaxElementsPerPanel * HudTextWordCost) + (MaxSeats * HudMaxElementsPerSeatPanel * HudTextWordCost));
     private const int HudClips = HudPanels;
+    private const int HudElements = (((HudMaxWorldPanels * HudMaxElementsPerPanel) * HudGaugeElementCost) + ((MaxSeats * HudMaxElementsPerSeatPanel) * HudGaugeElementCost));
+    private const int HudPanels = (HudMaxWorldPanels + (HudSeatPanelsPerSeat * MaxSeats));
+    private const int HudTextWords = (((HudMaxWorldPanels * HudMaxElementsPerPanel) * HudTextWordCost) + ((MaxSeats * HudMaxElementsPerSeatPanel) * HudTextWordCost));
+    private const int WheelTextWordsPerSeat = (((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
 
     /// <summary>The element records every reservation claims together.</summary>
     public const int TotalElements = (((((((ConsoleElements + (BindingBarElementsPerSeat * MaxSeats)) + (GizmoElementsPerSeat * MaxSeats)) + (EditorHudElementsPerSeat * MaxSeats)) + ToastElements) + HudElements) + (CursorElementsPerSeat * MaxSeats)) + (WheelElementsPerSeat * MaxSeats));
@@ -174,15 +173,59 @@ public static class OverlayChannelLeases {
     /// <returns>The channel's hard reservation.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
     public static OverlayChannelReservation ReservationOf(OverlayChannel channel) => channel switch {
-        OverlayChannel.Console => new OverlayChannelReservation(Clips: 0, Elements: ConsoleElements, Panels: 1, TextWords: ConsoleTextWords),
-        OverlayChannel.BindingBar => new OverlayChannelReservation(Clips: 0, Elements: (BindingBarElementsPerSeat * MaxSeats), Panels: 0, TextWords: (BindingBarTextWordsPerSeat * MaxSeats)),
-        OverlayChannel.Gizmos => new OverlayChannelReservation(Clips: MaxSeats, Elements: (GizmoElementsPerSeat * MaxSeats), Panels: 0, TextWords: 0),
-        OverlayChannel.EditorHud => new OverlayChannelReservation(Clips: MaxSeats, Elements: (EditorHudElementsPerSeat * MaxSeats), Panels: MaxSeats, TextWords: (EditorHudTextWordsPerSeat * MaxSeats)),
-        OverlayChannel.Toast => new OverlayChannelReservation(Clips: 0, Elements: ToastElements, Panels: 1, TextWords: ToastTextWords),
-        OverlayChannel.Hud => new OverlayChannelReservation(Clips: HudClips, Elements: HudElements, Panels: HudPanels, TextWords: HudTextWords),
-        OverlayChannel.Cursor => new OverlayChannelReservation(Clips: MaxSeats, Elements: (CursorElementsPerSeat * MaxSeats), Panels: 0, TextWords: (CursorTextWordsPerSeat * MaxSeats)),
-        OverlayChannel.Wheel => new OverlayChannelReservation(Clips: MaxSeats, Elements: (WheelElementsPerSeat * MaxSeats), Panels: 0, TextWords: (WheelTextWordsPerSeat * MaxSeats)),
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(channel), actualValue: channel, message: "Not a declared overlay channel."),
+        OverlayChannel.Console => new OverlayChannelReservation(
+        Clips: 0,
+        Elements: ConsoleElements,
+        Panels: 1,
+        TextWords: ConsoleTextWords
+    ),
+        OverlayChannel.BindingBar => new OverlayChannelReservation(
+        Clips: 0,
+        Elements: (BindingBarElementsPerSeat * MaxSeats),
+        Panels: 0,
+        TextWords: (BindingBarTextWordsPerSeat * MaxSeats)
+    ),
+        OverlayChannel.Gizmos => new OverlayChannelReservation(
+        Clips: MaxSeats,
+        Elements: (GizmoElementsPerSeat * MaxSeats),
+        Panels: 0,
+        TextWords: 0
+    ),
+        OverlayChannel.EditorHud => new OverlayChannelReservation(
+        Clips: MaxSeats,
+        Elements: (EditorHudElementsPerSeat * MaxSeats),
+        Panels: MaxSeats,
+        TextWords: (EditorHudTextWordsPerSeat * MaxSeats)
+    ),
+        OverlayChannel.Toast => new OverlayChannelReservation(
+        Clips: 0,
+        Elements: ToastElements,
+        Panels: 1,
+        TextWords: ToastTextWords
+    ),
+        OverlayChannel.Hud => new OverlayChannelReservation(
+        Clips: HudClips,
+        Elements: HudElements,
+        Panels: HudPanels,
+        TextWords: HudTextWords
+    ),
+        OverlayChannel.Cursor => new OverlayChannelReservation(
+        Clips: MaxSeats,
+        Elements: (CursorElementsPerSeat * MaxSeats),
+        Panels: 0,
+        TextWords: (CursorTextWordsPerSeat * MaxSeats)
+    ),
+        OverlayChannel.Wheel => new OverlayChannelReservation(
+        Clips: MaxSeats,
+        Elements: (WheelElementsPerSeat * MaxSeats),
+        Panels: 0,
+        TextWords: (WheelTextWordsPerSeat * MaxSeats)
+    ),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(channel),
+        actualValue: channel,
+        message: "Not a declared overlay channel."
+    ),
     };
 
     /// <summary>Throws when a per-seat writer is about to emit more seats than the lease table provisioned for.
@@ -211,6 +254,10 @@ public static class OverlayChannelLeases {
         OverlayChannel.Hud => "hud",
         OverlayChannel.Cursor => "cursor",
         OverlayChannel.Wheel => "wheel",
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(channel), actualValue: channel, message: "Not a declared overlay channel."),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(channel),
+        actualValue: channel,
+        message: "Not a declared overlay channel."
+    ),
     };
 }

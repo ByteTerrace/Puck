@@ -7,25 +7,53 @@ using Puck.HumbleGamingBrick.Post;
 // the PUCK_GB_TESTROMS environment variable and skipped when absent; Tier C (the cross-machine serial link) is
 // self-contained like Tier A and runs anywhere.
 
-if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
+if (Diagnostics.TryRun(
+    args: args,
+    exitCode: out var diagnosticExitCode
+)) {
     return diagnosticExitCode;
 }
-var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "gb-post"));
-var tierFilter = CommandLineArguments.Value(args: args, name: "--tier");
-var nameFilter = CommandLineArguments.Value(args: args, name: "--filter");
+var artifactsDirectory = (CommandLineArguments.Value(
+    args: args,
+    name: "--artifacts"
+) ?? Path.Combine(
+    path1: "artifacts",
+    path2: "gb-post"
+));
+var tierFilter = CommandLineArguments.Value(
+    args: args,
+    name: "--tier"
+);
+var nameFilter = CommandLineArguments.Value(
+    args: args,
+    name: "--filter"
+);
 var testRomRoot = ResolveTestRomRoot(args: args);
 var sstRoot = ResolveSstRoot(args: args);
 var stages = PostStages.Create()
-    .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
-    .Where(predicate: stage => NameMatches(stage: stage, nameFilter: nameFilter))
+    .Where(predicate: stage => TierMatches(
+    stage: stage,
+    tierFilter: tierFilter
+))
+    .Where(predicate: stage => NameMatches(
+    stage: stage,
+    nameFilter: nameFilter
+))
     .ToArray();
-var context = new PostContext(artifactsDirectory: artifactsDirectory, testRomRoot: testRomRoot, sstRoot: sstRoot);
+var context = new PostContext(
+    artifactsDirectory: artifactsDirectory,
+    testRomRoot: testRomRoot,
+    sstRoot: sstRoot
+);
 var report = new PostBattery(stages: stages).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
 // The reference-ROM corpus root: --roms wins, else PUCK_GB_TESTROMS, else null (Tier-B stages skip when it is absent).
 static string? ResolveTestRomRoot(string[] args) {
-    var explicitRoot = CommandLineArguments.Value(args: args, name: "--roms");
+    var explicitRoot = CommandLineArguments.Value(
+        args: args,
+        name: "--roms"
+    );
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;
@@ -33,20 +61,28 @@ static string? ResolveTestRomRoot(string[] args) {
 
     var fromEnvironment = Environment.GetEnvironmentVariable(variable: "PUCK_GB_TESTROMS");
 
-    if (!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment)) {
+    if (
+        !string.IsNullOrEmpty(value: fromEnvironment) &&
+        Directory.Exists(path: fromEnvironment)
+    ) {
         return fromEnvironment;
     }
 
     // The known corpus location on the development machine, so the POST finds it without configuration; absent it,
     // the Tier-B stages skip.
-    const string fallback = @"D:\Source\ByteTerrace\Temp\GBC Test Suites";
+    const string Fallback = @"D:\Source\ByteTerrace\Temp\GBC Test Suites";
 
-    return (Directory.Exists(path: fallback) ? fallback : null);
+    return (Directory.Exists(path: Fallback)
+        ? Fallback
+        : null);
 }
 // The SingleStepTests/sm83 vector corpus root: PUCK_GB_SST, else the known development-machine location (the
 // established corpus-clone location pattern), else null (the sst stage skips when it is absent).
 static string? ResolveSstRoot(string[] args) {
-    var explicitRoot = CommandLineArguments.Value(args: args, name: "--sst");
+    var explicitRoot = CommandLineArguments.Value(
+        args: args,
+        name: "--sst"
+    );
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;
@@ -54,15 +90,27 @@ static string? ResolveSstRoot(string[] args) {
 
     var fromEnvironment = Environment.GetEnvironmentVariable(variable: "PUCK_GB_SST");
 
-    if (!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment)) {
+    if (
+        !string.IsNullOrEmpty(value: fromEnvironment) &&
+        Directory.Exists(path: fromEnvironment)
+    ) {
         return fromEnvironment;
     }
 
-    const string fallback = @"D:\Source\ByteTerrace\Temp\sm83-sst";
+    const string Fallback = @"D:\Source\ByteTerrace\Temp\sm83-sst";
 
-    return (Directory.Exists(path: fallback) ? fallback : null);
+    return (Directory.Exists(path: Fallback)
+        ? Fallback
+        : null);
 }
 static bool TierMatches(IPostStage stage, string? tierFilter) =>
-    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(a: stage.Tier.ToString(), b: tierFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
+    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
+    a: stage.Tier.ToString(),
+    b: tierFilter,
+    comparisonType: StringComparison.OrdinalIgnoreCase
+));
 static bool NameMatches(IPostStage stage, string? nameFilter) =>
-    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(value: nameFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
+    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
+    value: nameFilter,
+    comparisonType: StringComparison.OrdinalIgnoreCase
+));

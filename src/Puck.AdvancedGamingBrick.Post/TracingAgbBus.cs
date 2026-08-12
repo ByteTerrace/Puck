@@ -37,41 +37,99 @@ internal sealed class TracingAgbBus : IAgbBus {
 
     public bool IrqPending => m_inner.IrqPending;
 
-    public byte Read8(uint address, BusAccessType access) => m_inner.Read8(address: address, access: access);
+    public byte Read8(uint address, BusAccessType access) => m_inner.Read8(
+        address: address,
+        access: access
+    );
     public ushort Read16(uint address, BusAccessType access) {
-        var value = m_inner.Read16(address: address, access: access);
+        var value = m_inner.Read16(
+            address: address,
+            access: access
+        );
         var aligned = address & ~1u;
 
-        if ((m_onRead is not null) && (aligned == (m_readWatchAddress & ~1u))) {
+        if (
+            (m_onRead is not null) &&
+            (aligned == (m_readWatchAddress & ~1u))
+        ) {
             m_onRead(obj: value);
         }
 
-        if ((m_onRead2 is not null) && (aligned == (m_readWatchAddress2 & ~1u))) {
-            m_onRead2(arg1: aligned, arg2: value);
+        if (
+            (m_onRead2 is not null) &&
+            (aligned == (m_readWatchAddress2 & ~1u))
+        ) {
+            m_onRead2(
+                arg1: aligned,
+                arg2: value
+            );
         }
 
-        if ((m_onReadRange is not null) && (aligned >= m_readRangeBase) && (aligned < m_readRangeEnd)) {
-            m_onReadRange(arg1: aligned, arg2: value);
+        if (
+            (m_onReadRange is not null) &&
+            (aligned >= m_readRangeBase) &&
+            (aligned < m_readRangeEnd)
+        ) {
+            m_onReadRange(
+                arg1: aligned,
+                arg2: value
+            );
         }
 
         return value;
     }
-    public uint Read32(uint address, BusAccessType access) => m_inner.Read32(address: address, access: access);
-    public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(address: address, access: access);
-    public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(address: address, access: access);
+    public uint Read32(uint address, BusAccessType access) => m_inner.Read32(
+        address: address,
+        access: access
+    );
+    public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(
+        address: address,
+        access: access
+    );
+    public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(
+        address: address,
+        access: access
+    );
     public void Write8(uint address, byte value, BusAccessType access) {
-        Watch(address: address, value: value);
-        m_inner.Write8(address: address, value: value, access: access);
+        Watch(
+            address: address,
+            value: value
+        );
+        m_inner.Write8(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Write16(uint address, ushort value, BusAccessType access) {
-        Watch(address: address, value: value);
-        WatchWriteRange(address: address, value: value);
-        m_inner.Write16(address: address, value: value, access: access);
+        Watch(
+            address: address,
+            value: value
+        );
+        WatchWriteRange(
+            address: address,
+            value: value
+        );
+        m_inner.Write16(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Write32(uint address, uint value, BusAccessType access) {
-        Watch(address: address, value: value);
-        WatchWriteRange(address: address & ~3u, value: value);
-        m_inner.Write32(address: address, value: value, access: access);
+        Watch(
+            address: address,
+            value: value
+        );
+        WatchWriteRange(
+            address: address & ~3u,
+            value: value
+        );
+        m_inner.Write32(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
     public void ProcessEvents() => m_inner.ProcessEvents();
@@ -89,8 +147,15 @@ internal sealed class TracingAgbBus : IAgbBus {
     private void WatchWriteRange(uint address, uint value) {
         var aligned = address & ~1u;
 
-        if ((m_onWriteRange is not null) && (aligned >= m_writeRangeBase) && (aligned < m_writeRangeEnd)) {
-            m_onWriteRange(arg1: aligned, arg2: value);
+        if (
+            (m_onWriteRange is not null) &&
+            (aligned >= m_writeRangeBase) &&
+            (aligned < m_writeRangeEnd)
+        ) {
+            m_onWriteRange(
+                arg1: aligned,
+                arg2: value
+            );
         }
     }
 }

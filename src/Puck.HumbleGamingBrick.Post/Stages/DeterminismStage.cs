@@ -22,17 +22,32 @@ internal sealed class DeterminismStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var rom = SyntheticRom.Create();
 
-        using var first = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
-        using var second = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var first = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
+        using var second = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
-        PostMachine.RunFrames(instance: first, frames: Frames);
-        PostMachine.RunFrames(instance: second, frames: Frames);
+        PostMachine.RunFrames(
+            instance: first,
+            frames: Frames
+        );
+        PostMachine.RunFrames(
+            instance: second,
+            frames: Frames
+        );
 
         var firstState = first.Machine.Snapshot();
         var secondState = second.Machine.Snapshot();
 
         return (firstState.ContentEquals(other: secondState)
             ? PostStageOutcome.Pass(detail: $"two independent machines byte-identical after {Frames} frames ({firstState.Size} state bytes)")
-            : PostStageOutcome.Fail(detail: $"two independent machines diverged after {Frames} frames — {HashDivergenceProbe.DescribeDivergence(a: firstState, b: secondState)}"));
+            : PostStageOutcome.Fail(detail: $"two independent machines diverged after {Frames} frames — {HashDivergenceProbe.DescribeDivergence(
+            a: firstState,
+            b: secondState
+        )}"));
     }
 }

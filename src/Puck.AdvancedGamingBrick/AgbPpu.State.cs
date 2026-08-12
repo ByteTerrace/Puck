@@ -58,7 +58,10 @@ public sealed partial class AgbPpu : ISnapshotable {
         var when = reader.ReadInt64();
 
         if (scheduled) {
-            m_scheduler.ScheduleAbsolute(e: m_event, when: when);
+            m_scheduler.ScheduleAbsolute(
+                e: m_event,
+                when: when
+            );
         }
     }
 }

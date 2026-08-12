@@ -18,9 +18,15 @@ internal static class MiniJson {
     public static object? Parse(string json) {
         var position = 0;
 
-        var value = ParseValue(json: json, position: ref position);
+        var value = ParseValue(
+            json: json,
+            position: ref position
+        );
 
-        SkipWhitespace(json: json, position: ref position);
+        SkipWhitespace(
+            json: json,
+            position: ref position
+        );
 
         if (position != json.Length) {
             throw new FormatException(message: $"Unexpected trailing content at position {position}.");
@@ -30,43 +36,99 @@ internal static class MiniJson {
     }
 
     private static object? ParseValue(string json, ref int position) {
-        SkipWhitespace(json: json, position: ref position);
+        SkipWhitespace(
+            json: json,
+            position: ref position
+        );
 
         if (position >= json.Length) {
             throw new FormatException(message: "Unexpected end of JSON.");
         }
 
         return json[position] switch {
-            '{' => ParseObject(json: json, position: ref position),
-            '[' => ParseArray(json: json, position: ref position),
-            '"' => ParseString(json: json, position: ref position),
-            't' => ParseLiteral(json: json, position: ref position, literal: "true", value: true),
-            'f' => ParseLiteral(json: json, position: ref position, literal: "false", value: false),
-            'n' => ParseLiteral(json: json, position: ref position, literal: "null", value: null),
-            _ => ParseNumber(json: json, position: ref position),
+            '{' => ParseObject(
+            json: json,
+            position: ref position
+        ),
+            '[' => ParseArray(
+            json: json,
+            position: ref position
+        ),
+            '"' => ParseString(
+            json: json,
+            position: ref position
+        ),
+            't' => ParseLiteral(
+            json: json,
+            position: ref position,
+            literal: "true",
+            value: true
+        ),
+            'f' => ParseLiteral(
+            json: json,
+            position: ref position,
+            literal: "false",
+            value: false
+        ),
+            'n' => ParseLiteral(
+            json: json,
+            position: ref position,
+            literal: "null",
+            value: null
+        ),
+            _ => ParseNumber(
+            json: json,
+            position: ref position
+        ),
         };
     }
     private static Dictionary<string, object?> ParseObject(string json, ref int position) {
         var result = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
 
-        Expect(json: json, position: ref position, expected: '{');
-        SkipWhitespace(json: json, position: ref position);
+        Expect(
+            json: json,
+            position: ref position,
+            expected: '{'
+        );
+        SkipWhitespace(
+            json: json,
+            position: ref position
+        );
 
-        if (Peek(json: json, position: position) == '}') {
+        if (Peek(
+            json: json,
+            position: position
+        ) == '}') {
             position++;
 
             return result;
         }
 
         while (true) {
-            SkipWhitespace(json: json, position: ref position);
+            SkipWhitespace(
+                json: json,
+                position: ref position
+            );
 
-            var key = ParseString(json: json, position: ref position);
+            var key = ParseString(
+                json: json,
+                position: ref position
+            );
 
-            SkipWhitespace(json: json, position: ref position);
-            Expect(json: json, position: ref position, expected: ':');
+            SkipWhitespace(
+                json: json,
+                position: ref position
+            );
+            Expect(
+                json: json,
+                position: ref position,
+                expected: ':'
+            );
 
-            var value = ParseValue(json: json, position: ref position);
+            var value = ParseValue(
+                json: json,
+                position: ref position
+            );
 
             // Last-write-wins on a repeated key would let a second copy of an object silently decide what the
             // first one recorded, so a duplicate is refused rather than resolved.
@@ -76,9 +138,15 @@ internal static class MiniJson {
 
             result[key] = value;
 
-            SkipWhitespace(json: json, position: ref position);
+            SkipWhitespace(
+                json: json,
+                position: ref position
+            );
 
-            var next = Peek(json: json, position: position);
+            var next = Peek(
+                json: json,
+                position: position
+            );
 
             if (next == ',') {
                 position++;
@@ -86,7 +154,11 @@ internal static class MiniJson {
                 continue;
             }
 
-            Expect(json: json, position: ref position, expected: '}');
+            Expect(
+                json: json,
+                position: ref position,
+                expected: '}'
+            );
 
             break;
         }
@@ -96,23 +168,42 @@ internal static class MiniJson {
     private static List<object?> ParseArray(string json, ref int position) {
         var result = new List<object?>();
 
-        Expect(json: json, position: ref position, expected: '[');
-        SkipWhitespace(json: json, position: ref position);
+        Expect(
+            json: json,
+            position: ref position,
+            expected: '['
+        );
+        SkipWhitespace(
+            json: json,
+            position: ref position
+        );
 
-        if (Peek(json: json, position: position) == ']') {
+        if (Peek(
+            json: json,
+            position: position
+        ) == ']') {
             position++;
 
             return result;
         }
 
         while (true) {
-            var value = ParseValue(json: json, position: ref position);
+            var value = ParseValue(
+                json: json,
+                position: ref position
+            );
 
             result.Add(item: value);
 
-            SkipWhitespace(json: json, position: ref position);
+            SkipWhitespace(
+                json: json,
+                position: ref position
+            );
 
-            var next = Peek(json: json, position: position);
+            var next = Peek(
+                json: json,
+                position: position
+            );
 
             if (next == ',') {
                 position++;
@@ -120,7 +211,11 @@ internal static class MiniJson {
                 continue;
             }
 
-            Expect(json: json, position: ref position, expected: ']');
+            Expect(
+                json: json,
+                position: ref position,
+                expected: ']'
+            );
 
             break;
         }
@@ -128,7 +223,11 @@ internal static class MiniJson {
         return result;
     }
     private static string ParseString(string json, ref int position) {
-        Expect(json: json, position: ref position, expected: '"');
+        Expect(
+            json: json,
+            position: ref position,
+            expected: '"'
+        );
 
         var builder = new StringBuilder();
 
@@ -155,7 +254,10 @@ internal static class MiniJson {
 
             var escape = json[position++];
 
-            if (JsonEscape.TryDecode(escape: escape, value: out var decoded)) {
+            if (JsonEscape.TryDecode(
+                escape: escape,
+                value: out var decoded
+            )) {
                 builder.Append(value: decoded);
 
                 continue;
@@ -169,7 +271,14 @@ internal static class MiniJson {
                 throw new FormatException(message: "Truncated \\u escape.");
             }
 
-            var codeUnit = ushort.Parse(s: json.Substring(startIndex: position, length: 4), style: NumberStyles.AllowHexSpecifier, provider: CultureInfo.InvariantCulture);
+            var codeUnit = ushort.Parse(
+                s: json.Substring(
+                    startIndex: position,
+                    length: 4
+                ),
+                style: NumberStyles.AllowHexSpecifier,
+                provider: CultureInfo.InvariantCulture
+            );
 
             builder.Append(value: (char)codeUnit);
             position += 4;
@@ -180,7 +289,10 @@ internal static class MiniJson {
     private static object? ParseNumber(string json, ref int position) {
         var start = position;
 
-        while ((position < json.Length) && ("-+.0123456789eE".IndexOf(value: json[position]) >= 0)) {
+        while (
+            (position < json.Length) &&
+            ("-+.0123456789eE".IndexOf(value: json[position]) >= 0)
+        ) {
             position++;
         }
 
@@ -188,10 +300,26 @@ internal static class MiniJson {
             throw new FormatException(message: $"Expected a JSON value at position {position}.");
         }
 
-        return double.Parse(s: json.Substring(startIndex: start, length: (position - start)), style: NumberStyles.Float, provider: CultureInfo.InvariantCulture);
+        return double.Parse(
+            s: json.Substring(
+                startIndex: start,
+                length: (position - start)
+            ),
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture
+        );
     }
     private static object? ParseLiteral(string json, ref int position, string literal, object? value) {
-        if (((position + literal.Length) > json.Length) || (string.CompareOrdinal(strA: json, indexA: position, strB: literal, indexB: 0, length: literal.Length) != 0)) {
+        if (
+            ((position + literal.Length) > json.Length) ||
+            (string.CompareOrdinal(
+            strA: json,
+            indexA: position,
+            strB: literal,
+            indexB: 0,
+            length: literal.Length
+        ) != 0)
+        ) {
             throw new FormatException(message: $"Expected literal '{literal}' at position {position}.");
         }
 
@@ -200,14 +328,22 @@ internal static class MiniJson {
         return value;
     }
     private static void SkipWhitespace(string json, ref int position) {
-        while ((position < json.Length) && char.IsWhiteSpace(c: json[position])) {
+        while (
+            (position < json.Length) &&
+            char.IsWhiteSpace(c: json[position])
+        ) {
             position++;
         }
     }
     private static char Peek(string json, int position) =>
-        ((position < json.Length) ? json[position] : '\0');
+        ((position < json.Length)
+        ? json[position]
+        : '\0');
     private static void Expect(string json, ref int position, char expected) {
-        if ((position >= json.Length) || (json[position] != expected)) {
+        if (
+            (position >= json.Length) ||
+            (json[position] != expected)
+        ) {
             throw new FormatException(message: $"Expected '{expected}' at position {position}.");
         }
 

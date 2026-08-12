@@ -82,7 +82,10 @@ public sealed class AdvancedGamingBrickMachine {
         m_dma = dma;
         m_serial = serial;
         m_cartridge = cartridge;
-        m_identity = AgbMachineIdentity.Compute(bios: bios.Image.Span, rom: cartridge.Rom);
+        m_identity = AgbMachineIdentity.Compute(
+            bios: bios.Image.Span,
+            rom: cartridge.Rom
+        );
         BiosIdentity = AgbBiosProfile.Identify(image: bios.Image.Span);
     }
 
@@ -144,7 +147,10 @@ public sealed class AdvancedGamingBrickMachine {
     /// <param name="cycles">The master-cycle budget to advance this call.</param>
     /// <returns>The number of instructions executed.</returns>
     public int RunCycles(long cycles) {
-        if ((m_concreteBus is null) || (cycles <= 0L)) {
+        if (
+            (m_concreteBus is null) ||
+            (cycles <= 0L)
+        ) {
             return 0;
         }
 
@@ -178,16 +184,31 @@ public sealed class AdvancedGamingBrickMachine {
         var offset = 0;
 
         m_scheduler.SaveState(writer: m_stateWriter);
-        sections[0] = new SnapshotSection(Name: "scheduler", Offset: offset, Length: (m_stateWriter.Length - offset));
+        sections[0] = new SnapshotSection(
+            Name: "scheduler",
+            Offset: offset,
+            Length: (m_stateWriter.Length - offset)
+        );
         offset = m_stateWriter.Length;
 
         for (var index = 0; (index < order.Length); ++index) {
             order[index].SaveState(writer: m_stateWriter);
-            sections[(index + 1)] = new SnapshotSection(Name: s_snapshotableNames[index], Offset: offset, Length: (m_stateWriter.Length - offset));
+            sections[(index + 1)] = new SnapshotSection(
+                Name: SnapshotableNames[index],
+                Offset: offset,
+                Length: (m_stateWriter.Length - offset)
+            );
             offset = m_stateWriter.Length;
         }
 
-        return new AgbMachineSnapshot(identity: m_identity, takenAt: m_scheduler.Now, image: new SnapshotImage(data: m_stateWriter.ToArray(), sections: sections));
+        return new AgbMachineSnapshot(
+            identity: m_identity,
+            takenAt: m_scheduler.Now,
+            image: new SnapshotImage(
+                data: m_stateWriter.ToArray(),
+                sections: sections
+            )
+        );
     }
 
     /// <summary>Serializes the machine's entire mutable state into a writer, scheduler first, then each component in the
@@ -235,9 +256,7 @@ public sealed class AdvancedGamingBrickMachine {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
         if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(
-                message: "Snapshot identity (format version / BIOS / ROM) does not match this machine; refusing to restore a mismatched image."
-            );
+            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM) does not match this machine; refusing to restore a mismatched image.");
         }
 
         var reader = snapshot.OpenReader();
@@ -250,16 +269,14 @@ public sealed class AdvancedGamingBrickMachine {
         // SaveState/LoadState field-order drift that would otherwise be read as silently-wrong state — fault
         // deterministically so a byte difference stays a genuine divergence, never a misread.
         if (!reader.AtEnd) {
-            throw new InvalidOperationException(
-                message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted."
-            );
+            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
         }
     }
 
     // The section-table names for EnsureSnapshotables()'s order, one-to-one by index ("scheduler" itself is recorded
     // separately in Snapshot(), since it is saved before this array is walked). Keep this in lockstep with
     // EnsureSnapshotables() — an entry added/reordered there without a matching edit here mislabels a section.
-    private static readonly string[] s_snapshotableNames = ["cpu", "interrupts", "timers", "dma", "serial", "ppu", "apu", "bus", "cartridge"];
+    private static readonly string[] SnapshotableNames = ["cpu", "interrupts", "timers", "dma", "serial", "ppu", "apu", "bus", "cartridge"];
 
     // The state-bearing components in a fixed save/restore order (the scheduler is handled explicitly first). Built
     // lazily and cached: an exotic composition that never snapshots (a flat-memory or tracing bus) never pays the
@@ -279,7 +296,5 @@ public sealed class AdvancedGamingBrickMachine {
     }
     private static ISnapshotable AsSnapshotable(object component) =>
         ((component as ISnapshotable)
-            ?? throw new NotSupportedException(
-                message: $"Component '{component.GetType().Name}' does not implement {nameof(ISnapshotable)}; whole-machine snapshot is unavailable for this composition."
-            ));
+            ?? throw new NotSupportedException(message: $"Component '{component.GetType().Name}' does not implement {nameof(ISnapshotable)}; whole-machine snapshot is unavailable for this composition."));
 }

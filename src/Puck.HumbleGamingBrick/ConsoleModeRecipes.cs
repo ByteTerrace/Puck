@@ -37,7 +37,10 @@ internal static class ConsoleModeRecipes {
     /// <returns>The pokes, or an empty array.</returns>
     public static ModePoke[] PokesFor(string title, ConsoleModel target) {
         foreach (var (prefix, flags) in Recipes) {
-            if (!title.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+            if (!title.StartsWith(
+                value: prefix,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 continue;
             }
 
@@ -47,7 +50,9 @@ internal static class ConsoleModeRecipes {
             for (var index = 0; (index < flags.Length); index++) {
                 pokes[index] = new ModePoke(
                     Address: flags[index].Address,
-                    Value: (color ? flags[index].ColorValue : flags[index].MonochromeValue)
+                    Value: (color
+                    ? flags[index].ColorValue
+                    : flags[index].MonochromeValue)
                 );
             }
 
@@ -62,7 +67,10 @@ internal static class ConsoleModeRecipes {
     /// <param name="title">The cartridge header title.</param>
     public static bool HasRecipe(string title) {
         foreach (var (prefix, _) in Recipes) {
-            if (title.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+            if (title.StartsWith(
+                value: prefix,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return true;
             }
         }

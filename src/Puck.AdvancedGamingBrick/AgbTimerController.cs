@@ -19,10 +19,10 @@ namespace Puck.AdvancedGamingBrick;
 /// </summary>
 public sealed partial class AgbTimerController : IAgbTimerController {
     // Prescaler period mask per the 2-bit control field: divide by 1 / 64 / 256 / 1024.
-    private static readonly long[] s_mask = { 0, 63, 255, 1023 };
+    private static readonly long[] Mask = { 0, 63, 255, 1023 };
 
-    // log2 of the prescaler period (1 / 64 / 256 / 1024), so a clock >> s_shift is that clock's step index.
-    private static readonly int[] s_shift = { 0, 6, 8, 10 };
+    // log2 of the prescaler period (1 / 64 / 256 / 1024), so a clock >> Shift is that clock's step index.
+    private static readonly int[] Shift = { 0, 6, 8, 10 };
 
     // Overflow→IRQ-request latency: the overflow's interrupt flag is not asserted the same cycle the counter wraps —
     // the signal takes this many master cycles to reach the interrupt controller. Layered on top of the interrupt
@@ -82,7 +82,12 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         for (var index = 0; (index < 4); ++index) {
             var timer = index;
 
-            m_overflowEvent[index] = new AgbScheduler.Event { Callback = (cyclesLate) => OverflowEvent(timer: timer, cyclesLate: cyclesLate) };
+            m_overflowEvent[index] = new AgbScheduler.Event {
+                Callback = (cyclesLate) => OverflowEvent(
+                timer: timer,
+                cyclesLate: cyclesLate
+            ),
+            };
         }
     }
 
@@ -103,9 +108,15 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         // CNT_H: the committed control fields.
         return (ushort)(PrescaleField(frequency: m_frequency[timer])
-            | (m_cascade[timer] ? 0x4u : 0u)
-            | (m_irqEnabled[timer] ? 0x40u : 0u)
-            | (m_enable[timer] ? 0x80u : 0u));
+            | (m_cascade[timer]
+            ? 0x4u
+            : 0u)
+            | (m_irqEnabled[timer]
+            ? 0x40u
+            : 0u)
+            | (m_enable[timer]
+            ? 0x80u
+            : 0u));
     }
 
     /// <inheritdoc/>
@@ -134,9 +145,12 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         }
 
         for (var timer = 0; (timer < 4); ++timer) {
-            if (m_enable[timer] && !m_cascade[timer]) {
+            if (
+                m_enable[timer] &&
+                !m_cascade[timer]
+            ) {
                 m_anchorClock[timer] = now;
-                m_anchorValue[timer] = (m_period[timer] & 0xFFFF);
+                m_anchorValue[timer] = m_period[timer] & 0xFFFF;
 
                 ScheduleOverflow(timer: timer);
             } else {
@@ -157,8 +171,14 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         }
 
         for (var timer = 0; (timer < 4); ++timer) {
-            if (m_enable[timer] && !m_cascade[timer]) {
-                m_period[timer] = CounterAt(timer: timer, now: now);
+            if (
+                m_enable[timer] &&
+                !m_cascade[timer]
+            ) {
+                m_period[timer] = CounterAt(
+                    timer: timer,
+                    now: now
+                );
             }
 
             m_scheduler.Deschedule(e: m_overflowEvent[timer]);
@@ -178,10 +198,22 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         StepIrqDelay(timer: 2);
         StepIrqDelay(timer: 3);
 
-        Run(timer: 0, clock: clock);
-        Run(timer: 1, clock: clock);
-        Run(timer: 2, clock: clock);
-        Run(timer: 3, clock: clock);
+        Run(
+            timer: 0,
+            clock: clock
+        );
+        Run(
+            timer: 1,
+            clock: clock
+        );
+        Run(
+            timer: 2,
+            clock: clock
+        );
+        Run(
+            timer: 3,
+            clock: clock
+        );
 
         ReloadLatch(timer: 0);
         ReloadLatch(timer: 1);
@@ -200,11 +232,18 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     // The counter a CNT_L read returns: a scheduled prescaler timer is reconstructed closed-form from its anchor; a
     // cascade, disabled, or in-window timer holds its materialized value directly.
     private int LiveCounter(int timer) {
-        if (m_scheduled && m_enable[timer] && !m_cascade[timer]) {
-            return CounterAt(timer: timer, now: m_scheduler.Now);
+        if (
+            m_scheduled &&
+            m_enable[timer] &&
+            !m_cascade[timer]
+        ) {
+            return CounterAt(
+                timer: timer,
+                now: m_scheduler.Now
+            );
         }
 
-        return (m_period[timer] & 0xFFFF);
+        return m_period[timer] & 0xFFFF;
     }
 
     // The prescaler counter at absolute clock 'now', from the anchor: read(m_anchorClock) == m_anchorValue, and every
@@ -212,7 +251,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     // it counts the same global-clock boundaries — and never wraps within one scheduled interval (the overflow event
     // re-anchors first), so the mask is only defensive.
     private int CounterAt(int timer, long now) {
-        var shift = s_shift[m_frequency[timer]];
+        var shift = Shift[m_frequency[timer]];
         var steps = (((now - 1L) >> shift) - ((m_anchorClock[timer] - 1L) >> shift));
 
         return (int)(m_anchorValue[timer] + steps) & 0xFFFF;
@@ -222,13 +261,16 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     // the event fires the cycle after (overflow+1), matching the per-cycle model where a step at clock C becomes
     // visible to a read at C+1.
     private void ScheduleOverflow(int timer) {
-        var shift = s_shift[m_frequency[timer]];
+        var shift = Shift[m_frequency[timer]];
         var period = (1L << shift);
         var stepsToOverflow = (0x10000 - m_anchorValue[timer]);                     // increments until the counter wraps
-        var firstAligned = ((m_anchorClock[timer] + period - 1L) & ~(period - 1L)); // first boundary at/after the anchor
+        var firstAligned = ((m_anchorClock[timer] + period) - 1L) & ~(period - 1L); // first boundary at/after the anchor
         var overflowClock = (firstAligned + ((stepsToOverflow - 1) * period));
 
-        m_scheduler.ScheduleAbsolute(e: m_overflowEvent[timer], when: (overflowClock + 1L));
+        m_scheduler.ScheduleAbsolute(
+            e: m_overflowEvent[timer],
+            when: (overflowClock + 1L)
+        );
     }
 
     // The scheduled overflow: fired the cycle the wrap becomes visible. Does exactly what the per-cycle Step does on
@@ -244,7 +286,10 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         m_anchorClock[timer] = when;
         m_anchorValue[timer] = m_reload[timer];
 
-        if (m_irqEnabled[timer] && (m_irqCountdown[timer] == 0)) {
+        if (
+            m_irqEnabled[timer] &&
+            (m_irqCountdown[timer] == 0)
+        ) {
             m_irqCountdown[timer] = OverflowIrqDelay;
         }
 
@@ -252,7 +297,11 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             m_apu.OnTimerOverflow(timer: timer);
         }
 
-        if ((timer < 3) && m_enable[(timer + 1)] && m_cascade[(timer + 1)]) {
+        if (
+            (timer < 3) &&
+            m_enable[(timer + 1)] &&
+            m_cascade[(timer + 1)]
+        ) {
             Step(timer: (timer + 1));
         }
 
@@ -262,18 +311,24 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     // Overflow-IRQ delay: count an armed request down to its fire cycle, then assert the flag on the interrupt
     // controller. The controller's own two-stage synchronizer adds the register-visibility/recognition latency on top.
     private void StepIrqDelay(int timer) {
-        if ((m_irqCountdown[timer] != 0) && (--m_irqCountdown[timer] == 0)) {
+        if (
+            (m_irqCountdown[timer] != 0) &&
+            (--m_irqCountdown[timer] == 0)
+        ) {
             m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Timer0 + timer));
         }
     }
 
     // Per-cycle timer run: a prescaler-driven timer steps when the global clock hits its boundary.
     private void Run(int timer, long clock) {
-        if (!m_enable[timer] || m_cascade[timer]) {
+        if (
+            !m_enable[timer] ||
+            m_cascade[timer]
+        ) {
             return;
         }
 
-        if ((clock & s_mask[m_frequency[timer]]) == 0L) {
+        if ((clock & Mask[m_frequency[timer]]) == 0L) {
             Step(timer: timer);
         }
     }
@@ -289,7 +344,10 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         m_period[timer] = m_reload[timer];
 
-        if (m_irqEnabled[timer] && (m_irqCountdown[timer] == 0)) {
+        if (
+            m_irqEnabled[timer] &&
+            (m_irqCountdown[timer] == 0)
+        ) {
             // Arm the delayed request; the flag is asserted OverflowIrqDelay cycles later by StepIrqDelay. A request
             // already in flight is left alone (the interrupt flag is a level bit — a fresh arm only matters once the
             // in-flight one has fired), so a fast-overflowing timer cannot indefinitely defer its own recognition.
@@ -300,7 +358,11 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             m_apu.OnTimerOverflow(timer: timer);
         }
 
-        if ((timer < 3) && m_enable[(timer + 1)] && m_cascade[(timer + 1)]) {
+        if (
+            (timer < 3) &&
+            m_enable[(timer + 1)] &&
+            m_cascade[(timer + 1)]
+        ) {
             Step(timer: (timer + 1));
         }
     }
@@ -338,7 +400,10 @@ public sealed partial class AgbTimerController : IAgbTimerController {
                 m_cascade[timer] = ((control & 0x4) != 0);
             }
 
-            if (!wasEnabled && m_enable[timer]) {
+            if (
+                !wasEnabled &&
+                m_enable[timer]
+            ) {
                 m_pending[timer] = true;
             }
 

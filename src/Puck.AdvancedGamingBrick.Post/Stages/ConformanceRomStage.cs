@@ -31,7 +31,11 @@ internal sealed class ConformanceRomStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var cases = RomCatalog.Resolve(root: context.TestRomRoot, group: m_group, cases: m_cases);
+        var cases = RomCatalog.Resolve(
+            root: context.TestRomRoot,
+            group: m_group,
+            cases: m_cases
+        );
 
         if (cases.Count == 0) {
             return PostStageOutcome.Skip(detail: $"no conformance {m_group} ROMs (set PUCK_AGB_TESTROMS)");
@@ -42,7 +46,10 @@ internal sealed class ConformanceRomStage : IPostStage {
 
         foreach (var romCase in cases) {
             try {
-                var (pass, detail) = ConformanceRomProbe.Run(romCase: romCase, bios: context.BiosImage);
+                var (pass, detail) = ConformanceRomProbe.Run(
+                    romCase: romCase,
+                    bios: context.BiosImage
+                );
 
                 if (pass) {
                     ++passed;
@@ -56,6 +63,9 @@ internal sealed class ConformanceRomStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{passed}/{cases.Count} passed")
-            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

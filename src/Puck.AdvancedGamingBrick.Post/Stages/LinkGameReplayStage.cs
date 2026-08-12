@@ -57,7 +57,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         var romPath = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
 
-        if (string.IsNullOrEmpty(value: romPath) || !File.Exists(path: romPath)) {
+        if (
+            string.IsNullOrEmpty(value: romPath) ||
+            !File.Exists(path: romPath)
+        ) {
             return PostStageOutcome.Skip(detail: $"set {RomEnvironmentVariable} to a multiplayer ROM (dev box: {DevBoxRomPath}) to run this stage");
         }
 
@@ -68,7 +71,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         var rom = File.ReadAllBytes(path: romPath);
 
-        var first = RunLinkedScenario(bios: context.BiosImage, rom: rom);
+        var first = RunLinkedScenario(
+            bios: context.BiosImage,
+            rom: rom
+        );
 
         // Gate 1: the real game's link stack must ENGAGE on both consoles — Multiplayer-mode setup AND a real
         // cable-completed normal-mode transfer. A console that never touches SIO means the game never ran its link
@@ -78,46 +84,69 @@ internal sealed class LinkGameReplayStage : IPostStage {
         }
 
         // Gate 2: replay-identical determinism — the whole linked scenario reproduced from fresh consoles.
-        var second = RunLinkedScenario(bios: context.BiosImage, rom: rom);
+        var second = RunLinkedScenario(
+            bios: context.BiosImage,
+            rom: rom
+        );
 
         if (!first.ParentState.ContentEquals(other: second.ParentState)) {
-            return PostStageOutcome.Fail(detail: $"the parent console's final state differed between two identical linked game runs — {HashDivergenceProbe.DescribeDivergence(a: first.ParentState, b: second.ParentState)}");
+            return PostStageOutcome.Fail(detail: $"the parent console's final state differed between two identical linked game runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.ParentState,
+                b: second.ParentState
+            )}");
         }
 
         if (!first.ChildState.ContentEquals(other: second.ChildState)) {
-            return PostStageOutcome.Fail(detail: $"the child console's final state differed between two identical linked game runs — {HashDivergenceProbe.DescribeDivergence(a: first.ChildState, b: second.ChildState)}");
+            return PostStageOutcome.Fail(detail: $"the child console's final state differed between two identical linked game runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.ChildState,
+                b: second.ChildState
+            )}");
         }
 
         // The finding, reported (never gated): whether the game reached a multiplayer round, and whether the linked
         // parent's screen diverged from a lone-console control — evidence it did (or, as observed, did not) detect the
         // partner. A future core change that lands the SD/SI ready-line would flip these, which is desirable, so they
         // must not be a gate.
-        var solo = RunSoloControl(bios: context.BiosImage, rom: rom);
+        var solo = RunSoloControl(
+            bios: context.BiosImage,
+            rom: rom
+        );
         var reacted = (first.ParentFrameHash != solo);
         var handshake = (first.ParentProbe.SawMultiplayerRound || first.ChildProbe.SawMultiplayerRound);
 
-        return PostStageOutcome.Pass(
-            detail: (((($"{Path.GetFileName(path: romPath)}: both consoles ran the game's SIO link probe over the cable "
+        return PostStageOutcome.Pass(detail: (((($"{Path.GetFileName(path: romPath)}: both consoles ran the game's SIO link probe over the cable "
                 + $"(multiplayer-mode setup + {first.ParentProbe.NormalTransfers}/{first.ChildProbe.NormalTransfers} cable-completed normal transfers P/C), ")
                 + $"replay-identical across two runs ({first.ParentState.Size}+{first.ChildState.Size} state bytes over {Frames} frames); ")
-                + $"no multiplayer round completed and the linked screen is {(reacted ? "DIFFERENT from" : "identical to")} a lone-console control ")
-                + $"(the game polls the unmodeled Multiplayer SD/SI ready-line to detect a partner; handshake={(handshake ? "reached" : "not reached")})")
-        );
+                + $"no multiplayer round completed and the linked screen is {(reacted
+            ? "DIFFERENT from"
+            : "identical to")} a lone-console control ")
+                + $"(the game polls the unmodeled Multiplayer SD/SI ready-line to detect a partner; handshake={(handshake
+            ? "reached"
+            : "not reached")})"));
     }
 
     // One complete linked scenario from freshly built, full-booted consoles: connect on a cable, advance the fixed
     // sub-frame schedule while sampling both consoles' SIO for link-probe evidence, then snapshot. Self-contained so the
     // determinism leg repeats it identically.
     private static LinkGameResult RunLinkedScenario(ReadOnlyMemory<byte> bios, byte[] rom) {
-        using var parent = CreateConsole(bios: bios, rom: rom);
-        using var child = CreateConsole(bios: bios, rom: rom);
+        using var parent = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
+        using var child = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
 
         var parentBus = (AgbBus)parent.Machine.Bus;
         var childBus = (AgbBus)child.Machine.Bus;
         var parentProbe = new ProbeEvidence();
         var childProbe = new ProbeEvidence();
 
-        using var session = new AgbLinkSession(parent, child);
+        using var session = new AgbLinkSession(
+            parent,
+            child
+        );
 
         var subSteps = ((Frames * PostMachine.CyclesPerFrame) / SubFrameBudget);
 
@@ -140,7 +169,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // A lone console (no cable) full-booted and advanced the same number of frames — the control the linked parent's
     // screen is compared against to see whether the game reacted to the detected partner.
     private static ulong RunSoloControl(ReadOnlyMemory<byte> bios, byte[] rom) {
-        using var console = CreateConsole(bios: bios, rom: rom);
+        using var console = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
 
         for (var frame = 0; (frame < Frames); ++frame) {
             _ = console.Machine.RunFrame();
@@ -153,7 +185,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // NOT the HLE direct boot, on which the game mis-boots and never runs its link stack.
     private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
         // Each console gets its own ROM copy: a shared array would let one console's cartridge writes corrupt the other.
-        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: (byte[])rom.Clone()));
+        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: (byte[])rom.Clone()
+        ));
 
         console.Machine.Cpu.Reset();
 
@@ -163,8 +198,14 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // Both consoles must have engaged the game's link stack: Multiplayer-mode setup AND a real cable-completed normal
     // transfer. Null means the evidence held.
     private static string? Verify(LinkGameResult result) =>
-        (VerifySide(probe: result.ParentProbe, side: "parent")
-            ?? VerifySide(probe: result.ChildProbe, side: "child"));
+        (VerifySide(
+        probe: result.ParentProbe,
+        side: "parent"
+    )
+            ?? VerifySide(
+        probe: result.ChildProbe,
+        side: "child"
+    ));
     private static string? VerifySide(ProbeEvidence probe, string side) {
         if (!probe.SawMultiplayerMode) {
             return $"the {side} console never entered SIO Multiplayer mode; the game's link probe did not run (wrong ROM, or a boot regression)";
@@ -217,16 +258,26 @@ internal sealed class LinkGameReplayStage : IPostStage {
                 var slot0 = bus.DebugReadIo(offset: 0x120u);
                 var slot1 = bus.DebugReadIo(offset: 0x122u);
 
-                if ((id != 0u) || IsRealData(slot: slot0) || IsRealData(slot: slot1)) {
+                if (
+                    (id != 0u) ||
+                    IsRealData(slot: slot0) ||
+                    IsRealData(slot: slot1)
+                ) {
                     SawMultiplayerRound = true;
                 }
             }
 
             // A normal-mode (bits 12-13 = 0 or 1) start bit that goes set→clear is one completed transfer; count the
             // falling edge so a held probe is not double-counted.
-            if ((mode < 2u) && start) {
+            if (
+                (mode < 2u) &&
+                start
+            ) {
                 m_startArmed = true;
-            } else if (m_startArmed && !start) {
+            } else if (
+                m_startArmed &&
+                !start
+            ) {
                 ++NormalTransfers;
                 m_startArmed = false;
             }

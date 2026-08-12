@@ -41,7 +41,10 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         m_savePath = savePath;
         m_dmgSpeed = dmgSpeed;
         m_machine = MachineFactory.Create(
-            configuration: new MachineConfiguration(model: model, cartridgeRom: cartridgeRom),
+            configuration: new MachineConfiguration(
+                model: model,
+                cartridgeRom: cartridgeRom
+            ),
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
         m_audioSink = m_machine.GetRequiredService<IAudioSink>();
@@ -57,7 +60,9 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
 
     /// <inheritdoc/>
     public ulong CyclesPerSecond =>
-        ((!m_dmgSpeed && m_key1.IsDoubleSpeed) ? (2UL * MachineCyclesPerSecond) : MachineCyclesPerSecond);
+        ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
+        ? (2UL * MachineCyclesPerSecond)
+        : MachineCyclesPerSecond);
 
     /// <inheritdoc/>
     public long NativeFrameIndex =>
@@ -76,7 +81,10 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         m_joypad.SetButtons(pressed: BrickPad.ToJoypad(pad: in input));
 
         // Recorded per-segment sensor input: a no-op on any cartridge that never reads the tilt sensor.
-        m_tiltSensor.SetTilt(x: input.Tilt.X, y: input.Tilt.Y);
+        m_tiltSensor.SetTilt(
+            x: input.Tilt.X,
+            y: input.Tilt.Y
+        );
     }
 
     /// <inheritdoc/>
@@ -87,31 +95,49 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
         m_machine.Machine.SerializeState(writer: m_timeTravelWriter);
-        return SnapshotBuffer.CopyWrittenState(writer: m_timeTravelWriter, buffer: ref buffer);
+        return SnapshotBuffer.CopyWrittenState(
+            writer: m_timeTravelWriter,
+            buffer: ref buffer
+        );
     }
 
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
-        m_machine.Machine.RestoreState(reader: new StateReader(buffer: buffer, start: 0, length: length));
+        m_machine.Machine.RestoreState(reader: new StateReader(
+        buffer: buffer,
+        start: 0,
+        length: length
+    ));
 
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
-        new HumbleGamingBrickLookahead(instance: m_machine.Fork(), oneFrameCycles: DotsPerFrame);
+        new HumbleGamingBrickLookahead(
+        instance: m_machine.Fork(),
+        oneFrameCycles: DotsPerFrame
+    );
 
     /// <summary>Reads one byte from anywhere in the bus address space for the host's <see cref="IMachineMemoryPeek"/> —
     /// a side-effect-free poll (no clock advance, no lock masking), never a write into machine state.</summary>
     /// <param name="address">A 16-bit bus address.</param>
     /// <returns>The byte, or 0 for an out-of-range address.</returns>
     public byte PeekByte(int address) =>
-        (((address < 0x0000) || (address > 0xFFFF)) ? (byte)0 : m_systemBus.DebugReadByte(address: (ushort)address));
+        (((address < 0x0000) || (address > 0xFFFF))
+        ? (byte)0
+        : m_systemBus.DebugReadByte(address: (ushort)address));
 
     /// <summary>Forces one byte into a writable bus region for the host's <see cref="IMachineMemoryPeek"/> — a debug
     /// mutation outside replay determinism (the host drops rewind history). A no-op for an out-of-range address.</summary>
     /// <param name="address">A 16-bit bus address.</param>
     /// <param name="value">The byte to store.</param>
     public void PokeByte(int address, byte value) {
-        if ((address >= 0x0000) && (address <= 0xFFFF)) {
-            m_systemBus.DebugWriteByte(address: (ushort)address, value: value);
+        if (
+            (address >= 0x0000) &&
+            (address <= 0xFFFF)
+        ) {
+            m_systemBus.DebugWriteByte(
+                address: (ushort)address,
+                value: value
+            );
         }
     }
 
@@ -132,9 +158,15 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         // The fairness pin is construction-fixed (it sizes the tick->cycle budget for determinism), so options only
         // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.
         var title = m_cartridge.Header.Title;
-        var pokes = ConsoleModeRecipes.PokesFor(title: title, target: model);
+        var pokes = ConsoleModeRecipes.PokesFor(
+            title: title,
+            target: model
+        );
 
-        m_machine.Machine.SwitchModel(model: model, pokes: pokes);
+        m_machine.Machine.SwitchModel(
+            model: model,
+            pokes: pokes
+        );
 
         reason = ((pokes.Length > 0)
             ? string.Empty
@@ -157,24 +189,37 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
 
     /// <inheritdoc/>
     public void FlushSave(bool force) {
-        if ((m_savePath is not { } savePath) || !m_cartridge.Header.HasBattery) {
+        if (
+            (m_savePath is not { } savePath) ||
+            !m_cartridge.Header.HasBattery
+        ) {
             return;
         }
 
         var hasClock = (m_cartridge.PersistentClockByteCount > 0);
         var hasRam = (m_cartridge.ExternalRamByteCount > 0);
 
-        if (!(m_cartridge.ExternalRamDirty || (force && hasClock)) || !(hasRam || hasClock)) {
+        if (
+            !(m_cartridge.ExternalRamDirty || (force && hasClock)) ||
+            !(hasRam || hasClock)
+        ) {
             return;
         }
 
         try {
             byte[][] parts = [
-                (hasRam ? m_cartridge.ExportExternalRam() : []),
-                (hasClock ? m_cartridge.ExportPersistentClock(unixTimestampSeconds: DateTimeOffset.UtcNow.ToUnixTimeSeconds()) : []),
+                (hasRam
+                ? m_cartridge.ExportExternalRam()
+                : []),
+                (hasClock
+                ? m_cartridge.ExportPersistentClock(unixTimestampSeconds: DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                : []),
             ];
 
-            File.WriteAllBytes(path: savePath, bytes: [.. parts[0], .. parts[1]]);
+            File.WriteAllBytes(
+                path: savePath,
+                bytes: [.. parts[0], .. parts[1]]
+            );
             m_cartridge.MarkExternalRamClean();
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
@@ -191,7 +236,11 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     // battery-backed timed hardware, the clock footer appended after it) before the machine runs — a configuration input to
     // the deterministic timeline. The clock RESUMES where the last flush left it; any embedded wall timestamp is ignored.
     private void LoadBatterySave() {
-        if ((m_savePath is not { } savePath) || !m_cartridge.Header.HasBattery || !File.Exists(path: savePath)) {
+        if (
+            (m_savePath is not { } savePath) ||
+            !m_cartridge.Header.HasBattery ||
+            !File.Exists(path: savePath)
+        ) {
             return;
         }
 
@@ -200,11 +249,23 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             var ramByteCount = m_cartridge.ExternalRamByteCount;
 
             if (ramByteCount > 0) {
-                m_cartridge.ImportExternalRam(source: save.AsSpan(start: 0, length: Math.Min(val1: save.Length, val2: ramByteCount)));
+                m_cartridge.ImportExternalRam(source: save.AsSpan(
+                    start: 0,
+                    length: Math.Min(
+                        val1: save.Length,
+                        val2: ramByteCount
+                    )
+                ));
             }
 
-            if ((m_cartridge.PersistentClockByteCount > 0) && (save.Length >= (ramByteCount + m_cartridge.PersistentClockByteCount))) {
-                m_cartridge.ImportPersistentClock(source: save.AsSpan(start: ramByteCount, length: m_cartridge.PersistentClockByteCount));
+            if (
+                (m_cartridge.PersistentClockByteCount > 0) &&
+                (save.Length >= (ramByteCount + m_cartridge.PersistentClockByteCount))
+            ) {
+                m_cartridge.ImportPersistentClock(source: save.AsSpan(
+                    start: ramByteCount,
+                    length: m_cartridge.PersistentClockByteCount
+                ));
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[machine-host] battery save '{savePath}' unreadable ({exception.Message}); booting with fresh external RAM.");

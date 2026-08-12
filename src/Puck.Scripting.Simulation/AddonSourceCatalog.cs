@@ -42,11 +42,11 @@ namespace Puck.Scripting.Simulation;
 /// </para>
 /// </remarks>
 public static class AddonSourceCatalog {
-    private static readonly Dictionary<string, AddonSourceShape> s_shapesBySourceId;
-    private static readonly HashSet<string> s_unaddressableSourceIds;
+    private static readonly Dictionary<string, AddonSourceShape> ShapesBySourceId;
+    private static readonly HashSet<string> UnaddressableSourceIds;
 
     static AddonSourceCatalog() {
-        (s_shapesBySourceId, s_unaddressableSourceIds) = BuildTables();
+        (ShapesBySourceId, UnaddressableSourceIds) = BuildTables();
     }
 
     /// <summary>Attempts to resolve <paramref name="sourceId"/> against the engine's canonical source-id
@@ -55,7 +55,10 @@ public static class AddonSourceCatalog {
     /// <param name="shape">When this returns <see langword="true"/>, the record value shape the source carries.</param>
     /// <returns><see langword="true"/> if <paramref name="sourceId"/> names a source this ABI can carry; otherwise <see langword="false"/>.</returns>
     public static bool TryResolve(string sourceId, out AddonSourceShape shape) {
-        if (s_shapesBySourceId.TryGetValue(key: sourceId, value: out shape)) {
+        if (ShapesBySourceId.TryGetValue(
+            key: sourceId,
+            value: out shape
+        )) {
             return true;
         }
 
@@ -72,7 +75,7 @@ public static class AddonSourceCatalog {
     /// <param name="sourceId">The provider-neutral source id text.</param>
     /// <returns><see langword="true"/> when the id names a real control this ABI cannot express.</returns>
     public static bool IsUnaddressable(string sourceId) {
-        return s_unaddressableSourceIds.Contains(item: sourceId);
+        return UnaddressableSourceIds.Contains(item: sourceId);
     }
 
     // Reads InputSourceValueAttribute/InputSourceUnaddressableAttribute off every const string field declared
@@ -109,14 +112,20 @@ public static class AddonSourceCatalog {
     }
     private static void ClassifyGroup(Dictionary<string, string> declaredBy, Dictionary<string, AddonSourceShape> shapes, HashSet<string> unaddressable, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] Type type) {
         foreach (var field in type.GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
-            if (!field.IsLiteral || (field.FieldType != typeof(string))) {
+            if (
+                !field.IsLiteral ||
+                (field.FieldType != typeof(string))
+            ) {
                 continue;
             }
 
             var sourceId = (string)field.GetRawConstantValue()!;
             var memberName = $"InputSources.{type.Name}.{field.Name}";
 
-            if (declaredBy.TryGetValue(key: sourceId, value: out var existingMember)) {
+            if (declaredBy.TryGetValue(
+                key: sourceId,
+                value: out var existingMember
+            )) {
                 throw new InvalidOperationException(message: $"InputSources id \"{sourceId}\" is declared by both {existingMember} and {memberName}.");
             }
 
@@ -178,20 +187,35 @@ public static class AddonSourceCatalog {
     private static bool TryResolveParametric(string sourceId, out AddonSourceShape shape) {
         shape = default;
 
-        const string keyboardPrefix = "keyboard.";
+        const string KeyboardPrefix = "keyboard.";
 
-        if (!sourceId.StartsWith(value: keyboardPrefix, comparisonType: StringComparison.Ordinal)) {
+        if (!sourceId.StartsWith(
+            value: KeyboardPrefix,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return false;
         }
 
-        var suffix = sourceId.AsSpan(start: keyboardPrefix.Length);
+        var suffix = sourceId.AsSpan(start: KeyboardPrefix.Length);
 
-        if ((suffix.Length == 1) && char.IsAsciiLetterLower(c: suffix[0])) {
+        if (
+            (suffix.Length == 1) &&
+            char.IsAsciiLetterLower(c: suffix[0])
+        ) {
             shape = AddonSourceShape.Digital;
             return true;
         }
 
-        if ((suffix.Length >= 2) && (suffix[0] == 'f') && TryParseFunctionKeyNumber(digits: suffix[1..], number: out var number) && (number >= 1) && (number <= 12)) {
+        if (
+            (suffix.Length >= 2) &&
+            (suffix[0] == 'f') &&
+            TryParseFunctionKeyNumber(
+            digits: suffix[1..],
+            number: out var number
+        ) &&
+            (number >= 1) &&
+            (number <= 12)
+        ) {
             shape = AddonSourceShape.Digital;
             return true;
         }
@@ -206,15 +230,24 @@ public static class AddonSourceCatalog {
     private static bool TryParseFunctionKeyNumber(ReadOnlySpan<char> digits, out int number) {
         number = 0;
 
-        if ((digits.Length is not (1 or 2)) || !char.IsAsciiDigit(c: digits[0]) || ((digits.Length == 2) && !char.IsAsciiDigit(c: digits[1]))) {
+        if (
+            (digits.Length is not (1 or 2)) ||
+            !char.IsAsciiDigit(c: digits[0]) ||
+            ((digits.Length == 2) && !char.IsAsciiDigit(c: digits[1]))
+        ) {
             return false;
         }
 
-        if ((digits.Length == 2) && (digits[0] == '0')) {
+        if (
+            (digits.Length == 2) &&
+            (digits[0] == '0')
+        ) {
             return false;
         }
 
-        number = ((digits.Length == 1) ? (digits[0] - '0') : (((digits[0] - '0') * 10) + (digits[1] - '0')));
+        number = ((digits.Length == 1)
+            ? (digits[0] - '0')
+            : (((digits[0] - '0') * 10) + (digits[1] - '0')));
         return true;
     }
 }

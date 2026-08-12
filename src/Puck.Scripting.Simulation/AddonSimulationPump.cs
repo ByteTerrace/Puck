@@ -136,8 +136,17 @@ public sealed class AddonSimulationPump {
 
             switch (cell.Kind) {
                 case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Input): {
-                        if (!TryValidateInputAct(bindings: bindings, cell: in cell, ordinal: ordinal, error: out var actError)) {
-                            return Refuse(instance: instance, ordinal: ordinal, reason: actError);
+                        if (!TryValidateInputAct(
+                            bindings: bindings,
+                            cell: in cell,
+                            ordinal: ordinal,
+                            error: out var actError
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: actError
+                            );
                         }
 
                         // Structurally valid, so the declared ordinal is guaranteed < bindings.Length <=
@@ -146,7 +155,11 @@ public sealed class AddonSimulationPump {
                         var declaredBit = (1UL << declaredOrdinal);
 
                         if ((seenChannelOrdinals & declaredBit) != 0UL) {
-                            return Refuse(instance: instance, ordinal: ordinal, reason: $"names declared channel ordinal {declaredOrdinal} more than once in one batch — duplicate channel acts are a protocol fault under the per-tick declarative contract");
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: $"names declared channel ordinal {declaredOrdinal} more than once in one batch — duplicate channel acts are a protocol fault under the per-tick declarative contract"
+                            );
                         }
 
                         seenChannelOrdinals |= declaredBit;
@@ -154,21 +167,42 @@ public sealed class AddonSimulationPump {
                         break;
                     }
                 case AddonOutCellKind.Act when (channelKind == AddonChannelKind.Request): {
-                        if (!TryValidateQuery(cell: in cell, ordinal: ordinal, verbCount: channels[cell.Channel].VerbCount, error: out var queryError)) {
-                            return Refuse(instance: instance, ordinal: ordinal, reason: queryError);
+                        if (!TryValidateQuery(
+                            cell: in cell,
+                            ordinal: ordinal,
+                            verbCount: channels[cell.Channel].VerbCount,
+                            error: out var queryError
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: queryError
+                            );
                         }
 
                         break;
                     }
                 case AddonOutCellKind.Ask when (channelKind == AddonChannelKind.Request): {
-                        if (!TryValidateAsk(cell: in cell, ordinal: ordinal, error: out var askError)) {
-                            return Refuse(instance: instance, ordinal: ordinal, reason: askError);
+                        if (!TryValidateAsk(
+                            cell: in cell,
+                            ordinal: ordinal,
+                            error: out var askError
+                        )) {
+                            return Refuse(
+                                instance: instance,
+                                ordinal: ordinal,
+                                reason: askError
+                            );
                         }
 
                         break;
                     }
                 default:
-                    return Refuse(instance: instance, ordinal: ordinal, reason: $"a {cell.Kind} cell is not admissible on a {channelKind} channel");
+                    return Refuse(
+                        instance: instance,
+                        ordinal: ordinal,
+                        reason: $"a {cell.Kind} cell is not admissible on a {channelKind} channel"
+                    );
             }
         }
 
@@ -201,7 +235,10 @@ public sealed class AddonSimulationPump {
 
         // B and C are required-zero regardless of resolution — the wire shape is fixed independent of whether the
         // host recognizes the name.
-        if ((cell.B != 0L) || (cell.C != 0L)) {
+        if (
+            (cell.B != 0L) ||
+            (cell.C != 0L)
+        ) {
             error = $"channel act on '{binding.Name}' requires B = C = 0 (B={cell.B}, C={cell.C})";
             return false;
         }
@@ -257,7 +294,10 @@ public sealed class AddonSimulationPump {
         }
 
         if (cell.Verb == AddonAbi.RequestVerbs.SubmitMutation) {
-            if ((cell.A < 0L) || (cell.A > byte.MaxValue)) {
+            if (
+                (cell.A < 0L) ||
+                (cell.A > byte.MaxValue)
+            ) {
                 error = $"submit-mutation kind ordinal {cell.A} outside [0, {byte.MaxValue}]";
                 return false;
             }
@@ -276,7 +316,13 @@ public sealed class AddonSimulationPump {
         }
 
         if (cell.Verb == AddonAbi.RequestVerbs.Designate) {
-            if ((cell.A < 0L) || (cell.A > int.MaxValue) || (cell.B < 0L) || (cell.B > int.MaxValue) || (cell.C != 0L)) {
+            if (
+                (cell.A < 0L) ||
+                (cell.A > int.MaxValue) ||
+                (cell.B < 0L) ||
+                (cell.B > int.MaxValue) ||
+                (cell.C != 0L)
+            ) {
                 error = $"designate requires target body and register indices in [0, {int.MaxValue}] and C = 0 (A={cell.A}, B={cell.B}, C={cell.C})";
                 return false;
             }
@@ -293,7 +339,11 @@ public sealed class AddonSimulationPump {
             return true;
         }
 
-        if ((cell.A != 0L) || (cell.B != 0L) || (cell.C != 0L)) {
+        if (
+            (cell.A != 0L) ||
+            (cell.B != 0L) ||
+            (cell.C != 0L)
+        ) {
             error = $"request verb {cell.Verb} requires A = B = C = 0 (A={cell.A}, B={cell.B}, C={cell.C})";
             return false;
         }
@@ -317,14 +367,20 @@ public sealed class AddonSimulationPump {
     // the resolve-time refusal WorldAddonRuntime.ResolveAsks already gives an oversized/out-of-bounds mutation
     // payload, never a whole-batch fault here.
     private bool TryValidateAsk(in AddonOutCell cell, ushort ordinal, out string error) {
-        if ((cell.Verb != (ushort)AddonSubjectKind.Body) && (cell.Verb != (ushort)AddonSubjectKind.Section)) {
+        if (
+            (cell.Verb != (ushort)AddonSubjectKind.Body) &&
+            (cell.Verb != (ushort)AddonSubjectKind.Section)
+        ) {
             error = $"ask subject kind {cell.Verb} is not admitted (admitted: {(byte)AddonSubjectKind.Body} = Body, {(byte)AddonSubjectKind.Section} = Section)";
             return false;
         }
 
         var subjectKind = (AddonSubjectKind)cell.Verb;
 
-        if ((cell.HandleIndex != 0) || (cell.HandleGeneration != 0)) {
+        if (
+            (cell.HandleIndex != 0) ||
+            (cell.HandleGeneration != 0)
+        ) {
             error = $"ask handle fields must be zero (index={cell.HandleIndex}, generation={cell.HandleGeneration})";
             return false;
         }
@@ -335,9 +391,15 @@ public sealed class AddonSimulationPump {
         }
 
         var mask = (ulong)cell.B;
-        var admissible = ((subjectKind == AddonSubjectKind.Section) ? AddonCapabilityMask.Mutate : AddonCapabilityMask.Drive | AddonCapabilityMask.Observe);
+        var admissible = ((subjectKind == AddonSubjectKind.Section)
+            ? AddonCapabilityMask.Mutate
+            : AddonCapabilityMask.Drive | AddonCapabilityMask.Observe);
 
-        if ((mask == 0UL) || ((mask & (mask - 1UL)) != 0UL) || ((mask & ~admissible) != 0UL)) {
+        if (
+            (mask == 0UL) ||
+            ((mask & (mask - 1UL)) != 0UL) ||
+            ((mask & ~admissible) != 0UL)
+        ) {
             error = $"ask capability mask 0x{mask:x} must be exactly one of the {subjectKind}-admissible bits (0x{admissible:x})";
             return false;
         }
@@ -359,7 +421,9 @@ public sealed class AddonSimulationPump {
             SubjectKind: subjectKind,
             SubjectIndex: cell.A,
             CapabilityMask: mask,
-            NameLength: ((subjectKind == AddonSubjectKind.Section) ? cell.C : 0L)
+            NameLength: ((subjectKind == AddonSubjectKind.Section)
+            ? cell.C
+            : 0L)
         );
         error = "";
         return true;

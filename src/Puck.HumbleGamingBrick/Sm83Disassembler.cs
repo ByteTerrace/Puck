@@ -35,11 +35,19 @@ public static class Sm83Disassembler {
             return (2, DecodeBitOperation(opcode: byte1));
         }
 
-        if ((opcode >= 0x40) && (opcode <= 0x7F)) {
-            return (1, ((opcode == 0x76) ? "HALT" : $"LD {Registers[(opcode >> 3) & 7]},{Registers[opcode & 7]}"));
+        if (
+            (opcode >= 0x40) &&
+            (opcode <= 0x7F)
+        ) {
+            return (1, ((opcode == 0x76)
+                ? "HALT"
+                : $"LD {Registers[(opcode >> 3) & 7]},{Registers[opcode & 7]}"));
         }
 
-        if ((opcode >= 0x80) && (opcode <= 0xBF)) {
+        if (
+            (opcode >= 0x80) &&
+            (opcode <= 0xBF)
+        ) {
             return (1, $"{AluOps[(opcode >> 3) & 7]}{Registers[opcode & 7]}");
         }
 
@@ -64,10 +72,27 @@ public static class Sm83Disassembler {
         }
 
         return opcode switch {
-            < 0x20 => DecodeLowGroup0(opcode: opcode, address: address, byte1: byte1, word: word),
-            < 0x40 => DecodeLowGroup1(opcode: opcode, address: address, byte1: byte1, word: word),
-            < 0xE0 => DecodeControlGroup(opcode: opcode, word: word),
-            _ => DecodeHighPageGroup(opcode: opcode, byte1: byte1, word: word),
+            < 0x20 => DecodeLowGroup0(
+            opcode: opcode,
+            address: address,
+            byte1: byte1,
+            word: word
+        ),
+            < 0x40 => DecodeLowGroup1(
+            opcode: opcode,
+            address: address,
+            byte1: byte1,
+            word: word
+        ),
+            < 0xE0 => DecodeControlGroup(
+            opcode: opcode,
+            word: word
+        ),
+            _ => DecodeHighPageGroup(
+            opcode: opcode,
+            byte1: byte1,
+            word: word
+        ),
         };
     }
 
@@ -92,9 +117,11 @@ public static class Sm83Disassembler {
             0x08 => (3, $"LD ({Hex16(value: word)}),SP"),
             0x09 => (1, "ADD HL,BC"),
             0x19 => (1, "ADD HL,DE"),
-            _ => (2, $"JR {RelativeTarget(address: address, offset: byte1)}"),
+            _ => (2, $"JR {RelativeTarget(
+        address: address,
+        offset: byte1
+    )}"),
         };
-
     private static (int Length, string Text) DecodeLowGroup1(byte opcode, ushort address, byte byte1, ushort word) =>
         opcode switch {
             0x21 => (3, $"LD HL,{Hex16(value: word)}"),
@@ -113,9 +140,11 @@ public static class Sm83Disassembler {
             0x3F => (1, "CCF"),
             0x29 => (1, "ADD HL,HL"),
             0x39 => (1, "ADD HL,SP"),
-            _ => (2, $"JR {Conditions[(opcode >> 3) & 3]},{RelativeTarget(address: address, offset: byte1)}"),
+            _ => (2, $"JR {Conditions[(opcode >> 3) & 3]},{RelativeTarget(
+        address: address,
+        offset: byte1
+    )}"),
         };
-
     private static (int Length, string Text) DecodeControlGroup(byte opcode, ushort word) =>
         opcode switch {
             0xC0 or 0xC8 or 0xD0 or 0xD8 => (1, $"RET {Conditions[(opcode >> 3) & 3]}"),
@@ -131,7 +160,6 @@ public static class Sm83Disassembler {
             0xCD => (3, $"CALL {Hex16(value: word)}"),
             _ => (1, $"DB {Hex8(value: opcode)}"),
         };
-
     private static (int Length, string Text) DecodeHighPageGroup(byte opcode, byte byte1, ushort word) =>
         opcode switch {
             0xE0 => (2, $"LDH ({HighPage(value: byte1)}),A"),
@@ -152,7 +180,6 @@ public static class Sm83Disassembler {
             0xFB => (1, "EI"),
             _ => (1, $"DB {Hex8(value: opcode)}"),
         };
-
     private static string DecodeBitOperation(byte opcode) {
         var index = Registers[opcode & 7];
 
@@ -167,20 +194,30 @@ public static class Sm83Disassembler {
     // The absolute target of a relative jump: PC-after-the-2-byte-instruction plus the signed offset — what a reader
     // wants to see, not the raw displacement.
     private static string RelativeTarget(ushort address, byte offset) =>
-        Hex16(value: (ushort)(address + 2 + (sbyte)offset));
-
+        Hex16(value: (ushort)((address + 2) + (sbyte)offset));
     private static string HighPage(byte value) =>
-        $"0xFF{value.ToString(format: "X2", provider: CultureInfo.InvariantCulture)}";
-
+        $"0xFF{value.ToString(
+        format: "X2",
+        provider: CultureInfo.InvariantCulture
+    )}";
     private static string SignedByte(byte value) {
         var signed = (sbyte)value;
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{((signed < 0) ? "-" : "+")}0x{Math.Abs(value: signed):X2}");
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{((signed < 0)
+            ? "-"
+            : "+")}0x{Math.Abs(value: signed):X2}"
+        );
     }
-
     private static string Hex8(byte value) =>
-        $"0x{value.ToString(format: "X2", provider: CultureInfo.InvariantCulture)}";
-
+        $"0x{value.ToString(
+        format: "X2",
+        provider: CultureInfo.InvariantCulture
+    )}";
     private static string Hex16(ushort value) =>
-        $"0x{value.ToString(format: "X4", provider: CultureInfo.InvariantCulture)}";
+        $"0x{value.ToString(
+        format: "X4",
+        provider: CultureInfo.InvariantCulture
+    )}";
 }

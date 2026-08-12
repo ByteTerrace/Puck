@@ -47,17 +47,36 @@ public readonly record struct MachinePadState(
             Buttons: first.Buttons | second.Buttons,
             LeftStick: ClampStick(stick: (first.LeftStick + second.LeftStick)),
             RightStick: ClampStick(stick: (first.RightStick + second.RightStick)),
-            LeftTrigger: Math.Clamp(value: (first.LeftTrigger + second.LeftTrigger), min: 0f, max: 1f),
-            RightTrigger: Math.Clamp(value: (first.RightTrigger + second.RightTrigger), min: 0f, max: 1f),
+            LeftTrigger: Math.Clamp(
+                value: (first.LeftTrigger + second.LeftTrigger),
+                min: 0f,
+                max: 1f
+            ),
+            RightTrigger: Math.Clamp(
+                value: (first.RightTrigger + second.RightTrigger),
+                min: 0f,
+                max: 1f
+            ),
             Tilt: ClampStick(stick: (first.Tilt + second.Tilt)),
-            LightLevel: Math.Max(val1: first.LightLevel, val2: second.LightLevel)
+            LightLevel: Math.Max(
+                val1: first.LightLevel,
+                val2: second.LightLevel
+            )
         );
     }
 
     private static Vector2 ClampStick(Vector2 stick) {
         return new Vector2(
-            x: Math.Clamp(value: stick.X, min: -1f, max: 1f),
-            y: Math.Clamp(value: stick.Y, min: -1f, max: 1f)
+            x: Math.Clamp(
+                value: stick.X,
+                min: -1f,
+                max: 1f
+            ),
+            y: Math.Clamp(
+                value: stick.Y,
+                min: -1f,
+                max: 1f
+            )
         );
     }
 }

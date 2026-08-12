@@ -55,7 +55,10 @@ public static class WorldRenderScaleTiers {
     public static readonly IReadOnlyList<string> Names = ["native", "three-quarter", "half", "quarter", "eighth"];
 
     /// <summary>The valid names joined for an error / echo message.</summary>
-    public static string ValidNames => string.Join(separator: ", ", values: Names);
+    public static string ValidNames => string.Join(
+        separator: ", ",
+        values: Names
+    );
 
     /// <summary>Resolves a tier name (case-insensitive, trimmed) to its <see cref="WorldRenderScaleTier"/>.</summary>
     /// <param name="name">The tier name (a run-doc value or a typed console argument); null/whitespace is unknown.</param>

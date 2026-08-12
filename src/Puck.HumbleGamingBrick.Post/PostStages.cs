@@ -39,29 +39,93 @@ internal static class PostStages {
             // rejected before any machine state mutates (self-contained synthetic ROM; run anywhere).
             new BessImportGuardStage(),
             // Tier B — reference-ROM correctness (conformance ROMs via the $A000 result block; skip when the corpus is absent).
-            new ConformanceRomStage(group: "cpu-instrs", subPath: "cpu_instrs/individual", model: ConsoleModel.Dmg),
-            new ConformanceRomStage(group: "instr-timing", subPath: "instr_timing", model: ConsoleModel.Dmg),
-            new ConformanceRomStage(group: "mem-timing", subPath: "mem_timing/individual", model: ConsoleModel.Dmg),
-            new ConformanceRomStage(group: "dmg-sound", subPath: "dmg_sound/rom_singles", model: ConsoleModel.Dmg),
-            new ConformanceRomStage(group: "cgb-sound", subPath: "cgb_sound/rom_singles", model: ConsoleModel.Cgb),
+            new ConformanceRomStage(
+        group: "cpu-instrs",
+        subPath: "cpu_instrs/individual",
+        model: ConsoleModel.Dmg
+    ),
+            new ConformanceRomStage(
+        group: "instr-timing",
+        subPath: "instr_timing",
+        model: ConsoleModel.Dmg
+    ),
+            new ConformanceRomStage(
+        group: "mem-timing",
+        subPath: "mem_timing/individual",
+        model: ConsoleModel.Dmg
+    ),
+            new ConformanceRomStage(
+        group: "dmg-sound",
+        subPath: "dmg_sound/rom_singles",
+        model: ConsoleModel.Dmg
+    ),
+            new ConformanceRomStage(
+        group: "cgb-sound",
+        subPath: "cgb_sound/rom_singles",
+        model: ConsoleModel.Cgb
+    ),
             // Tier B — SingleStepTests/sm83 per-instruction vectors: the shared SM83 core against 500 opcode families
             // on a flat-RAM harness, off-ROM (skip when PUCK_GB_SST is absent).
             new Sm83SstStage(),
             // Tier B — acceptance timing suite (serial Fibonacci signature; skip when the corpus is absent).
-            new AcceptanceRomStage(group: "timer", relativeDirectory: "timer", recurse: true),
-            new AcceptanceRomStage(group: "ppu", relativeDirectory: "ppu", recurse: true),
-            new AcceptanceRomStage(group: "interrupts", relativeDirectory: "interrupts", recurse: true),
-            new AcceptanceRomStage(group: "serial", relativeDirectory: "serial", recurse: true),
-            new AcceptanceRomStage(group: "oam-dma", relativeDirectory: "oam_dma", recurse: true),
-            new AcceptanceRomStage(group: "bits", relativeDirectory: "bits", recurse: true),
-            new AcceptanceRomStage(group: "instr", relativeDirectory: "instr", recurse: true),
-            new AcceptanceRomStage(group: "misc", relativeDirectory: "", recurse: false),
+            new AcceptanceRomStage(
+        group: "timer",
+        relativeDirectory: "timer",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "ppu",
+        relativeDirectory: "ppu",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "interrupts",
+        relativeDirectory: "interrupts",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "serial",
+        relativeDirectory: "serial",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "oam-dma",
+        relativeDirectory: "oam_dma",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "bits",
+        relativeDirectory: "bits",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "instr",
+        relativeDirectory: "instr",
+        recurse: true
+    ),
+            new AcceptanceRomStage(
+        group: "misc",
+        relativeDirectory: "",
+        recurse: false
+    ),
             // Tier C — cross-machine link determinism, one stage per generation pairing (self-contained synthetic
             // ROMs; run anywhere). Dmg↔Cgb is the original pairing; Dmg↔Agb and Cgb↔Agb prove the carry-forward
             // rule's Agb costume links through the identical SerialLinkSession machinery.
-            new SerialLinkStage(name: "serial-link", masterModel: ConsoleModel.Dmg, slaveModel: ConsoleModel.Cgb),
-            new SerialLinkStage(name: "serial-link-dmg-agb", masterModel: ConsoleModel.Dmg, slaveModel: ConsoleModel.Agb),
-            new SerialLinkStage(name: "serial-link-cgb-agb", masterModel: ConsoleModel.Cgb, slaveModel: ConsoleModel.Agb),
+            new SerialLinkStage(
+        name: "serial-link",
+        masterModel: ConsoleModel.Dmg,
+        slaveModel: ConsoleModel.Cgb
+    ),
+            new SerialLinkStage(
+        name: "serial-link-dmg-agb",
+        masterModel: ConsoleModel.Dmg,
+        slaveModel: ConsoleModel.Agb
+    ),
+            new SerialLinkStage(
+        name: "serial-link-cgb-agb",
+        masterModel: ConsoleModel.Cgb,
+        slaveModel: ConsoleModel.Agb
+    ),
             // Tier C — the link cable under a longer gapped exchange and a mid-exchange churn: suspend/snapshot/restore/
             // reconnect at a transfer-idle boundary via the credit-preserving resume token, proving the exchange is
             // transparent to a snapshot cycle (self-contained synthetic ROMs; runs anywhere).

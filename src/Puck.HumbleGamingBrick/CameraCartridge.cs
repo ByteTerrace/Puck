@@ -73,10 +73,16 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public CameraCartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
+        : base(
+        rom: rom,
+        header: header
+    ) {
         m_cameraRegisters = new byte[CameraRegisterCount];
         m_plane = new byte[SensorImage.PixelCount];
-        m_ramBankWrapMask = ComputeBankWrapMask(byteCount: header.RamByteCount, bankSize: RamBankSize);
+        m_ramBankWrapMask = ComputeBankWrapMask(
+            byteCount: header.RamByteCount,
+            bankSize: RamBankSize
+        );
         m_romBank = 1;
         m_sensor = new GradientCameraSensor();
         m_tiles = new byte[SensorImage.TiledByteCount];
@@ -149,7 +155,9 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
 
         var register = (address - MemoryMap.ExternalRamStart) & 0x7F;
 
-        return ((register == ShootRegister) ? m_cameraRegisters[ShootRegister] : (byte)0x00);
+        return ((register == ShootRegister)
+            ? m_cameraRegisters[ShootRegister]
+            : (byte)0x00);
     }
     /// <summary>Writes to the external window: a camera register while the camera block is selected (register&#160;0's
     /// bit&#160;0 arms a capture on its rising edge and cannot be cleared while a shoot is in progress), otherwise banked
@@ -158,7 +166,10 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     /// <param name="value">The value to store.</param>
     public override void WriteRam(ushort address, byte value) {
         if (!m_cameraSelected) {
-            base.WriteRam(address: address, value: value);
+            base.WriteRam(
+                address: address,
+                value: value
+            );
 
             return;
         }
@@ -179,14 +190,20 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
         // countdown); a real cart cannot cancel an in-progress shoot, so a bit-0 clear while busy is ignored.
         value &= 0x07;
 
-        if (((value & 0x01) != 0) && ((m_cameraRegisters[ShootRegister] & 0x01) == 0)) {
+        if (
+            ((value & 0x01) != 0) &&
+            ((m_cameraRegisters[ShootRegister] & 0x01) == 0)
+        ) {
             m_cameraRegisters[ShootRegister] = value;
             Capture();
 
             return;
         }
 
-        if (((value & 0x01) == 0) && ((m_cameraRegisters[ShootRegister] & 0x01) != 0)) {
+        if (
+            ((value & 0x01) == 0) &&
+            ((m_cameraRegisters[ShootRegister] & 0x01) != 0)
+        ) {
             value |= 0x01;
         }
 
@@ -205,8 +222,8 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
@@ -249,14 +266,29 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
 
                     for (var column = 0; (column < 8); ++column) {
                         var px = ((tileX * 8) + column);
-                        var color = GetProcessedColor(x: px, y: py);
+                        var color = GetProcessedColor(
+                            x: px,
+                            y: py
+                        );
 
                         if (edgeEnabled) {
                             var neighbours =
-                                (((GetProcessedColor(x: (px - 1), y: py)
-                                + GetProcessedColor(x: (px + 1), y: py))
-                                + GetProcessedColor(x: px, y: (py - 1)))
-                                + GetProcessedColor(x: px, y: (py + 1)));
+                                (((GetProcessedColor(
+                                x: (px - 1),
+                                y: py
+                            )
+                                + GetProcessedColor(
+                                x: (px + 1),
+                                y: py
+                            ))
+                                + GetProcessedColor(
+                                x: px,
+                                y: (py - 1)
+                            ))
+                                + GetProcessedColor(
+                                x: px,
+                                y: (py + 1)
+                            ));
 
                             color += ((ratioQuarters * ((4 * color) - neighbours)) / 4);
                         }
@@ -286,13 +318,18 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
             }
         }
 
-        DepositExternalRam(offset: SensorImage.RamOffset, source: m_tiles);
+        DepositExternalRam(
+            offset: SensorImage.RamOffset,
+            source: m_tiles
+        );
 
         var exposure = (m_cameraRegisters[ExposureHighRegister] << 8) | m_cameraRegisters[ExposureLowRegister];
 
         m_busyDots =
             ((BusyBaseDots
-            + (((m_cameraRegisters[GainAndEdgeRegister] & 0x80) != 0) ? 0 : BusyOneDimensionalPenaltyDots))
+            + (((m_cameraRegisters[GainAndEdgeRegister] & 0x80) != 0)
+            ? 0
+            : BusyOneDimensionalPenaltyDots))
             + (exposure * BusyDotsPerExposureUnit));
     }
 

@@ -19,10 +19,13 @@ internal sealed class QueuedHostBackpressureStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var result = QueuedHostContractProbe.VerifyBackpressure(
-            withContent: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create())
-        );
+        var result = QueuedHostContractProbe.VerifyBackpressure(withContent: () => new MachineHost(
+            model: ConsoleModel.Dmg,
+            cartridgeRom: SyntheticRom.Create()
+        ));
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

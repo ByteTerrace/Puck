@@ -7,7 +7,7 @@ namespace Puck.AdvancedGamingBrick;
 /// because the Advanced GamingBrick's master clock is four times faster.
 /// </summary>
 public sealed partial class ApuPulseChannel {
-    private static readonly byte[] s_dutyPatterns = { 0b00000001, 0b00000011, 0b00001111, 0b11111100 };
+    private static readonly byte[] DutyPatterns = { 0b00000001, 0b00000011, 0b00001111, 0b11111100 };
     private readonly bool m_hasSweep;
     private int m_dutyPattern;
     private int m_dutyStep;
@@ -45,7 +45,7 @@ public sealed partial class ApuPulseChannel {
                 return 0;
             }
 
-            return ((((s_dutyPatterns[m_dutyPattern] >> m_dutyStep) & 1) != 0)
+            return ((((DutyPatterns[m_dutyPattern] >> m_dutyStep) & 1) != 0)
                 ? m_envelopeVolume
                 : 0);
         }
@@ -70,16 +70,22 @@ public sealed partial class ApuPulseChannel {
     }
 
     /// <summary>Reads back the sweep register (NR10): shift, direction, and period (all bits readable).</summary>
-    public byte ReadSweep() => (byte)((m_sweepPeriod << 4) | (m_sweepDecrease ? 0x8 : 0) | m_sweepShift);
+    public byte ReadSweep() => (byte)((m_sweepPeriod << 4) | (m_sweepDecrease
+        ? 0x8
+        : 0) | m_sweepShift);
 
     /// <summary>Reads back the duty field of NRx1 (the length sub-field is write-only and reads as zero).</summary>
     public byte ReadDutyLength() => (byte)(m_dutyPattern << 6);
 
     /// <summary>Reads back the envelope register (NRx2): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease ? 0x8 : 0) | m_envelopePeriod);
+    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
+        ? 0x8
+        : 0) | m_envelopePeriod);
 
     /// <summary>Reads back NRx4's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled ? 0x40 : 0);
+    public byte ReadControl() => (byte)(m_lengthEnabled
+        ? 0x40
+        : 0);
 
     /// <summary>Sets duty and reloads the length counter (NRx1).</summary>
     public void WriteDutyLength(byte value) {
@@ -116,7 +122,11 @@ public sealed partial class ApuPulseChannel {
 
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
-        if (m_lengthEnabled && (m_lengthCounter > 0) && (--m_lengthCounter == 0)) {
+        if (
+            m_lengthEnabled &&
+            (m_lengthCounter > 0) &&
+            (--m_lengthCounter == 0)
+        ) {
             m_enabled = false;
         }
     }
@@ -130,9 +140,15 @@ public sealed partial class ApuPulseChannel {
         if (--m_envelopeTimer <= 0) {
             m_envelopeTimer = m_envelopePeriod;
 
-            if (m_envelopeIncrease && (m_envelopeVolume < 15)) {
+            if (
+                m_envelopeIncrease &&
+                (m_envelopeVolume < 15)
+            ) {
                 ++m_envelopeVolume;
-            } else if (!m_envelopeIncrease && (m_envelopeVolume > 0)) {
+            } else if (
+                !m_envelopeIncrease &&
+                (m_envelopeVolume > 0)
+            ) {
                 --m_envelopeVolume;
             }
         }
@@ -140,11 +156,17 @@ public sealed partial class ApuPulseChannel {
 
     /// <summary>Clocks the frequency sweep (128&#160;Hz, channel 1 only).</summary>
     public void ClockSweep() {
-        if (!m_hasSweep || !m_sweepActive || (--m_sweepTimer > 0)) {
+        if (
+            !m_hasSweep ||
+            !m_sweepActive ||
+            (--m_sweepTimer > 0)
+        ) {
             return;
         }
 
-        m_sweepTimer = ((m_sweepPeriod == 0) ? 8 : m_sweepPeriod);
+        m_sweepTimer = ((m_sweepPeriod == 0)
+            ? 8
+            : m_sweepPeriod);
 
         if (m_sweepPeriod == 0) {
             return;
@@ -152,7 +174,10 @@ public sealed partial class ApuPulseChannel {
 
         var next = ComputeSweep();
 
-        if ((next <= 2047) && (m_sweepShift > 0)) {
+        if (
+            (next <= 2047) &&
+            (m_sweepShift > 0)
+        ) {
             m_sweepShadow = next;
             m_frequency = next;
 
@@ -185,10 +210,15 @@ public sealed partial class ApuPulseChannel {
 
         if (m_hasSweep) {
             m_sweepShadow = m_frequency;
-            m_sweepTimer = ((m_sweepPeriod == 0) ? 8 : m_sweepPeriod);
+            m_sweepTimer = ((m_sweepPeriod == 0)
+                ? 8
+                : m_sweepPeriod);
             m_sweepActive = ((m_sweepPeriod > 0) || (m_sweepShift > 0));
 
-            if ((m_sweepShift > 0) && (ComputeSweep() > 2047)) {
+            if (
+                (m_sweepShift > 0) &&
+                (ComputeSweep() > 2047)
+            ) {
                 m_enabled = false;
             }
         }

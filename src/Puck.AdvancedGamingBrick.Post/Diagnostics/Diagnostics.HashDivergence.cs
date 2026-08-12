@@ -18,13 +18,19 @@ internal static partial class Diagnostics {
     private static bool TryHashDivergence(string[] args, out int exitCode) {
         exitCode = 0;
 
-        var hashDivergenceIndex = Array.IndexOf(array: args, value: "--hash-divergence");
+        var hashDivergenceIndex = Array.IndexOf(
+            array: args,
+            value: "--hash-divergence"
+        );
 
         if (hashDivergenceIndex < 0) {
             return false;
         }
 
-        var romAPath = ((((hashDivergenceIndex + 1) < args.Length) && !args[(hashDivergenceIndex + 1)].StartsWith(value: "--", comparisonType: StringComparison.Ordinal))
+        var romAPath = ((((hashDivergenceIndex + 1) < args.Length) && !args[(hashDivergenceIndex + 1)].StartsWith(
+            value: "--",
+            comparisonType: StringComparison.Ordinal
+        ))
             ? args[(hashDivergenceIndex + 1)]
             : null);
 
@@ -35,17 +41,40 @@ internal static partial class Diagnostics {
             return true;
         }
 
-        var romBPath = ((((hashDivergenceIndex + 2) < args.Length) && !args[(hashDivergenceIndex + 2)].StartsWith(value: "--", comparisonType: StringComparison.Ordinal))
+        var romBPath = ((((hashDivergenceIndex + 2) < args.Length) && !args[(hashDivergenceIndex + 2)].StartsWith(
+            value: "--",
+            comparisonType: StringComparison.Ordinal
+        ))
             ? args[(hashDivergenceIndex + 2)]
             : null);
 
-        var fine = (Array.IndexOf(array: args, value: "--fine") >= 0);
-        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
-        var frames = ((framesArg is not null) ? int.Parse(s: framesArg) : 600);
-        var perturbArg = CommandLineArguments.Value(args: args, name: "--perturb-at");
-        var perturbAtFrame = ((perturbArg is not null) ? int.Parse(s: perturbArg) : (int?)null);
+        var fine = (Array.IndexOf(
+            array: args,
+            value: "--fine"
+        ) >= 0);
+        var framesArg = CommandLineArguments.Value(
+            args: args,
+            name: "--frames"
+        );
+        var frames = ((framesArg is not null)
+            ? int.Parse(s: framesArg)
+            : 600);
+        var perturbArg = CommandLineArguments.Value(
+            args: args,
+            name: "--perturb-at"
+        );
+        var perturbAtFrame = ((perturbArg is not null)
+            ? int.Parse(s: perturbArg)
+            : (int?)null);
 
-        exitCode = HashDivergenceProbe.Run(romAPath: romAPath, romBPath: romBPath, bios: BiosImage, frames: frames, fine: fine, perturbAtFrame: perturbAtFrame);
+        exitCode = HashDivergenceProbe.Run(
+            romAPath: romAPath,
+            romBPath: romBPath,
+            bios: BiosImage,
+            frames: frames,
+            fine: fine,
+            perturbAtFrame: perturbAtFrame
+        );
 
         return true;
     }

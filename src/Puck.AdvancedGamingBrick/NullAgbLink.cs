@@ -20,7 +20,9 @@ public sealed class NullAgbLink : IAgbLink, IAgbLinkNode {
     public IAgbLinkNode Connect(IAgbLinkClient client) => this;
 
     /// <inheritdoc/>
-    public uint NormalExchange(uint outgoing, bool word) => (word ? 0xFFFFFFFFu : 0xFFu);
+    public uint NormalExchange(uint outgoing, bool word) => (word
+        ? 0xFFFFFFFFu
+        : 0xFFu);
 
     /// <inheritdoc/>
     public bool MultiplayerExchange(ushort send, out ushort[] slots) {

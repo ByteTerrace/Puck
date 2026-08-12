@@ -25,7 +25,11 @@ internal sealed class PostReport {
             }
         }
 
-        ExitCode = (hasInfra ? 2 : (hasFail ? 1 : 0));
+        ExitCode = (hasInfra
+            ? 2
+            : (hasFail
+                ? 1
+                : 0));
     }
 
     /// <summary>The process exit code folded from the per-stage verdicts.</summary>
@@ -69,7 +73,13 @@ internal sealed class PostReport {
 
         var table = Render();
 
-        File.WriteAllText(path: Path.Combine(path1: artifactsDirectory, path2: "post-report.txt"), contents: table);
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: artifactsDirectory,
+                path2: "post-report.txt"
+            ),
+            contents: table
+        );
         Console.Out.Write(value: table);
     }
 

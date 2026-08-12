@@ -24,20 +24,22 @@ namespace Puck.Carriage;
 /// <item><c>recipient-sealing.pkcs8</c> — the recipient's private sealing key, PKCS#8 DER. It is here so
 /// the other side can actually unseal; see the warning below.</item>
 /// <item><c>manifest.txt</c> — <c>key=value</c> lines naming what the verifier must expect: domain,
-/// subject, algorithm, purpose, audience, sequence, and the sealed claim's purpose and expected
+/// subject, algorithm, purpose, audience, sequence, replay horizon, and the sealed claim's purpose and expected
 /// plaintext. The format is fixed by §17 — UTF-8, LF-terminated, first <c>=</c> splits, three backslash
 /// escapes, unknown keys ignored.</item>
 /// </list>
 /// <para><b>Why the sealed artifact has to exist.</b> Sealed carriage's key derivation
-/// (README.md §14) fixes five construction inputs — raw agreement as HKDF input, absent
-/// salt, the <c>puck.carriage.sealed.v1</c> info label, 32-byte output, 16-byte AEAD tag — and none of them
+/// (README.md §14) fixes the raw agreement as HKDF input, absent salt, the
+/// <c>puck.carriage.sealed.v1</c> info-label prefix followed by recipient-id context, 32-byte output,
+/// 16-byte AEAD tag, and recipient-bound associated data — and none of them
 /// is observable from a signed envelope. Two implementations disagreeing about any one of them fail with an
 /// AEAD tag mismatch, which is the same failure a tampered payload produces. Without ciphertext one side
 /// actually opens, §14 is cross-verified by reading prose and hoping. The signed envelopes never exercised
 /// it.</para>
 /// <para><b>The private key in the directory is deliberate and is a fixture only.</b> A recipient key that
 /// nobody can decrypt with proves nothing, so this one is minted fresh per export, used for one sealed
-/// payload, and belongs to no identity. Nothing here is a key management pattern.</para>
+/// payload, and has only the self-certifying throwaway id carried by that payload. Nothing here is a key
+/// management pattern.</para>
 /// <para><b>Neither verb may crash.</b> Every file in the directory is input, and input that is missing,
 /// truncated, corrupt, or simply not what it claims to be is a failed check with a name and a non-zero exit
 /// — never an unhandled exception. A cross-checking implementer reading a stack trace cannot tell "your
@@ -52,6 +54,9 @@ public static class CarriageInterchange {
     private const string RecipientSealingKeyFileName = "recipient-sealing.pkcs8";
     private const string RootKeyFileName = "root.spki";
     private const string SealedFileName = "sealed.envelope";
+    private static readonly CarriageConformanceProfile InterchangeProfile = CarriageConformanceProfile.Base.WithExtensions(
+        extensions: CarriageConformanceExtensions.EcdsaP256Sha384 | CarriageConformanceExtensions.SealedCarriageV1 | CarriageConformanceExtensions.InterchangeV1
+    );
 
     /// <summary>The manifest keys §17 requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
     private static readonly string[] RequiredManifestKeys = [
@@ -59,6 +64,7 @@ public static class CarriageInterchange {
         "audience",
         "domain",
         "purpose",
+        "replay-horizon-seconds",
         "sealed-plaintext",
         "sealed-purpose",
         "sequence",
@@ -80,8 +86,11 @@ public static class CarriageInterchange {
     /// <summary>The audience both interchange envelopes are directed at — §17 fixes the sealed envelope's audience as the claim's, so the manifest carries one value for both.</summary>
     public const string InterchangeAudience = "world:interchange";
 
-    /// <summary>The sequence the interchange claim carries. The sealed envelope deliberately carries none (§17): a mark store shared across runs would refuse the second verification of the same file as a replay, correctly.</summary>
+    /// <summary>The sequence the interchange claim carries. The fixture verifier inspects the returned commit requirement but deliberately does not mutate production replay state.</summary>
     public const ulong InterchangeSequence = 1UL;
+
+    /// <summary>The verifier-wide horizon the fixture uses to derive and cross-check its replay requirement.</summary>
+    public const long InterchangeReplayHorizonSeconds = (31L * 24 * 60 * 60);
 
     /// <summary>The subject the interchange chain is minted for.</summary>
     public const string InterchangeSubject = "puck:interchange-subject";
@@ -130,6 +139,13 @@ public static class CarriageInterchange {
             subject: InterchangeSubject,
             subjectPublicKeyInfo: subjectSpki,
             algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
+        var recipientSealingSpki = recipientSealingKey.ExportSubjectPublicKeyInfo();
+        var recipientSealingId = KeyId.ForSubject(
+            domain: rootId.Domain,
+            subject: InterchangeSubject,
+            subjectPublicKeyInfo: recipientSealingSpki,
+            algorithm: CarriageAlgorithms.EcdhP256HkdfSha256Aes256Gcm
         );
 
         var bindingOne = CarriageSigner.SignKeyBinding(
@@ -182,7 +198,8 @@ public static class CarriageInterchange {
             Sequence: null
         );
         var sealedPayload = SealedCarriage.Seal(
-            recipientPublicKeySubjectPublicKeyInfo: recipientSealingKey.ExportSubjectPublicKeyInfo(),
+            recipientId: recipientSealingId,
+            recipientPublicKeySubjectPublicKeyInfo: recipientSealingSpki,
             associatedData: codec.EncodeHeader(header: sealedHeader),
             plaintext: Encoding.UTF8.GetBytes(s: InterchangeSealedPlaintext)
         );
@@ -249,6 +266,7 @@ public static class CarriageInterchange {
                 ("domain", rootId.Domain),
                 ("minted-by", "puck.carriage"),
                 ("purpose", InterchangePurpose),
+                ("replay-horizon-seconds", InterchangeReplayHorizonSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
                 ("sealed-plaintext", InterchangeSealedPlaintext),
                 ("sealed-purpose", InterchangeSealedPurpose),
                 ("sequence", InterchangeSequence.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
@@ -381,6 +399,14 @@ public static class CarriageInterchange {
         }
 
         if (!TryStep(
+            check: "cross-verify manifest: parsing replay-horizon-seconds",
+            body: () => ParseReplayHorizon(value: manifest["replay-horizon-seconds"]),
+            value: out var replayHorizon
+        )) {
+            return 1;
+        }
+
+        if (!TryStep(
             check: "cross-verify trust list: pinning the exported root",
             body: () => new TrustList(
                 entries: [
@@ -392,7 +418,10 @@ public static class CarriageInterchange {
                     MaximumAge: null
                 ),
                 ],
-                defaultMaximumAge: null
+                defaultMaximumAge: null,
+                defaultRootBindingMaximumAge: null,
+                defaultSubjectBindingMaximumAge: null,
+                replayAcceptanceHorizon: replayHorizon
             ),
             value: out var trustList
         )) {
@@ -402,11 +431,11 @@ public static class CarriageInterchange {
         if (!TryStep(
             check: $"cross-verify chain: decoding {BindingOneFileName} and {BindingTwoFileName}",
             body: () => new[] {
-                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(
+                InterchangeProfile.DecodeEnvelope(codec: codec, wire: File.ReadAllBytes(path: Path.Combine(
                 path1: directory,
                 path2: BindingOneFileName
             ))),
-                codec.DecodeEnvelope(wire: File.ReadAllBytes(path: Path.Combine(
+                InterchangeProfile.DecodeEnvelope(codec: codec, wire: File.ReadAllBytes(path: Path.Combine(
                 path1: directory,
                 path2: BindingTwoFileName
             ))),
@@ -418,19 +447,17 @@ public static class CarriageInterchange {
 
         // Reading the clock here is legitimate where it would not be in the engine: this is a file-in
         // file-out developer tool whose admission boundary IS the process invocation, so there is no tape
-        // to replay and no tick to be inside (README.md §9). The mark store is fresh per
-        // run for the same reason §17 gives: a store carried between runs would refuse the second
-        // verification of the same fixture as a replay, and be right to.
+        // to replay and no tick to be inside (README.md §9). Verification is pure; the fixture checks the
+        // replay-commit requirement rather than committing it to production state.
         CarriageVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
-            CarriageVerifier.VerifyChain(
+            InterchangeProfile.VerifyChain(
             codec: codec,
-            claim: codec.DecodeEnvelope(wire: wire),
+            claim: InterchangeProfile.DecodeEnvelope(codec: codec, wire: wire),
             chain: chain,
             trustList: trustList,
             now: DateTimeOffset.UtcNow,
             expectedPurpose: expected,
-            expectedAudience: manifest["audience"],
-            sequenceStore: new InMemorySequenceStore()
+            expectedAudience: manifest["audience"]
         );
 
         if (TryStep(
@@ -446,6 +473,35 @@ public static class CarriageInterchange {
                     separator: ", ",
                     values: result.Reach!
                 )}]");
+
+                var claim = InterchangeProfile.DecodeEnvelope(codec: codec, wire: claimBytes);
+                var replay = result.ReplayCommit;
+                var horizonSeconds = checked((long)trustList.ReplayAcceptanceHorizon!.Value.TotalSeconds);
+                var expectedEpoch = Math.DivRem(
+                    a: claim.Header.NotBefore,
+                    b: horizonSeconds,
+                    result: out var remainder
+                );
+
+                if (remainder < 0) {
+                    expectedEpoch--;
+                }
+
+                expectedEpoch = checked(expectedEpoch * horizonSeconds);
+
+                if (
+                    (replay is null) ||
+                    !string.Equals(a: replay.Domain, b: claim.Header.Domain, comparisonType: StringComparison.Ordinal) ||
+                    !string.Equals(a: replay.Subject, b: claim.Header.Subject, comparisonType: StringComparison.Ordinal) ||
+                    (replay.Sequence != claim.Header.Sequence) ||
+                    (replay.EpochStartUnixSeconds != expectedEpoch) ||
+                    (replay.RetainThroughUnixSeconds != checked(expectedEpoch + (2 * horizonSeconds) - 1))
+                ) {
+                    failures += 1;
+                    Console.WriteLine(value: "[FAIL] cross-verify replay contract: the sequenced claim did not return the exact epoch-scoped commit requirement §8 derives");
+                } else {
+                    Console.WriteLine(value: $"[PASS] cross-verify replay contract: epoch {replay.EpochStartUnixSeconds}, sequence {replay.Sequence}, retain through {replay.RetainThroughUnixSeconds}");
+                }
             } else {
                 failures += 1;
 
@@ -501,7 +557,7 @@ public static class CarriageInterchange {
     private static int CheckClaimHeader(ICarriageCodec codec, byte[] claimBytes, Dictionary<string, string> manifest) {
         if (!TryStep(
             check: $"cross-verify manifest agreement: decoding {ClaimFileName}",
-            body: () => codec.DecodeEnvelope(wire: claimBytes),
+            body: () => InterchangeProfile.DecodeEnvelope(codec: codec, wire: claimBytes),
             value: out var claim
         )) {
             return 1;
@@ -604,7 +660,7 @@ public static class CarriageInterchange {
 
         if (!TryStep(
             check: $"cross-verify sealed: decoding {SealedFileName}",
-            body: () => codec.DecodeEnvelope(wire: File.ReadAllBytes(path: sealedPath)),
+            body: () => InterchangeProfile.DecodeEnvelope(codec: codec, wire: File.ReadAllBytes(path: sealedPath)),
             value: out var sealedClaim
         )) {
             return 1;
@@ -612,15 +668,14 @@ public static class CarriageInterchange {
 
         if (!TryStep(
             check: "cross-verify sealed: walking the sealed envelope's own chain",
-            body: () => CarriageVerifier.VerifyChain(
+            body: () => InterchangeProfile.VerifyChain(
                 codec: codec,
                 claim: sealedClaim,
                 chain: chain,
                 trustList: trustList,
                 now: DateTimeOffset.UtcNow,
                 expectedPurpose: manifest["sealed-purpose"],
-                expectedAudience: manifest["audience"],
-                sequenceStore: new InMemorySequenceStore()
+                expectedAudience: manifest["audience"]
             ),
             value: out var result
         )) {
@@ -758,6 +813,26 @@ public static class CarriageInterchange {
             value = default!;
 
             return false;
+        }
+    }
+
+    private static TimeSpan ParseReplayHorizon(string value) {
+        if (
+            !long.TryParse(
+                s: value,
+                style: System.Globalization.NumberStyles.None,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var seconds
+            ) ||
+            (seconds <= 0)
+        ) {
+            throw new FormatException(message: $"manifest.txt's replay-horizon-seconds must be a positive whole-second integer, but '{value}' arrived.");
+        }
+
+        try {
+            return TimeSpan.FromSeconds(value: seconds);
+        } catch (OverflowException exception) {
+            throw new FormatException(message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range.", innerException: exception);
         }
     }
 

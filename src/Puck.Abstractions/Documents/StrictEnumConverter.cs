@@ -30,6 +30,9 @@ namespace Puck.Abstractions.Documents;
 public sealed class StrictEnumConverter<TEnum> : JsonStringEnumConverter<TEnum> where TEnum : struct, Enum {
     /// <summary>Initializes a new instance of the <see cref="StrictEnumConverter{TEnum}"/> class: no naming policy
     /// (an enum value is never touched, only property names are), and integer tokens refused on read.</summary>
-    public StrictEnumConverter() : base(namingPolicy: null, allowIntegerValues: false) {
+    public StrictEnumConverter() : base(
+        namingPolicy: null,
+        allowIntegerValues: false
+    ) {
     }
 }

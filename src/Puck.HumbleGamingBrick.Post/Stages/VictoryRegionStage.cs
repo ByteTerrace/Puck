@@ -37,9 +37,15 @@ internal sealed class VictoryRegionStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var rom = SyntheticRom.Create(cartridgeType: 0x1B, ramSize: 0x04); // MBC5+RAM+BATTERY, 128 KiB RAM
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0x1B,
+            ramSize: 0x04
+        ); // MBC5+RAM+BATTERY, 128 KiB RAM
 
-        using var machine = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
 
         var cartridge = machine.GetRequiredService<ICartridge>();
 
@@ -51,17 +57,29 @@ internal sealed class VictoryRegionStage : IPostStage {
 
         // Write the region through the real MBC5 protocol: enable RAM (0x0A to 0x0000–0x1FFF), select the HIGHEST bank
         // 0x0F (to 0x4000–0x5FFF), then store into the top of the window 0xBFF0–0xBFFF.
-        cartridge.WriteControl(address: 0x0000, value: 0x0A);
-        cartridge.WriteControl(address: 0x4000, value: 0x0F);
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0A
+        );
+        cartridge.WriteControl(
+            address: 0x4000,
+            value: 0x0F
+        );
 
         for (var index = 0; (index < RegionByteCount); index++) {
-            cartridge.WriteRam(address: (ushort)(0xBFF0 + index), value: Region[index]);
+            cartridge.WriteRam(
+                address: (ushort)(0xBFF0 + index),
+                value: Region[index]
+            );
         }
 
         // ReadExternalRam at the top offset returns the region.
         var read = new byte[RegionByteCount];
 
-        cartridge.ReadExternalRam(offset: topOffset, destination: read);
+        cartridge.ReadExternalRam(
+            offset: topOffset,
+            destination: read
+        );
 
         if (!read.AsSpan().SequenceEqual(other: Region)) {
             return PostStageOutcome.Fail(detail: "ReadExternalRam at ExternalRamByteCount-16 did not return the bytes written to the top of bank 0x0F — the region is not the highest SRAM address");
@@ -86,11 +104,17 @@ internal sealed class VictoryRegionStage : IPostStage {
         // Bank independence: re-page to bank 0 (as a running game would). ReadExternalRam STILL returns the highest bank's
         // bytes — it never touched the bank select — while the CPU window now reads bank 0 (which we never wrote), proving
         // the two are different addresses and the host poll is immune to the game's paging.
-        cartridge.WriteControl(address: 0x4000, value: 0x00);
+        cartridge.WriteControl(
+            address: 0x4000,
+            value: 0x00
+        );
 
         var afterRepage = new byte[RegionByteCount];
 
-        cartridge.ReadExternalRam(offset: topOffset, destination: afterRepage);
+        cartridge.ReadExternalRam(
+            offset: topOffset,
+            destination: afterRepage
+        );
 
         if (!afterRepage.AsSpan().SequenceEqual(other: Region)) {
             return PostStageOutcome.Fail(detail: "ReadExternalRam changed after the game re-paged the RAM bank — the host poll is not bank-independent");
@@ -101,7 +125,10 @@ internal sealed class VictoryRegionStage : IPostStage {
         }
 
         // The region round-trips through a battery save into a fresh machine (deterministic resume).
-        using var reboot = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var reboot = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
 
         var rebootCartridge = reboot.GetRequiredService<ICartridge>();
 
@@ -109,7 +136,10 @@ internal sealed class VictoryRegionStage : IPostStage {
 
         var afterReboot = new byte[RegionByteCount];
 
-        rebootCartridge.ReadExternalRam(offset: topOffset, destination: afterReboot);
+        rebootCartridge.ReadExternalRam(
+            offset: topOffset,
+            destination: afterReboot
+        );
 
         if (!afterReboot.AsSpan().SequenceEqual(other: Region)) {
             return PostStageOutcome.Fail(detail: "the win-condition region did not survive a battery-save round-trip into a fresh machine");

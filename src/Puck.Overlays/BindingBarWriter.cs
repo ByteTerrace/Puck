@@ -44,7 +44,12 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         var seats = frame.Seats.Span;
 
-        OverlaySeatLoop.Emit(builder: builder, seats: seats, writerName: nameof(BindingBarWriter), writer: this);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: seats,
+            writerName: nameof(BindingBarWriter),
+            writer: this
+        );
     }
 
     // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its bottom-center anchor,
@@ -53,7 +58,11 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) {
         var region = seat.Viewport;
 
-        if (!seat.Visible || (region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
+        if (
+            !seat.Visible ||
+            (region.Width < MinRegionExtent) ||
+            (region.Height < MinRegionExtent)
+        ) {
             return;
         }
 
@@ -72,7 +81,11 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 continue;
             }
 
-            var placement = BindingBarLayout.Place(aspect: regionAspect, index: index, options: in layout);
+            var placement = BindingBarLayout.Place(
+                aspect: regionAspect,
+                index: index,
+                options: in layout
+            );
 
             builder.WriteIcon(
                 accent: slot.Accent,
@@ -92,7 +105,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         // The modifier pips sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
-        var anchor = BindingBarLayout.BarAnchor(anchorOffsetY: layout.AnchorOffsetY, aspect: regionAspect);
+        var anchor = BindingBarLayout.BarAnchor(
+            anchorOffsetY: layout.AnchorOffsetY,
+            aspect: regionAspect
+        );
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
         var scaledButtonSize = (layout.ButtonSize * layout.Scale);
@@ -100,10 +116,16 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var pipSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
         // The page NAME rides directly under the pips — the visible half of the page model: squeeze a trigger chord
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
-        var labelCell = Math.Max(val1: 12, val2: (int)(pipHalf * 1.9f));
+        var labelCell = Math.Max(
+            val1: 12,
+            val2: ((int)(pipHalf * 1.9f))
+        );
 
         if (!string.IsNullOrEmpty(value: seat.Label)) {
-            var labelChars = Math.Min(val1: seat.Label.Length, val2: MaxLineChars);
+            var labelChars = Math.Min(
+                val1: seat.Label.Length,
+                val2: MaxLineChars
+            );
 
             builder.WriteText(
                 alpha: 0.9f,
@@ -111,7 +133,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextPrimary,
                 text: seat.Label,
-                x: (anchorX - (builder.TextWidth(chars: labelChars, cellHeight: labelCell) * 0.5f)),
+                x: (anchorX - (builder.TextWidth(
+                    chars: labelChars,
+                    cellHeight: labelCell
+                ) * 0.5f)),
                 y: (anchorY + (pipHalf * 1.4f))
             );
         }
@@ -120,12 +145,18 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             return;
         }
 
-        var pipCount = Math.Min(val1: modifiers.Length, val2: MaxModifierPips);
+        var pipCount = Math.Min(
+            val1: modifiers.Length,
+            val2: MaxModifierPips
+        );
 
         // The pip cap is the SAME kind of self-declared truncation as the hint-line cap below it: attribute it the
         // same way (NoteRefused) rather than letting it clip silently at a smaller grain than the row cap does.
         if (pipCount < modifiers.Length) {
-            builder.NoteRefused(elements: (modifiers.Length - pipCount), textWords: 0);
+            builder.NoteRefused(
+                elements: (modifiers.Length - pipCount),
+                textWords: 0
+            );
         }
 
         for (var index = 0; (index < pipCount); index++) {
@@ -133,7 +164,9 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
             builder.WriteIcon(
                 accent: false,
-                alpha: (modifier.Held ? 1f : 0.35f),
+                alpha: (modifier.Held
+                ? 1f
+                : 0.35f),
                 bound: true,
                 centerX: (anchorX + ((index - ((pipCount - 1) * 0.5f)) * pipSpacing)),
                 centerY: anchorY,
@@ -155,23 +188,35 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             return;
         }
 
-        var hintCell = Math.Max(val1: 10, val2: (int)(pipHalf * 1.6f));
+        var hintCell = Math.Max(
+            val1: 10,
+            val2: ((int)(pipHalf * 1.6f))
+        );
         var hintLineStep = (hintCell * 1.3f);
         var hintBaseY = (anchorY - (pipHalf * 2.2f));
         // Bounded and pinned: a page with many command-chord rows would otherwise lose its overflow silently at the
         // shared record pool's boundary, by draw-order accident. The first MaxHintLines rows draw; the rest are
         // refused at the bar's reservation and attributed to the bar — boundedness is what makes the reservation
         // meaningful, since an unbounded writer cannot be carved by any scheme.
-        var hintCount = Math.Min(val1: hints.Length, val2: MaxHintLines);
+        var hintCount = Math.Min(
+            val1: hints.Length,
+            val2: MaxHintLines
+        );
 
         if (hintCount < hints.Length) {
             var refusedWords = 0;
 
             for (var index = hintCount; (index < hints.Length); index++) {
-                refusedWords += Math.Min(val1: hints[index].Length, val2: MaxLineChars);
+                refusedWords += Math.Min(
+                    val1: hints[index].Length,
+                    val2: MaxLineChars
+                );
             }
 
-            builder.NoteRefused(elements: (hints.Length - hintCount), textWords: refusedWords);
+            builder.NoteRefused(
+                elements: (hints.Length - hintCount),
+                textWords: refusedWords
+            );
         }
 
         for (var index = 0; (index < hintCount); index++) {
@@ -181,7 +226,10 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 continue;
             }
 
-            var hintChars = Math.Min(val1: hint.Length, val2: MaxLineChars);
+            var hintChars = Math.Min(
+                val1: hint.Length,
+                val2: MaxLineChars
+            );
 
             builder.WriteText(
                 alpha: 0.6f,
@@ -189,12 +237,18 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextDim,
                 text: hint,
-                x: (anchorX - (builder.TextWidth(chars: hintChars, cellHeight: hintCell) * 0.5f)),
-                y: (hintBaseY - ((hintCount - 1 - index) * hintLineStep) - hintCell)
+                x: (anchorX - (builder.TextWidth(
+                    chars: hintChars,
+                    cellHeight: hintCell
+                ) * 0.5f)),
+                y: ((hintBaseY - (((hintCount - 1) - index) * hintLineStep)) - hintCell)
             );
         }
     }
 
     void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
-        EmitSeat(builder: builder, seat: in seat);
+        EmitSeat(
+            builder: builder,
+            seat: in seat
+        );
 }

@@ -798,7 +798,7 @@ public sealed class AdmissionSecurityLawTests {
     }
 
     private static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, byte[] challenge, CancellationToken ct) {
-        var codec = new FixedLayoutCarriageCodec();
+        var codec = new CborCarriageCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var claim = CarriageSigner.SignClaim(
             codec: codec,

@@ -3,7 +3,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 // --trace-crash <rom>: report the first branch into unmapped memory.
 internal static partial class Diagnostics {
     public static void TraceCrash(string romPath) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 
@@ -30,13 +34,18 @@ internal static partial class Diagnostics {
                     continue;
                 }
 
-                var culprit = (pcBefore - (thumb ? 4u : 8u));
+                var culprit = (pcBefore - (thumb
+                    ? 4u
+                    : 8u));
 
                 Console.WriteLine(value: $"  CRASH at step {i}: branched to 0x{pc:X8}");
-                Console.WriteLine(value: $"  culprit instruction @0x{culprit:X8} = 0x{machine.Bus.Read32(address: culprit, access: BusAccessType.NonSequential):X8} (thumb={thumb})");
+                Console.WriteLine(value: $"  culprit instruction @0x{culprit:X8} = 0x{machine.Bus.Read32(
+                    address: culprit,
+                    access: BusAccessType.NonSequential
+                ):X8} (thumb={thumb})");
 
                 for (var r = 0; (r < 16); r += 4) {
-                    Console.WriteLine(value: $"    r{r,-2}=0x{cpu.GetRegister(r):X8}  r{(r + 1),-2}=0x{cpu.GetRegister((r + 1)):X8}  r{(r + 2),-2}=0x{cpu.GetRegister((r + 2)):X8}  r{(r + 3),-2}=0x{cpu.GetRegister((r + 3)):X8}");
+                    Console.WriteLine(value: $"    r{r,-2}=0x{cpu.GetRegister(index: r):X8}  r{(r + 1),-2}=0x{cpu.GetRegister(index: (r + 1)):X8}  r{(r + 2),-2}=0x{cpu.GetRegister(index: (r + 2)):X8}  r{(r + 3),-2}=0x{cpu.GetRegister(index: (r + 3)):X8}");
                 }
 
                 Console.WriteLine(value: $"    cpsr=0x{cpu.Cpsr:X8}");

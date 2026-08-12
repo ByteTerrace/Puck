@@ -24,7 +24,12 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
     /// <param name="rom">The cartridge ROM bytes.</param>
     /// <returns>The identity stamp.</returns>
     public static AgbMachineIdentity Compute(ReadOnlySpan<byte> bios, ReadOnlySpan<byte> rom) =>
-        new(Version: CurrentVersion, BiosHash: Fnv1aHash.Compute(values: bios), RomHash: Fnv1aHash.Compute(values: rom), RomLength: rom.Length);
+        new(
+        Version: CurrentVersion,
+        BiosHash: Fnv1aHash.Compute(values: bios),
+        RomHash: Fnv1aHash.Compute(values: rom),
+        RomLength: rom.Length
+    );
 }
 
 /// <summary>
@@ -36,9 +41,17 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
 /// </summary>
 public sealed class AgbMachineSnapshot : MachineSnapshot<AgbMachineSnapshot, AgbMachineIdentity, long> {
     internal AgbMachineSnapshot(AgbMachineIdentity identity, long takenAt, SnapshotImage image)
-        : base(identity: identity, takenAt: takenAt, image: image) { }
+        : base(
+        identity: identity,
+        takenAt: takenAt,
+        image: image
+    ) { }
 
     /// <inheritdoc/>
     protected override AgbMachineSnapshot Create(AgbMachineIdentity identity, long takenAt, SnapshotImage image) =>
-        new(identity: identity, takenAt: takenAt, image: image);
+        new(
+        identity: identity,
+        takenAt: takenAt,
+        image: image
+    );
 }

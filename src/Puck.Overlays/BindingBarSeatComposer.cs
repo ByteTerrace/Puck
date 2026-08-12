@@ -40,17 +40,26 @@ public static class BindingBarSeatComposer {
         ArgumentNullException.ThrowIfNull(argument: view);
 
         if (destination.Length != SlotSources.Length) {
-            throw new ArgumentException(message: $"Expected {SlotSources.Length} slots; got {destination.Length}.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"Expected {SlotSources.Length} slots; got {destination.Length}.",
+                paramName: nameof(destination)
+            );
         }
 
         for (var index = 0; (index < destination.Length); index++) {
-            var button = FindButton(view: view, source: SlotSources[index]);
+            var button = FindButton(
+                view: view,
+                source: SlotSources[index]
+            );
 
             if (button is null) {
                 destination[index] = new OverlayBindingSlot(
                     Alpha: (0.35f * barAlpha),
                     Bound: false,
-                    Glyph: OverlayGamepadGlyphs.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
+                    Glyph: OverlayGamepadGlyphs.Resolve(
+                        button: BindingBarLayout.SlotButtons[index],
+                        family: family
+                    ),
                     Icon: OverlayIconId.None,
                     Pressed: false,
                     Visible: true
@@ -62,7 +71,10 @@ public static class BindingBarSeatComposer {
             destination[index] = new OverlayBindingSlot(
                 Alpha: barAlpha,
                 Bound: true,
-                Glyph: OverlayGamepadGlyphs.Resolve(button: BindingBarLayout.SlotButtons[index], family: family),
+                Glyph: OverlayGamepadGlyphs.Resolve(
+                    button: BindingBarLayout.SlotButtons[index],
+                    family: family
+                ),
                 Icon: OverlayGamepadGlyphs.ResolveIcon(icon: button.Icon),
                 Pressed: (isPressed?.Invoke(arg: button.Command) ?? false),
                 Visible: true
@@ -78,7 +90,10 @@ public static class BindingBarSeatComposer {
     public static int ComposeModifiers(BindingPageView view, Span<OverlayBindingModifier> destination) {
         ArgumentNullException.ThrowIfNull(argument: view);
 
-        var count = Math.Min(val1: view.Modifiers.Count, val2: destination.Length);
+        var count = Math.Min(
+            val1: view.Modifiers.Count,
+            val2: destination.Length
+        );
 
         for (var index = 0; (index < count); index++) {
             var modifier = view.Modifiers[index];
@@ -94,7 +109,11 @@ public static class BindingBarSeatComposer {
 
     private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
         foreach (var button in view.Buttons) {
-            if (string.Equals(a: button.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(
+                a: button.Source,
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 return button;
             }
         }

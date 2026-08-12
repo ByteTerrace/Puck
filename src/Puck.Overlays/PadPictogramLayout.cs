@@ -44,9 +44,15 @@ public static class PadPictogramLayout {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside 0..11.</exception>
     public static PadPictogramSlot Resolve(int index, in PadPictogramOptions options) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: SlotCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: index,
+            other: SlotCount
+        );
 
-        var (cluster, slot) = Math.DivRem(left: index, right: SlotsPerCluster);
+        var (cluster, slot) = Math.DivRem(
+            left: index,
+            right: SlotsPerCluster
+        );
         var sign = ((cluster << 1) - 1);
         var xMultiplier = SlotCompassX[index: slot];
         var yMultiplier = SlotCompassY[index: slot];

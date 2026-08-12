@@ -55,11 +55,17 @@ public sealed class AddonHost : IDisposable {
     /// <param name="descriptor">The neutral load request.</param>
     /// <exception cref="ArgumentException"><paramref name="descriptor"/> has a null-or-whitespace name.</exception>
     public void Add(in AddonDescriptor descriptor) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: descriptor.Name, paramName: nameof(descriptor));
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            argument: descriptor.Name,
+            paramName: nameof(descriptor)
+        );
 
         var instance = Load(descriptor: in descriptor);
 
-        if (!descriptor.Enabled && (instance.State == AddonState.Enabled)) {
+        if (
+            !descriptor.Enabled &&
+            (instance.State == AddonState.Enabled)
+        ) {
             instance.Disable();
         }
 
@@ -110,7 +116,11 @@ public sealed class AddonHost : IDisposable {
             try {
                 var info = m_loader.Load(path: descriptor.ModulePath);
 
-                if (!string.Equals(a: info.ContentHash.ToString(), b: pin, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                if (!string.Equals(
+                    a: info.ContentHash.ToString(),
+                    b: pin,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) {
                     return $"refused — content {info.ContentHash} no longer matches the declared moduleHash pin {pin}; remove the pin to hot-reload";
                 }
             } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
@@ -212,10 +222,20 @@ public sealed class AddonHost : IDisposable {
             // Enforced exactly as Reload enforces it: a declared moduleHash pin is a boot-time integrity check,
             // not decoration. A mismatch must produce a sticky, attributed load fault naming both hashes — the
             // addon must never instantiate on unpinned content.
-            if ((descriptor.ModuleHash is { } pin) && !string.Equals(a: info.ContentHash.ToString(), b: pin, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (
+                (descriptor.ModuleHash is { } pin) &&
+                !string.Equals(
+                a: info.ContentHash.ToString(),
+                b: pin,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+            ) {
                 return new AddonInstance(
                     descriptor: in descriptor,
-                    fault: new AddonFault(Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}", Kind: AddonFaultKind.HashMismatch),
+                    fault: new AddonFault(
+                        Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}",
+                        Kind: AddonFaultKind.HashMismatch
+                    ),
                     hash: info.ContentHash
                 );
             }
@@ -229,7 +249,10 @@ public sealed class AddonHost : IDisposable {
         } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
             return new AddonInstance(
                 descriptor: in descriptor,
-                fault: new AddonFault(Detail: $"addon {descriptor.Name}: BadExport — {error.Message}", Kind: AddonFaultKind.BadExport),
+                fault: new AddonFault(
+                    Detail: $"addon {descriptor.Name}: BadExport — {error.Message}",
+                    Kind: AddonFaultKind.BadExport
+                ),
                 hash: default
             );
         }

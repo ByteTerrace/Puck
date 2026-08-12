@@ -1,5 +1,5 @@
-using Puck.Recording.Capture;
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Recording.Capture;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -23,29 +23,67 @@ internal static class LinkExplore {
     public static bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
 
-        var index = Array.IndexOf(array: args, value: "--link-explore");
+        var index = Array.IndexOf(
+            array: args,
+            value: "--link-explore"
+        );
 
         if (index < 0) {
             return false;
         }
 
-        var positionals = Positionals(args: args, afterIndex: index);
-        var frames = IntArg(args: args, name: "--frames", fallback: 900);
-        var dumpEvery = IntArg(args: args, name: "--dump-every", fallback: 60);
-        var outDir = (CommandLineArguments.Value(args: args, name: "--out") ?? ".");
-        var modelA = ModelArg(args: args, name: "--modelA", fallback: ConsoleModel.Cgb);
-        var modelB = ModelArg(args: args, name: "--modelB", fallback: ConsoleModel.Agb);
+        var positionals = Positionals(
+            args: args,
+            afterIndex: index
+        );
+        var frames = IntArg(
+            args: args,
+            name: "--frames",
+            fallback: 900
+        );
+        var dumpEvery = IntArg(
+            args: args,
+            name: "--dump-every",
+            fallback: 60
+        );
+        var outDir = (CommandLineArguments.Value(
+            args: args,
+            name: "--out"
+        ) ?? ".");
+        var modelA = ModelArg(
+            args: args,
+            name: "--modelA",
+            fallback: ConsoleModel.Cgb
+        );
+        var modelB = ModelArg(
+            args: args,
+            name: "--modelB",
+            fallback: ConsoleModel.Agb
+        );
 
         Directory.CreateDirectory(path: outDir);
 
         if (positionals.Count >= 4) {
             RunLinked(
-                romAPath: positionals[0], scriptAPath: positionals[1], modelA: modelA,
-                romBPath: positionals[2], scriptBPath: positionals[3], modelB: modelB,
-                frames: frames, dumpEvery: dumpEvery, outDir: outDir
+                romAPath: positionals[0],
+                scriptAPath: positionals[1],
+                modelA: modelA,
+                romBPath: positionals[2],
+                scriptBPath: positionals[3],
+                modelB: modelB,
+                frames: frames,
+                dumpEvery: dumpEvery,
+                outDir: outDir
             );
         } else if (positionals.Count >= 2) {
-            RunLone(romPath: positionals[0], scriptPath: positionals[1], model: modelA, frames: frames, dumpEvery: dumpEvery, outDir: outDir);
+            RunLone(
+                romPath: positionals[0],
+                scriptPath: positionals[1],
+                model: modelA,
+                frames: frames,
+                dumpEvery: dumpEvery,
+                outDir: outDir
+            );
         } else {
             Console.WriteLine(value: "  --link-explore needs at least <rom> <script>");
         }
@@ -54,7 +92,10 @@ internal static class LinkExplore {
     }
 
     private static void RunLone(string romPath, string scriptPath, ConsoleModel model, int frames, int dumpEvery, string outDir) {
-        using var machine = PostMachine.Build(model: model, rom: File.ReadAllBytes(path: romPath));
+        using var machine = PostMachine.Build(
+            model: model,
+            rom: File.ReadAllBytes(path: romPath)
+        );
 
         var script = LinkInputScript.Load(path: scriptPath);
         var joypad = machine.GetRequiredService<IJoypad>();
@@ -66,8 +107,16 @@ internal static class LinkExplore {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
             machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
 
-            if ((((frame + 1) % dumpEvery) == 0) || ((frame + 1) == frames)) {
-                Dump(machine: machine, outDir: outDir, tag: tag, frame: (frame + 1));
+            if (
+                (((frame + 1) % dumpEvery) == 0) ||
+                ((frame + 1) == frames)
+            ) {
+                Dump(
+                    machine: machine,
+                    outDir: outDir,
+                    tag: tag,
+                    frame: (frame + 1)
+                );
             }
         }
     }
@@ -76,8 +125,14 @@ internal static class LinkExplore {
         string romBPath, string scriptBPath, ConsoleModel modelB,
         int frames, int dumpEvery, string outDir
     ) {
-        using var machineA = PostMachine.Build(model: modelA, rom: File.ReadAllBytes(path: romAPath));
-        using var machineB = PostMachine.Build(model: modelB, rom: File.ReadAllBytes(path: romBPath));
+        using var machineA = PostMachine.Build(
+            model: modelA,
+            rom: File.ReadAllBytes(path: romAPath)
+        );
+        using var machineB = PostMachine.Build(
+            model: modelB,
+            rom: File.ReadAllBytes(path: romBPath)
+        );
 
         var scriptA = LinkInputScript.Load(path: scriptAPath);
         var scriptB = LinkInputScript.Load(path: scriptBPath);
@@ -87,11 +142,28 @@ internal static class LinkExplore {
         Console.WriteLine(value: $"== link-explore (linked {modelA}<->{modelB}), {frames} frames, dump every {dumpEvery} ==");
 
         var result = LinkReplay.Run(
-            first: machineA, firstScript: scriptA, second: machineB, secondScript: scriptB, frames: frames,
+            first: machineA,
+            firstScript: scriptA,
+            second: machineB,
+            secondScript: scriptB,
+            frames: frames,
             onFrame: frame => {
-                if ((((frame + 1) % dumpEvery) == 0) || ((frame + 1) == frames)) {
-                    Dump(machine: machineA, outDir: outDir, tag: tagA, frame: (frame + 1));
-                    Dump(machine: machineB, outDir: outDir, tag: tagB, frame: (frame + 1));
+                if (
+                    (((frame + 1) % dumpEvery) == 0) ||
+                    ((frame + 1) == frames)
+                ) {
+                    Dump(
+                        machine: machineA,
+                        outDir: outDir,
+                        tag: tagA,
+                        frame: (frame + 1)
+                    );
+                    Dump(
+                        machine: machineB,
+                        outDir: outDir,
+                        tag: tagB,
+                        frame: (frame + 1)
+                    );
                 }
             }
         );
@@ -114,9 +186,17 @@ internal static class LinkExplore {
             rgba[(offset + 3)] = 0xFF;
         }
 
-        var path = Path.Combine(path1: outDir, path2: $"{tag}_{frame:D5}.png");
+        var path = Path.Combine(
+            path1: outDir,
+            path2: $"{tag}_{frame:D5}.png"
+        );
 
-        PngEncoder.Write(path: path, rgba: rgba, width: framebuffer.Width, height: framebuffer.Height);
+        PngEncoder.Write(
+            path: path,
+            rgba: rgba,
+            width: framebuffer.Width,
+            height: framebuffer.Height
+        );
         Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} (fb 0x{HashPixels(pixels: pixels):X16})");
     }
     private static ulong HashPixels(ReadOnlySpan<uint> pixels) {
@@ -132,7 +212,10 @@ internal static class LinkExplore {
         var positionals = new List<string>();
 
         for (var index = (afterIndex + 1); (index < args.Length); ++index) {
-            if (args[index].StartsWith(value: "--", comparisonType: StringComparison.Ordinal)) {
+            if (args[index].StartsWith(
+                value: "--",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 break;
             }
 
@@ -142,12 +225,23 @@ internal static class LinkExplore {
         return positionals;
     }
     private static int IntArg(string[] args, string name, int fallback) {
-        var value = CommandLineArguments.Value(args: args, name: name);
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
 
-        return (((value is not null) && int.TryParse(s: value, result: out var parsed)) ? parsed : fallback);
+        return (((value is not null) && int.TryParse(
+            s: value,
+            result: out var parsed
+        ))
+            ? parsed
+            : fallback);
     }
     private static ConsoleModel ModelArg(string[] args, string name, ConsoleModel fallback) {
-        var value = CommandLineArguments.Value(args: args, name: name);
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
 
         return value?.ToLowerInvariant() switch {
             "dmg" => ConsoleModel.Dmg,

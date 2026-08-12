@@ -18,13 +18,13 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class WatchpointAccessPcStage : IPostStage {
-    private const ushort WriteInstructionPc = 0x0102;
-    private const ushort WriteWatchAddress = 0xC060;
-    private const byte WriteValue = 0x7A;
-    private const ushort ReadInstructionPc = 0x0105;
-    private const ushort ReadWatchAddress = 0xC050;
-    private const byte ReadValue = 0x33;
     private const ushort LoopPc = 0x0108;
+    private const ushort ReadInstructionPc = 0x0105;
+    private const byte ReadValue = 0x33;
+    private const ushort ReadWatchAddress = 0xC050;
+    private const ushort WriteInstructionPc = 0x0102;
+    private const byte WriteValue = 0x7A;
+    private const ushort WriteWatchAddress = 0xC060;
 
     // 0x0100: LD A,0x7A (3E 7A) · LD (0xC060),A (EA 60 C0) · LD A,(0xC050) (FA 50 C0) · JR -2 (18 FE, infinite loop).
     private static readonly byte[] Program = [0x3E, WriteValue, 0xEA, 0x60, 0xC0, 0xFA, 0x50, 0xC0, 0x18, 0xFE];
@@ -42,19 +42,48 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
         var legs = new (string Mode, Action<MachineInstance> Advance)[] {
             ("continuous", static instance => instance.Machine.Run(tCycles: 256)),
             ("frame", static instance => instance.Machine.Run(tCycles: PostMachine.TCyclesPerFrame)),
-            ("step", static instance => RunSteps(instance: instance, count: 2)),
-            ("until", static instance => RunUntil(instance: instance, target: LoopPc)),
+            ("step", static instance => RunSteps(
+            instance: instance,
+            count: 2
+        )),
+            ("until", static instance => RunUntil(
+            instance: instance,
+            target: LoopPc
+        )),
         };
 
         foreach (var (mode, advance) in legs) {
-            if (RunLeg(mode: mode, read: false, write: true, watchAddress: WriteWatchAddress, expectedPc: WriteInstructionPc, expectedValue: WriteValue, expectedIsWrite: true, advance: advance) is { } writeFailure) {
+            if (RunLeg(
+                mode: mode,
+                read: false,
+                write: true,
+                watchAddress: WriteWatchAddress,
+                expectedPc: WriteInstructionPc,
+                expectedValue: WriteValue,
+                expectedIsWrite: true,
+                advance: advance
+            ) is { } writeFailure) {
                 return PostStageOutcome.Fail(detail: writeFailure);
             }
 
             // "step" only needs 2 steps to reach the WRITE; the READ is the 3rd instruction, so its own leg needs one more.
-            var readAdvance = ((mode == "step") ? (static instance => RunSteps(instance: instance, count: 3)) : advance);
+            var readAdvance = ((mode == "step")
+                ? (static instance => RunSteps(
+                instance: instance,
+                count: 3
+            ))
+                : advance);
 
-            if (RunLeg(mode: mode, read: true, write: false, watchAddress: ReadWatchAddress, expectedPc: ReadInstructionPc, expectedValue: ReadValue, expectedIsWrite: false, advance: readAdvance) is { } readFailure) {
+            if (RunLeg(
+                mode: mode,
+                read: true,
+                write: false,
+                watchAddress: ReadWatchAddress,
+                expectedPc: ReadInstructionPc,
+                expectedValue: ReadValue,
+                expectedIsWrite: false,
+                advance: readAdvance
+            ) is { } readFailure) {
                 return PostStageOutcome.Fail(detail: readFailure);
             }
         }
@@ -65,35 +94,63 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
     private static string? RunLeg(string mode, bool read, bool write, ushort watchAddress, ushort expectedPc, byte expectedValue, bool expectedIsWrite, Action<MachineInstance> advance) {
         var rom = new byte[0x8000];
 
-        Program.CopyTo(array: rom, index: 0x0100);
+        Program.CopyTo(
+            array: rom,
+            index: 0x0100
+        );
 
-        using var instance = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        using var instance = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
 
         var bus = instance.GetRequiredService<SystemBus>();
 
-        bus.WriteByte(address: ReadWatchAddress, value: ReadValue);
-        bus.AddWatch(address: watchAddress, read: read, write: write);
+        bus.WriteByte(
+            address: ReadWatchAddress,
+            value: ReadValue
+        );
+        bus.AddWatch(
+            address: watchAddress,
+            read: read,
+            write: write
+        );
 
         advance(instance);
 
-        if (!bus.TryTakeWatchHit(address: out var hitAddress, value: out var hitValue, isWrite: out var hitIsWrite, pc: out var hitPc)) {
-            return $"{mode}/{(write ? "write" : "read")}: no watch hit reported at all";
+        if (!bus.TryTakeWatchHit(
+            address: out var hitAddress,
+            value: out var hitValue,
+            isWrite: out var hitIsWrite,
+            pc: out var hitPc
+        )) {
+            return $"{mode}/{(write
+                ? "write"
+                : "read")}: no watch hit reported at all";
         }
 
         if (hitPc != expectedPc) {
-            return $"{mode}/{(write ? "write" : "read")}: reported PC=0x{hitPc:X4}; expected the accessing instruction's PC 0x{expectedPc:X4}";
+            return $"{mode}/{(write
+                ? "write"
+                : "read")}: reported PC=0x{hitPc:X4}; expected the accessing instruction's PC 0x{expectedPc:X4}";
         }
 
         if (hitAddress != watchAddress) {
-            return $"{mode}/{(write ? "write" : "read")}: reported address=0x{hitAddress:X4}; expected 0x{watchAddress:X4}";
+            return $"{mode}/{(write
+                ? "write"
+                : "read")}: reported address=0x{hitAddress:X4}; expected 0x{watchAddress:X4}";
         }
 
         if (hitValue != expectedValue) {
-            return $"{mode}/{(write ? "write" : "read")}: reported value=0x{hitValue:X2}; expected 0x{expectedValue:X2}";
+            return $"{mode}/{(write
+                ? "write"
+                : "read")}: reported value=0x{hitValue:X2}; expected 0x{expectedValue:X2}";
         }
 
         if (hitIsWrite != expectedIsWrite) {
-            return $"{mode}/{(write ? "write" : "read")}: reported isWrite={hitIsWrite}; expected {expectedIsWrite}";
+            return $"{mode}/{(write
+                ? "write"
+                : "read")}: reported isWrite={hitIsWrite}; expected {expectedIsWrite}";
         }
 
         return null;

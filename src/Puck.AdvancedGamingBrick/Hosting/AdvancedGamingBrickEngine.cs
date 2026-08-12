@@ -15,22 +15,35 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
     public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         var bios = ResolveBios(options: options);
 
-        return new AdvancedMachineHost(cartridgeRom: contentBytes, savePath: savePath, biosImage: bios, audioSampleRate: audioSampleRate);
+        return new AdvancedMachineHost(
+            cartridgeRom: contentBytes,
+            savePath: savePath,
+            biosImage: bios,
+            audioSampleRate: audioSampleRate
+        );
     }
 
     private static byte[] ResolveBios(string? options) {
-        if (string.IsNullOrWhiteSpace(value: options) ||
-            options.Equals(value: "direct", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (
+            string.IsNullOrWhiteSpace(value: options) ||
+            options.Equals(
+            value: "direct",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+        ) {
             return new byte[ReplacementBios.ImageSize];
         }
 
-        const string biosPrefix = "bios=";
+        const string BiosPrefix = "bios=";
 
-        if (!options.StartsWith(value: biosPrefix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (!options.StartsWith(
+            value: BiosPrefix,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             throw new ArgumentException(message: $"unknown advanced-gaming-brick option '{options}' — expected direct, bios=<path>, or no option");
         }
 
-        var path = options[biosPrefix.Length..].Trim();
+        var path = options[BiosPrefix.Length..].Trim();
 
         if (!File.Exists(path: path)) {
             throw new ArgumentException(message: $"advanced-gaming-brick BIOS '{path}' not found");
@@ -44,8 +57,11 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
             }
 
             return bios;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
-            throw new ArgumentException(message: $"advanced-gaming-brick BIOS '{path}' unreadable ({exception.Message})", innerException: exception);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            throw new ArgumentException(
+                message: $"advanced-gaming-brick BIOS '{path}' unreadable ({exception.Message})",
+                innerException: exception
+            );
         }
     }
 }

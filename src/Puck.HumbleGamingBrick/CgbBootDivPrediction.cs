@@ -48,10 +48,20 @@ internal static class CgbBootDivPrediction {
     /// <param name="header">The parsed cartridge header.</param>
     /// <returns>The 16-bit counter value the boot ROM hands off with.</returns>
     public static ushort Compute(CartridgeHeader header) {
-        var licenseeBucket = ((header.OldLicenseeCode == 0x01) ? 0 : ((header.OldLicenseeCode == 0x33) ? 1 : 2));
-        var new0 = ((header.NewLicenseeCode0 == (byte)'0') ? 1 : 0);
-        var new1 = ((header.NewLicenseeCode1 == (byte)'1') ? 1 : 0);
-        var index = ((((((header.SupportsColor ? 1 : 0) * 3) + licenseeBucket) * 4) + (new0 * 2)) + new1);
+        var licenseeBucket = ((header.OldLicenseeCode == 0x01)
+            ? 0
+            : ((header.OldLicenseeCode == 0x33)
+                ? 1
+                : 2));
+        var new0 = ((header.NewLicenseeCode0 == (byte)'0')
+            ? 1
+            : 0);
+        var new1 = ((header.NewLicenseeCode1 == (byte)'1')
+            ? 1
+            : 0);
+        var index = ((((((header.SupportsColor
+            ? 1
+            : 0) * 3) + licenseeBucket) * 4) + (new0 * 2)) + new1);
         var baseDiv = ByHeader[index];
 
         if (baseDiv > Sentinel) {
@@ -65,9 +75,14 @@ internal static class CgbBootDivPrediction {
         }
 
         // Titles whose checksums collide are told apart by the fourth title letter.
-        var ambiguous = AmbiguousDiv(checksum: header.TitleChecksum, fourthTitleLetter: header.FourthTitleLetter);
+        var ambiguous = AmbiguousDiv(
+            checksum: header.TitleChecksum,
+            fourthTitleLetter: header.FourthTitleLetter
+        );
 
-        return ((ambiguous != 0) ? (ushort)(baseDiv + ambiguous) : baseDiv);
+        return ((ambiguous != 0)
+            ? (ushort)(baseDiv + ambiguous)
+            : baseDiv);
     }
 
     // The checksum rows whose contribution depends on the fourth title letter; zero when the checksum is not ambiguous.

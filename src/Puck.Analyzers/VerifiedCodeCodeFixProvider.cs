@@ -43,22 +43,35 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
         var json = text.ToString();
 
         foreach (var diagnostic in context.Diagnostics) {
-            if (!TryReadRepair(diagnostic: diagnostic, id: out var id, hash: out var hash)) {
+            if (!TryReadRepair(
+                diagnostic: diagnostic,
+                id: out var id,
+                hash: out var hash
+            )) {
                 continue;
             }
 
             // An entry the ledger does not record cannot be repaired by rewriting a hash, and an action that
             // reports success having changed nothing is worse than no action at all.
-            if (JsonText.FindRecordedHash(json: json, id: id) is null) {
+            if (JsonText.FindRecordedHash(
+                json: json,
+                id: id
+            ) is null) {
                 continue;
             }
 
             context.RegisterCodeFix(
                 action: CodeAction.Create(
                     title: $"Update verification brand for '{id}'",
-                    createChangedSolution: cancellationToken => UpdateManifestAsync(project: context.Document.Project, repairs: [(Id: id, Hash: hash)], cancellationToken: cancellationToken),
-                    equivalenceKey: EquivalenceKey),
-                diagnostic: diagnostic);
+                    createChangedSolution: cancellationToken => UpdateManifestAsync(
+                        project: context.Document.Project,
+                        repairs: [(Id: id, Hash: hash)],
+                        cancellationToken: cancellationToken
+                    ),
+                    equivalenceKey: EquivalenceKey
+                ),
+                diagnostic: diagnostic
+            );
         }
     }
 
@@ -66,11 +79,17 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
     /// <remarks>Two documents of that name make the ledger ambiguous, which the analyzer refuses; a repair must not pick one of them either.</remarks>
     private static TextDocument? FindManifest(Project project) {
         var candidates = project.AdditionalDocuments
-            .Where(predicate: document => string.Equals(a: Path.GetFileName(path: (document.FilePath ?? document.Name)), b: ManifestFileName, comparisonType: StringComparison.OrdinalIgnoreCase))
+            .Where(predicate: document => string.Equals(
+            a: Path.GetFileName(path: (document.FilePath ?? document.Name)),
+            b: ManifestFileName,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ))
             .Take(count: 2)
             .ToArray();
 
-        return ((candidates.Length == 1) ? candidates[0] : null);
+        return ((candidates.Length == 1)
+            ? candidates[0]
+            : null);
     }
 
     /// <summary>Recovers a repair's inputs from the diagnostic's structured properties, refusing anything that is not a usable pair.</summary>
@@ -78,15 +97,31 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
         id = string.Empty;
         hash = string.Empty;
 
-        if (!string.Equals(a: diagnostic.Id, b: VerifiedCodeAnalyzer.Ver001FingerprintMismatch.Id, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: diagnostic.Id,
+            b: VerifiedCodeAnalyzer.Ver001FingerprintMismatch.Id,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return false;
         }
 
-        if (!diagnostic.Properties.TryGetValue(key: VerifiedCodeAnalyzer.BrandIdProperty, value: out var recordedId) || string.IsNullOrEmpty(value: recordedId)) {
+        if (
+            !diagnostic.Properties.TryGetValue(
+            key: VerifiedCodeAnalyzer.BrandIdProperty,
+            value: out var recordedId
+        ) ||
+            string.IsNullOrEmpty(value: recordedId)
+        ) {
             return false;
         }
 
-        if (!diagnostic.Properties.TryGetValue(key: VerifiedCodeAnalyzer.RecomputedHashProperty, value: out var recordedHash) || !IsRecordedHash(text: recordedHash)) {
+        if (
+            !diagnostic.Properties.TryGetValue(
+            key: VerifiedCodeAnalyzer.RecomputedHashProperty,
+            value: out var recordedHash
+        ) ||
+            !IsRecordedHash(text: recordedHash)
+        ) {
             return false;
         }
 
@@ -98,7 +133,10 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
 
     /// <summary>Whether <paramref name="text"/> is the exact shape the analyzer computes, so it can be written into JSON without escaping.</summary>
     private static bool IsRecordedHash(string? text) {
-        if ((text is null) || (text.Length != 64)) {
+        if (
+            (text is null) ||
+            (text.Length != 64)
+        ) {
             return false;
         }
 
@@ -123,16 +161,26 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
         var json = text.ToString();
         var changed = false;
 
-        foreach (var repair in repairs.OrderBy(keySelector: repair => repair.Id, comparer: StringComparer.Ordinal)) {
+        foreach (var repair in repairs.OrderBy(
+            keySelector: repair => repair.Id,
+            comparer: StringComparer.Ordinal
+        )) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (JsonText.FindRecordedHash(json: json, id: repair.Id) is not JsonText.ValueSpan span) {
+            if (JsonText.FindRecordedHash(
+                json: json,
+                id: repair.Id
+            ) is not JsonText.ValueSpan span) {
                 continue;
             }
 
             // The replacement is the literal value, spliced in by index. Handing the hash to a substitution
             // pattern would let a leading digit be read as part of a capture-group reference.
-            json = JsonText.Replace(json: json, span: span, replacement: $"\"{repair.Hash}\"");
+            json = JsonText.Replace(
+                json: json,
+                span: span,
+                replacement: $"\"{repair.Hash}\""
+            );
             changed = true;
         }
 
@@ -140,9 +188,16 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             return project.Solution;
         }
 
-        var newText = SourceText.From(text: json, encoding: text.Encoding, checksumAlgorithm: text.ChecksumAlgorithm);
+        var newText = SourceText.From(
+            text: json,
+            encoding: text.Encoding,
+            checksumAlgorithm: text.ChecksumAlgorithm
+        );
 
-        return project.Solution.WithAdditionalDocumentText(documentId: manifestDocument.Id, text: newText);
+        return project.Solution.WithAdditionalDocumentText(
+            documentId: manifestDocument.Id,
+            text: newText
+        );
     }
 
     /// <summary>
@@ -165,11 +220,21 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             var diagnostics = await GetDiagnosticsAsync(fixAllContext: fixAllContext).ConfigureAwait(continueOnCapturedContext: false);
 
             var repairs = diagnostics
-                .Select(selector: diagnostic => (Diagnostic: diagnostic, Read: TryReadRepair(diagnostic: diagnostic, id: out var id, hash: out var hash), Id: id, Hash: hash))
+                .Select(selector: diagnostic => (Diagnostic: diagnostic, Read: TryReadRepair(
+                diagnostic: diagnostic,
+                id: out var id,
+                hash: out var hash
+            ), Id: id, Hash: hash))
                 .Where(predicate: candidate => candidate.Read)
-                .GroupBy(keySelector: candidate => candidate.Id, comparer: StringComparer.Ordinal)
+                .GroupBy(
+                keySelector: candidate => candidate.Id,
+                comparer: StringComparer.Ordinal
+            )
                 .Select(selector: group => (Id: group.Key, group.First().Hash))
-                .OrderBy(keySelector: repair => repair.Id, comparer: StringComparer.Ordinal)
+                .OrderBy(
+                keySelector: repair => repair.Id,
+                comparer: StringComparer.Ordinal
+            )
                 .ToArray();
 
             if (repairs.Length == 0) {
@@ -180,13 +245,18 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
 
             return CodeAction.Create(
                 title: "Update every drifted verification brand",
-                createChangedSolution: cancellationToken => UpdateManifestAsync(project: project, repairs: repairs, cancellationToken: cancellationToken),
-                equivalenceKey: EquivalenceKey);
+                createChangedSolution: cancellationToken => UpdateManifestAsync(
+                    project: project,
+                    repairs: repairs,
+                    cancellationToken: cancellationToken
+                ),
+                equivalenceKey: EquivalenceKey
+            );
         }
 
         private static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(FixAllContext fixAllContext) =>
             ((fixAllContext.Scope == FixAllScope.Document)
-                ? await fixAllContext.GetDocumentDiagnosticsAsync(document: fixAllContext.Document!).ConfigureAwait(continueOnCapturedContext: false)
-                : await fixAllContext.GetAllDiagnosticsAsync(project: fixAllContext.Project).ConfigureAwait(continueOnCapturedContext: false));
+            ? await fixAllContext.GetDocumentDiagnosticsAsync(document: fixAllContext.Document!).ConfigureAwait(continueOnCapturedContext: false)
+            : await fixAllContext.GetAllDiagnosticsAsync(project: fixAllContext.Project).ConfigureAwait(continueOnCapturedContext: false));
     }
 }

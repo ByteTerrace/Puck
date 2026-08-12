@@ -32,8 +32,17 @@ public readonly record struct WasmStdlibSource(string RelativePath, Func<string>
 public static class WasmStdlibSources {
     /// <summary>Gets the registry, in the order artifacts are written and reported.</summary>
     public static IReadOnlyList<WasmStdlibSource> All { get; } = [
-        new WasmStdlibSource(RelativePath: "wasm/puck-stdlib/src/fixed_generated.rs", Emit: FixedQ4816RustPort.EmitGenerated),
-        new WasmStdlibSource(RelativePath: "wasm/puck-stdlib/src/fixed_vectors.rs", Emit: FixedQ4816RustPort.EmitVectors),
-        new WasmStdlibSource(RelativePath: "wasm/puck-stdlib/src/abi_generated.rs", Emit: AddonAbiRustPort.EmitGenerated),
+        new WasmStdlibSource(
+        RelativePath: "wasm/puck-stdlib/src/fixed_generated.rs",
+        Emit: FixedQ4816RustPort.EmitGenerated
+    ),
+        new WasmStdlibSource(
+        RelativePath: "wasm/puck-stdlib/src/fixed_vectors.rs",
+        Emit: FixedQ4816RustPort.EmitVectors
+    ),
+        new WasmStdlibSource(
+        RelativePath: "wasm/puck-stdlib/src/abi_generated.rs",
+        Emit: AddonAbiRustPort.EmitGenerated
+    ),
     ];
 }

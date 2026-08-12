@@ -21,7 +21,10 @@ public static class ShaderBytecode {
     /// <exception cref="ArgumentException"><paramref name="bytecode"/> is too small, mis-aligned (SPIR-V), or an unrecognized format.</exception>
     public static void ValidateFormat(ReadOnlySpan<byte> bytecode) {
         if (bytecode.Length < MagicByteLength) {
-            throw new ArgumentException(message: $"Shader bytecode is too small to identify (minimum {MagicByteLength} bytes); got {bytecode.Length}.", paramName: nameof(bytecode));
+            throw new ArgumentException(
+                message: $"Shader bytecode is too small to identify (minimum {MagicByteLength} bytes); got {bytecode.Length}.",
+                paramName: nameof(bytecode)
+            );
         }
 
         var magic = BinaryPrimitives.ReadUInt32LittleEndian(source: bytecode[..MagicByteLength]);
@@ -29,22 +32,34 @@ public static class ShaderBytecode {
         switch (magic) {
             case SpirVMagic:
                 if ((bytecode.Length % sizeof(uint)) != 0) {
-                    throw new ArgumentException(message: $"SPIR-V shader byte length must be a multiple of 4; got {bytecode.Length}.", paramName: nameof(bytecode));
+                    throw new ArgumentException(
+                        message: $"SPIR-V shader byte length must be a multiple of 4; got {bytecode.Length}.",
+                        paramName: nameof(bytecode)
+                    );
                 }
 
                 if (bytecode.Length < SpirVMinimumByteLength) {
-                    throw new ArgumentException(message: $"SPIR-V shader is too small to be valid (minimum {SpirVMinimumByteLength} bytes); got {bytecode.Length}.", paramName: nameof(bytecode));
+                    throw new ArgumentException(
+                        message: $"SPIR-V shader is too small to be valid (minimum {SpirVMinimumByteLength} bytes); got {bytecode.Length}.",
+                        paramName: nameof(bytecode)
+                    );
                 }
 
                 break;
             case DxbcContainerMagic:
                 if (bytecode.Length < DxbcHeaderByteLength) {
-                    throw new ArgumentException(message: $"DXBC/DXIL container is too small to be valid (minimum {DxbcHeaderByteLength} bytes); got {bytecode.Length}.", paramName: nameof(bytecode));
+                    throw new ArgumentException(
+                        message: $"DXBC/DXIL container is too small to be valid (minimum {DxbcHeaderByteLength} bytes); got {bytecode.Length}.",
+                        paramName: nameof(bytecode)
+                    );
                 }
 
                 break;
             default:
-                throw new ArgumentException(message: "Shader bytecode is not recognized as SPIR-V or DXBC/DXIL bytecode.", paramName: nameof(bytecode));
+                throw new ArgumentException(
+                    message: "Shader bytecode is not recognized as SPIR-V or DXBC/DXIL bytecode.",
+                    paramName: nameof(bytecode)
+                );
         }
     }
 }

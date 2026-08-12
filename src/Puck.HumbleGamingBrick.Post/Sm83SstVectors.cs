@@ -51,15 +51,24 @@ internal static partial class Sm83SstVectorFile {
     public static IReadOnlyList<Sm83SstVector> Load(string path) {
         using var stream = File.OpenRead(path: path);
 
-        var dtos = JsonSerializer.Deserialize(utf8Json: stream, jsonTypeInfo: Sm83SstJsonContext.Default.Vectors)
-            ?? throw new InvalidDataException(message: $"'{path}' did not deserialize to a vector array.");
+        var dtos = (JsonSerializer.Deserialize(
+            utf8Json: stream,
+            jsonTypeInfo: Sm83SstJsonContext.Default.Vectors
+        )
+            ?? throw new InvalidDataException(message: $"'{path}' did not deserialize to a vector array."));
         var vectors = new List<Sm83SstVector>(capacity: dtos.Count);
 
         foreach (var dto in dtos) {
             vectors.Add(item: new Sm83SstVector(
                 Name: (dto.Name ?? string.Empty),
-                Initial: MapState(dto: (dto.Initial ?? throw new InvalidDataException(message: $"'{path}': a vector is missing 'initial'.")), ei: false),
-                Final: MapState(dto: (dto.Final ?? throw new InvalidDataException(message: $"'{path}': a vector is missing 'final'.")), ei: ((dto.Final.Ei ?? 0) != 0)),
+                Initial: MapState(
+                    dto: (dto.Initial ?? throw new InvalidDataException(message: $"'{path}': a vector is missing 'initial'.")),
+                    ei: false
+                ),
+                Final: MapState(
+                    dto: (dto.Final ?? throw new InvalidDataException(message: $"'{path}': a vector is missing 'final'.")),
+                    ei: ((dto.Final.Ei ?? 0) != 0)
+                ),
                 Cycles: MapCycles(entries: dto.Cycles)
             ));
         }
@@ -77,8 +86,18 @@ internal static partial class Sm83SstVectorFile {
         }
 
         return new Sm83SstState(
-            A: (byte)dto.A, B: (byte)dto.B, C: (byte)dto.C, D: (byte)dto.D, E: (byte)dto.E, F: (byte)dto.F, H: (byte)dto.H, L: (byte)dto.L,
-            Pc: (ushort)dto.Pc, Sp: (ushort)dto.Sp, Ime: dto.Ime, Ei: ei,
+            A: (byte)dto.A,
+            B: (byte)dto.B,
+            C: (byte)dto.C,
+            D: (byte)dto.D,
+            E: (byte)dto.E,
+            F: (byte)dto.F,
+            H: (byte)dto.H,
+            L: (byte)dto.L,
+            Pc: (ushort)dto.Pc,
+            Sp: (ushort)dto.Sp,
+            Ime: dto.Ime,
+            Ei: ei,
             Ram: ram
         );
     }
@@ -91,8 +110,12 @@ internal static partial class Sm83SstVectorFile {
 
         for (var index = 0; (index < entries.Count); ++index) {
             var entry = entries[index];
-            var address = ((entry[0].ValueKind == JsonValueKind.Number) ? (ushort?)entry[0].GetUInt16() : null);
-            var data = ((entry[1].ValueKind == JsonValueKind.Number) ? (byte?)entry[1].GetByte() : null);
+            var address = ((entry[0].ValueKind == JsonValueKind.Number)
+                ? (ushort?)entry[0].GetUInt16()
+                : null);
+            var data = ((entry[1].ValueKind == JsonValueKind.Number)
+                ? (byte?)entry[1].GetByte()
+                : null);
             var flags = (entry[2].GetString() ?? string.Empty);
 
             cycles[index] = new Sm83SstCycle(
@@ -107,10 +130,10 @@ internal static partial class Sm83SstVectorFile {
     }
 
     private sealed class VectorDto {
-        public string? Name { get; set; }
-        public StateDto? Initial { get; set; }
-        public StateDto? Final { get; set; }
         public List<List<JsonElement>>? Cycles { get; set; }
+        public StateDto? Final { get; set; }
+        public StateDto? Initial { get; set; }
+        public string? Name { get; set; }
     }
     private sealed class StateDto {
         public int A { get; set; }
@@ -118,19 +141,18 @@ internal static partial class Sm83SstVectorFile {
         public int C { get; set; }
         public int D { get; set; }
         public int E { get; set; }
+        public int? Ei { get; set; }
         public int F { get; set; }
         public int H { get; set; }
+        public int? Ie { get; set; }
+        public int Ime { get; set; }
         public int L { get; set; }
         public int Pc { get; set; }
-        public int Sp { get; set; }
-        public int Ime { get; set; }
-        public int? Ie { get; set; }
-        public int? Ei { get; set; }
         public int[][]? Ram { get; set; }
+        public int Sp { get; set; }
     }
-
-    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
     [JsonSerializable(typeof(List<VectorDto>), TypeInfoPropertyName = "Vectors")]
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
     private sealed partial class Sm83SstJsonContext : JsonSerializerContext {
     }
 }

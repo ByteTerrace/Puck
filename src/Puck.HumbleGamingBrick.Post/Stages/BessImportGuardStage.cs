@@ -46,13 +46,25 @@ internal sealed class BessImportGuardStage : IPostStage {
 
         // CGB, so the destination-capacity check for the palette regions (capacity 0x40, not 0) is exercised as a real
         // boundary rather than the degenerate "any nonzero size is already too big" DMG case.
-        using var source = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var source = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
 
-        PostMachine.RunFrames(instance: source, frames: ExportFrames);
+        PostMachine.RunFrames(
+            instance: source,
+            frames: ExportFrames
+        );
 
-        var (goodFile, _) = BessExporter.Export(instance: source, model: ConsoleModel.Cgb);
+        var (goodFile, _) = BessExporter.Export(
+            instance: source,
+            model: ConsoleModel.Cgb
+        );
 
-        using var probe = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var probe = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
         var baseline = probe.Machine.Snapshot();
         var caseCount = 0;
         var failures = new List<string>();
@@ -63,7 +75,10 @@ internal sealed class BessImportGuardStage : IPostStage {
             InvalidDataException? rejection = null;
 
             try {
-                BessImporter.Import(instance: probe, file: malformed);
+                BessImporter.Import(
+                    instance: probe,
+                    file: malformed
+                );
             } catch (InvalidDataException exception) {
                 rejection = exception;
             }
@@ -84,18 +99,27 @@ internal sealed class BessImportGuardStage : IPostStage {
         foreach (var shapeCase in BessMalformedCorpus.BuildGracefulShapeCases(goodFile: goodFile)) {
             ++gracefulCaseCount;
 
-            using var fillProbe = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+            using var fillProbe = PostMachine.Build(
+                model: ConsoleModel.Cgb,
+                rom: rom
+            );
             var fillBus = fillProbe.GetRequiredService<ISystemBus>();
 
             // Sentinel-seed the whole destination window before import: a retained-old-bytes bug (writing only the
             // imported span and leaving the rest as-is) would surface as leftover 0xAA past ImportedBytes.Length,
             // where the spec instead requires 0.
             for (var index = 0; (index < shapeCase.DestinationCapacity); ++index) {
-                fillBus.WriteByte(address: (ushort)(shapeCase.DestinationStart + index), value: 0xAA);
+                fillBus.WriteByte(
+                    address: (ushort)(shapeCase.DestinationStart + index),
+                    value: 0xAA
+                );
             }
 
             try {
-                BessImporter.Import(instance: fillProbe, file: shapeCase.File);
+                BessImporter.Import(
+                    instance: fillProbe,
+                    file: shapeCase.File
+                );
             } catch (InvalidDataException exception) {
                 failures.Add(item: $"\"{shapeCase.Label}\": expected acceptance (legal per spec) but import threw: {exception.Message}");
 
@@ -104,7 +128,9 @@ internal sealed class BessImportGuardStage : IPostStage {
 
             for (var index = 0; (index < shapeCase.DestinationCapacity); ++index) {
                 var actual = fillBus.ReadByte(address: (ushort)(shapeCase.DestinationStart + index));
-                var expected = ((index < shapeCase.ImportedBytes.Length) ? shapeCase.ImportedBytes[index] : (byte)0);
+                var expected = ((index < shapeCase.ImportedBytes.Length)
+                    ? shapeCase.ImportedBytes[index]
+                    : (byte)0);
 
                 if (actual != expected) {
                     failures.Add(item: $"\"{shapeCase.Label}\": destination byte {index} is 0x{actual:X2}, expected 0x{expected:X2} (imported span or spec zero-fill)");
@@ -124,11 +150,23 @@ internal sealed class BessImportGuardStage : IPostStage {
         var extendedCoreFile = BessMalformedCorpus.BuildExtendedCoreCase(goodFile: goodFile);
 
         try {
-            using var unextendedProbe = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
-            using var extendedProbe = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+            using var unextendedProbe = PostMachine.Build(
+                model: ConsoleModel.Cgb,
+                rom: rom
+            );
+            using var extendedProbe = PostMachine.Build(
+                model: ConsoleModel.Cgb,
+                rom: rom
+            );
 
-            var unextendedReport = BessImporter.Import(instance: unextendedProbe, file: goodFile);
-            var extendedReport = BessImporter.Import(instance: extendedProbe, file: extendedCoreFile);
+            var unextendedReport = BessImporter.Import(
+                instance: unextendedProbe,
+                file: goodFile
+            );
+            var extendedReport = BessImporter.Import(
+                instance: extendedProbe,
+                file: extendedCoreFile
+            );
 
             if (unextendedReport != extendedReport) {
                 failures.Add(item: $"\"{extendedCoreLabel}\": the import report differs from the unextended file's ({unextendedReport} vs {extendedReport})");
@@ -143,6 +181,9 @@ internal sealed class BessImportGuardStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{caseCount} malformed BESS cases (truncation/out-of-bounds-offset/undersized-CORE/garbage-footer/missing-END/nonzero-or-non-final-END/oversized work-RAM+video-RAM+palette destinations/undersized palette+OAM+HRAM/trailing-fragment+out-of-domain-address MBC/incompatible-CORE-major-version/duplicate-CORE/MBC-before-CORE) all rejected with InvalidDataException, probe machine untouched every time; {gracefulCaseCount} legal cases accepted (zero-filled undersized work-RAM+video-RAM, extended-CORE with matching modeled state)")
-            : PostStageOutcome.Fail(detail: string.Join(separator: "; ", values: failures)));
+            : PostStageOutcome.Fail(detail: string.Join(
+            separator: "; ",
+            values: failures
+        )));
     }
 }

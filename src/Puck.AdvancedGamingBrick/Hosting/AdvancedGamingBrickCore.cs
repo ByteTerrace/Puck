@@ -23,7 +23,10 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">The optional battery-save path.</param>
     public AdvancedGamingBrickCore(byte[] bios, byte[] cartridgeRom, string? savePath) {
         m_savePath = savePath;
-        m_instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: cartridgeRom));
+        m_instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: cartridgeRom
+        ));
         m_machine = m_instance.Machine;
         m_cartridge = m_instance.GetRequiredService<AgbCartridge>();
 
@@ -54,7 +57,10 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
         // Sensor channels: recorded per-segment host input, held constant for the whole cycle budget like every other
         // pad field — never a live read from inside the core. A no-op on a cartridge with no matching sensor.
         m_cartridge.SetLightLevel(level: input.LightLevel);
-        m_cartridge.SetTilt(x: input.Tilt.X, y: input.Tilt.Y);
+        m_cartridge.SetTilt(
+            x: input.Tilt.X,
+            y: input.Tilt.Y
+        );
     }
 
     /// <inheritdoc/>
@@ -65,12 +71,19 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
         m_machine.SerializeState(writer: m_timeTravelWriter);
-        return SnapshotBuffer.CopyWrittenState(writer: m_timeTravelWriter, buffer: ref buffer);
+        return SnapshotBuffer.CopyWrittenState(
+            writer: m_timeTravelWriter,
+            buffer: ref buffer
+        );
     }
 
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
-        m_machine.RestoreState(reader: new StateReader(buffer: buffer, start: 0, length: length));
+        m_machine.RestoreState(reader: new StateReader(
+        buffer: buffer,
+        start: 0,
+        length: length
+    ));
 
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
@@ -90,15 +103,21 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
 
     /// <inheritdoc/>
     public void FlushSave(bool force) {
-        if ((m_savePath is not { } savePath) || (m_cartridge is not { HasSave: true } cartridge) ||
-            (!cartridge.SaveDirty && !(force && !File.Exists(path: savePath)))) {
+        if (
+            (m_savePath is not { } savePath) ||
+            (m_cartridge is not { HasSave: true } cartridge) ||
+            (!cartridge.SaveDirty && !(force && !File.Exists(path: savePath)))
+        ) {
             return;
         }
 
         try {
-            File.WriteAllBytes(path: savePath, bytes: cartridge.SaveData.ToArray());
+            File.WriteAllBytes(
+                path: savePath,
+                bytes: cartridge.SaveData.ToArray()
+            );
             cartridge.MarkSaveClean();
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[advanced-machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
@@ -110,7 +129,11 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     }
 
     private void LoadBatterySave() {
-        if ((m_savePath is not { } savePath) || !m_cartridge.HasSave || !File.Exists(path: savePath)) {
+        if (
+            (m_savePath is not { } savePath) ||
+            !m_cartridge.HasSave ||
+            !File.Exists(path: savePath)
+        ) {
             return;
         }
 
@@ -118,7 +141,7 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
             if (!m_cartridge.LoadSave(data: File.ReadAllBytes(path: savePath))) {
                 Console.Error.WriteLine(value: $"[advanced-machine-host] battery save '{savePath}' has an incompatible size; booting with fresh backup memory.");
             }
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[advanced-machine-host] battery save '{savePath}' unreadable ({exception.Message}); booting with fresh backup memory.");
         }
     }

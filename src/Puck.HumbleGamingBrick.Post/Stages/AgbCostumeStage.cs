@@ -25,13 +25,31 @@ internal sealed class AgbCostumeStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var rom = SyntheticRom.Create();
 
-        using var first = PostMachine.Build(model: ConsoleModel.Agb, rom: rom);
-        using var second = PostMachine.Build(model: ConsoleModel.Agb, rom: rom);
-        using var cgb = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var first = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
+        using var second = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
+        using var cgb = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
 
-        PostMachine.RunFrames(instance: first, frames: Frames);
-        PostMachine.RunFrames(instance: second, frames: Frames);
-        PostMachine.RunFrames(instance: cgb, frames: Frames);
+        PostMachine.RunFrames(
+            instance: first,
+            frames: Frames
+        );
+        PostMachine.RunFrames(
+            instance: second,
+            frames: Frames
+        );
+        PostMachine.RunFrames(
+            instance: cgb,
+            frames: Frames
+        );
 
         if (!first.Machine.Snapshot().ContentEquals(other: second.Machine.Snapshot())) {
             return PostStageOutcome.Fail(detail: $"two independent Agb machines diverged after {Frames} frames");

@@ -24,9 +24,7 @@ public static class TimingServiceRegistration {
             implementationFactory: static _ => TickResolution.Default,
             service: typeof(TickResolution)
         ));
-        services.TryAddScoped(implementationFactory: static provider => new MasterClock(
-            resolution: provider.GetRequiredService<TickResolution>()
-        ));
+        services.TryAddScoped(implementationFactory: static provider => new MasterClock(resolution: provider.GetRequiredService<TickResolution>()));
         // The component set is fixed at composition time, so the clock resolves each timed component by its concrete
         // type and holds it as a typed field — the per-T-cycle fan-out is direct sealed calls (ideal plan §7). A test
         // substitutes a component by pre-registering its own instance for the same concrete type.
