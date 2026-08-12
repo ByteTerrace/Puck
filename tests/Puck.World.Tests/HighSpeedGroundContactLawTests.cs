@@ -124,6 +124,7 @@ public sealed class HighSpeedGroundContactLawTests {
             yawRadians: FixedQ4816.Zero,
             planarVelocity: FixedVector3.Zero,
             verticalVelocity: FixedQ4816.FromInteger(value: -(distance * 8)),
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             continuum: trajectory));
 
         Assert.True(body.FixedPosition.Y >= FixedQ4816.Zero,

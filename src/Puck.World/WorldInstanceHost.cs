@@ -1092,26 +1092,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// definition at drain time, never at scan time. <see langword="null"/> for <c>Spawn</c>.</param>
     /// <param name="AdjacencyCounterpart">The destination document's reciprocal adjacency row for an automatic
     /// ownership handoff. Mutually exclusive with <paramref name="Counterpart"/>.</param>
-    /// <param name="SourceSeamPosition">The source portal face's own seam point — F_s, <c>Frame.PointAt(SeamU,
-    /// SeamV)</c> captured at scan time from <see cref="WorldFaceCatalog"/>/<see cref="WorldFaceRegion.Sweep"/>, so a
-    /// traveler leaves from the exact point its segment crossed the face rather than from the door's own center.
-    /// Ignored for <c>Spawn</c>.</param>
-    /// <param name="SourceFaceYawRadians">The source portal face's own frame heading — F_s. Ignored for
-    /// <c>Spawn</c>.</param>
-    /// <param name="SourceAdjacencyFrame">The complete source boundary frame for a pitched adjacency; null for
-    /// portal furniture and ordinary spawn arrivals.</param>
-    /// <param name="SourceFaceSeamU">The captured crossing's own in-plane coordinate along the source frame's
-    /// <c>Right</c> — carried alongside <see cref="SourceSeamPosition"/> so the destination side can apply the same
-    /// coordinate to the counterpart's own frame, the mapped image of the source seam rather than a fresh sample.
-    /// Ignored for <c>Spawn</c>.</param>
-    /// <param name="SourceFaceSeamV">The captured crossing's own in-plane coordinate along the source frame's
-    /// <c>Up</c>. Ignored for <c>Spawn</c>.</param>
-    /// <param name="MemberSeams">Per-member seam overrides, keyed by source slot — a member with an entry here maps
-    /// through the exact point its own crossing swept (<see cref="MemberSeam"/>) rather than
-    /// <see cref="SourceSeamPosition"/>/<see cref="SourceFaceSeamU"/>/<see cref="SourceFaceSeamV"/>, which remain the
-    /// fallback for a cohort member with no entry — a <c>party</c>-travel passenger swept along without personally
-    /// crossing the aperture. <see langword="null"/> for a non-resolver transfer (console <c>world.transfer</c>,
-    /// which carries no per-hit data at all) or <c>Spawn</c>.</param>
+    /// <param name="SourceCrossingPoint">The exact world point the crossing seat's swept segment met the source
+    /// boundary. Consumed only as the mapped continuum cursor's origin, never as the arrival anchor —
+    /// <see cref="WorldFrameIsometry.MapArrival"/> maps a traveler from wherever it actually stands. Default for
+    /// <c>Spawn</c> and for portal furniture, which carries no continuum.</param>
+    /// <param name="SourceFrame">The source boundary or portal face's own frame, captured at scan so later document
+    /// mutation cannot move it. <see langword="null"/> for an ordinary spawn arrival.</param>
     /// <param name="Continuum">The source-step interval and geometric cursor captured by an adjacency scan. Null
     /// for portal furniture and ordinary spawn transfers.</param>
     /// <param name="HoldSeconds">The authored binding lease duration.</param>
@@ -1136,12 +1122,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         WorldPortalArrival Arrival,
         string? Counterpart,
         string? AdjacencyCounterpart,
-        FixedVector3 SourceSeamPosition,
-        FixedQ4816 SourceFaceYawRadians,
-        WorldFaceFrame? SourceAdjacencyFrame,
-        FixedQ4816 SourceFaceSeamU,
-        FixedQ4816 SourceFaceSeamV,
-        IReadOnlyDictionary<int, MemberSeam>? MemberSeams,
+        FixedVector3 SourceCrossingPoint,
+        WorldFaceFrame? SourceFrame,
         WorldContinuumTrajectory? Continuum,
         double HoldSeconds,
         WorldTransferFullPolicy FullPolicy,
@@ -1230,18 +1212,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// onto — see <see cref="PendingTransfer.Counterpart"/>. Omit for the ordinary spawn arrival.</param>
     /// <param name="adjacencyCounterpart">The destination document's reciprocal adjacency row for an automatic
     /// ownership handoff. Omit for portal and console transfers.</param>
-    /// <param name="sourceSeamPosition">The source portal face's own seam point — see
-    /// <see cref="PendingTransfer.SourceSeamPosition"/>. Omit for the ordinary spawn arrival.</param>
-    /// <param name="sourceFaceYawRadians">The source portal face's own frame heading — see
-    /// <see cref="PendingTransfer.SourceFaceYawRadians"/>. Omit for the ordinary spawn arrival.</param>
-    /// <param name="sourceAdjacencyFrame">The complete source boundary frame for an adjacency arrival. Omit for
-    /// portal furniture and the ordinary spawn arrival.</param>
-    /// <param name="sourceFaceSeamU">The captured crossing's own in-plane coordinate along the source frame's
-    /// <c>Right</c> — see <see cref="PendingTransfer.SourceFaceSeamU"/>. Omit for the ordinary spawn arrival.</param>
-    /// <param name="sourceFaceSeamV">The captured crossing's own in-plane coordinate along the source frame's
-    /// <c>Up</c> — see <see cref="PendingTransfer.SourceFaceSeamV"/>. Omit for the ordinary spawn arrival.</param>
-    /// <param name="memberSeams">Per-member seam overrides — see <see cref="PendingTransfer.MemberSeams"/>. Omit for
-    /// a non-resolver transfer or the ordinary spawn arrival.</param>
+    /// <param name="sourceCrossingPoint">The crossing seat's own swept boundary point — see
+    /// <see cref="PendingTransfer.SourceCrossingPoint"/>. Omit outside an adjacency crossing.</param>
+    /// <param name="sourceFrame">The source boundary or portal face frame — see
+    /// <see cref="PendingTransfer.SourceFrame"/>. Omit for the ordinary spawn arrival.</param>
     /// <param name="continuum">The source-step interval captured by an adjacency scan. Omit for portals and spawns.</param>
     /// <param name="holdSeconds">The binding lease duration authored by the source world.</param>
     /// <param name="fullPolicy">Whether a full refusal remains retryable.</param>
@@ -1251,10 +1225,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceSeamPosition = default, FixedQ4816 sourceFaceYawRadians = default, WorldFaceFrame? sourceAdjacencyFrame = null, FixedQ4816 sourceFaceSeamU = default, FixedQ4816 sourceFaceSeamV = default, IReadOnlyDictionary<int, MemberSeam>? memberSeams = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
         var transferId = (explicitTransferId ?? MintTransferId());
 
-        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, AdjacencyCounterpart: adjacencyCounterpart, SourceSeamPosition: sourceSeamPosition, SourceFaceYawRadians: sourceFaceYawRadians, SourceAdjacencyFrame: sourceAdjacencyFrame, SourceFaceSeamU: sourceFaceSeamU, SourceFaceSeamV: sourceFaceSeamV, MemberSeams: memberSeams, Continuum: continuum, HoldSeconds: holdSeconds, FullPolicy: fullPolicy, PartyAllOrNothing: partyAllOrNothing, BorderCapacity: borderCapacity, Border: (border ?? "transfer")));
+        m_pendingTransfers.Enqueue(item: new PendingTransfer(SourceInstance: sourceInstance, Scope: scope, SourceSlot: sourceSlot, Destination: destination, ActingPrincipal: actingPrincipal, ResolvedDestinationRow: resolvedDestinationRow, FrozenCohortSlots: frozenCohortSlots, FrozenScopeKey: frozenScopeKey, FrozenGenerationId: frozenGenerationId, TransferId: transferId, TestForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal, Arrival: arrival, Counterpart: counterpart, AdjacencyCounterpart: adjacencyCounterpart, SourceCrossingPoint: sourceCrossingPoint, SourceFrame: sourceFrame, Continuum: continuum, HoldSeconds: holdSeconds, FullPolicy: fullPolicy, PartyAllOrNothing: partyAllOrNothing, BorderCapacity: borderCapacity, Border: (border ?? "transfer")));
 
         return transferId;
     }
@@ -1577,9 +1551,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         var transferDestination = TransferDestination.Resolved(name: resolvedSession.InstanceName, documentPath: referencedDocument, retain: true);
         var seamPosition = hit.Frame.PointAt(u: hit.SeamU, v: hit.SeamV);
-        var memberSeams = new Dictionary<int, MemberSeam> {
-            [hit.Seat] = new MemberSeam(SourcePosition: seamPosition, SeamU: hit.SeamU, SeamV: hit.SeamV),
-        };
         var sourceBody = instance.Server.Population.EntryBody(index: hit.Seat)!;
         var continuum = sourceBody.PendingContinuum;
         if (continuum is null) {
@@ -1605,12 +1576,8 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             frozenGenerationId: resolvedSession.GenerationId,
             arrival: WorldPortalArrival.Mapped,
             adjacencyCounterpart: hit.Adjacency.Counterpart,
-            sourceSeamPosition: seamPosition,
-            sourceFaceYawRadians: hit.Frame.PlanarYawRadians,
-            sourceAdjacencyFrame: hit.Frame,
-            sourceFaceSeamU: hit.SeamU,
-            sourceFaceSeamV: hit.SeamV,
-            memberSeams: memberSeams,
+            sourceCrossingPoint: seamPosition,
+            sourceFrame: hit.Frame,
             continuum: continuum,
             border: $"adjacency/{hit.Adjacency.Name.Value}"
         );
@@ -1641,12 +1608,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // carries the crossing parameter and the face's own identity, which is what decides a seat's ONE winner when its
     // step crosses several faces.
     private readonly record struct PortalEdgeHit(WorldPlacement Placement, WorldPlacementFace Face, WorldPlacementPortal Portal, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, WorldFaceCrossingClaim Claim);
-
-    // One cohort member's OWN swept-crossing seam, captured from ITS OWN hit — never borrowed from a different
-    // member's crossing. A party crossing the same door abreast at different lateral offsets must map each member
-    // through the point IT actually swept through; sharing one group-level (SeamU, SeamV) across every member
-    // mirrors every member except whichever hit happened to open the coalesced group first.
-    internal readonly record struct MemberSeam(FixedVector3 SourcePosition, FixedQ4816 SeamU, FixedQ4816 SeamV);
 
     // One instance's own portal scan: every placement's every portal-carrying face, against every active local
     // seat. Placement/face iteration order is the document's own declared order; seat order is ascending
@@ -1785,19 +1746,12 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         public required int? BorderCapacity { get; init; }
         public required string Border { get; init; }
         public TransferScope Scope { get; set; }
-        // The frame is captured when the source face is scanned, so later document mutation cannot move it. A member
-        // with a hit uses MemberSeams; the shared seam is only the fallback for a party passenger without its own hit.
-        // The destination applies (-u, v), the horizontal image produced by the arrival isometry's half turn.
+        // Captured when the source face is scanned, so later document mutation cannot move it.
         public required WorldPortalArrival Arrival { get; init; }
         public required string? Counterpart { get; init; }
-        public required FixedVector3 SourceSeamPosition { get; init; }
-        public required FixedQ4816 SourceFaceYawRadians { get; init; }
-        public required FixedQ4816 SourceFaceSeamU { get; init; }
-        public required FixedQ4816 SourceFaceSeamV { get; init; }
+        public required WorldFaceFrame SourceFrame { get; init; }
         public readonly SortedSet<int> Slots = new();
         public readonly List<string> Descriptions = new();
-        // Every crossing seat's own seam; seats absent from this map use the party fallback above.
-        public readonly Dictionary<int, MemberSeam> MemberSeams = new();
     }
 
     // Resolves this scan's hits, coalesces identical mappings, and enqueues one transfer per group. The order list
@@ -1839,7 +1793,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             }
 
             var key = new CoalescedPortalGroupKey(DestinationName: destination.Name.Value, ScopeKey: scopeKey, SourcePlacementId: hit.Placement.Id, SourceFace: hit.Face.Face, Arrival: hit.Portal.Arrival, Counterpart: hit.Portal.Counterpart);
-            var hitSeamPosition = hit.Frame.PointAt(u: hit.SeamU, v: hit.SeamV);
 
             if (!groups.TryGetValue(key: key, value: out var group)) {
                 group = new CoalescedPortalGroup {
@@ -1854,10 +1807,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     Scope = scope,
                     Arrival = hit.Portal.Arrival,
                     Counterpart = hit.Portal.Counterpart,
-                    SourceSeamPosition = hitSeamPosition,
-                    SourceFaceYawRadians = hit.Frame.PlanarYawRadians,
-                    SourceFaceSeamU = hit.SeamU,
-                    SourceFaceSeamV = hit.SeamV,
+                    SourceFrame = hit.Frame,
                 };
                 groups[key] = group;
                 order.Add(item: key);
@@ -1867,11 +1817,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                 // Scope whenever both are present), so this only affects what the enqueue echo/verb narrates.
                 group.Scope = TransferScope.Party;
             }
-
-            // THIS hit's own seam, recorded by seat — every hit that lands in this group gets its own entry, not
-            // just the one that opened it, so a party crossing abreast maps each member through the point IT
-            // actually swept rather than mirroring every member but the first through the group's shared fallback.
-            group.MemberSeams[hit.Seat] = new MemberSeam(SourcePosition: hitSeamPosition, SeamU: hit.SeamU, SeamV: hit.SeamV);
 
             foreach (var slot in cohortSlots) {
                 group.Slots.Add(item: slot);
@@ -1944,7 +1889,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // MemberTravelPrincipal already re-derives every other member's own Seat principal independently, so
         // whichever seat is named here only affects itself.
         var actingPrincipal = WorldPrincipal.Seat(slot: cohortSlots[0]);
-        var transferId = EnqueueTransfer(sourceInstance: instance.Name, scope: group.Scope, sourceSlot: cohortSlots[0], destination: transferDestination, actingPrincipal: actingPrincipal, resolvedDestinationRow: group.Destination, frozenCohortSlots: cohortSlots, frozenScopeKey: resolvedSession.ScopeKey, frozenGenerationId: resolvedSession.GenerationId, arrival: group.Arrival, counterpart: group.Counterpart, sourceSeamPosition: group.SourceSeamPosition, sourceFaceYawRadians: group.SourceFaceYawRadians, sourceFaceSeamU: group.SourceFaceSeamU, sourceFaceSeamV: group.SourceFaceSeamV, memberSeams: group.MemberSeams, holdSeconds: group.HoldSeconds, fullPolicy: group.FullPolicy, partyAllOrNothing: group.PartyAllOrNothing, borderCapacity: group.BorderCapacity, border: group.Border);
+        var transferId = EnqueueTransfer(sourceInstance: instance.Name, scope: group.Scope, sourceSlot: cohortSlots[0], destination: transferDestination, actingPrincipal: actingPrincipal, resolvedDestinationRow: group.Destination, frozenCohortSlots: cohortSlots, frozenScopeKey: resolvedSession.ScopeKey, frozenGenerationId: resolvedSession.GenerationId, arrival: group.Arrival, counterpart: group.Counterpart, sourceFrame: group.SourceFrame, holdSeconds: group.HoldSeconds, fullPolicy: group.FullPolicy, partyAllOrNothing: group.PartyAllOrNothing, borderCapacity: group.BorderCapacity, border: group.Border);
 
         Console.Out.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(separator: ", ", values: group.Descriptions)} entered -> queued transfer={transferId} to '{group.Destination.Name}' (durability={WorldDestinationTokens.DurabilityToken(durability: group.Destination.Durability)} scope={WorldDestinationTokens.ScopeToken(scope: group.Destination.Scope)} travel={WorldDestinationTokens.TravelToken(travel: group.Travel)} arrival={WorldDestinationTokens.ArrivalToken(arrival: group.Arrival)} generation={resolvedSession.GenerationId}{(resolvedSession.IsNewGeneration ? " (new)" : "")} instance={resolvedSession.InstanceName} cohort=[{string.Join(separator: ",", values: cohortSlots.Select(selector: static slot => (slot + 1)))}])]");
     }
@@ -2615,11 +2560,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
             for (var ordinal = 0; ordinal < members.Length; ordinal++) {
                 var member = members[ordinal];
-                IReadOnlyDictionary<int, MemberSeam>? memberSeams = null;
-
-                if ((transfer.MemberSeams is not null) && transfer.MemberSeams.TryGetValue(key: member, value: out var seam)) {
-                    memberSeams = new Dictionary<int, MemberSeam> { [member] = seam };
-                }
 
                 ApplyTransfer(transfer: transfer with {
                     TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
@@ -2628,7 +2568,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     Destination = splitDestination,
                     FrozenCohortSlots = [member],
                     PartyAllOrNothing = true,
-                    MemberSeams = memberSeams,
                     TestForceJoinRefusalOrdinal = ((transfer.TestForceJoinRefusalOrdinal == ordinal) ? 0 : null),
                     ScopeProofAlreadyVerified = true,
                 });
@@ -2677,36 +2616,24 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // ABORTED line names why by quoting the exact counterpart string that failed to resolve.
         //
         // The counterpart resolve proves the authored anchor exists; the arrival frame itself is that
-        // face's own derived frame (WorldFaceCatalog), exactly like the source side
-        // (SourceSeamPosition/YawRadians, captured at scan). Both ends read the same derivation rendering
-        // draws from, so scan, arrival, and the drawn door can never disagree about where a face sits.
-        //
-        // destinationFacePosition is the counterpart's own seam point at (-u, v) for the group's captured
-        // source crossing — the fallback for a member with no entry in transfer.MemberSeams (a party
-        // passenger swept along without personally crossing). A member with its own entry maps through its
-        // own (-u, v) applied to counterpartFrame instead, inside the per-member loop below — the mapped
-        // image of that member's own seam, never a fresh sample. Reusing a captured SeamU/SeamV against the
-        // destination frame either way keeps a paired border's oppositely-oriented face frames in
-        // one-to-one correspondence.
-        var destinationFacePosition = FixedVector3.Zero;
-        var destinationFaceYawRadians = FixedQ4816.Zero;
+        // face's own derived frame (WorldFaceCatalog), exactly like transfer.SourceFrame captured at scan.
+        // Both ends read the same derivation rendering draws from, so scan, arrival, and the drawn door can
+        // never disagree about where a face sits.
         var counterpartFrame = default(WorldFaceFrame);
         string? abortReason = null;
 
         if (transfer.Arrival == WorldPortalArrival.Mapped) {
-            if (transfer.AdjacencyCounterpart is { } adjacencyCounterpart) {
+            if (transfer.SourceFrame is null) {
+                abortReason = $"mapped arrival into '{targetName}' carries no source boundary frame";
+            } else if (transfer.AdjacencyCounterpart is { } adjacencyCounterpart) {
                 if (WorldDefinitionRows.FindAdjacency(adjacencies: destinationDefinition.Adjacencies, name: adjacencyCounterpart) is { } destinationAdjacency) {
                     counterpartFrame = destinationAdjacency.Boundary.CompileFrame();
-                    destinationFacePosition = WorldPortalArrivalMath.CounterpartSeam(destinationFrame: counterpartFrame, seamU: transfer.SourceFaceSeamU, seamV: transfer.SourceFaceSeamV);
-                    destinationFaceYawRadians = counterpartFrame.PlanarYawRadians;
                 } else {
                     abortReason = $"mapped adjacency arrival names no counterpart '{adjacencyCounterpart}' in '{targetName}'";
                 }
             } else if (WorldPortalCounterpart.TryResolve(definition: destinationDefinition, counterpart: transfer.Counterpart, placement: out var counterpartPlacement, face: out var counterpartFace, reason: out var counterpartReason)) {
                 if (WorldFaceCatalog.For(definition: destinationDefinition).TryFind(placementId: counterpartPlacement!.Id, faceName: counterpartFace!.Face, out var counterpartRow)) {
                     counterpartFrame = counterpartRow.Frame;
-                    destinationFacePosition = WorldPortalArrivalMath.CounterpartSeam(destinationFrame: counterpartRow.Frame, seamU: transfer.SourceFaceSeamU, seamV: transfer.SourceFaceSeamV);
-                    destinationFaceYawRadians = counterpartRow.Frame.PlanarYawRadians;
                 } else {
                     abortReason = $"mapped arrival's counterpart '{transfer.Counterpart}' names no DECLARED creation face in '{targetName}'";
                 }
@@ -2743,41 +2670,17 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             // after the ordinary join above already embodied this member under the destination's own kit. The
             // selected motion-program NAME travels beside these mapped facts and resolves against that destination's
             // own declared program table (appearance/grants/action-track state remain untouched; see
-            // WorldPopulation.ApplyMappedArrival). destinationFacePosition/YawRadians were resolved once
-            // for the whole group before this loop started; destinationFaceYawRadians and counterpartFrame
-            // are shared (one door, one frame), but the position each member maps through is per-member — a
-            // member with its own entry in transfer.MemberSeams maps through the point it actually crossed
-            // on both ends, never the group's shared fallback, since two seats crossing abreast at
-            // different lateral offsets would otherwise both map through whichever seat's hit happened to
-            // open the coalesced group.
+            // WorldPopulation.ApplyMappedArrival). One isometry maps every member from wherever it actually
+            // stands, so a party crossing abreast at different lateral offsets needs no per-member seam.
             if (transfer.Arrival == WorldPortalArrival.Mapped) {
-                var memberSourcePosition = transfer.SourceSeamPosition;
-                var memberDestinationPosition = destinationFacePosition;
-
-                if ((transfer.MemberSeams is not null) && transfer.MemberSeams.TryGetValue(key: sourceSlot, value: out var memberSeam)) {
-                    memberSourcePosition = memberSeam.SourcePosition;
-                    memberDestinationPosition = WorldPortalArrivalMath.CounterpartSeam(destinationFrame: in counterpartFrame, seamU: memberSeam.SeamU, seamV: memberSeam.SeamV);
-                }
-
-                var mapped = (transfer.SourceAdjacencyFrame is { } sourceAdjacencyFrame)
-                    ? WorldPortalArrivalMath.ComputeFrameArrival(
-                        travelerPosition: position,
-                        travelerYawRadians: yaw,
-                        travelerPlanarVelocity: dynamicState.PlanarVelocity,
-                        travelerVerticalVelocity: dynamicState.VerticalVelocity,
-                        sourceSeamPosition: memberSourcePosition,
-                        sourceFrame: sourceAdjacencyFrame,
-                        destinationSeamPosition: memberDestinationPosition,
-                        destinationFrame: counterpartFrame)
-                    : WorldPortalArrivalMath.ComputeArrival(
-                        travelerPosition: position,
-                        travelerYawRadians: yaw,
-                        travelerPlanarVelocity: dynamicState.PlanarVelocity,
-                        travelerVerticalVelocity: dynamicState.VerticalVelocity,
-                        sourcePosition: memberSourcePosition,
-                        sourceYawRadians: transfer.SourceFaceYawRadians,
-                        destinationPosition: memberDestinationPosition,
-                        destinationYawRadians: destinationFaceYawRadians);
+                var sourceFrame = transfer.SourceFrame!.Value;
+                var mapped = WorldFrameIsometry.MapArrival(
+                    travelerPosition: position,
+                    travelerYawRadians: yaw,
+                    travelerPlanarVelocity: dynamicState.PlanarVelocity,
+                    travelerVerticalVelocity: dynamicState.VerticalVelocity,
+                    source: in sourceFrame,
+                    destination: in counterpartFrame);
 
                 arrivalPosition = mapped.Position;
                 arrivalYaw = mapped.YawRadians;
@@ -2794,7 +2697,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                         ?? throw new InvalidOperationException(message: "adjacency transfer carries no continuum interval");
                     var boundaryEvents = checked((byte)(prior.BoundaryEvents + 1));
                     continuum = new WorldContinuumTrajectory(
-                        PreviousPosition: memberDestinationPosition,
+                        PreviousPosition: WorldFrameIsometry.MapPoint(point: transfer.SourceCrossingPoint, source: in sourceFrame, destination: in counterpartFrame),
                         SourceTick: prior.SourceTick,
                         ContinuumStartEngineTick: prior.ContinuumStartEngineTick,
                         ContinuumEndEngineTick: prior.ContinuumEndEngineTick,

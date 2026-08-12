@@ -29,25 +29,18 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 
 /// <summary>
 /// Presentation-float border-window math: maps a viewer's eye through a mapped border pair's isometry into the
-/// destination side — the position half of the same isometry <see cref="WorldPortalArrivalMath"/> applies
-/// fixed-point for a traveler's simulated arrival pose (a body that actually crosses the threshold). Deliberately a
-/// separate, independently-derived copy: nothing here ever reaches simulation state, this type never reads or calls
-/// <see cref="WorldPortalArrivalMath"/>, and the border-windows lane that authored it does not edit that file (see
-/// its own task brief: "add your own projection math type rather than editing theirs"). Public — not internal to
-/// this assembly — because <c>Puck.World.Client.WorldWindowFrustumFit</c> (the composition root, which also needs
-/// <c>Puck.SdfVm.Views.SdfAsymmetricFrustum</c> and so cannot itself live in this project's narrower dependency
-/// profile — see docs/project-map.md) is this type's one other caller, and <c>tests/Puck.World.Tests</c> — which
-/// deliberately does not reference <c>Puck.World</c> at all — is where the correctness proof below lives
-/// (<c>WorldWindowProjectionMathLawTests</c>). Widening the member across both callers rather than granting either
-/// one <c>InternalsVisibleTo</c> follows CLAUDE.md's ruling directly.
+/// destination side. It is the float mirror of <see cref="WorldFrameIsometry.MapPoint"/>, kept separate because
+/// nothing here ever reaches simulation state; <c>WorldWindowProjectionMathLawTests</c> pins the two against each
+/// other for a hand-picked pair. Public rather than internal because both
+/// <c>Puck.World.Client.WorldWindowFrustumFit</c> and <c>tests/Puck.World.Tests</c> call it.
 /// </summary>
 /// <remarks>
 /// <para><b>It IS the arrival isometry — the full 180° door-to-door flip.</b> A window shows "what an arrived
 /// viewer would see," rendered live without moving anyone: the same <c>(u,v,n) → (-u,v,-n)</c> flip
-/// <see cref="WorldPortalArrivalMath.ComputeArrival"/> documents (walking out of the source face's outward normal
-/// arrives walking in through the destination face), independently re-derived here over the full
-/// <see cref="WorldFaceFrame"/> basis (Right/Up/Normal) rather than a bare placement yaw, because the face-frame
-/// landing's whole point was that face geometry has exactly one derivation (<see cref="WorldFaceCatalog"/>).</para>
+/// <see cref="WorldFrameIsometry.MapVector"/> applies (walking out of the source face's outward normal arrives
+/// walking in through the destination face), over the full <see cref="WorldFaceFrame"/> basis (Right/Up/Normal)
+/// rather than a bare placement yaw, because face geometry has exactly one derivation
+/// (<see cref="WorldFaceCatalog"/>).</para>
 /// <para><b>Why the Right component must flip too — this is forced, not a choice.</b> A mapped border pair's two
 /// apertures have opposite outward Normals by construction (each one's Normal points toward its own room's approach
 /// side, and the two rooms sit on opposite sides of the seam). Under this type's Right×Up=Normal convention with a
@@ -57,10 +50,9 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
 /// +90° gives (Right=-Z, Normal=+X) — both flipped. Mapping eye (u,v,n)=(5,·,3) through the identity-border case
 /// (destYaw-srcYaw+180°≡0°, so the true mapped eye is the same world point the traveler stood at) only reproduces
 /// that point under the full <c>(-u,v,-n)</c> flip; a Normal-only flip <c>(u,v,-n)</c> lands at a mirrored world
-/// point — this was a real reflection bug an earlier version of this file shipped with (every window rendered the
-/// destination laterally mirrored, parallax moving the wrong way as the eye moved), caught by
-/// <c>WorldWindowProjectionMathLawTests</c> cross-checking a hand-picked pair against
-/// <see cref="WorldPortalArrivalMath.ComputeArrival"/>'s own answer for the same pair.</para>
+/// point, rendering the destination laterally mirrored with parallax moving the wrong way.
+/// <c>WorldWindowProjectionMathLawTests</c> cross-checks a hand-picked pair against
+/// <see cref="WorldFrameIsometry.MapPoint"/>'s own answer for the same pair.</para>
 /// <para><b>The algebra.</b> Decompose a world point's offset from the source aperture's origin along the source's
 /// own orthonormal (Right, Up, Normal) basis: <c>(u, v, n) = (offset·Right, offset·Up, offset·Normal)</c>. The
 /// mapped point is <c>destination.Origin - u·destination.Right + v·destination.Up - n·destination.Normal</c> — Up is

@@ -12,10 +12,9 @@ namespace Puck.World.Server;
 /// </summary>
 /// <remarks>
 /// <para><b>The isometry.</b> A query position is mapped into the neighbour's own local frame, and the neighbour's
-/// answer is mapped back, through <c>Server.WorldPortalArrivalMath.ComputeArrival</c> — the exact same isometry a
-/// crossing traveler's arrival uses, anchored at the two boundaries' own frames rather than one body's swept seam.
-/// The overlap serves every point near the boundary. Pure fixed-point
-/// throughout; no wall-clock, RNG, or float ever reaches this decision.</para>
+/// answer is mapped back, through <see cref="WorldFrameIsometry"/> — the exact same isometry a crossing traveler's
+/// arrival uses, anchored at the two boundaries' own frames. The overlap serves every point near the boundary. Pure
+/// fixed-point throughout; no wall-clock, RNG, or float ever reaches this decision.</para>
 /// <para><b>Composition, not replacement.</b> This world's own field resolves first, exactly as it would with no
 /// adjacency at all — an overlap is consulted only when the body is not already grounded and its position
 /// falls inside one, so a world whose own geometry already reaches the border pays nothing extra and behaves

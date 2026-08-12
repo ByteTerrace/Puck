@@ -8,14 +8,13 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="WorldWindowProjectionMath.MapPoint"/> — the border-window's eye-mapping isometry
-/// must agree with <see cref="WorldPortalArrivalMath.ComputeArrival"/>'s own position mapping for the SAME (source
-/// frame, destination frame, point) triple. That correspondence IS the definition of "the window shows where the
+/// must agree with <see cref="WorldFrameIsometry.MapPoint"/>'s own position mapping for the SAME (source frame,
+/// destination frame, point) triple. That correspondence IS the definition of "the window shows where the
 /// door goes": a window is presentation math (float, GPU-free) computing "what an arrived traveler would see,"
-/// while <see cref="WorldPortalArrivalMath"/> is simulation math (fixed-point) computing where a traveler who
+/// while <see cref="WorldFrameIsometry"/> is simulation math (fixed-point) computing where a traveler who
 /// actually crosses ends up — two independent implementations of the identical isometry, on two independent number
-/// systems, that must land on the same point. <see cref="WorldPortalArrivalMath"/> is read here, never edited (it is
-/// a different lane's file — see docs/vision.md and this suite's sibling <c>WorldPortalArrivalMathLawTests</c>
-/// for its own contract).
+/// systems, that must land on the same point (<c>WorldFrameIsometryLawTests</c> carries the simulation side's own
+/// contract).
 /// </summary>
 /// <remarks>
 /// A reflection bug (flip only the Normal component, not Right) passed the visual "does a window show *something*
@@ -48,6 +47,16 @@ public sealed class WorldWindowProjectionMathLawTests {
 
     private static FixedVector3 ToFixed(Vector3 value) => FixedVector3.FromVector3(value: value);
 
+    private static WorldFaceFrame ToFrame(WorldFaceGeometry geometry) => new(
+        Origin: ToFixed(value: geometry.Origin),
+        Right: ToFixed(value: geometry.Right),
+        Up: ToFixed(value: geometry.Up),
+        Normal: ToFixed(value: geometry.Normal),
+        HalfWidth: FixedQ4816.FromDouble(value: geometry.HalfWidth),
+        HalfHeight: FixedQ4816.FromDouble(value: geometry.HalfHeight),
+        HalfDepth: FixedQ4816.Zero
+    );
+
     [Fact]
     public void MapPoint_AsymmetricPair_AgreesWithWorldPortalArrivalMathsPositionMapping() {
         // THE DISCRIMINATING CASE (matches the adversarial-review finding's own proof shape): source yaw -90 degrees,
@@ -65,20 +74,11 @@ public sealed class WorldWindowProjectionMathLawTests {
 
         var mappedFloat = WorldWindowProjectionMath.MapPoint(point: eye, source: source, destination: destination);
 
-        // The SAME isometry, independently computed via WorldPortalArrivalMath's fixed-point ComputeArrival: a
-        // traveler standing exactly at `eye`, with zero yaw/velocity (irrelevant to the Position output), mapped
-        // through the identical (sourceOrigin, sourceYaw) -> (destinationOrigin, destinationYaw) pair.
-        var arrival = WorldPortalArrivalMath.ComputeArrival(
-            travelerPosition: ToFixed(value: eye),
-            travelerYawRadians: FixedQ4816.Zero,
-            travelerPlanarVelocity: FixedVector3.Zero,
-            travelerVerticalVelocity: FixedQ4816.Zero,
-            sourcePosition: ToFixed(value: sourceOrigin),
-            sourceYawRadians: DegreesToRadians(degrees: -90.0),
-            destinationPosition: ToFixed(value: destinationOrigin),
-            destinationYawRadians: DegreesToRadians(degrees: 90.0)
-        );
-        var mappedFromArrival = arrival.Position.ToVector3();
+        // The SAME isometry, independently computed in fixed point through WorldFrameIsometry, over the identical
+        // (sourceOrigin, sourceYaw) -> (destinationOrigin, destinationYaw) pair.
+        var sourceFrame = ToFrame(geometry: source);
+        var destinationFrame = ToFrame(geometry: destination);
+        var mappedFromArrival = WorldFrameIsometry.MapPoint(point: ToFixed(value: eye), source: in sourceFrame, destination: in destinationFrame).ToVector3();
 
         // A generous but real tolerance: WorldWindowProjectionMath computes entirely in float32 (MathF.Cos/Sin),
         // ComputeArrival entirely in FixedQ4816 (its own SinCos, up to ~0.51 ULP per its documented remarks) — two

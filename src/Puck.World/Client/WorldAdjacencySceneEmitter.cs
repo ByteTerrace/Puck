@@ -9,8 +9,8 @@ namespace Puck.World.Client;
 /// <summary>
 /// The render half of an adjacency overlap: composes the
 /// neighbour's own solid geometry — the same rows <see cref="WorldSolidField"/> would compile for collision, plus
-/// its delivered addressable bodies but never unrelated props or screens — through the same isometry <see cref="WorldPortalArrivalMath"/> uses for a
-/// crossing traveler, so the ground a body sees continuing past the doorway is the ground
+/// its delivered addressable bodies but never unrelated props or screens — through the same
+/// <see cref="WorldFrameIsometry"/> a crossing traveler arrives by, so the ground a body sees continuing past the doorway is the ground
 /// <see cref="WorldAdjacencyContactField"/> actually stands it on.
 /// </summary>
 /// <remarks>

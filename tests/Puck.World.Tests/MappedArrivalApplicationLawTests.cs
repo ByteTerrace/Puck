@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: <see cref="WorldPopulation.ApplyMappedArrival"/>/<see cref="WorldBody.SetArrivalVelocity"/> —
 /// the WRITE half of a mapped portal arrival, applied AFTER the destination's own ordinary
 /// <see cref="WorldPopulation.ActivateSeat"/> join already embodied the traveler fresh under its own kit. The
-/// isometry itself (which pose, which velocity) is <see cref="WorldPortalArrivalMathLawTests"/>'s own contract; this
+/// isometry itself (which pose, which velocity) is <see cref="WorldFrameIsometryLawTests"/>'s own contract; this
 /// suite proves the OTHER half: that the write lands exactly where told, that it runs AFTER the hard-teleport commit
 /// (so <see cref="WorldBody.FixedPreviousPosition"/> collapses to the new landing spot, never a ghost from the
 /// destination's own spawn point), and that it never touches state a mapped arrival deliberately leaves alone
@@ -47,6 +47,7 @@ public sealed class MappedArrivalApplicationLawTests {
             yawRadians: mappedYaw,
             planarVelocity: mappedPlanarVelocity,
             verticalVelocity: mappedVerticalVelocity,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             actionContinuity: new WorldTransferActionContinuity(
                 Channels: [new WorldTransferChannelEdge(Name: "forward", PreviousBit: true, HeldValue: FixedQ4816.One)],
                 Registers: []));
@@ -90,6 +91,7 @@ public sealed class MappedArrivalApplicationLawTests {
             yawRadians: body.FixedYaw,
             planarVelocity: FixedVector3.Zero,
             verticalVelocity: FixedQ4816.Zero,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             actionContinuity: new WorldTransferActionContinuity(
                 Channels: [new WorldTransferChannelEdge(Name: "jump", PreviousBit: true, HeldValue: FixedQ4816.One)],
                 Registers: [])));
@@ -134,6 +136,7 @@ public sealed class MappedArrivalApplicationLawTests {
             yawRadians: FixedQ4816.Zero,
             planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 9), FixedQ4816.Zero, FixedQ4816.Zero),
             verticalVelocity: FixedQ4816.FromInteger(value: -5),
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             continuum: trajectory));
         fixture.Server.Body(index: contactActor.Index)!.Pose(
             position: mappedPosition,
@@ -185,6 +188,7 @@ public sealed class MappedArrivalApplicationLawTests {
             yawRadians: FixedQ4816.Zero,
             planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 12), FixedQ4816.Zero, FixedQ4816.Zero),
             verticalVelocity: FixedQ4816.Zero,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             continuum: trajectory));
         body.ClearPendingContinuum();
 
@@ -252,6 +256,7 @@ public sealed class MappedArrivalApplicationLawTests {
             yawRadians: FixedQ4816.Zero,
             planarVelocity: new FixedVector3(FixedQ4816.FromInteger(value: 12), FixedQ4816.Zero, FixedQ4816.Zero),
             verticalVelocity: FixedQ4816.Zero,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             continuum: trajectory));
         var frame = new WorldFaceFrame(
             Origin: position,
@@ -281,7 +286,8 @@ public sealed class MappedArrivalApplicationLawTests {
             position: FixedVector3.Zero,
             yawRadians: FixedQ4816.Zero,
             planarVelocity: FixedVector3.Zero,
-            verticalVelocity: FixedQ4816.Zero
+            verticalVelocity: FixedQ4816.Zero,
+            destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks
         );
 
         Assert.False(condition: applied);

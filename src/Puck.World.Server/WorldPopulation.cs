@@ -1488,7 +1488,7 @@ public sealed class WorldPopulation {
     /// after the destination's own ordinary <see cref="ActivateSeat"/> join already embodied the traveler fresh
     /// under its own kit (appearance, grants, action-track state) — this call selects the source's named motion
     /// program from the destination's own declared program table, then carries across the positional-continuity facts
-    /// <c>Puck.World.Server.WorldPortalArrivalMath.ComputeArrival</c> computed: pose and captured velocity rotated into
+    /// <c>Puck.World.WorldFrameIsometry.MapArrival</c> computed: pose and captured velocity rotated into
     /// the destination's frame. It never imports the source kit, appearance, grants, dash overlay, timers, or tape.
     /// <see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>
     /// runs first (the hard-teleport commit), <see cref="WorldBody.SetArrivalVelocity"/> after — the same
@@ -1507,7 +1507,7 @@ public sealed class WorldPopulation {
     /// <param name="destinationCompletedEngineTick">The destination authority's completed engine-time boundary at
     /// admission. It raises the traveler's consumed-through fence when transport arrives after the source interval.</param>
     /// <returns><see langword="true"/> when the seat was active and its body was overridden.</returns>
-    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, WorldTransferActionContinuity? actionContinuity = null, WorldContinuumTrajectory? continuum = null, ulong destinationCompletedEngineTick = 0UL) {
+    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, ulong destinationCompletedEngineTick, WorldTransferActionContinuity? actionContinuity = null, WorldContinuumTrajectory? continuum = null) {
         var entry = m_entries[slot];
 
         if (!entry.Active || (entry.Body is not { } body)) {
