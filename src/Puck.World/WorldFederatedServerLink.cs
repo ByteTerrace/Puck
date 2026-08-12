@@ -78,17 +78,13 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             return null;
         }
 
-        (WorldFederationWireFormat.ResponseKind Kind, byte[] Body) response;
-        try {
-            var body = WorldFederationWireFormat.EncodeSubmission(sourceAuthority: sourceAuthority, mobility: in mobility, frame: canonical);
-            response = m_authority.RoundTrip(sourceAuthority: sourceAuthority, kind: WorldFederationWireFormat.RequestKind.Submission, body: body);
-        } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
-            NoteUnavailable(bodyIndex: bodyIndex, reason: $"{exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-            return null;
-        }
-        if (response.Kind != WorldFederationWireFormat.ResponseKind.Completion) {
-            NoteUnavailable(bodyIndex: bodyIndex, reason: $"authority returned {response.Kind}");
-            return (WorldTcpWireFormat.DownstreamKind.Refusal, response.Body);
+        var body = WorldFederationCodec.EncodeSubmission(sourceAuthority: sourceAuthority, mobility: in mobility, frame: canonical);
+        var response = m_authority.AwaitAnswer(sourceAuthority: sourceAuthority, kind: WorldFederationRequest.Submission, body: body);
+
+        if (response.Kind != WorldFederationResponse.Completion) {
+            var narration = response.Describe();
+            NoteUnavailable(bodyIndex: bodyIndex, reason: narration);
+            return (WorldTcpWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
         }
 
         _ = m_unavailableBodies.Remove(item: bodyIndex);
