@@ -3,7 +3,8 @@
 Runner-asserted verification that all four charter worlds (play, dive, kart,
 jump) boot WINDOWED with a healthy binding surface: no binding-vocabulary
 narration, a forced seat recompose that is not rejected, and a document that
-round-trips through `world.save`.
+round-trips through `world.save`. A final leg carries a seat out of play through
+a portal and requires that it stays both DRIVEN and PRESENTED there.
 
 .DESCRIPTION
 A binding value-kind mismatch is FATAL at recompose but only NARRATED at boot.
@@ -230,6 +231,86 @@ world.save $savedPath
     Test-Assertion -Name "${id}: the saved document exists and is non-empty" -Matched ($savedLength -gt 0) -Require $true
 }
 
+# ---------------------------------------------------------------------------
+# The portal-crossing leg: a seat carried out of play into the kart world must stay PRESENTED and DRIVEN there.
+#
+# A crossing has two halves that fail independently. Input can forward correctly while presentation does not follow:
+# the seat's route names the destination authority, but the client resolves a camera anchor only for the boot
+# authority, an adjacency neighbour, or a same-document authority — a portal destination is none of those, so the
+# frame source holds the seat's pre-crossing anchor and the camera freezes while the body still drives. This leg
+# asserts both halves: the routed pose ADVANCES under held input, and no seat holds a stale anchor.
+#
+# world.transfer is the console mirror of the diegetic portal act and feeds the same pending-transfer queue a portal
+# facet's trigger does, so it exercises the identical commit/seed/publish path deterministically. WINDOWED, because
+# the held-anchor narration comes from the frame source, which a headless boot never runs.
+$portalWorld = Join-Path $repoRoot 'src\Puck.World\Assets\worlds\play.world.json'
+$portalTarget = Join-Path $repoRoot 'src\Puck.World\Assets\worlds\kart.world.json'
+$portalStdin = Join-Path $scratchDir 'stdin-portal.txt'
+$portalOut = Join-Path $scratchDir 'out-portal.log'
+$portalErr = Join-Path $scratchDir 'err-portal.log'
+$portalState = Join-Path $scratchDir 'state-portal'
+
+Write-Output "---- a seat carried through a portal stays presented and driven ----"
+
+Set-Content -Path $portalStdin -Value @"
+# A leading Immediate read-back, for the same reason as the per-world scripts above.
+replay.status
+world.wait 30
+player.where 1
+
+# The crossing itself.
+world.transfer boot 1 persisted kart1 $portalTarget
+world.wait 90
+
+# Read one, then drive, then read again: the pair is what proves the routed body ADVANCED rather than merely
+# answering. A single read would pass on a body frozen at its arrival pose.
+player.where 1
+player.fly 1 0 0 0 0 0 2 1
+world.wait 150
+player.where 1
+world.wait 60
+player.where 1
+"@ -NoNewline:$false
+
+Push-Location $repoRoot
+try {
+    Get-Content $portalStdin | & dotnet run --project src/Puck.World -c Release -- --world $portalWorld --exit-after-seconds 14 --width 640 --height 480 --state-dir $portalState > $portalOut 2> $portalErr
+    $portalExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+
+$portalStdout = if (Test-Path $portalOut) { Get-Content -Raw $portalOut } else { '' }
+$portalStderr = if (Test-Path $portalErr) { Get-Content -Raw $portalErr } else { '' }
+
+$transcripts += [PSCustomObject]@{ Id = 'portal'; OutPath = $portalOut; ErrPath = $portalErr; ExitCode = $portalExit }
+
+# The positive control. Without it, both assertions below pass vacuously on a run where the crossing never happened.
+Test-Assertion -Name "portal (stdout): the crossing committed (seat 1 departed boot and arrived in the kart instance)" `
+    -Matched ([regex]::IsMatch($portalStdout, "\[world\.transfer:.*'boot' seat 1 departed.*'kart1' seat \d+ arrived")) -Require $true
+
+# The routed read-backs. Each carries an 'instance:' token, which is what distinguishes a routed answer from a boot
+# one — a seat that silently stayed home would answer without it and must not satisfy this leg.
+$portalPoses = [regex]::Matches($portalStdout, '\[player\.where: p\d+ pos=\(([^)]+)\)[^\r\n]*instance:')
+Test-Assertion -Name 'portal (stdout): at least two routed player.where answers after the crossing' `
+    -Matched ($portalPoses.Count -ge 2) -Require $true
+
+if ($portalPoses.Count -ge 2) {
+    $first = $portalPoses[0].Groups[1].Value
+    $last = $portalPoses[$portalPoses.Count - 1].Groups[1].Value
+
+    Test-Assertion -Name "portal (stdout): the routed pose ADVANCED under held input (first '$first' vs last '$last')" `
+        -Matched ($first -ne $last) -Require $true
+}
+
+Test-Assertion -Name 'portal (stderr): FORBIDDEN — a seat holding the last continuous camera anchor (presentation did not follow the body)' `
+    -Matched ([regex]::IsMatch($portalStderr, 'holding the last continuous camera anchor')) -Require $false
+
+Test-Assertion -Name 'portal (stderr): FORBIDDEN — no unhandled exception' `
+    -Matched ([regex]::IsMatch($portalStderr, 'Unhandled exception')) -Require $false
+
+Test-Assertion -Name 'portal: dotnet run exited 0' -Matched ($portalExit -eq 0) -Require $true
+
 Write-Output "---- transcripts: $scratchDir ----"
 foreach ($transcript in $transcripts) {
     Write-Output "  $($transcript.Id) -> $($transcript.OutPath) / $($transcript.ErrPath) (exit $($transcript.ExitCode))"
@@ -245,5 +326,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Output "PASS: all four charter worlds boot windowed with a healthy binding surface (all $assertionCount assertions held)."
+Write-Output "PASS: all four charter worlds boot windowed with a healthy binding surface, and a seat carried through a portal stays presented and driven (all $assertionCount assertions held)."
 exit 0

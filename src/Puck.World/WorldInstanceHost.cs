@@ -2968,6 +2968,16 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     endpoint = EndpointFor(identity: routeName, authority: routeAuthority);
                 } else if (targetAuthority.Local is { } localEndpointTarget) {
                     endpoint = EndpointFor(instance: localEndpointTarget);
+                    // Parity with the federated arm above: the endpoint carries the arrival pose before the route
+                    // naming it is published, so no frame observes the route without an anchor.
+                    var localRoute = localEndpointTarget.Server.ExecuteAuthorityOperation(operation: () =>
+                        WorldLocalForwardedAuthority.DescribeRoute(
+                            server: localEndpointTarget.Server,
+                            endpoint: endpoint.Identity,
+                            bodyIndex: member.TargetSlot));
+
+                    endpoint.SeedRoute(route: in localRoute);
+                    initialRoute = localRoute;
                 } else {
                     throw new InvalidOperationException(message: "committed transfer has no target authority");
                 }
