@@ -95,12 +95,22 @@ public sealed class CartridgeHeader {
     /// <exception cref="ArgumentException"><paramref name="rom"/> is too small to contain a header.</exception>
     public static CartridgeHeader Parse(byte[] rom) {
         ArgumentNullException.ThrowIfNull(argument: rom);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: rom.Length, other: 0x0150, paramName: nameof(rom));
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rom.Length,
+            other: 0x0150,
+            paramName: nameof(rom)
+        );
 
         var colorFlag = rom[ColorFlagOffset];
         var typeCode = rom[CartridgeTypeOffset];
 
-        DecodeType(typeCode: typeCode, mapper: out var mapper, hasRam: out var hasRam, hasBattery: out var hasBattery, hasRumble: out var hasRumble);
+        DecodeType(
+            typeCode: typeCode,
+            mapper: out var mapper,
+            hasRam: out var hasRam,
+            hasBattery: out var hasBattery,
+            hasRumble: out var hasRumble
+        );
 
         return new CartridgeHeader(
             title: ReadTitle(rom: rom),
@@ -140,7 +150,9 @@ public sealed class CartridgeHeader {
             _ => 0,
         };
     private static int DecodeRomBankCount(byte sizeCode) =>
-        ((sizeCode <= 0x08) ? (2 << sizeCode) : 2);
+        ((sizeCode <= 0x08)
+        ? (2 << sizeCode)
+        : 2);
     private static void DecodeType(byte typeCode, out MapperKind mapper, out bool hasRam, out bool hasBattery, out bool hasRumble) {
         (mapper, hasRam, hasBattery, hasRumble) = typeCode switch {
             0x00 => (MapperKind.RomOnly, false, false, false),
@@ -182,7 +194,10 @@ public sealed class CartridgeHeader {
         for (var offset = TitleStart; (offset < TitleEnd); ++offset) {
             var value = rom[offset];
 
-            if ((value == 0x00) || (value > 0x7E)) {
+            if (
+                (value == 0x00) ||
+                (value > 0x7E)
+            ) {
                 break;
             }
 

@@ -71,7 +71,10 @@ public sealed partial class AgbPpu : IAgbPpu {
         // The raster runs as scheduled events: from the start of each scanline the next event is H-Blank (after
         // the H-draw period), and from H-Blank the next is the following scanline. The first fires at H-draw end.
         m_event = new AgbScheduler.Event { Callback = RunEvent };
-        m_scheduler.Schedule(e: m_event, cyclesFromNow: HDrawLength);
+        m_scheduler.Schedule(
+            e: m_event,
+            cyclesFromNow: HDrawLength
+        );
     }
 
     /// <inheritdoc/>
@@ -87,11 +90,17 @@ public sealed partial class AgbPpu : IAgbPpu {
         if (!m_inHBlank) {
             EnterHBlank();
             m_inHBlank = true;
-            m_scheduler.Schedule(e: m_event, cyclesFromNow: (HBlankLength - cyclesLate));
+            m_scheduler.Schedule(
+                e: m_event,
+                cyclesFromNow: (HBlankLength - cyclesLate)
+            );
         } else {
             NextScanline();
             m_inHBlank = false;
-            m_scheduler.Schedule(e: m_event, cyclesFromNow: (HDrawLength - cyclesLate));
+            m_scheduler.Schedule(
+                e: m_event,
+                cyclesFromNow: (HDrawLength - cyclesLate)
+            );
         }
     }
 
@@ -100,9 +109,15 @@ public sealed partial class AgbPpu : IAgbPpu {
         if (offset == 0x04u) {
             // The V-Blank flag is set on lines 160–226 and cleared again on the final line (227), a hardware
             // quirk the AGS vblank_status test checks explicitly.
-            return (ushort)((((m_line >= ScreenHeight) && (m_line < (TotalLines - 1))) ? 0x1u : 0u)
-                | (m_hblankFlag ? 0x2u : 0u)
-                | ((m_line == (m_dispStatControl >> 8)) ? 0x4u : 0u)
+            return (ushort)((((m_line >= ScreenHeight) && (m_line < (TotalLines - 1)))
+                ? 0x1u
+                : 0u)
+                | (m_hblankFlag
+                ? 0x2u
+                : 0u)
+                | ((m_line == (m_dispStatControl >> 8))
+                ? 0x4u
+                : 0u)
                 | m_dispStatControl);
         }
 
@@ -170,13 +185,21 @@ public sealed partial class AgbPpu : IAgbPpu {
             // 1232-cycle scanline, which equals the master clock modulo 1232 (scanlines are 1232-aligned from boot).
             var mode = m_registers[0] & 0x7;
 
-            if ((m_line >= ScreenHeight) || ForcedBlank || (mode == 3) || (mode == 5)) {
+            if (
+                (m_line >= ScreenHeight) ||
+                ForcedBlank ||
+                (mode == 3) ||
+                (mode == 5)
+            ) {
                 return false;
             }
 
             var hcounter = (m_scheduler.Now % 1232L);
 
-            if ((hcounter < 46L) || (hcounter > 1005L)) {
+            if (
+                (hcounter < 46L) ||
+                (hcounter > 1005L)
+            ) {
                 return false;
             }
 
@@ -186,9 +209,21 @@ public sealed partial class AgbPpu : IAgbPpu {
 
     /// <inheritdoc/>
     public uint ReadVideo(uint address, int width) => (address >> 24) switch {
-        0x5u => AgbArrayAccess.Read(array: m_palette, index: address & 0x3FFu, width: width),
-        0x6u => AgbArrayAccess.Read(array: m_vram, index: VramOffset(address: address), width: width),
-        _ => AgbArrayAccess.Read(array: m_oam, index: address & 0x3FFu, width: width),
+        0x5u => AgbArrayAccess.Read(
+        array: m_palette,
+        index: address & 0x3FFu,
+        width: width
+    ),
+        0x6u => AgbArrayAccess.Read(
+        array: m_vram,
+        index: VramOffset(address: address),
+        width: width
+    ),
+        _ => AgbArrayAccess.Read(
+        array: m_oam,
+        index: address & 0x3FFu,
+        width: width
+    ),
     };
 
     /// <inheritdoc/>
@@ -196,20 +231,38 @@ public sealed partial class AgbPpu : IAgbPpu {
         switch (address >> 24) {
             case 0x5u:
                 if (width == 1) {
-                    WriteDuplicatedByte(array: m_palette, index: address & 0x3FFu & ~1u, value: (byte)value);
+                    WriteDuplicatedByte(
+                        array: m_palette,
+                        index: address & 0x3FFu & ~1u,
+                        value: (byte)value
+                    );
                 } else {
-                    AgbArrayAccess.Write(array: m_palette, index: address & 0x3FFu, width: width, value: value);
+                    AgbArrayAccess.Write(
+                        array: m_palette,
+                        index: address & 0x3FFu,
+                        width: width,
+                        value: value
+                    );
                 }
 
                 break;
             case 0x6u:
-                WriteVram(address: address, width: width, value: value);
+                WriteVram(
+                    address: address,
+                    width: width,
+                    value: value
+                );
 
                 break;
             default:
                 // 8-bit writes to OAM are dropped.
                 if (width != 1) {
-                    AgbArrayAccess.Write(array: m_oam, index: address & 0x3FFu, width: width, value: value);
+                    AgbArrayAccess.Write(
+                        array: m_oam,
+                        index: address & 0x3FFu,
+                        width: width,
+                        value: value
+                    );
                 }
 
                 break;
@@ -269,7 +322,10 @@ public sealed partial class AgbPpu : IAgbPpu {
 
         // DMA3 video-capture timing fires on the H-blank of scanlines 2 through 161 (the visible lines plus the
         // first two V-blank lines), then the window ends at line 162.
-        if ((m_line >= 2) && (m_line <= 161)) {
+        if (
+            (m_line >= 2) &&
+            (m_line <= 161)
+        ) {
             m_videoCaptureStarted = true;
         }
     }
@@ -299,7 +355,10 @@ public sealed partial class AgbPpu : IAgbPpu {
             m_videoCaptureEnded = true;
         }
 
-        if ((m_line == (m_dispStatControl >> 8)) && ((m_dispStatControl & 0x20) != 0)) {
+        if (
+            (m_line == (m_dispStatControl >> 8)) &&
+            ((m_dispStatControl & 0x20) != 0)
+        ) {
             m_interrupts.Request(source: InterruptSource.VCounter);
         }
     }
@@ -307,7 +366,10 @@ public sealed partial class AgbPpu : IAgbPpu {
         var rowBase = (line * ScreenWidth);
 
         if (ForcedBlank) {
-            m_framebuffer.AsSpan(start: rowBase, length: ScreenWidth).Fill(value: 0xFFFFFFFFu);
+            m_framebuffer.AsSpan(
+                start: rowBase,
+                length: ScreenWidth
+            ).Fill(value: 0xFFFFFFFFu);
             ApplyGreenSwap(rowBase: rowBase);
 
             return;
@@ -321,14 +383,29 @@ public sealed partial class AgbPpu : IAgbPpu {
             case 1:
             case 2:
                 for (var background = 0; (background < 4); ++background) {
-                    if (!BackgroundUsable(mode: mode, background: background) || ((m_registers[0] & (0x100u << background)) == 0u)) {
+                    if (
+                        !BackgroundUsable(
+                        mode: mode,
+                        background: background
+                    ) ||
+                        ((m_registers[0] & (0x100u << background)) == 0u)
+                    ) {
                         continue;
                     }
 
-                    if (IsAffineBackground(mode: mode, background: background)) {
-                        RenderAffineBackground(background: background, line: line);
+                    if (IsAffineBackground(
+                        mode: mode,
+                        background: background
+                    )) {
+                        RenderAffineBackground(
+                            background: background,
+                            line: line
+                        );
                     } else {
-                        RenderTextBackground(background: background, line: line);
+                        RenderTextBackground(
+                            background: background,
+                            line: line
+                        );
                     }
 
                     activeBackgrounds |= (1 << background);
@@ -351,7 +428,10 @@ public sealed partial class AgbPpu : IAgbPpu {
 
                 break;
             default:
-                m_framebuffer.AsSpan(start: rowBase, length: ScreenWidth).Fill(value: Color(bgr555: PaletteColor(index: 0)));
+                m_framebuffer.AsSpan(
+                    start: rowBase,
+                    length: ScreenWidth
+                ).Fill(value: Color(bgr555: PaletteColor(index: 0)));
                 ApplyGreenSwap(rowBase: rowBase);
 
                 return;
@@ -362,11 +442,19 @@ public sealed partial class AgbPpu : IAgbPpu {
         if (objectsEnabled) {
             RenderSprites(line: line);
         } else {
-            Array.Fill(array: m_spriteLine, value: -1);
+            Array.Fill(
+                array: m_spriteLine,
+                value: -1
+            );
             Array.Clear(array: m_spriteWindow);
         }
 
-        Composite(line: line, rowBase: rowBase, activeBackgrounds: activeBackgrounds, objectsEnabled: objectsEnabled);
+        Composite(
+            line: line,
+            rowBase: rowBase,
+            activeBackgrounds: activeBackgrounds,
+            objectsEnabled: objectsEnabled
+        );
         ApplyGreenSwap(rowBase: rowBase);
     }
 
@@ -380,27 +468,63 @@ public sealed partial class AgbPpu : IAgbPpu {
         var secondTargets = (blendControl >> 8) & 0x3Fu;
 
         for (var x = 0; (x < ScreenWidth); ++x) {
-            var enableMask = (windowsActive ? WindowMaskAt(x: x, line: line) : 0x3Fu);
+            var enableMask = (windowsActive
+                ? WindowMaskAt(
+                x: x,
+                line: line
+            )
+                : 0x3Fu);
 
             // Find the top two visible, opaque layers by (priority, then OBJ-before-BG, then BG number); the
             // backdrop sits beneath everything (priority 5, id 5).
             var backdrop = (int)PaletteColor(index: 0);
-            var top = new Layer(Color: backdrop, Priority: 5, Order: 6, Id: 5);
-            var second = new Layer(Color: backdrop, Priority: 5, Order: 6, Id: 5);
+            var top = new Layer(
+                Color: backdrop,
+                Priority: 5,
+                Order: 6,
+                Id: 5
+            );
+            var second = new Layer(
+                Color: backdrop,
+                Priority: 5,
+                Order: 6,
+                Id: 5
+            );
 
-            if (objectsEnabled && (m_spriteLine[x] >= 0) && ((enableMask & 0x10u) != 0u)) {
-                Consider(color: m_spriteLine[x], priority: m_spritePriority[x], order: 0, id: 4, top: ref top, second: ref second);
+            if (
+                objectsEnabled &&
+                (m_spriteLine[x] >= 0) &&
+                ((enableMask & 0x10u) != 0u)
+            ) {
+                Consider(
+                    color: m_spriteLine[x],
+                    priority: m_spritePriority[x],
+                    order: 0,
+                    id: 4,
+                    top: ref top,
+                    second: ref second
+                );
             }
 
             for (var background = 0; (background < 4); ++background) {
-                if ((((activeBackgrounds >> background) & 1) == 0) || (((enableMask >> background) & 1u) == 0u)) {
+                if (
+                    (((activeBackgrounds >> background) & 1) == 0) ||
+                    (((enableMask >> background) & 1u) == 0u)
+                ) {
                     continue;
                 }
 
                 var color = m_backgroundLine[background][x];
 
                 if (color >= 0) {
-                    Consider(color: color, priority: m_registers[(4 + background)] & 0x3, order: (background + 1), id: background, top: ref top, second: ref second);
+                    Consider(
+                        color: color,
+                        priority: m_registers[(4 + background)] & 0x3,
+                        order: (background + 1),
+                        id: background,
+                        top: ref top,
+                        second: ref second
+                    );
                 }
             }
 
@@ -412,11 +536,23 @@ public sealed partial class AgbPpu : IAgbPpu {
                 var topIsFirst = ((firstTargets & (1u << top.Id)) != 0u);
                 var secondIsTarget = ((secondTargets & (1u << second.Id)) != 0u);
 
-                if (semiTransparentTop && secondIsTarget) {
-                    result = AlphaBlend(first: top.Color, second: second.Color);
+                if (
+                    semiTransparentTop &&
+                    secondIsTarget
+                ) {
+                    result = AlphaBlend(
+                        first: top.Color,
+                        second: second.Color
+                    );
                 } else if (topIsFirst) {
-                    if ((effect == 1) && secondIsTarget) {
-                        result = AlphaBlend(first: top.Color, second: second.Color);
+                    if (
+                        (effect == 1) &&
+                        secondIsTarget
+                    ) {
+                        result = AlphaBlend(
+                            first: top.Color,
+                            second: second.Color
+                        );
                     } else if (effect == 2) {
                         result = Brighten(color: top.Color);
                     } else if (effect == 3) {
@@ -429,26 +565,61 @@ public sealed partial class AgbPpu : IAgbPpu {
         }
     }
     private static void Consider(int color, int priority, int order, int id, ref Layer top, ref Layer second) {
-        if ((priority < top.Priority) || ((priority == top.Priority) && (order < top.Order))) {
+        if (
+            (priority < top.Priority) ||
+            ((priority == top.Priority) && (order < top.Order))
+        ) {
             second = top;
-            top = new Layer(Color: color, Priority: priority, Order: order, Id: id);
-        } else if ((priority < second.Priority) || ((priority == second.Priority) && (order < second.Order))) {
-            second = new Layer(Color: color, Priority: priority, Order: order, Id: id);
+            top = new Layer(
+                Color: color,
+                Priority: priority,
+                Order: order,
+                Id: id
+            );
+        } else if (
+            (priority < second.Priority) ||
+            ((priority == second.Priority) && (order < second.Order))
+        ) {
+            second = new Layer(
+                Color: color,
+                Priority: priority,
+                Order: order,
+                Id: id
+            );
         }
     }
 
     private readonly record struct Layer(int Color, int Priority, int Order, int Id);
 
     private uint WindowMaskAt(int x, int line) {
-        if (((m_registers[0] & 0x2000u) != 0u) && InWindow(horizontalRegister: 0x20, verticalRegister: 0x22, x: x, line: line)) {
+        if (
+            ((m_registers[0] & 0x2000u) != 0u) &&
+            InWindow(
+            horizontalRegister: 0x20,
+            verticalRegister: 0x22,
+            x: x,
+            line: line
+        )
+        ) {
             return (uint)m_registers[0x24] & 0x3Fu; // WININ low byte (WIN0)
         }
 
-        if (((m_registers[0] & 0x4000u) != 0u) && InWindow(horizontalRegister: 0x21, verticalRegister: 0x23, x: x, line: line)) {
+        if (
+            ((m_registers[0] & 0x4000u) != 0u) &&
+            InWindow(
+            horizontalRegister: 0x21,
+            verticalRegister: 0x23,
+            x: x,
+            line: line
+        )
+        ) {
             return ((uint)m_registers[0x24] >> 8) & 0x3Fu; // WININ high byte (WIN1)
         }
 
-        if (((m_registers[0] & 0x8000u) != 0u) && m_spriteWindow[x]) {
+        if (
+            ((m_registers[0] & 0x8000u) != 0u) &&
+            m_spriteWindow[x]
+        ) {
             return ((uint)m_registers[0x25] >> 8) & 0x3Fu; // WINOUT high byte (object window)
         }
 
@@ -462,23 +633,48 @@ public sealed partial class AgbPpu : IAgbPpu {
         var top = (vertical >> 8) & 0xFF;
         var bottom = vertical & 0xFF;
 
-        var insideX = ((left <= right) ? ((x >= left) && (x < right)) : ((x >= left) || (x < right)));
-        var insideY = ((top <= bottom) ? ((line >= top) && (line < bottom)) : ((line >= top) || (line < bottom)));
+        var insideX = ((left <= right)
+            ? ((x >= left) && (x < right))
+            : ((x >= left) || (x < right)));
+        var insideY = ((top <= bottom)
+            ? ((line >= top) && (line < bottom))
+            : ((line >= top) || (line < bottom)));
 
-        return (insideX && insideY);
+        return (
+            insideX &&
+            insideY
+        );
     }
     private int AlphaBlend(int first, int second) {
-        var eva = Math.Min(val1: 16, val2: m_registers[0x29] & 0x1F);        // BLDALPHA EVA
-        var evb = Math.Min(val1: 16, val2: (m_registers[0x29] >> 8) & 0x1F); // BLDALPHA EVB
+        var eva = Math.Min(
+            val1: 16,
+            val2: m_registers[0x29] & 0x1F
+        );        // BLDALPHA EVA
+        var evb = Math.Min(
+            val1: 16,
+            val2: (m_registers[0x29] >> 8) & 0x1F
+        ); // BLDALPHA EVB
 
-        var r = Math.Min(val1: 31, val2: ((((first & 0x1F) * eva) + ((second & 0x1F) * evb)) >> 4));
-        var g = Math.Min(val1: 31, val2: (((((first >> 5) & 0x1F) * eva) + (((second >> 5) & 0x1F) * evb)) >> 4));
-        var b = Math.Min(val1: 31, val2: (((((first >> 10) & 0x1F) * eva) + (((second >> 10) & 0x1F) * evb)) >> 4));
+        var r = Math.Min(
+            val1: 31,
+            val2: ((((first & 0x1F) * eva) + ((second & 0x1F) * evb)) >> 4)
+        );
+        var g = Math.Min(
+            val1: 31,
+            val2: (((((first >> 5) & 0x1F) * eva) + (((second >> 5) & 0x1F) * evb)) >> 4)
+        );
+        var b = Math.Min(
+            val1: 31,
+            val2: (((((first >> 10) & 0x1F) * eva) + (((second >> 10) & 0x1F) * evb)) >> 4)
+        );
 
         return r | (g << 5) | (b << 10);
     }
     private int Brighten(int color) {
-        var evy = Math.Min(val1: 16, val2: m_registers[0x2A] & 0x1F); // BLDY
+        var evy = Math.Min(
+            val1: 16,
+            val2: m_registers[0x2A] & 0x1F
+        ); // BLDY
         var r = ((color & 0x1F) + (((31 - (color & 0x1F)) * evy) >> 4));
         var g = (((color >> 5) & 0x1F) + (((31 - ((color >> 5) & 0x1F)) * evy) >> 4));
         var b = (((color >> 10) & 0x1F) + (((31 - ((color >> 10) & 0x1F)) * evy) >> 4));
@@ -486,22 +682,32 @@ public sealed partial class AgbPpu : IAgbPpu {
         return r | (g << 5) | (b << 10);
     }
     private int Darken(int color) {
-        var evy = Math.Min(val1: 16, val2: m_registers[0x2A] & 0x1F); // BLDY
+        var evy = Math.Min(
+            val1: 16,
+            val2: m_registers[0x2A] & 0x1F
+        ); // BLDY
         var r = ((color & 0x1F) - (((color & 0x1F) * evy) >> 4));
         var g = (((color >> 5) & 0x1F) - ((((color >> 5) & 0x1F) * evy) >> 4));
         var b = (((color >> 10) & 0x1F) - ((((color >> 10) & 0x1F) * evy) >> 4));
 
         return r | (g << 5) | (b << 10);
     }
-    private int BitmapBackgroundActive() => (((m_registers[0] & 0x400u) != 0u) ? (1 << 2) : 0);
+    private int BitmapBackgroundActive() => (((m_registers[0] & 0x400u) != 0u)
+        ? (1 << 2)
+        : 0);
     private void RenderSprites(int line) {
-        Array.Fill(array: m_spriteLine, value: -1);
+        Array.Fill(
+            array: m_spriteLine,
+            value: -1
+        );
         Array.Clear(array: m_spriteWindow);
 
         var oneDimensional = ((m_registers[0] & 0x40u) != 0u);
 
         // Per-scanline scratch: recomputed from the budget constants every line, so it needs no snapshot entry.
-        var cyclesRemaining = (((m_registers[0] & 0x20u) != 0u) ? SpriteCyclesHBlankFree : SpriteCyclesNormal);
+        var cyclesRemaining = (((m_registers[0] & 0x20u) != 0u)
+            ? SpriteCyclesHBlankFree
+            : SpriteCyclesNormal);
 
         for (var sprite = 0; (sprite < 128); ++sprite) {
             if (cyclesRemaining <= 0) {
@@ -517,7 +723,10 @@ public sealed partial class AgbPpu : IAgbPpu {
             var affine = ((attr0 & 0x100) != 0);
             var objectMode = (attr0 >> 10) & 0x3;
 
-            if ((!affine && ((attr0 & 0x200) != 0)) || (objectMode == 3)) {
+            if (
+                (!affine && ((attr0 & 0x200) != 0)) ||
+                (objectMode == 3)
+            ) {
                 // Disabled, or a prohibited mode.
                 continue;
             }
@@ -525,10 +734,17 @@ public sealed partial class AgbPpu : IAgbPpu {
             var windowSprite = (objectMode == 2);
             var is8Bpp = ((attr0 & 0x2000) != 0);
 
-            var (width, height) = SpriteSize(shape: (attr0 >> 14) & 0x3, size: (attr1 >> 14) & 0x3);
+            var (width, height) = SpriteSize(
+                shape: (attr0 >> 14) & 0x3,
+                size: (attr1 >> 14) & 0x3
+            );
             var doubleSize = (affine && ((attr0 & 0x200) != 0));
-            var boxWidth = (doubleSize ? (width * 2) : width);
-            var boxHeight = (doubleSize ? (height * 2) : height);
+            var boxWidth = (doubleSize
+                ? (width * 2)
+                : width);
+            var boxHeight = (doubleSize
+                ? (height * 2)
+                : height);
             var rowInBox = (line - (attr0 & 0xFF)) & 0xFF;
 
             if (rowInBox >= boxHeight) {
@@ -545,9 +761,15 @@ public sealed partial class AgbPpu : IAgbPpu {
             // OBJ mosaic (attr0 bit 12): the MOSAIC register's bits 8-11 (H) and 12-15 (V) quantise the sprite's
             // sampled coordinates into blocks, snapped to the sprite's origin.
             var objMosaic = ((attr0 & 0x1000) != 0);
-            var objMosaicX = (objMosaic ? (((m_registers[0x26] >> 8) & 0xF) + 1) : 1);
-            var objMosaicY = (objMosaic ? (((m_registers[0x26] >> 12) & 0xF) + 1) : 1);
-            var sampleRow = (objMosaic ? (rowInBox - (rowInBox % objMosaicY)) : rowInBox);
+            var objMosaicX = (objMosaic
+                ? (((m_registers[0x26] >> 8) & 0xF) + 1)
+                : 1);
+            var objMosaicY = (objMosaic
+                ? (((m_registers[0x26] >> 12) & 0xF) + 1)
+                : 1);
+            var sampleRow = (objMosaic
+                ? (rowInBox - (rowInBox % objMosaicY))
+                : rowInBox);
 
             var x = attr1 & 0x1FF;
             var priority = (attr2 >> 10) & 0x3;
@@ -583,10 +805,15 @@ public sealed partial class AgbPpu : IAgbPpu {
                     break;
                 }
 
-                cyclesRemaining -= (affine ? SpriteAffinePixelCost : SpriteRegularPixelCost);
+                cyclesRemaining -= (affine
+                    ? SpriteAffinePixelCost
+                    : SpriteRegularPixelCost);
 
                 // A colour pixel already written by a lower-numbered sprite wins; window sprites only OR in.
-                if (!windowSprite && (m_spriteLine[screenX] >= 0)) {
+                if (
+                    !windowSprite &&
+                    (m_spriteLine[screenX] >= 0)
+                ) {
                     continue;
                 }
 
@@ -594,7 +821,9 @@ public sealed partial class AgbPpu : IAgbPpu {
                 int texelY;
 
                 // Snap the sampled column to the OBJ mosaic grid (the row was snapped above).
-                var sampleColumn = (objMosaic ? (column - (column % objMosaicX)) : column);
+                var sampleColumn = (objMosaic
+                    ? (column - (column % objMosaicX))
+                    : column);
 
                 if (affine) {
                     var dx = (sampleColumn - halfBoxWidth);
@@ -603,15 +832,32 @@ public sealed partial class AgbPpu : IAgbPpu {
                     texelX = ((((pa * dx) + (pb * dy)) >> 8) + (width / 2));
                     texelY = ((((pc * dx) + (pd * dy)) >> 8) + (height / 2));
                 } else {
-                    texelX = (flipX ? ((width - 1) - sampleColumn) : sampleColumn);
-                    texelY = (flipY ? ((height - 1) - sampleRow) : sampleRow);
+                    texelX = (flipX
+                        ? ((width - 1) - sampleColumn)
+                        : sampleColumn);
+                    texelY = (flipY
+                        ? ((height - 1) - sampleRow)
+                        : sampleRow);
                 }
 
-                if ((texelX < 0) || (texelX >= width) || (texelY < 0) || (texelY >= height)) {
+                if (
+                    (texelX < 0) ||
+                    (texelX >= width) ||
+                    (texelY < 0) ||
+                    (texelY >= height)
+                ) {
                     continue;
                 }
 
-                var colorIndex = FetchSpritePixel(texelX: texelX, texelY: texelY, width: width, tileBase: tileBase, is8Bpp: is8Bpp, paletteBank: paletteBank, oneDimensional: oneDimensional);
+                var colorIndex = FetchSpritePixel(
+                    texelX: texelX,
+                    texelY: texelY,
+                    width: width,
+                    tileBase: tileBase,
+                    is8Bpp: is8Bpp,
+                    paletteBank: paletteBank,
+                    oneDimensional: oneDimensional
+                );
 
                 if (colorIndex < 0) {
                     continue;
@@ -629,7 +875,9 @@ public sealed partial class AgbPpu : IAgbPpu {
     }
     private int FetchSpritePixel(int texelX, int texelY, int width, uint tileBase, bool is8Bpp, int paletteBank, bool oneDimensional) {
         var tilesWide = (width >> 3);
-        var units = (is8Bpp ? 2u : 1u);
+        var units = (is8Bpp
+            ? 2u
+            : 1u);
         var tileNumber = (oneDimensional
             ? (tileBase + ((uint)(((texelY >> 3) * tilesWide) + (texelX >> 3)) * units))
             : ((tileBase + (uint)((texelY >> 3) * 32)) + ((uint)(texelX >> 3) * units)));
@@ -637,7 +885,9 @@ public sealed partial class AgbPpu : IAgbPpu {
         tileNumber &= 0x3FF;
 
         // Object tiles live in the upper half of VRAM: 0x10000+ in text modes, 0x14000+ in bitmap modes 3/4/5.
-        var spriteBase = ((BackgroundMode >= 3) ? 0x14000u : 0x10000u);
+        var spriteBase = ((BackgroundMode >= 3)
+            ? 0x14000u
+            : 0x10000u);
         var address = (spriteBase + (tileNumber * 32u));
 
         if (is8Bpp) {
@@ -649,7 +899,9 @@ public sealed partial class AgbPpu : IAgbPpu {
 
             int index = m_vram[address];
 
-            return ((index == 0) ? -1 : index);
+            return ((index == 0)
+                ? -1
+                : index);
         }
 
         address += (uint)(((texelY & 7) * 4) + ((texelX & 7) >> 1));
@@ -659,9 +911,13 @@ public sealed partial class AgbPpu : IAgbPpu {
         }
 
         var packed = m_vram[address];
-        var nibble = (((texelX & 1) != 0) ? (packed >> 4) : packed & 0xF);
+        var nibble = (((texelX & 1) != 0)
+            ? (packed >> 4)
+            : packed & 0xF);
 
-        return ((nibble == 0) ? -1 : ((paletteBank * 16) + nibble));
+        return ((nibble == 0)
+            ? -1
+            : ((paletteBank * 16) + nibble));
     }
     private static (int Width, int Height) SpriteSize(int shape, int size) => shape switch {
         1 => size switch { 0 => (16, 8), 1 => (32, 8), 2 => (32, 16), _ => (64, 32) },
@@ -672,7 +928,10 @@ public sealed partial class AgbPpu : IAgbPpu {
     private void RenderTextBackground(int background, int line) {
         var dest = m_backgroundLine[background];
 
-        Array.Fill(array: dest, value: -1);
+        Array.Fill(
+            array: dest,
+            value: -1
+        );
 
         var control = m_registers[(4 + background)];
         var charBase = ((uint)((control >> 2) & 0x3) * 0x4000u);
@@ -681,11 +940,19 @@ public sealed partial class AgbPpu : IAgbPpu {
         var size = (control >> 14) & 0x3;
         var horizontalOffset = m_registers[(8 + (background * 2))] & 0x1FF;
         var verticalOffset = m_registers[(9 + (background * 2))] & 0x1FF;
-        var widthMask = (((size == 0) || (size == 2)) ? 0xFF : 0x1FF);
-        var heightMask = (((size == 0) || (size == 1)) ? 0xFF : 0x1FF);
+        var widthMask = (((size == 0) || (size == 2))
+            ? 0xFF
+            : 0x1FF);
+        var heightMask = (((size == 0) || (size == 1))
+            ? 0xFF
+            : 0x1FF);
         var mosaic = ((control & 0x40) != 0);
-        var mosaicX = (mosaic ? ((m_registers[0x26] & 0xF) + 1) : 1);
-        var mosaicY = (mosaic ? (((m_registers[0x26] >> 4) & 0xF) + 1) : 1);
+        var mosaicX = (mosaic
+            ? ((m_registers[0x26] & 0xF) + 1)
+            : 1);
+        var mosaicY = (mosaic
+            ? (((m_registers[0x26] >> 4) & 0xF) + 1)
+            : 1);
 
         var y = ((line - (line % mosaicY)) + verticalOffset) & heightMask;
         var tileY = (y >> 3);
@@ -693,12 +960,20 @@ public sealed partial class AgbPpu : IAgbPpu {
 
         for (var x = 0; (x < ScreenWidth); ++x) {
             var px = ((x - (x % mosaicX)) + horizontalOffset) & widthMask;
-            var entry = Vram16(offset: (screenBase + MapEntryOffset(tileX: (px >> 3), tileY: tileY, size: size)));
+            var entry = Vram16(offset: (screenBase + MapEntryOffset(
+                tileX: (px >> 3),
+                tileY: tileY,
+                size: size
+            )));
             var tileNumber = (uint)(entry & 0x3FF);
             var flipX = ((entry & 0x400) != 0);
             var flipY = ((entry & 0x800) != 0);
-            var tx = (flipX ? (7 - (px & 7)) : px & 7);
-            var ty = (flipY ? (7 - inTileY) : inTileY);
+            var tx = (flipX
+                ? (7 - (px & 7))
+                : px & 7);
+            var ty = (flipY
+                ? (7 - inTileY)
+                : inTileY);
             int colorIndex;
 
             if (is8Bpp) {
@@ -717,7 +992,9 @@ public sealed partial class AgbPpu : IAgbPpu {
                 }
 
                 var packed = m_vram[address];
-                var nibble = (((tx & 1) != 0) ? (packed >> 4) : packed & 0xF);
+                var nibble = (((tx & 1) != 0)
+                    ? (packed >> 4)
+                    : packed & 0xF);
 
                 if (nibble == 0) {
                     continue;
@@ -736,7 +1013,10 @@ public sealed partial class AgbPpu : IAgbPpu {
     private void RenderAffineBackground(int background, int line) {
         var dest = m_backgroundLine[background];
 
-        Array.Fill(array: dest, value: -1);
+        Array.Fill(
+            array: dest,
+            value: -1
+        );
 
         var index = (background - 2);
         var control = m_registers[(4 + background)];
@@ -745,14 +1025,20 @@ public sealed partial class AgbPpu : IAgbPpu {
         var wrap = ((control & 0x2000) != 0);
         var mapPixels = (128 << ((control >> 14) & 0x3));
         var tilesWide = (mapPixels >> 3);
-        var registerBase = ((background == 2) ? 0x10 : 0x18);
+        var registerBase = ((background == 2)
+            ? 0x10
+            : 0x18);
         var pa = (short)m_registers[registerBase];
         var pb = (short)m_registers[(registerBase + 1)];
         var pc = (short)m_registers[(registerBase + 2)];
         var pd = (short)m_registers[(registerBase + 3)];
         var mosaic = ((control & 0x40) != 0);
-        var mosaicX = (mosaic ? ((m_registers[0x26] & 0xF) + 1) : 1);
-        var mosaicY = (mosaic ? (((m_registers[0x26] >> 4) & 0xF) + 1) : 1);
+        var mosaicX = (mosaic
+            ? ((m_registers[0x26] & 0xF) + 1)
+            : 1);
+        var mosaicY = (mosaic
+            ? (((m_registers[0x26] >> 4) & 0xF) + 1)
+            : 1);
         var mosaicLine = (line - (line % mosaicY));
         var startX = (m_affineRefX[index] + (pb * mosaicLine));
         var startY = (m_affineRefY[index] + (pd * mosaicLine));
@@ -765,7 +1051,12 @@ public sealed partial class AgbPpu : IAgbPpu {
             if (wrap) {
                 texX &= (mapPixels - 1);
                 texY &= (mapPixels - 1);
-            } else if ((texX < 0) || (texX >= mapPixels) || (texY < 0) || (texY >= mapPixels)) {
+            } else if (
+                (texX < 0) ||
+                (texX >= mapPixels) ||
+                (texY < 0) ||
+                (texY >= mapPixels)
+            ) {
                 continue;
             }
 
@@ -814,9 +1105,17 @@ public sealed partial class AgbPpu : IAgbPpu {
     // background sizes (256×256, 512×256, 256×512, 512×512).
     private static uint MapEntryOffset(int tileX, int tileY, int size) {
         var block = size switch {
-            1 => ((tileX >= 32) ? 1u : 0u),
-            2 => ((tileY >= 32) ? 1u : 0u),
-            3 => (((tileY >= 32) ? 2u : 0u) + ((tileX >= 32) ? 1u : 0u)),
+            1 => ((tileX >= 32)
+            ? 1u
+            : 0u),
+            2 => ((tileY >= 32)
+            ? 1u
+            : 0u),
+            3 => (((tileY >= 32)
+            ? 2u
+            : 0u) + ((tileX >= 32)
+            ? 1u
+            : 0u)),
             _ => 0u,
         };
 
@@ -836,7 +1135,9 @@ public sealed partial class AgbPpu : IAgbPpu {
     private void RenderBitmapMode4(int line) {
         // The 8-bit paletted bitmap is double-buffered; DISPCNT bit 4 selects the visible page. Index 0 is transparent.
         var dest = m_backgroundLine[2];
-        var page = (((m_registers[0] & 0x10) != 0) ? 0xA000 : 0x0000);
+        var page = (((m_registers[0] & 0x10) != 0)
+            ? 0xA000
+            : 0x0000);
         var source = (page + (line * ScreenWidth));
 
         for (var x = 0; (x < ScreenWidth); ++x) {
@@ -851,13 +1152,18 @@ public sealed partial class AgbPpu : IAgbPpu {
         // A 160×128 16-bit bitmap, also double-buffered; outside that area is transparent (shows the backdrop).
         var dest = m_backgroundLine[2];
 
-        Array.Fill(array: dest, value: -1);
+        Array.Fill(
+            array: dest,
+            value: -1
+        );
 
         if (line >= 128) {
             return;
         }
 
-        var page = (((m_registers[0] & 0x10) != 0) ? 0xA000 : 0x0000);
+        var page = (((m_registers[0] & 0x10) != 0)
+            ? 0xA000
+            : 0x0000);
         var source = (page + ((line * 160) * 2));
 
         for (var x = 0; (x < 160); ++x) {
@@ -871,18 +1177,29 @@ public sealed partial class AgbPpu : IAgbPpu {
         if (width == 1) {
             // An 8-bit VRAM write duplicates the byte across a halfword in the background region and is dropped
             // in the object region (boundary 0x14000 in bitmap modes, 0x10000 in tiled modes).
-            var objectBase = ((BackgroundMode >= 3) ? 0x14000u : 0x10000u);
+            var objectBase = ((BackgroundMode >= 3)
+                ? 0x14000u
+                : 0x10000u);
 
             if (offset >= objectBase) {
                 return;
             }
 
-            WriteDuplicatedByte(array: m_vram, index: offset & ~1u, value: (byte)value);
+            WriteDuplicatedByte(
+                array: m_vram,
+                index: offset & ~1u,
+                value: (byte)value
+            );
 
             return;
         }
 
-        AgbArrayAccess.Write(array: m_vram, index: offset, width: width, value: value);
+        AgbArrayAccess.Write(
+            array: m_vram,
+            index: offset,
+            width: width,
+            value: value
+        );
     }
     private static uint VramOffset(uint address) {
         var offset = address & 0x1FFFFu;

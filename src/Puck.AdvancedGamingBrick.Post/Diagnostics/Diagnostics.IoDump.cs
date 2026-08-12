@@ -5,7 +5,11 @@ internal static partial class Diagnostics {
     /// <summary>Dumps every I/O register halfword after running a ROM, in the cosim oracle's <c>iodump</c> format
     /// (<c>IO &lt;offset&gt; &lt;value&gt;</c>), so the two streams diff to find I/O read-mask divergences.</summary>
     public static void IoDump(string romPath, long steps) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 

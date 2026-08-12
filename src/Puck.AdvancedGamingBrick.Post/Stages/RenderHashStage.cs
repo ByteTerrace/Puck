@@ -54,7 +54,9 @@ internal sealed class RenderHashStage : IPostStage {
         var ran = 0;
 
         foreach (var floor in m_floors) {
-            var root = ((floor.Source == RenderFloorSource.Corpus) ? context.TestRomRoot : context.GamesRoot);
+            var root = ((floor.Source == RenderFloorSource.Corpus)
+                ? context.TestRomRoot
+                : context.GamesRoot);
 
             if (root is null) {
                 continue;
@@ -62,11 +64,20 @@ internal sealed class RenderHashStage : IPostStage {
 
             // A BIOS-dependent floor renders a blank screen on the zeroed stub, which would never match — skip it there
             // rather than false-fail; it only reproduces its floor with a real replacement BIOS.
-            if (floor.NeedsBios && (context.BiosImage.Span.IndexOfAnyExcept(value: (byte)0) < 0)) {
+            if (
+                floor.NeedsBios &&
+                (context.BiosImage.Span.IndexOfAnyExcept(value: (byte)0) < 0)
+            ) {
                 continue;
             }
 
-            var fullPath = Path.Combine(path1: root, path2: floor.RelativePath.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar));
+            var fullPath = Path.Combine(
+                path1: root,
+                path2: floor.RelativePath.Replace(
+                    oldChar: '/',
+                    newChar: Path.DirectorySeparatorChar
+                )
+            );
 
             if (!File.Exists(path: fullPath)) {
                 continue;
@@ -75,7 +86,12 @@ internal sealed class RenderHashStage : IPostStage {
             ++ran;
 
             try {
-                var (pass, _, detail) = RenderHashProbe.Run(romPath: fullPath, steps: floor.Steps, expected: floor.ExpectedHash, bios: context.BiosImage);
+                var (pass, _, detail) = RenderHashProbe.Run(
+                    romPath: fullPath,
+                    steps: floor.Steps,
+                    expected: floor.ExpectedHash,
+                    bios: context.BiosImage
+                );
 
                 if (pass == true) {
                     ++passed;
@@ -93,6 +109,9 @@ internal sealed class RenderHashStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{passed}/{ran} floors reproduced")
-            : PostStageOutcome.Fail(detail: $"{passed}/{ran} reproduced; drifted: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{passed}/{ran} reproduced; drifted: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

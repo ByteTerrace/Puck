@@ -19,7 +19,10 @@ internal static partial class Diagnostics {
             return false;
         }
 
-        var allow = (Array.IndexOf(array: args, value: "--allow-replacement-bios") >= 0);
+        var allow = (Array.IndexOf(
+            array: args,
+            value: "--allow-replacement-bios"
+        ) >= 0);
 
         Console.WriteLine(value: "  ============================================================================");
         Console.WriteLine(value: $"  !! WARNING: {mode} is running on a NON-RETAIL BIOS — {identity.Description}");
@@ -49,7 +52,10 @@ internal static partial class Diagnostics {
             return false;
         }
 
-        instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: BiosImage, rom: File.ReadAllBytes(path: romPath)));
+        instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: BiosImage,
+            rom: File.ReadAllBytes(path: romPath)
+        ));
 
         instance.Machine.DirectBoot();
 

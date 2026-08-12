@@ -24,11 +24,20 @@ internal sealed class QueuedHostAudioStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var bios = context.BiosImage.ToArray();
         var result = QueuedHostContractProbe.VerifyAudio(
-            attached: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios, audioSampleRate: RequestedSampleRate),
-            detached: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios),
+            attached: () => new AdvancedMachineHost(
+                cartridgeRom: SyntheticRom.Create(),
+                biosImage: bios,
+                audioSampleRate: RequestedSampleRate
+            ),
+            detached: () => new AdvancedMachineHost(
+                cartridgeRom: SyntheticRom.Create(),
+                biosImage: bios
+            ),
             requestedRate: RequestedSampleRate
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

@@ -8,7 +8,7 @@ internal static partial class Diagnostics {
     // Names are best-effort annotations for the value stream written to 0x04; the raw index + value is
     // authoritative. The SIO interrupt test spins waiting for a link cable, so a headless run stalls there (after
     // ~32 results).
-    private static readonly string[] s_agsTestNames = [
+    private static readonly string[] AgsTestNames = [
         "mem: cpu_external_work_ram", "mem: cpu_internal_work_ram", "mem: palette_ram", "mem: vram", "mem: oam",
         "mem: cartridge_type_flag", "mem: prefetch_buffer", "mem: waitstate_wait_control", "mem: cartridge_ram_wait_control",
         "lcd: vcounter", "lcd: vcount_intr_flag", "lcd: hblank_intr_flag", "lcd: vblank_intr_flag", "lcd: vcount_status",
@@ -59,7 +59,10 @@ internal static partial class Diagnostics {
         // Wire the tracing decorator in front of the real bus: register the concrete bus, then map IAgbBus to a
         // TracingAgbBus that wraps it. The compose callback runs before AddAdvancedGamingBrick's TryAdd, so ours wins.
         using var instance = AgbMachineFactory.Create(
-            configuration: new AgbMachineConfiguration(bios: BiosImage, rom: rom),
+            configuration: new AgbMachineConfiguration(
+                bios: BiosImage,
+                rom: rom
+            ),
             compose: services => {
                 services.AddScoped<AgbBus>();
                 services.AddScoped<IAgbBus>(implementationFactory: sp => {
@@ -69,7 +72,10 @@ internal static partial class Diagnostics {
                         inner: busRef,
                         watchAddress: 0x04u,
                         onStore: value => {
-                            if (trace && (results.Count < 8)) {
+                            if (
+                                trace &&
+                                (results.Count < 8)
+                            ) {
                                 Console.WriteLine(value: $"    [store] result#{results.Count} value=0x{value:X8} pc=0x{(machineRef?.Cpu.GetRegister(index: 15) ?? 0):X8}");
                             }
 
@@ -84,9 +90,11 @@ internal static partial class Diagnostics {
                         onReadRange: (addr, value) => connectIoReads.Add(item: (results.Count, addr, value, (busRef?.Cycles ?? 0))),
                         writeRangeBase: 0x04000100u,
                         writeRangeEnd: 0x04000110u,
-                        onWriteRange: (addr, value) => connectIoWrites.Add(item: (results.Count, addr, value, (busRef?.Cycles ?? 0))));
+                        onWriteRange: (addr, value) => connectIoWrites.Add(item: (results.Count, addr, value, (busRef?.Cycles ?? 0)))
+                    );
                 });
-            });
+            }
+        );
         var machine = instance.Machine;
 
         machineRef = machine;
@@ -95,22 +103,28 @@ internal static partial class Diagnostics {
 
         // Step until the result stream goes quiet: once results have started arriving, a long gap with no new
         // result means the suite has stalled (the SIO link-cable test) or finished.
-        const long budget = 400_000_000;
-        const long quietWindow = 12_000_000;
+        const long Budget = 400_000_000;
+        const long QuietWindow = 12_000_000;
         var lastCount = 0;
         var lastChangeStep = 0L;
 
-        for (long i = 1; (i <= budget); ++i) {
+        for (long i = 1; (i <= Budget); ++i) {
             machine.Step();
 
-            if (trace && ((i % 2_000_000L) == 0L)) {
+            if (
+                trace &&
+                ((i % 2_000_000L) == 0L)
+            ) {
                 Console.WriteLine(value: $"    [trace] step={i,12} pc=0x{machine.Cpu.GetRegister(index: 15):X8} dispcnt=0x{machine.Ppu.ReadRegister(offset: 0x00u):X4} vcount={machine.Ppu.ReadRegister(offset: 0x06u),3} results={results.Count}");
             }
 
             if (results.Count != lastCount) {
                 lastCount = results.Count;
                 lastChangeStep = i;
-            } else if ((results.Count > 0) && ((i - lastChangeStep) > quietWindow)) {
+            } else if (
+                (results.Count > 0) &&
+                ((i - lastChangeStep) > QuietWindow)
+            ) {
                 break;
             }
         }
@@ -122,7 +136,9 @@ internal static partial class Diagnostics {
 
         for (var i = 0; (i < results.Count); ++i) {
             var value = results[i];
-            var label = ((i < s_agsTestNames.Length) ? s_agsTestNames[i] : $"test #{i}");
+            var label = ((i < AgsTestNames.Length)
+                ? AgsTestNames[i]
+                : $"test #{i}");
             var ok = (value == 0u);
 
             if (ok) {
@@ -131,7 +147,9 @@ internal static partial class Diagnostics {
                 ++failed;
             }
 
-            Console.WriteLine(value: $"    [{(ok ? "PASS" : "FAIL")}] #{i,2} {label,-42} flags=0x{value:X}");
+            Console.WriteLine(value: $"    [{(ok
+                ? "PASS"
+                : "FAIL")}] #{i,2} {label,-42} flags=0x{value:X}");
         }
 
         Console.WriteLine(value: $"  == AGS: {passed} passed, {failed} failed ({results.Count} run) ==");
@@ -146,25 +164,36 @@ internal static partial class Diagnostics {
             for (var i = 0; ((i < waitReads.Length) && (i < expectedWait.Length)); ++i) {
                 var ours = waitReads[i];
 
-                Console.WriteLine(value: $"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {((ours == expectedWait[i]) ? "ok" : $"d={((long)ours - expectedWait[i])}")}");
+                Console.WriteLine(value: $"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {((ours == expectedWait[i])
+                    ? "ok"
+                    : $"d={((long)ours - expectedWait[i])}")}");
             }
         }
 
         // prefetch test (#6) reads the timer twice (prefetch on → expect 0x18, off → 0x33).
         var prefetchReads = timerReads.Where(predicate: r => (r.afterResults == 6)).Select(selector: r => r.value).ToArray();
 
-        Console.WriteLine(value: $"  -- prefetch timer reads (afterResults==6): {string.Join(separator: ", ", values: prefetchReads.Select(selector: v => $"0x{v:X}"))} (expect 0x18 on, 0x33 off) --");
+        Console.WriteLine(value: $"  -- prefetch timer reads (afterResults==6): {string.Join(
+            separator: ", ",
+            values: prefetchReads.Select(selector: v => $"0x{v:X}")
+        )} (expect 0x18 on, 0x33 off) --");
 
         // cart-RAM (SRAM) wait test (#8) reads the timer 4 times (expect 0x1C,0x18,0x14,0x2C).
         uint[] expectedCart = [0x1C, 0x18, 0x14, 0x2C];
         var cartReads = timerReads.Where(predicate: r => (r.afterResults == 8)).Select(selector: r => r.value).ToArray();
 
-        Console.WriteLine(value: $"  -- cart-RAM timer reads (afterResults==8): {string.Join(separator: ", ", values: cartReads.Select(selector: v => $"0x{v:X}"))} (expect 0x1C,0x18,0x14,0x2C) --");
+        Console.WriteLine(value: $"  -- cart-RAM timer reads (afterResults==8): {string.Join(
+            separator: ", ",
+            values: cartReads.Select(selector: v => $"0x{v:X}")
+        )} (expect 0x1C,0x18,0x14,0x2C) --");
 
         // prescaler test (#16) reads the timer once per prescaler mode (4 reads: /1, /64, /256, /1024).
         var prescalerReads = timerReads.Where(predicate: r => (r.afterResults == 16)).Select(selector: r => r.value).ToArray();
 
-        Console.WriteLine(value: $"  -- prescaler timer reads (afterResults==16): {string.Join(separator: ", ", values: prescalerReads.Select(selector: v => $"0x{v:X}"))} ({prescalerReads.Length} reads, expect 4 values) --");
+        Console.WriteLine(value: $"  -- prescaler timer reads (afterResults==16): {string.Join(
+            separator: ", ",
+            values: prescalerReads.Select(selector: v => $"0x{v:X}")
+        )} ({prescalerReads.Length} reads, expect 4 values) --");
 
         // For any failed test: dump I/O reads and writes observed during it.
         for (var testIdx = 0; (testIdx < results.Count); ++testIdx) {
@@ -172,7 +201,9 @@ internal static partial class Diagnostics {
                 continue;
             }
 
-            var testLabel = ((testIdx < s_agsTestNames.Length) ? s_agsTestNames[testIdx] : $"test #{testIdx}");
+            var testLabel = ((testIdx < AgsTestNames.Length)
+                ? AgsTestNames[testIdx]
+                : $"test #{testIdx}");
 
             var ioWritesForTest = connectIoWrites.Where(predicate: r => (r.afterResults == testIdx)).ToArray();
 

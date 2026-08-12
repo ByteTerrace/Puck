@@ -35,7 +35,11 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
 
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
-        m_instance.Machine.RestoreState(reader: new StateReader(buffer: buffer, start: 0, length: length));
+        m_instance.Machine.RestoreState(reader: new StateReader(
+        buffer: buffer,
+        start: 0,
+        length: length
+    ));
 
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) {
@@ -44,7 +48,10 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
         // The lookahead applies the SAME full input image the authoritative core does (buttons AND the recorded tilt
         // sensor sample) so a sensor-bearing cart's predicted branch matches the authority's — a no-op on a cart that
         // never reads the tilt sensor.
-        m_tiltSensor.SetTilt(x: input.Tilt.X, y: input.Tilt.Y);
+        m_tiltSensor.SetTilt(
+            x: input.Tilt.X,
+            y: input.Tilt.Y
+        );
     }
 
     /// <inheritdoc/>

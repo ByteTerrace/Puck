@@ -28,7 +28,7 @@ public sealed class ToastWriter {
     private const string OkLabel = "OK";
     // Lifetime and fade in DETERMINISTIC engine ticks (content tick, never wall clock).
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
-    private static readonly ulong FadeTicks = (ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond);
+    private static readonly ulong FadeTicks = ((ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond));
     private readonly IOverlayToastSource m_source;
     private ulong m_firstTicks;
     private int m_sequenceSeen;
@@ -77,10 +77,12 @@ public sealed class ToastWriter {
         var remaining = (DurationTicks - age);
         var alpha = ((remaining >= FadeTicks)
             ? 1f
-            : ((float)remaining / FadeTicks));
+            : (((float)remaining) / FadeTicks)
+        );
         var stateRole = (toast.IsError
             ? OverlayColorRole.Danger
-            : OverlayColorRole.Positive);
+            : OverlayColorRole.Positive
+        );
         var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
         var message = toast.Message.AsSpan(
@@ -154,7 +156,8 @@ public sealed class ToastWriter {
 
         var label = (toast.IsError
             ? ErrorLabel
-            : OkLabel);
+            : OkLabel
+        );
 
         builder.WriteText(
             alpha: alpha,
@@ -193,7 +196,8 @@ public sealed class ToastWriter {
 
         return ((newline >= 0)
             ? newline
-            : text.Length);
+            : text.Length
+        );
     }
 
     // Greedy word wrap into at most `lines.Length` ranges of MaxMessageChars: break at the last space that fits,
@@ -224,7 +228,8 @@ public sealed class ToastWriter {
             var space = window.LastIndexOf(value: ' ');
             var take = ((space > 0)
                 ? space
-                : MaxMessageChars);
+                : MaxMessageChars
+            );
 
             lines[count++] = new Range(
                 start: start,

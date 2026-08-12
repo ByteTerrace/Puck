@@ -57,24 +57,43 @@ internal sealed class SerialLinkStage : IPostStage {
         var second = RunLinkedScenario();
 
         if (!first.MasterState.ContentEquals(other: second.MasterState)) {
-            return PostStageOutcome.Fail(detail: $"the master machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.MasterState, b: second.MasterState)}");
+            return PostStageOutcome.Fail(detail: $"the master machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.MasterState,
+                b: second.MasterState
+            )}");
         }
 
         if (!first.SlaveState.ContentEquals(other: second.SlaveState)) {
-            return PostStageOutcome.Fail(detail: $"the slave machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.SlaveState, b: second.SlaveState)}");
+            return PostStageOutcome.Fail(detail: $"the slave machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.SlaveState,
+                b: second.SlaveState
+            )}");
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"{SerialLinkRom.TransferCount} bytes exchanged each way ({Label(model: m_masterModel)} master ↔ {Label(model: m_slaveModel)} slave), {SerialLinkRom.TransferCount} serial interrupts observed per side, replay-identical across two runs ({first.MasterState.Size}+{first.SlaveState.Size} state bytes)"
-        );
+        return PostStageOutcome.Pass(detail: $"{SerialLinkRom.TransferCount} bytes exchanged each way ({Label(model: m_masterModel)} master ↔ {Label(model: m_slaveModel)} slave), {SerialLinkRom.TransferCount} serial interrupts observed per side, replay-identical across two runs ({first.MasterState.Size}+{first.SlaveState.Size} state bytes)");
     }
 
     // One complete linked scenario from freshly built machines: connect, run the per-frame budget schedule, read the
     // protocol's work-RAM verdicts, snapshot. Fully self-contained so the determinism leg can repeat it identically.
     private LinkScenarioResult RunLinkedScenario() {
-        using var master = PostMachine.Build(model: m_masterModel, rom: SerialLinkRom.Create(internalClock: true, sendBase: MasterSendBase));
-        using var slave = PostMachine.Build(model: m_slaveModel, rom: SerialLinkRom.Create(internalClock: false, sendBase: SlaveSendBase));
-        using var session = new SerialLinkSession(first: master, second: slave);
+        using var master = PostMachine.Build(
+            model: m_masterModel,
+            rom: SerialLinkRom.Create(
+                internalClock: true,
+                sendBase: MasterSendBase
+            )
+        );
+        using var slave = PostMachine.Build(
+            model: m_slaveModel,
+            rom: SerialLinkRom.Create(
+                internalClock: false,
+                sendBase: SlaveSendBase
+            )
+        );
+        using var session = new SerialLinkSession(
+            first: master,
+            second: slave
+        );
 
         for (var frame = 0; (frame < Frames); ++frame) {
             session.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
@@ -105,8 +124,16 @@ internal sealed class SerialLinkStage : IPostStage {
 
     // Judges the first run's protocol outcomes; null means every expectation held.
     private static string? Verify(LinkScenarioResult result) =>
-        (VerifySide(verdict: result.MasterVerdict, side: "master", expectedBase: SlaveSendBase)
-            ?? VerifySide(verdict: result.SlaveVerdict, side: "slave", expectedBase: MasterSendBase));
+        (VerifySide(
+        verdict: result.MasterVerdict,
+        side: "master",
+        expectedBase: SlaveSendBase
+    )
+            ?? VerifySide(
+        verdict: result.SlaveVerdict,
+        side: "slave",
+        expectedBase: MasterSendBase
+    ));
     private static string? VerifySide(LinkSideVerdict verdict, string side, byte expectedBase) {
         if (verdict.CompletionMarker != SerialLinkRom.CompletionMarker) {
             return $"the {side} never completed its {SerialLinkRom.TransferCount} transfers (marker 0x{verdict.CompletionMarker:X2})";

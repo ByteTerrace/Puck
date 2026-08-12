@@ -38,6 +38,9 @@ public sealed class MachineFork : IDisposable {
     // reaching through to a machine it no longer owns.
     private MachineInstance Current =>
         (m_instance.IsRentalCurrent(generation: m_generation)
-            ? m_instance
-            : throw new ObjectDisposedException(objectName: nameof(MachineFork), message: "This fork rental was disposed and its machine re-rented; a stale fork handle cannot reach it."));
+        ? m_instance
+        : throw new ObjectDisposedException(
+        objectName: nameof(MachineFork),
+        message: "This fork rental was disposed and its machine re-rented; a stale fork handle cannot reach it."
+    ));
 }

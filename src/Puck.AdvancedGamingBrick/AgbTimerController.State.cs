@@ -14,16 +14,31 @@ public sealed partial class AgbTimerController : ISnapshotable {
         writer.WriteBlock<int>(values: m_period);
         writer.WriteBlock<int>(values: m_reload);
         writer.WriteBlock<int>(values: m_frequency);
-        WriteBooleans(writer: writer, values: m_enable);
-        WriteBooleans(writer: writer, values: m_irqEnabled);
-        WriteBooleans(writer: writer, values: m_cascade);
-        WriteBooleans(writer: writer, values: m_pending);
+        WriteBooleans(
+            writer: writer,
+            values: m_enable
+        );
+        WriteBooleans(
+            writer: writer,
+            values: m_irqEnabled
+        );
+        WriteBooleans(
+            writer: writer,
+            values: m_cascade
+        );
+        WriteBooleans(
+            writer: writer,
+            values: m_pending
+        );
         writer.WriteBlock<int>(values: m_irqCountdown);
 
         writer.WriteBlock<long>(values: m_anchorClock);
         writer.WriteBlock<int>(values: m_anchorValue);
 
-        WriteBooleans(writer: writer, values: m_controlFlag);
+        WriteBooleans(
+            writer: writer,
+            values: m_controlFlag
+        );
         writer.WriteBlock<int>(values: m_latchControl);
         writer.WriteBlock<int>(values: m_reloadFlags);
         writer.WriteBlock<int>(values: m_latchReload);
@@ -38,16 +53,31 @@ public sealed partial class AgbTimerController : ISnapshotable {
         reader.ReadBlock<int>(destination: m_period);
         reader.ReadBlock<int>(destination: m_reload);
         reader.ReadBlock<int>(destination: m_frequency);
-        ReadBooleans(reader: reader, values: m_enable);
-        ReadBooleans(reader: reader, values: m_irqEnabled);
-        ReadBooleans(reader: reader, values: m_cascade);
-        ReadBooleans(reader: reader, values: m_pending);
+        ReadBooleans(
+            reader: reader,
+            values: m_enable
+        );
+        ReadBooleans(
+            reader: reader,
+            values: m_irqEnabled
+        );
+        ReadBooleans(
+            reader: reader,
+            values: m_cascade
+        );
+        ReadBooleans(
+            reader: reader,
+            values: m_pending
+        );
         reader.ReadBlock<int>(destination: m_irqCountdown);
 
         reader.ReadBlock<long>(destination: m_anchorClock);
         reader.ReadBlock<int>(destination: m_anchorValue);
 
-        ReadBooleans(reader: reader, values: m_controlFlag);
+        ReadBooleans(
+            reader: reader,
+            values: m_controlFlag
+        );
         reader.ReadBlock<int>(destination: m_latchControl);
         reader.ReadBlock<int>(destination: m_reloadFlags);
         reader.ReadBlock<int>(destination: m_latchReload);
@@ -57,7 +87,11 @@ public sealed partial class AgbTimerController : ISnapshotable {
         // Re-derive the overflow events from the anchors (the scheduler cleared its queue in its own LoadState, run
         // first). Only a scheduled prescaler timer owns a live overflow event; everything else stays descheduled.
         for (var timer = 0; (timer < 4); ++timer) {
-            if (m_scheduled && m_enable[timer] && !m_cascade[timer]) {
+            if (
+                m_scheduled &&
+                m_enable[timer] &&
+                !m_cascade[timer]
+            ) {
                 ScheduleOverflow(timer: timer);
             }
         }

@@ -118,7 +118,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
         var labelCell = Math.Max(
             val1: 12,
-            val2: (int)(pipHalf * 1.9f)
+            val2: ((int)(pipHalf * 1.9f))
         );
 
         if (!string.IsNullOrEmpty(value: seat.Label)) {
@@ -190,7 +190,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
         var hintCell = Math.Max(
             val1: 10,
-            val2: (int)(pipHalf * 1.6f)
+            val2: ((int)(pipHalf * 1.6f))
         );
         var hintLineStep = (hintCell * 1.3f);
         var hintBaseY = (anchorY - (pipHalf * 2.2f));
@@ -248,7 +248,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
     void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
         EmitSeat(
-        builder: builder,
-        seat: in seat
-    );
+            builder: builder,
+            seat: in seat
+        );
 }

@@ -7,8 +7,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// closure-in-a-tick-path or LINQ-in-a-mapper regression surfaces as a red battery instead of a demo GC spike.
 /// </summary>
 internal sealed class AllocationStage : IPostStage {
-    private const int WarmFrames = 120;
     private const int MeasureFrames = 600;
+    private const int WarmFrames = 120;
 
     /// <inheritdoc/>
     public string Name =>
@@ -20,7 +20,10 @@ internal sealed class AllocationStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(bios: context.BiosImage, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            bios: context.BiosImage,
+            rom: SyntheticRom.Create()
+        );
 
         machine.RunFrames(frames: WarmFrames);
 

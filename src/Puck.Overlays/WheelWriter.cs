@@ -221,7 +221,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
     void IOverlaySeatEmitter<OverlayWheelSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) =>
         EmitSeat(
-        builder: builder,
-        seat: in seat
-    );
+            builder: builder,
+            seat: in seat
+        );
 }

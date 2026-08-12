@@ -67,7 +67,10 @@ public sealed class AgbLinkSession : IDisposable {
     /// negative, or a console's identity (format version / BIOS / ROM) does not match the token's binding for that
     /// position — a reordered or substituted console. No console is connected when this is thrown.</exception>
     public AgbLinkSession(AgbLinkResumeToken resumeToken, params AgbMachineInstance[] consoles)
-        : this(plan: BuildResumePlan(resumeToken: resumeToken, consoles: consoles)) {
+        : this(plan: BuildResumePlan(
+        resumeToken: resumeToken,
+        consoles: consoles
+    )) {
     }
 
     // Wires the cable from an already-validated plan. Every check — console shape, resume-token credit count/values,
@@ -94,7 +97,11 @@ public sealed class AgbLinkSession : IDisposable {
             targets[index] = machines[index].Cycles;
         }
 
-        return new LinkPlan(Controllers: controllers, Machines: machines, Targets: targets);
+        return new LinkPlan(
+            Controllers: controllers,
+            Machines: machines,
+            Targets: targets
+        );
     }
     private static LinkPlan BuildResumePlan(AgbLinkResumeToken resumeToken, AgbMachineInstance[] consoles) {
         ArgumentNullException.ThrowIfNull(argument: resumeToken);
@@ -104,24 +111,37 @@ public sealed class AgbLinkSession : IDisposable {
         var identities = resumeToken.Identities;
 
         if (credits.Length != machines.Length) {
-            throw new ArgumentException(message: $"the resume token carries {credits.Length} credits; the session joins {machines.Length} consoles.", paramName: nameof(resumeToken));
+            throw new ArgumentException(
+                message: $"the resume token carries {credits.Length} credits; the session joins {machines.Length} consoles.",
+                paramName: nameof(resumeToken)
+            );
         }
 
         var targets = new long[machines.Length];
 
         for (var index = 0; (index < machines.Length); ++index) {
             if (credits[index] < 0) {
-                throw new ArgumentException(message: $"the resume token's credit for console {index} is negative ({credits[index]}); a suspend credit is always non-negative.", paramName: nameof(resumeToken));
+                throw new ArgumentException(
+                    message: $"the resume token's credit for console {index} is negative ({credits[index]}); a suspend credit is always non-negative.",
+                    paramName: nameof(resumeToken)
+                );
             }
 
             if (machines[index].Identity != identities[index]) {
-                throw new ArgumentException(message: $"console {index}'s identity (format version / BIOS / ROM) does not match the resume token's binding for that position; consoles must reconnect in the same order they were suspended in.", paramName: nameof(consoles));
+                throw new ArgumentException(
+                    message: $"console {index}'s identity (format version / BIOS / ROM) does not match the resume token's binding for that position; consoles must reconnect in the same order they were suspended in.",
+                    paramName: nameof(consoles)
+                );
             }
 
             targets[index] = (machines[index].Cycles - credits[index]);
         }
 
-        return new LinkPlan(Controllers: controllers, Machines: machines, Targets: targets);
+        return new LinkPlan(
+            Controllers: controllers,
+            Machines: machines,
+            Targets: targets
+        );
     }
 
     // Shared shape/identity validation for both constructors: resolves each console's serial controller and machine,
@@ -130,22 +150,37 @@ public sealed class AgbLinkSession : IDisposable {
     private static (IAgbSerialController[] Controllers, AdvancedGamingBrickMachine[] Machines) ValidateConsoles(AgbMachineInstance[] consoles) {
         ArgumentNullException.ThrowIfNull(argument: consoles);
 
-        if ((consoles.Length < 2) || (consoles.Length > AgbLinkCable.MaxPlayers)) {
-            throw new ArgumentException(message: $"A link session joins 2 to {AgbLinkCable.MaxPlayers} consoles; got {consoles.Length}.", paramName: nameof(consoles));
+        if (
+            (consoles.Length < 2) ||
+            (consoles.Length > AgbLinkCable.MaxPlayers)
+        ) {
+            throw new ArgumentException(
+                message: $"A link session joins 2 to {AgbLinkCable.MaxPlayers} consoles; got {consoles.Length}.",
+                paramName: nameof(consoles)
+            );
         }
 
         var controllers = new IAgbSerialController[consoles.Length];
         var machines = new AdvancedGamingBrickMachine[consoles.Length];
 
         for (var index = 0; (index < consoles.Length); ++index) {
-            var console = (consoles[index] ?? throw new ArgumentException(message: $"Console {index} is null.", paramName: nameof(consoles)));
+            var console = (consoles[index] ?? throw new ArgumentException(
+                message: $"Console {index} is null.",
+                paramName: nameof(consoles)
+            ));
 
             controllers[index] = console.GetRequiredService<IAgbSerialController>();
             machines[index] = console.Machine;
 
             for (var earlier = 0; (earlier < index); ++earlier) {
-                if (ReferenceEquals(objA: machines[earlier], objB: machines[index])) {
-                    throw new ArgumentException(message: $"Consoles {earlier} and {index} are the same machine; a console occupies exactly one chain position.", paramName: nameof(consoles));
+                if (ReferenceEquals(
+                    objA: machines[earlier],
+                    objB: machines[index]
+                )) {
+                    throw new ArgumentException(
+                        message: $"Consoles {earlier} and {index} are the same machine; a console occupies exactly one chain position.",
+                        paramName: nameof(consoles)
+                    );
                 }
             }
         }
@@ -162,7 +197,10 @@ public sealed class AgbLinkSession : IDisposable {
     /// <param name="cycles">The number of master-clock cycles to advance each machine this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
     public void Run(long cycles) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         for (var index = 0; (index < m_targets.Length); ++index) {
             m_targets[index] += cycles;
@@ -205,7 +243,10 @@ public sealed class AgbLinkSession : IDisposable {
     /// never mid-transfer — the session is left live and untouched so the caller can drive it to an idle boundary
     /// and retry.</exception>
     public AgbLinkResumeToken Suspend() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         for (var index = 0; (index < m_controllers.Length); ++index) {
             if (m_controllers[index].IsTransferActive) {
@@ -221,7 +262,10 @@ public sealed class AgbLinkSession : IDisposable {
             identities[index] = m_machines[index].Identity;
         }
 
-        var token = new AgbLinkResumeToken(credits: credits, identities: identities);
+        var token = new AgbLinkResumeToken(
+            credits: credits,
+            identities: identities
+        );
 
         Dispose();
 

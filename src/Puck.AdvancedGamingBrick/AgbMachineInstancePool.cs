@@ -38,7 +38,10 @@ internal sealed class AgbMachineInstancePool : IDisposable {
         }
 
         // Build outside the lock; a fresh sibling is tagged to return here on dispose, then armed as its first rental.
-        var instance = AgbMachineFactory.Create(configuration: m_configuration, compose: m_compose);
+        var instance = AgbMachineFactory.Create(
+            configuration: m_configuration,
+            compose: m_compose
+        );
 
         instance.SetReturnPool(pool: this);
 
@@ -61,7 +64,10 @@ internal sealed class AgbMachineInstancePool : IDisposable {
 
             instance.MarkReturned();
 
-            if (!m_disposed && (m_parked.Count < Capacity)) {
+            if (
+                !m_disposed &&
+                (m_parked.Count < Capacity)
+            ) {
                 m_parked.Push(item: instance);
 
                 return;

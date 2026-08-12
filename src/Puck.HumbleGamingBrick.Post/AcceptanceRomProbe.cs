@@ -21,27 +21,42 @@ internal static class AcceptanceRomProbe {
     public static (bool? Passed, string Detail) Run(RomCase romCase) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
-        using var machine = PostMachine.Build(model: romCase.Model, rom: rom);
+        using var machine = PostMachine.Build(
+            model: romCase.Model,
+            rom: rom
+        );
 
         var transmitted = new List<byte>();
 
         machine.GetRequiredService<SerialComponent>().ByteQueued = value => transmitted.Add(item: value);
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
-            PostMachine.RunFrames(instance: machine, frames: 1);
+            PostMachine.RunFrames(
+                instance: machine,
+                frames: 1
+            );
 
-            if (EndsWith(sequence: transmitted, suffix: PassSignature)) {
+            if (EndsWith(
+                sequence: transmitted,
+                suffix: PassSignature
+            )) {
                 return (true, $"fib signature after {(frame + 1)} frames");
             }
 
-            if (EndsWith(sequence: transmitted, suffix: FailSignature)) {
+            if (EndsWith(
+                sequence: transmitted,
+                suffix: FailSignature
+            )) {
                 return (false, $"0x42 failure signature after {(frame + 1)} frames");
             }
         }
 
         return (null, ((transmitted.Count == 0)
             ? $"no serial output within {romCase.FrameCap} frames"
-            : $"no signature within {romCase.FrameCap} frames; serial=[{string.Join(separator: ' ', values: transmitted.Select(selector: static b => b.ToString(format: "X2")))}]"));
+            : $"no signature within {romCase.FrameCap} frames; serial=[{string.Join(
+            separator: ' ',
+            values: transmitted.Select(selector: static b => b.ToString(format: "X2"))
+        )}]"));
     }
 
     private static bool EndsWith(List<byte> sequence, byte[] suffix) {

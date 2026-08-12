@@ -26,12 +26,21 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyTimeTravel(
-            withContent: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create()),
-            withAudio: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create(), audioSampleRate: RequestedSampleRate),
+            withContent: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create()
+            ),
+            withAudio: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create(),
+                audioSampleRate: RequestedSampleRate
+            ),
             observe: ObserveState
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 
     // An FNV-1a fold of the whole I/O + high-RAM window (0xFF00-0xFFFF) through the host's side-effect-free debug peek —

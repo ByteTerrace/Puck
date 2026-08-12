@@ -18,10 +18,20 @@ internal static class RomCatalog {
         var resolved = new List<RomCase>(capacity: cases.Count);
 
         foreach (var (relativePath, name) in cases) {
-            var fullPath = Path.Combine(path1: root, path2: relativePath.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar));
+            var fullPath = Path.Combine(
+                path1: root,
+                path2: relativePath.Replace(
+                    oldChar: '/',
+                    newChar: Path.DirectorySeparatorChar
+                )
+            );
 
             if (File.Exists(path: fullPath)) {
-                resolved.Add(item: new RomCase(Group: group, Name: name, FullPath: fullPath));
+                resolved.Add(item: new RomCase(
+                    Group: group,
+                    Name: name,
+                    FullPath: fullPath
+                ));
             }
         }
 
@@ -37,7 +47,10 @@ internal static class RomCatalog {
             return [];
         }
 
-        var fuzzArmRoot = Path.Combine(path1: (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: root)) ?? root), path2: "FuzzARM");
+        var fuzzArmRoot = Path.Combine(
+            path1: (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: root)) ?? root),
+            path2: "FuzzARM"
+        );
 
         (string RelativePath, string Name)[] known = [
             ("ARM_Any.gba", "ARM_Any"),
@@ -47,6 +60,10 @@ internal static class RomCatalog {
             ("FuzzARM.gba", "FuzzARM"),
         ];
 
-        return Resolve(root: fuzzArmRoot, group: "arm-fuzz", cases: known);
+        return Resolve(
+            root: fuzzArmRoot,
+            group: "arm-fuzz",
+            cases: known
+        );
     }
 }

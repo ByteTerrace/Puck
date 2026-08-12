@@ -36,7 +36,8 @@ public readonly record struct GpuDescriptorPoolSizes(
             foreach (var binding in set) {
                 var count = ((binding.Count > 0)
                     ? binding.Count
-                    : 1);
+                    : 1
+                );
 
                 switch (binding.Kind) {
                     case GpuComputeBindingKind.StorageImage:
@@ -65,7 +66,7 @@ public readonly record struct GpuDescriptorPoolSizes(
         }
 
         return new GpuDescriptorPoolSizes(
-            MaxSets: (uint)sets.Length,
+            MaxSets: ((uint)sets.Length),
             CombinedImageSamplerCount: combinedImageSamplerCount,
             StorageBufferCount: storageBufferCount,
             StorageImageCount: storageImageCount,

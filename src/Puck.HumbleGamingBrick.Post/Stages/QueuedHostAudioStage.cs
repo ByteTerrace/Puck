@@ -23,11 +23,20 @@ internal sealed class QueuedHostAudioStage : IPostStage {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyAudio(
-            attached: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create(), audioSampleRate: RequestedSampleRate),
-            detached: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create()),
+            attached: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create(),
+                audioSampleRate: RequestedSampleRate
+            ),
+            detached: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create()
+            ),
             requestedRate: RequestedSampleRate
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

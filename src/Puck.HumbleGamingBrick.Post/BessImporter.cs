@@ -77,7 +77,10 @@ internal static class BessImporter {
     /// <c>MBC </c> block) its length is not a multiple of 3 or one of its records writes an address outside
     /// <c>0x0000-0x7FFF</c>/<c>0xA000-0xBFFF</c>.</exception>
     public static BessImportReport Import(MachineInstance instance, byte[] file) {
-        var (name, core, mbc) = ParseAndValidate(file: file, model: instance.Configuration.Model);
+        var (name, core, mbc) = ParseAndValidate(
+            file: file,
+            model: instance.Configuration.Model
+        );
 
         var cpu = instance.GetRequiredService<Sm83>();
         var interrupts = instance.GetRequiredService<IInterruptController>();
@@ -95,7 +98,10 @@ internal static class BessImporter {
         var ime = (core[0x14] != 0);
         var ie = core[0x15];
         var executionState = core[0x16];
-        var registerPage = core.AsSpan(start: Bess.RegisterPageOffset, length: Bess.RegisterPageLength).ToArray();
+        var registerPage = core.AsSpan(
+            start: Bess.RegisterPageOffset,
+            length: Bess.RegisterPageLength
+        ).ToArray();
 
         var scratch = new StateWriter(capacity: Sm83StateCodec.ByteCount);
 
@@ -104,15 +110,29 @@ internal static class BessImporter {
         // double-speed mode is KEY1's own snapshot seam, spliced the same way DIV is below. Done BEFORE the CPU load so
         // Sm83.LoadState's own "re-sync the component clock's speed from KEY1" step (its normal Restore() behavior)
         // picks up the restored value for free.
-        RestoreDoubleSpeed(key1: key1, isDoubleSpeed: ((registerPage[MemoryMap.SpeedSwitch - MemoryMap.IoRegistersStart] & 0x80) != 0));
+        RestoreDoubleSpeed(
+            key1: key1,
+            isDoubleSpeed: ((registerPage[(MemoryMap.SpeedSwitch - MemoryMap.IoRegistersStart)] & 0x80) != 0)
+        );
 
         Sm83StateCodec.Load(
-            cpu: cpu, scratch: scratch,
-            a: (byte)(af >> 8), f: (byte)(af & 0xF0), b: (byte)(bc >> 8), c: (byte)bc,
-            d: (byte)(de >> 8), e: (byte)de, h: (byte)(hl >> 8), l: (byte)hl,
-            sp: sp, pc: pc,
-            halted: (executionState == 1), haltBug: false, lockedUp: false,
-            ime: ime, interruptEnableCountdown: 0
+            cpu: cpu,
+            scratch: scratch,
+            a: (byte)(af >> 8),
+            f: (byte)(af & 0xF0),
+            b: (byte)(bc >> 8),
+            c: (byte)bc,
+            d: (byte)(de >> 8),
+            e: (byte)de,
+            h: (byte)(hl >> 8),
+            l: (byte)hl,
+            sp: sp,
+            pc: pc,
+            halted: (executionState == 1),
+            haltBug: false,
+            lockedUp: false,
+            ime: ime,
+            interruptEnableCountdown: 0
         );
 
         interrupts.Enabled = (InterruptKind)ie;
@@ -125,53 +145,137 @@ internal static class BessImporter {
         // set it to a SPECIFIC restored value is the timer's own snapshot seam (the same seam a normal Restore() uses)
         // — TimerComponent.SaveState's field order is [counter:u16, tima, tma, tac, ...], mirrored here narrowly (just
         // enough to splice one field) rather than exposed as a new public setter.
-        RestoreDivider(timer: timer, dividerByte: registerPage[DivOffset]);
+        RestoreDivider(
+            timer: timer,
+            dividerByte: registerPage[DivOffset]
+        );
 
         for (var offset = 0; (offset < registerPage.Length); ++offset) {
-            if ((offset == DivOffset) || (offset == DmaStartOffset) || (offset == HdmaStartOffset) || (Array.IndexOf(array: PaletteOffsets, value: offset) >= 0)) {
+            if (
+                (offset == DivOffset) ||
+                (offset == DmaStartOffset) ||
+                (offset == HdmaStartOffset) ||
+                (Array.IndexOf(
+                array: PaletteOffsets,
+                value: offset
+            ) >= 0)
+            ) {
                 continue;
             }
 
             var value = registerPage[offset];
 
-            if (Array.IndexOf(array: TriggerBitOffsets, value: offset) >= 0) {
+            if (Array.IndexOf(
+                array: TriggerBitOffsets,
+                value: offset
+            ) >= 0) {
                 value = (byte)(value & 0x7F);
             }
 
-            bus.WriteByte(address: (ushort)(MemoryMap.IoRegistersStart + offset), value: value);
+            bus.WriteByte(
+                address: (ushort)(MemoryMap.IoRegistersStart + offset),
+                value: value
+            );
         }
 
-        ApplyBuffer(bus: bus, core: core, tableOffset: 0x00, start: MemoryMap.WorkRamBank0Start, file: file, fillCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1));
-        ApplyBuffer(bus: bus, core: core, tableOffset: 0x08, start: MemoryMap.VideoRamStart, file: file, fillCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1));
-        ApplyMbcRam(cartridge: cartridge, core: core, file: file);
-        ApplyBuffer(bus: bus, core: core, tableOffset: 0x18, start: MemoryMap.ObjectAttributeMemoryStart, file: file);
-        ApplyBuffer(bus: bus, core: core, tableOffset: 0x20, start: MemoryMap.HighRamStart, file: file);
-        ApplyPalette(bus: bus, core: core, tableOffset: 0x28, registers: (MemoryMap.BackgroundColorPaletteIndex, MemoryMap.BackgroundColorPaletteData), indexRegisterValue: registerPage[MemoryMap.BackgroundColorPaletteIndex - MemoryMap.IoRegistersStart], file: file);
-        ApplyPalette(bus: bus, core: core, tableOffset: 0x30, registers: (MemoryMap.ObjectColorPaletteIndex, MemoryMap.ObjectColorPaletteData), indexRegisterValue: registerPage[MemoryMap.ObjectColorPaletteIndex - MemoryMap.IoRegistersStart], file: file);
+        ApplyBuffer(
+            bus: bus,
+            core: core,
+            tableOffset: 0x00,
+            start: MemoryMap.WorkRamBank0Start,
+            file: file,
+            fillCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1)
+        );
+        ApplyBuffer(
+            bus: bus,
+            core: core,
+            tableOffset: 0x08,
+            start: MemoryMap.VideoRamStart,
+            file: file,
+            fillCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1)
+        );
+        ApplyMbcRam(
+            cartridge: cartridge,
+            core: core,
+            file: file
+        );
+        ApplyBuffer(
+            bus: bus,
+            core: core,
+            tableOffset: 0x18,
+            start: MemoryMap.ObjectAttributeMemoryStart,
+            file: file
+        );
+        ApplyBuffer(
+            bus: bus,
+            core: core,
+            tableOffset: 0x20,
+            start: MemoryMap.HighRamStart,
+            file: file
+        );
+        ApplyPalette(
+            bus: bus,
+            core: core,
+            tableOffset: 0x28,
+            registers: (MemoryMap.BackgroundColorPaletteIndex, MemoryMap.BackgroundColorPaletteData),
+            indexRegisterValue: registerPage[(MemoryMap.BackgroundColorPaletteIndex - MemoryMap.IoRegistersStart)],
+            file: file
+        );
+        ApplyPalette(
+            bus: bus,
+            core: core,
+            tableOffset: 0x30,
+            registers: (MemoryMap.ObjectColorPaletteIndex, MemoryMap.ObjectColorPaletteData),
+            indexRegisterValue: registerPage[(MemoryMap.ObjectColorPaletteIndex - MemoryMap.IoRegistersStart)],
+            file: file
+        );
 
         // No domain re-check here: ParseAndValidate's ValidateMbcBlock already proved mbc.Length is a multiple of 3
         // and every record's address falls in 0x0000-0x7FFF or 0xA000-0xBFFF, before any of the writes above ran.
         if (mbc is not null) {
             for (var offset = 0; (offset < mbc.Length); offset += 3) {
-                var address = (ushort)(mbc[offset] | (mbc[offset + 1] << 8));
+                var address = (ushort)(mbc[offset] | (mbc[(offset + 1)] << 8));
 
-                bus.WriteByte(address: address, value: mbc[offset + 2]);
+                bus.WriteByte(
+                    address: address,
+                    value: mbc[(offset + 2)]
+                );
             }
         }
 
-        cartridge.ComputeRomWindows(bank0Offset: out _, bankNOffset: out var bankNOffset);
-        var ramBank = (cartridge.TryComputeRamWindow(offset: out var ramOffset, length: out var ramLength) && (ramLength > 0)
+        cartridge.ComputeRomWindows(
+            bank0Offset: out _,
+            bankNOffset: out var bankNOffset
+        );
+        var ramBank = ((cartridge.TryComputeRamWindow(
+            offset: out var ramOffset,
+            length: out var ramLength
+        ) && (ramLength > 0))
             ? (ramOffset / 0x2000)
             : -1);
 
         return new BessImportReport(
             EmulatorName: name,
-            ModelTag: System.Text.Encoding.ASCII.GetString(bytes: core.AsSpan(start: 0x04, length: 4)),
-            Pc: cpu.ProgramCounter, Af: (ushort)((cpu.A << 8) | cpu.F), Bc: (ushort)((cpu.B << 8) | cpu.C),
-            De: (ushort)((cpu.D << 8) | cpu.E), Hl: (ushort)((cpu.H << 8) | cpu.L), Sp: cpu.StackPointer,
-            Ime: ime, Ie: (byte)interrupts.Enabled, If: bus.ReadByte(address: MemoryMap.InterruptFlag),
-            Lcdc: bus.ReadByte(address: MemoryMap.LcdControl), Stat: bus.ReadByte(address: MemoryMap.LcdStatus), Ly: bus.ReadByte(address: MemoryMap.LcdY),
-            RomBank: ((bankNOffset >= 0) ? (bankNOffset / 0x4000) : -1), RamBank: ramBank
+            ModelTag: System.Text.Encoding.ASCII.GetString(bytes: core.AsSpan(
+                start: 0x04,
+                length: 4
+            )),
+            Pc: cpu.ProgramCounter,
+            Af: (ushort)((cpu.A << 8) | cpu.F),
+            Bc: (ushort)((cpu.B << 8) | cpu.C),
+            De: (ushort)((cpu.D << 8) | cpu.E),
+            Hl: (ushort)((cpu.H << 8) | cpu.L),
+            Sp: cpu.StackPointer,
+            Ime: ime,
+            Ie: (byte)interrupts.Enabled,
+            If: bus.ReadByte(address: MemoryMap.InterruptFlag),
+            Lcdc: bus.ReadByte(address: MemoryMap.LcdControl),
+            Stat: bus.ReadByte(address: MemoryMap.LcdStatus),
+            Ly: bus.ReadByte(address: MemoryMap.LcdY),
+            RomBank: ((bankNOffset >= 0)
+            ? (bankNOffset / 0x4000)
+            : -1),
+            RamBank: ramBank
         );
     }
     // Parses and fully validates a BESS file's block graph, CORE buffer table, and optional MBC payload — against
@@ -179,7 +283,10 @@ internal static class BessImporter {
     // This pass touches only `file` — no service lookups, no writes — so any InvalidDataException it throws leaves
     // the machine byte-for-byte as it was.
     private static (string Name, byte[] Core, byte[]? Mbc) ParseAndValidate(byte[] file, ConsoleModel model) {
-        if (!Bess.TryReadFooter(file: file, firstBlockOffset: out var cursor)) {
+        if (!Bess.TryReadFooter(
+            file: file,
+            firstBlockOffset: out var cursor
+        )) {
             throw new InvalidDataException(message: "The file has no BESS footer.");
         }
 
@@ -197,7 +304,14 @@ internal static class BessImporter {
                 throw new InvalidDataException(message: "a BESS block follows the END block; the spec requires END to be the last block.");
             }
 
-            if (!Bess.TryReadBlock(file: file, offset: cursor, end: end, tag: out var tag, payload: out var payload, next: out var next)) {
+            if (!Bess.TryReadBlock(
+                file: file,
+                offset: cursor,
+                end: end,
+                tag: out var tag,
+                payload: out var payload,
+                next: out var next
+            )) {
                 throw new InvalidDataException(message: $"a BESS block at file offset {cursor} is truncated or extends past the file.");
             }
 
@@ -266,7 +380,10 @@ internal static class BessImporter {
             throw new InvalidDataException(message: $"the CORE block is {core.Length} bytes; the spec requires at least {Bess.CoreBlockLength}.");
         }
 
-        core = core.AsSpan(start: 0, length: Bess.CoreBlockLength).ToArray();
+        core = core.AsSpan(
+            start: 0,
+            length: Bess.CoreBlockLength
+        ).ToArray();
 
         // (H-10) BESS spec (CORE block): "0x00 | Major BESS version as a 16-bit integer" and "Both major and minor
         // versions should be 1. Implementations are expected to reject incompatible majors, but still attempt to
@@ -280,7 +397,9 @@ internal static class BessImporter {
         // Palette RAM exists only on a color-capable destination (DMG has none); the spec's own "sizes must be 0 for
         // models prior to Game Boy Color" gives a DMG destination zero capacity here, so any nonzero palette entry is
         // rejected the same way an oversized one is.
-        var paletteCapacity = (model.SupportsColor() ? 0x40 : 0); // BESS spec: palette size "must be 0 or 0x40".
+        var paletteCapacity = (model.SupportsColor()
+            ? 0x40
+            : 0); // BESS spec: palette size "must be 0 or 0x40".
 
         // Work-RAM/video-RAM/OAM/high-RAM capacities are the fixed CPU-visible bus windows ApplyBuffer writes through
         // (start, start+1, ...) — the same extents BessScope captures on export — regardless of DMG/CGB/AGB, since a
@@ -290,20 +409,65 @@ internal static class BessImporter {
         // rows carry an explicit "=" size) — only an upper bound applies here; a smaller-than-capacity size is legal
         // and gets the spec's own graceful handling ("if a too small VRAM size is specified... set that extra bank to
         // all zeros") at apply time in ApplyBuffer, not rejected here.
-        ValidateBufferTable(core: core, tableOffset: 0x00, fileLength: file.Length, name: "work-RAM", destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1));
-        ValidateBufferTable(core: core, tableOffset: 0x08, fileLength: file.Length, name: "video-RAM", destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1));
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x00,
+            fileLength: file.Length,
+            name: "work-RAM",
+            destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1)
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x08,
+            fileLength: file.Length,
+            name: "video-RAM",
+            destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1)
+        );
         // MBC-RAM has no destination-capacity check: ICartridge.ImportExternalRam already clamps to the cartridge's own
         // RAM size (Math.Min), matching the spec's explicit "too large MBC RAM size... the superfluous data should be
         // ignored" — there is no unchecked-index write here to guard.
-        ValidateBufferTable(core: core, tableOffset: 0x10, fileLength: file.Length, name: "MBC-RAM");
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x10,
+            fileLength: file.Length,
+            name: "MBC-RAM"
+        );
         // OAM and HRAM carry a fixed spec size ("=0xA0", "=0x7F") with no "or 0" escape (unlike palette below), so
         // anything but the exact capacity is rejected.
-        ValidateBufferTable(core: core, tableOffset: 0x18, fileLength: file.Length, name: "OAM", destinationCapacity: ((MemoryMap.ObjectAttributeMemoryEnd - MemoryMap.ObjectAttributeMemoryStart) + 1), shape: BufferSizeShape.Exact);
-        ValidateBufferTable(core: core, tableOffset: 0x20, fileLength: file.Length, name: "high-RAM", destinationCapacity: ((MemoryMap.HighRamEnd - MemoryMap.HighRamStart) + 1), shape: BufferSizeShape.Exact);
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x18,
+            fileLength: file.Length,
+            name: "OAM",
+            destinationCapacity: ((MemoryMap.ObjectAttributeMemoryEnd - MemoryMap.ObjectAttributeMemoryStart) + 1),
+            shape: BufferSizeShape.Exact
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x20,
+            fileLength: file.Length,
+            name: "high-RAM",
+            destinationCapacity: ((MemoryMap.HighRamEnd - MemoryMap.HighRamStart) + 1),
+            shape: BufferSizeShape.Exact
+        );
         // Palette carries a fixed spec size too, but with the explicit "or 0" escape ("=0x40 or 0") — a DMG
         // destination's capacity is already 0, so its two allowed sizes collapse to just 0.
-        ValidateBufferTable(core: core, tableOffset: 0x28, fileLength: file.Length, name: "background-palette", destinationCapacity: paletteCapacity, shape: BufferSizeShape.ExactOrZero);
-        ValidateBufferTable(core: core, tableOffset: 0x30, fileLength: file.Length, name: "object-palette", destinationCapacity: paletteCapacity, shape: BufferSizeShape.ExactOrZero);
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x28,
+            fileLength: file.Length,
+            name: "background-palette",
+            destinationCapacity: paletteCapacity,
+            shape: BufferSizeShape.ExactOrZero
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x30,
+            fileLength: file.Length,
+            name: "object-palette",
+            destinationCapacity: paletteCapacity,
+            shape: BufferSizeShape.ExactOrZero
+        );
 
         return (name, core, mbc);
     }
@@ -318,7 +482,7 @@ internal static class BessImporter {
         }
 
         for (var offset = 0; (offset < mbc.Length); offset += 3) {
-            var address = (ushort)(mbc[offset] | (mbc[offset + 1] << 8));
+            var address = (ushort)(mbc[offset] | (mbc[(offset + 1)] << 8));
 
             if (!(((address >= 0x0000) && (address <= 0x7FFF)) || ((address >= 0xA000) && (address <= 0xBFFF)))) {
                 throw new InvalidDataException(message: $"the MBC block record at index {(offset / 3)} writes address 0x{address:X4}, outside the spec's 0x0000-0x7FFF and 0xA000-0xBFFF ranges.");
@@ -345,7 +509,11 @@ internal static class BessImporter {
         var size = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute));
         var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
 
-        if ((size < 0) || (offset < 0) || (offset > (fileLength - size))) {
+        if (
+            (size < 0) ||
+            (offset < 0) ||
+            (offset > (fileLength - size))
+        ) {
             throw new InvalidDataException(message: $"the {name} buffer table entry references {size} bytes at file offset {offset}, outside the file's {fileLength} bytes.");
         }
 
@@ -366,7 +534,9 @@ internal static class BessImporter {
         };
 
         if (!shapeValid) {
-            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes; the spec requires exactly {capacity}{(shape == BufferSizeShape.ExactOrZero ? " or 0" : string.Empty)}.");
+            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes; the spec requires exactly {capacity}{((shape == BufferSizeShape.ExactOrZero)
+                ? " or 0"
+                : string.Empty)}.");
         }
     }
     // Splices the double-speed flag via Key1Component's own SaveState/LoadState round trip (its published field order:
@@ -378,7 +548,9 @@ internal static class BessImporter {
 
         var bytes = writer.ToArray();
 
-        bytes[1] = (byte)(isDoubleSpeed ? 1 : 0); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
+        bytes[1] = (byte)(isDoubleSpeed
+            ? 1
+            : 0); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
 
         key1.LoadState(reader: new StateReader(buffer: bytes));
     }
@@ -409,11 +581,17 @@ internal static class BessImporter {
         var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
 
         for (var index = 0; (index < size); ++index) {
-            bus.WriteByte(address: (ushort)(start + index), value: file[offset + index]);
+            bus.WriteByte(
+                address: (ushort)(start + index),
+                value: file[(offset + index)]
+            );
         }
 
         for (var index = size; (fillCapacity.HasValue && (index < fillCapacity.Value)); ++index) {
-            bus.WriteByte(address: (ushort)(start + index), value: 0);
+            bus.WriteByte(
+                address: (ushort)(start + index),
+                value: 0
+            );
         }
     }
     private static void ApplyMbcRam(ICartridge cartridge, byte[] core, byte[] file) {
@@ -422,7 +600,10 @@ internal static class BessImporter {
         var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
 
         if (size > 0) {
-            cartridge.ImportExternalRam(source: file.AsSpan(start: offset, length: size));
+            cartridge.ImportExternalRam(source: file.AsSpan(
+                start: offset,
+                length: size
+            ));
         }
     }
     private static void ApplyPalette(ISystemBus bus, byte[] core, int tableOffset, (ushort Index, ushort Data) registers, byte indexRegisterValue, byte[] file) {
@@ -431,7 +612,15 @@ internal static class BessImporter {
         var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
 
         if (size > 0) {
-            BessScope.WriteColorPalette(bus: bus, registers: registers, finalIndexRegister: indexRegisterValue, palette: file.AsSpan(start: offset, length: size));
+            BessScope.WriteColorPalette(
+                bus: bus,
+                registers: registers,
+                finalIndexRegister: indexRegisterValue,
+                palette: file.AsSpan(
+                    start: offset,
+                    length: size
+                )
+            );
         }
     }
 }

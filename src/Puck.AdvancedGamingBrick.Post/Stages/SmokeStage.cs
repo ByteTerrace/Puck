@@ -21,10 +21,15 @@ internal sealed class SmokeStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var result = SmokeTests.Run(bios: context.BiosImage);
         var total = (result.Passed + result.Failed);
-        var skipNote = ((result.Skipped > 0) ? $", {result.Skipped} skipped (no real BIOS)" : string.Empty);
+        var skipNote = ((result.Skipped > 0)
+            ? $", {result.Skipped} skipped (no real BIOS)"
+            : string.Empty);
 
         return ((result.Failed == 0)
             ? PostStageOutcome.Pass(detail: $"{result.Passed}/{total} CPU/PPU/APU/IRQ/DMA/DI vectors passed{skipNote}")
-            : PostStageOutcome.Fail(detail: $"{result.Passed}/{total} passed{skipNote}; failed: {string.Join(separator: ", ", values: result.Failures)}"));
+            : PostStageOutcome.Fail(detail: $"{result.Passed}/{total} passed{skipNote}; failed: {string.Join(
+            separator: ", ",
+            values: result.Failures
+        )}"));
     }
 }

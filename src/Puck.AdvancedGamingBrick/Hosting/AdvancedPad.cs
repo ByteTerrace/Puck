@@ -9,19 +9,61 @@ internal static class AdvancedPad {
         var keys = 0x03FF;
         var buttons = pad.Buttons;
 
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.South), bit: 0); // A
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.East), bit: 1); // B
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.Back), bit: 2); // Select
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.Start), bit: 3);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.DpadRight) || (pad.LeftStick.X >= MachineInputThresholds.StickDirection), bit: 4);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.DpadLeft) || (pad.LeftStick.X <= -MachineInputThresholds.StickDirection), bit: 5);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.DpadUp) || (pad.LeftStick.Y >= MachineInputThresholds.StickDirection), bit: 6);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.DpadDown) || (pad.LeftStick.Y <= -MachineInputThresholds.StickDirection), bit: 7);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.RightShoulder), bit: 8);
-        keys = Press(keys: keys, pressed: buttons.HasFlag(flag: MachineButtons.LeftShoulder), bit: 9);
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.South),
+            bit: 0
+        ); // A
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.East),
+            bit: 1
+        ); // B
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.Back),
+            bit: 2
+        ); // Select
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.Start),
+            bit: 3
+        );
+        keys = Press(
+            keys: keys,
+            pressed: (buttons.HasFlag(flag: MachineButtons.DpadRight) || (pad.LeftStick.X >= MachineInputThresholds.StickDirection)),
+            bit: 4
+        );
+        keys = Press(
+            keys: keys,
+            pressed: (buttons.HasFlag(flag: MachineButtons.DpadLeft) || (pad.LeftStick.X <= -MachineInputThresholds.StickDirection)),
+            bit: 5
+        );
+        keys = Press(
+            keys: keys,
+            pressed: (buttons.HasFlag(flag: MachineButtons.DpadUp) || (pad.LeftStick.Y >= MachineInputThresholds.StickDirection)),
+            bit: 6
+        );
+        keys = Press(
+            keys: keys,
+            pressed: (buttons.HasFlag(flag: MachineButtons.DpadDown) || (pad.LeftStick.Y <= -MachineInputThresholds.StickDirection)),
+            bit: 7
+        );
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.RightShoulder),
+            bit: 8
+        );
+        keys = Press(
+            keys: keys,
+            pressed: buttons.HasFlag(flag: MachineButtons.LeftShoulder),
+            bit: 9
+        );
 
         return (ushort)keys;
     }
 
-    private static int Press(int keys, bool pressed, int bit) => (pressed ? (keys & ~(1 << bit)) : keys);
+    private static int Press(int keys, bool pressed, int bit) => (pressed
+        ? keys & ~(1 << bit)
+        : keys);
 }

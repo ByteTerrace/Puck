@@ -22,10 +22,8 @@ public static class HumbleGamingBrickComponents {
 
         // The decoded header is immutable configuration shared by every component that models a header-dependent boot
         // path (the timer's DIV seed, the PPU's compatibility palettes, the CPU's register handoff).
-        services.TryAddScoped(implementationFactory: static provider => CartridgeHeader.Parse(
-            rom: (provider.GetRequiredService<MachineConfiguration>().CartridgeRom
-                ?? throw new InvalidOperationException(message: "The machine configuration has no cartridge ROM to load."))
-        ));
+        services.TryAddScoped(implementationFactory: static provider => CartridgeHeader.Parse(rom: (provider.GetRequiredService<MachineConfiguration>().CartridgeRom
+                ?? throw new InvalidOperationException(message: "The machine configuration has no cartridge ROM to load."))));
 
         // The live-swappable model owner, registered FIRST among snapshotables so its one byte leads the stream and is
         // restored before the machine re-derives every component's capability gate from it (Machine.Restore). It seeds

@@ -21,7 +21,11 @@ public sealed class Mbc2Cartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mbc2Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header, ramByteCount: RamByteCount) {
+        : base(
+        rom: rom,
+        header: header,
+        ramByteCount: RamByteCount
+    ) {
         m_romBank = 1;
     }
 
@@ -55,12 +59,17 @@ public sealed class Mbc2Cartridge : CartridgeBase {
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <returns>The value <c>0xF0 | nibble</c>, or <c>0xFF</c> when disabled.</returns>
     public override byte ReadRam(ushort address) =>
-        (RamAccessible ? (byte)(0xF0 | (base.ReadRam(address: address) & 0x0F)) : (byte)0xFF);
+        (RamAccessible
+        ? (byte)(0xF0 | (base.ReadRam(address: address) & 0x0F))
+        : (byte)0xFF);
     /// <summary>Writes the low four bits of <paramref name="value"/> to the built-in RAM; dropped when disabled.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <param name="value">The value whose low nibble is stored.</param>
     public override void WriteRam(ushort address, byte value) =>
-        base.WriteRam(address: address, value: (byte)(value & 0x0F));
+        base.WriteRam(
+        address: address,
+        value: (byte)(value & 0x0F)
+    );
     /// <inheritdoc/>
     /// <remarks>Overridden: <see cref="ReadRam"/>/<see cref="WriteRam"/> apply the built-in RAM's nibble mask, so the
     /// window is not a pure array offset — it stays on the interface path.</remarks>
@@ -74,8 +83,8 @@ public sealed class Mbc2Cartridge : CartridgeBase {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart) & RamMask;

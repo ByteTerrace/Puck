@@ -28,7 +28,10 @@ internal sealed class ArmFuzzStage : IPostStage {
 
         foreach (var romCase in cases) {
             try {
-                var (pass, detail) = ArmFuzzProbe.Run(romCase: romCase, bios: context.BiosImage);
+                var (pass, detail) = ArmFuzzProbe.Run(
+                    romCase: romCase,
+                    bios: context.BiosImage
+                );
 
                 if (pass) {
                     ++passed;
@@ -42,6 +45,9 @@ internal sealed class ArmFuzzStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{passed}/{cases.Count} passed")
-            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

@@ -65,30 +65,49 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
         var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
         var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
 
-        var reference = RunScenario(rom: rom, churnAtStep: -1);
+        var reference = RunScenario(
+            rom: rom,
+            churnAtStep: -1
+        );
 
-        if (Judge(result: reference, expectedLeadA: expectedLeadA, expectedLeadB: expectedLeadB) is { } failure) {
+        if (Judge(
+            result: reference,
+            expectedLeadA: expectedLeadA,
+            expectedLeadB: expectedLeadB
+        ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
 
         // Determinism: a second fresh run on the same budget schedule reproduces both final snapshots.
-        var replay = RunScenario(rom: rom, churnAtStep: -1);
+        var replay = RunScenario(
+            rom: rom,
+            churnAtStep: -1
+        );
 
-        if (Difference(expected: reference, actual: replay, leg: "replay") is { } replayFailure) {
+        if (Difference(
+            expected: reference,
+            actual: replay,
+            leg: "replay"
+        ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
         }
 
         // Churn transparency: suspend/snapshot/restore/reconnect at a transfer-idle boundary mid-boot, continue the
         // identical budgets, and demand identical final snapshots from the credit-preserving resume.
-        var churned = RunScenario(rom: rom, churnAtStep: ChurnStep);
+        var churned = RunScenario(
+            rom: rom,
+            churnAtStep: ChurnStep
+        );
 
-        if (Difference(expected: reference, actual: churned, leg: "churn") is { } churnFailure) {
+        if (Difference(
+            expected: reference,
+            actual: churned,
+            leg: "churn"
+        ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"{CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock."
-        );
+        return PostStageOutcome.Pass(detail: $"{CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock.");
     }
 
     // One complete scenario on the fixed per-frame budget schedule. With churnAtStep >= 0 the session is suspended at that
@@ -96,26 +115,44 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
     // machines, and the cable reconnected with the resume token before the remaining frames run.
     private static ScenarioResult RunScenario(byte[] rom, int churnAtStep) {
         var script = ScriptedTradeHarness.ContinueScript();
-        var machineA = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
-        var machineB = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideB);
+        var machineA = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        var machineB = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideB
+        );
 
         try {
             var joypadA = machineA.GetRequiredService<IJoypad>();
             var joypadB = machineB.GetRequiredService<IJoypad>();
-            var session = new SerialLinkSession(first: machineA, second: machineB);
+            var session = new SerialLinkSession(
+                first: machineA,
+                second: machineB
+            );
 
             try {
                 for (var frame = 0; (frame < ScriptedTradeHarness.ContinueSettledFrame); ++frame) {
                     if (frame == churnAtStep) {
-                        if (!IsTransferIdle(machine: machineA) || !IsTransferIdle(machine: machineB)) {
+                        if (
+                            !IsTransferIdle(machine: machineA) ||
+                            !IsTransferIdle(machine: machineB)
+                        ) {
                             throw new InvalidOperationException(message: $"the churn boundary at frame {frame} is not transfer-idle on both ports.");
                         }
 
                         var token = session.Suspend();
                         var stateA = machineA.Machine.Snapshot();
                         var stateB = machineB.Machine.Snapshot();
-                        var freshA = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
-                        var freshB = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideB);
+                        var freshA = ScriptedTradeHarness.Build(
+                            rom: rom,
+                            trainer: TradeSaveFactory.SideA
+                        );
+                        var freshB = ScriptedTradeHarness.Build(
+                            rom: rom,
+                            trainer: TradeSaveFactory.SideB
+                        );
 
                         freshA.Machine.Restore(snapshot: stateA);
                         freshB.Machine.Restore(snapshot: stateB);
@@ -127,7 +164,11 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
                         machineB = freshB;
                         joypadA = machineA.GetRequiredService<IJoypad>();
                         joypadB = machineB.GetRequiredService<IJoypad>();
-                        session = new SerialLinkSession(first: machineA, second: machineB, resumeToken: token);
+                        session = new SerialLinkSession(
+                            first: machineA,
+                            second: machineB,
+                            resumeToken: token
+                        );
                     }
 
                     joypadA.SetButtons(pressed: script.ButtonsAt(frame: frame));
@@ -158,11 +199,17 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
     // the crafted lead species (distinct per side), and each exported SRAM's primary checksum + check bytes are
     // self-consistent.
     private static string? Judge(ScenarioResult result, byte expectedLeadA, byte expectedLeadB) {
-        if (!result.ReachedA || !result.ReachedB) {
+        if (
+            !result.ReachedA ||
+            !result.ReachedB
+        ) {
             return $"a crafted save did not CONTINUE onto the POKECENTER_2F Cable Club floor (side A reached={result.ReachedA}, side B reached={result.ReachedB})";
         }
 
-        if ((result.LeadA != expectedLeadA) || (result.LeadB != expectedLeadB)) {
+        if (
+            (result.LeadA != expectedLeadA) ||
+            (result.LeadB != expectedLeadB)
+        ) {
             return $"the loaded lead species drifted from the crafted parties (side A 0x{result.LeadA:X2} expected 0x{expectedLeadA:X2}, side B 0x{result.LeadB:X2} expected 0x{expectedLeadB:X2})";
         }
 
@@ -170,7 +217,10 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
             return $"both sides loaded the same lead species 0x{result.LeadA:X2}; the crafted trainers must carry distinct leads for an observable trade";
         }
 
-        if (!result.ChecksumOkA || !result.ChecksumOkB) {
+        if (
+            !result.ChecksumOkA ||
+            !result.ChecksumOkB
+        ) {
             return $"a crafted save's primary checksum/check bytes are inconsistent after CONTINUE (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
         }
 
@@ -181,11 +231,17 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
     // (free rigor: refuses a model/ROM mismatch).
     private static string? Difference(ScenarioResult expected, ScenarioResult actual, string leg) {
         if (!expected.StateA.ContentEquals(other: actual.StateA)) {
-            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.StateA, b: actual.StateA)}";
+            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateA,
+                b: actual.StateA
+            )}";
         }
 
         if (!expected.StateB.ContentEquals(other: actual.StateB)) {
-            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.StateB, b: actual.StateB)}";
+            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateB,
+                b: actual.StateB
+            )}";
         }
 
         return null;
@@ -195,11 +251,17 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
     private static string? ResolveRomPath() {
         var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
 
-        if (!string.IsNullOrEmpty(value: fromEnvironment) && File.Exists(path: fromEnvironment)) {
+        if (
+            !string.IsNullOrEmpty(value: fromEnvironment) &&
+            File.Exists(path: fromEnvironment)
+        ) {
             return fromEnvironment;
         }
 
-        return Array.Find(array: RomFallbackPaths, match: File.Exists);
+        return Array.Find(
+            array: RomFallbackPaths,
+            match: File.Exists
+        );
     }
     private static string CartridgeTitle(byte[] rom) {
         var builder = new System.Text.StringBuilder(capacity: 11);
@@ -207,7 +269,10 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
         for (var offset = 0x0134; (offset < 0x013F); ++offset) {
             var character = rom[offset];
 
-            if ((character == 0) || (character >= 0x80)) {
+            if (
+                (character == 0) ||
+                (character >= 0x80)
+            ) {
                 break;
             }
 

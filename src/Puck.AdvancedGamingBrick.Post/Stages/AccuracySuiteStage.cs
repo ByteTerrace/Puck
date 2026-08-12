@@ -20,13 +20,19 @@ internal sealed class AccuracySuiteStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var romPath = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_ACCURACY_SUITE");
 
-        if (string.IsNullOrEmpty(value: romPath) || !File.Exists(path: romPath)) {
+        if (
+            string.IsNullOrEmpty(value: romPath) ||
+            !File.Exists(path: romPath)
+        ) {
             return PostStageOutcome.Skip(detail: "no accuracy-suite ROM (set PUCK_AGB_ACCURACY_SUITE)");
         }
 
         Diagnostics.BiosImage = context.BiosImage;
 
-        var failed = Diagnostics.RunAccuracySuite(romPath: romPath, name: "accuracy suite");
+        var failed = Diagnostics.RunAccuracySuite(
+            romPath: romPath,
+            name: "accuracy suite"
+        );
         var passed = (Diagnostics.AccuracySuiteCount - failed);
 
         return PostStageOutcome.Pass(detail: $"{passed}/{Diagnostics.AccuracySuiteCount} suites fully passed (measurement — accuracy frontier, not a gate)");

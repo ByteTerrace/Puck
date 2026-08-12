@@ -14,15 +14,25 @@ internal static class Sm83SstCorpus {
             return [];
         }
 
-        var directory = Path.Combine(path1: root, path2: "v1");
+        var directory = Path.Combine(
+            path1: root,
+            path2: "v1"
+        );
 
         if (!Directory.Exists(path: directory)) {
             return [];
         }
 
         return Directory
-            .EnumerateFiles(path: directory, searchPattern: "*.json", searchOption: SearchOption.TopDirectoryOnly)
-            .OrderBy(keySelector: static path => path, comparer: StringComparer.OrdinalIgnoreCase)
+            .EnumerateFiles(
+            path: directory,
+            searchPattern: "*.json",
+            searchOption: SearchOption.TopDirectoryOnly
+        )
+            .OrderBy(
+            keySelector: static path => path,
+            comparer: StringComparer.OrdinalIgnoreCase
+        )
             .ToArray();
     }
 }

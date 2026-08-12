@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// is clear.
 /// </summary>
 public sealed partial class ApuNoiseChannel {
-    private static readonly int[] s_divisors = { 8, 16, 32, 48, 64, 80, 96, 112 };
+    private static readonly int[] Divisors = { 8, 16, 32, 48, 64, 80, 96, 112 };
     private int m_frequencyTimer;
     private int m_lengthCounter;
     private int m_envelopeVolume;
@@ -36,7 +36,7 @@ public sealed partial class ApuNoiseChannel {
         m_frequencyTimer -= cycles;
 
         while (m_frequencyTimer <= 0) {
-            m_frequencyTimer += ((s_divisors[m_divisorCode] << m_shiftClock) * 4); // ×4 for the AGB master clock
+            m_frequencyTimer += ((Divisors[m_divisorCode] << m_shiftClock) * 4); // ×4 for the AGB master clock
 
             var feedback = (m_lfsr ^ (m_lfsr >> 1)) & 1;
 
@@ -49,13 +49,19 @@ public sealed partial class ApuNoiseChannel {
     }
 
     /// <summary>Reads back the envelope register (NR42): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease ? 0x8 : 0) | m_envelopePeriod);
+    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
+        ? 0x8
+        : 0) | m_envelopePeriod);
 
     /// <summary>Reads back the polynomial register (NR43): divisor, width mode, and shift clock.</summary>
-    public byte ReadPolynomial() => (byte)(m_divisorCode | (m_widthMode ? 0x8 : 0) | (m_shiftClock << 4));
+    public byte ReadPolynomial() => (byte)(m_divisorCode | (m_widthMode
+        ? 0x8
+        : 0) | (m_shiftClock << 4));
 
     /// <summary>Reads back NR44's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled ? 0x40 : 0);
+    public byte ReadControl() => (byte)(m_lengthEnabled
+        ? 0x40
+        : 0);
 
     /// <summary>Reloads the length counter (NR41).</summary>
     public void WriteLength(byte value) {
@@ -90,7 +96,7 @@ public sealed partial class ApuNoiseChannel {
             m_lfsr = 0x7FFF;
             m_envelopeVolume = m_envelopeInitial;
             m_envelopeTimer = m_envelopePeriod;
-            m_frequencyTimer = ((s_divisors[m_divisorCode] << m_shiftClock) * 4);
+            m_frequencyTimer = ((Divisors[m_divisorCode] << m_shiftClock) * 4);
 
             if (m_lengthCounter == 0) {
                 m_lengthCounter = 64;
@@ -100,7 +106,11 @@ public sealed partial class ApuNoiseChannel {
 
     /// <summary>Clocks the length counter (256&#160;Hz).</summary>
     public void ClockLength() {
-        if (m_lengthEnabled && (m_lengthCounter > 0) && (--m_lengthCounter == 0)) {
+        if (
+            m_lengthEnabled &&
+            (m_lengthCounter > 0) &&
+            (--m_lengthCounter == 0)
+        ) {
             m_enabled = false;
         }
     }
@@ -114,9 +124,15 @@ public sealed partial class ApuNoiseChannel {
         if (--m_envelopeTimer <= 0) {
             m_envelopeTimer = m_envelopePeriod;
 
-            if (m_envelopeIncrease && (m_envelopeVolume < 15)) {
+            if (
+                m_envelopeIncrease &&
+                (m_envelopeVolume < 15)
+            ) {
                 ++m_envelopeVolume;
-            } else if (!m_envelopeIncrease && (m_envelopeVolume > 0)) {
+            } else if (
+                !m_envelopeIncrease &&
+                (m_envelopeVolume > 0)
+            ) {
                 --m_envelopeVolume;
             }
         }

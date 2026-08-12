@@ -19,7 +19,10 @@ public sealed class Mbc1Cartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mbc1Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
+        : base(
+        rom: rom,
+        header: header
+    ) {
         m_primaryBank = 1;
     }
 
@@ -59,7 +62,9 @@ public sealed class Mbc1Cartridge : CartridgeBase {
     protected override int MapRomOffset(ushort address) {
         if (address <= MemoryMap.RomBank0End) {
             // The fixed region is bank 0 in simple mode, but tracks the secondary bits in advanced mode on large ROMs.
-            var lowBank = (m_advancedMode ? (m_secondaryBank << 5) : 0);
+            var lowBank = (m_advancedMode
+                ? (m_secondaryBank << 5)
+                : 0);
 
             return ((lowBank * RomBankSize) + address);
         }
@@ -70,7 +75,9 @@ public sealed class Mbc1Cartridge : CartridgeBase {
     }
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) {
-        var bank = (m_advancedMode ? m_secondaryBank : 0);
+        var bank = (m_advancedMode
+            ? m_secondaryBank
+            : 0);
 
         return ((bank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     }

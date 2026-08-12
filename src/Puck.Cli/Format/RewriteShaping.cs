@@ -76,12 +76,30 @@ internal static class RewriteShaping {
     // wraps, this one moves to a deeper line, and reading that line's indent would add a level every
     // run. Instead: take the enclosing statement's indent (which the wrapping passes never move) and add
     // one level per enclosing construct that `addsLevel` accepts — a count driven by tree shape, not by
-    // the current layout, so a second pass reproduces the same value exactly.
+    // the current layout, so a second pass reproduces the same value exactly. An enclosing arrow-body
+    // (`=>`) clause anchors at ITS expression's line instead: the construct opens on the arrow
+    // continuation line, which may sit deeper than the member's own line — and that line is safe to read
+    // because no pass moves the arrow break or the expression's first token off it.
     public static int StructuralIndent(SyntaxNode node, Func<SyntaxNode, SyntaxNode, bool> addsLevel) {
-        var anchor = ((node.FirstAncestorOrSelf<StatementSyntax>() as SyntaxNode)
-            ?? ((node.FirstAncestorOrSelf<MemberDeclarationSyntax>() as SyntaxNode)
-            ?? node));
-        var anchorLine = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(position: anchor.GetFirstToken().SpanStart).ToString();
+        var anchor = node;
+        SyntaxNode? anchorLineOwner = null;
+
+        for (var candidate = node.Parent; (candidate is not null); candidate = candidate.Parent) {
+            if (candidate is ArrowExpressionClauseSyntax arrow) {
+                anchor = candidate;
+                anchorLineOwner = arrow.Expression;
+
+                break;
+            }
+
+            if (candidate is StatementSyntax or MemberDeclarationSyntax) {
+                anchor = candidate;
+
+                break;
+            }
+        }
+
+        var anchorLine = node.SyntaxTree!.GetText().Lines.GetLineFromPosition(position: (anchorLineOwner ?? anchor).GetFirstToken().SpanStart).ToString();
         var baseIndent = (anchorLine.Length - anchorLine.TrimStart().Length);
 
         var depth = 0;

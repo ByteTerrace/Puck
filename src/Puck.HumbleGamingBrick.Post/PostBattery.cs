@@ -34,7 +34,11 @@ internal sealed class PostBattery {
             }
 
             Console.Out.WriteLine(value: $"[{stage.Tier}] {stage.Name}: {outcome.Verdict} | {outcome.Detail}");
-            results.Add(item: new PostStageResult(Name: stage.Name, Tier: stage.Tier, Outcome: outcome));
+            results.Add(item: new PostStageResult(
+                Name: stage.Name,
+                Tier: stage.Tier,
+                Outcome: outcome
+            ));
         }
 
         return new PostReport(results: results);

@@ -54,7 +54,9 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         if (configuration.BootRom is null) {
             // The AGB seed is canonicalized to the CGB prediction until measured on hardware (the ideal-machine plan
             // tracks per-profile post-boot DIV seeds as INFORMATIVE, resolved by measurement — never copied blind).
-            m_counter = (configuration.Model.SupportsColor() ? CgbBootDivPrediction.Compute(header: header) : DmgPostBootDivCounter);
+            m_counter = (configuration.Model.SupportsColor()
+                ? CgbBootDivPrediction.Compute(header: header)
+                : DmgPostBootDivCounter);
         }
     }
 
@@ -195,7 +197,9 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
             _ => 7,
         };
 
-        m_timaInputMask = (((m_tac & ClockEnableBit) != 0) ? (ushort)(1 << selectedBit) : (ushort)0);
+        m_timaInputMask = (((m_tac & ClockEnableBit) != 0)
+            ? (ushort)(1 << selectedBit)
+            : (ushort)0);
     }
     private void SetCounter(ushort value) {
         m_counter = value;
@@ -207,7 +211,10 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
     private void UpdateTimaInput() {
         var input = ((m_counter & m_timaInputMask) != 0);
 
-        if (m_lastTimaInput && !input) {
+        if (
+            m_lastTimaInput &&
+            !input
+        ) {
             IncrementTima();
         }
 

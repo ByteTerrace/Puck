@@ -123,7 +123,7 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
 
     void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
         EmitSeat(
-        builder: builder,
-        seat: in seat
-    );
+            builder: builder,
+            seat: in seat
+        );
 }

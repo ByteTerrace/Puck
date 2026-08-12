@@ -81,11 +81,11 @@ public sealed class OverlayGlyphSdfPack {
 
         var atlasCellWidth = Math.Max(
             val1: 1,
-            val2: (int)MathF.Round(x: (probeBounds.Right - probeBounds.Left))
+            val2: ((int)MathF.Round(x: (probeBounds.Right - probeBounds.Left)))
         );
         var atlasCellHeight = Math.Max(
             val1: 1,
-            val2: (int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top))
+            val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
         );
         var cellStride = (atlasCellWidth * atlasCellHeight);
         var packedSdf = new uint[(GlyphCount * cellStride)];
@@ -104,8 +104,8 @@ public sealed class OverlayGlyphSdfPack {
                 continue;
             }
 
-            var left = (int)MathF.Round(x: bounds.Left);
-            var top = (int)MathF.Round(x: bounds.Top);
+            var left = ((int)MathF.Round(x: bounds.Left));
+            var top = ((int)MathF.Round(x: bounds.Top));
             var glyphBase = (index * cellStride);
 
             for (var y = 0; (y < atlasCellHeight); y++) {
@@ -128,9 +128,9 @@ public sealed class OverlayGlyphSdfPack {
                     // channel value.
                     packedSdf[((glyphBase + (y * atlasCellWidth)) + x)] =
                         pixels[sourceBase]
-                        | ((uint)pixels[(sourceBase + 1)] << 8)
-                        | ((uint)pixels[(sourceBase + 2)] << 16)
-                        | ((uint)pixels[(sourceBase + 3)] << 24);
+                        | (((uint)pixels[(sourceBase + 1)]) << 8)
+                        | (((uint)pixels[(sourceBase + 2)]) << 16)
+                        | (((uint)pixels[(sourceBase + 3)]) << 24);
                 }
             }
         }
@@ -147,8 +147,9 @@ public sealed class OverlayGlyphSdfPack {
     /// range.</summary>
     public static int GlyphIndex(int codePoint) =>
         (((codePoint >= FirstChar) && (codePoint < (FirstChar + GlyphCount)))
-        ? (codePoint - FirstChar)
-        : -1);
+            ? (codePoint - FirstChar)
+            : -1
+        );
 
     // ---- the prepacked artifact ---------------------------------------------------------------------------------
     // The pack is ~1.4 MiB of already-flattened cells, but building it from the atlas decodes the WHOLE combined

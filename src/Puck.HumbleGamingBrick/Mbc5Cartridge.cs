@@ -24,7 +24,10 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mbc5Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
+        : base(
+        rom: rom,
+        header: header
+    ) {
         m_isRumbleVariant = header.HasRumble;
         m_romBank = 1;
     }
@@ -42,7 +45,9 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     /// <inheritdoc/>
     /// <remarks>The MBC5 rumble hardware is on/off only (no PWM), so this is always exactly 0 or 1.</remarks>
     public override float MotorLevel =>
-        (MotorOn ? 1f : 0f);
+        (MotorOn
+        ? 1f
+        : 0f);
 
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
@@ -64,9 +69,9 @@ public sealed class Mbc5Cartridge : CartridgeBase {
             case 5: // 0x5000-0x5FFF: RAM bank (+ motor on a rumble variant)
                 if (m_isRumbleVariant) {
                     m_motorOn = ((value & RumbleMotorBit) != 0);
-                    m_ramBank = (value & 0x07);
+                    m_ramBank = value & 0x07;
                 } else {
-                    m_ramBank = (value & 0x0F);
+                    m_ramBank = value & 0x0F;
                 }
 
                 break;
@@ -78,8 +83,8 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         ((m_ramBank * RamBankSize) + (address - MemoryMap.ExternalRamStart));

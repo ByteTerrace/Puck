@@ -17,7 +17,10 @@ internal static class ConformanceRomProbe {
     public static (bool Pass, string Detail) Run(RomCase romCase, ReadOnlyMemory<byte> bios) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
-        using var machine = PostMachine.Build(bios: bios, rom: rom);
+        using var machine = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
 
         MachineProbe.RunUntilSettled(machine: machine);
 

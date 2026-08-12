@@ -88,12 +88,21 @@ internal static class ScriptedTradeHarness {
     /// <param name="trainer">The crafted trainer whose save boots into the machine.</param>
     /// <returns>The assembled machine; the caller owns and disposes it.</returns>
     public static MachineInstance Build(byte[] rom, TradeTrainer trainer) {
-        var machine = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        var machine = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
         var cartridge = machine.GetRequiredService<ICartridge>();
         var save = TradeSaveFactory.CreateSaveFile(trainer: trainer);
 
-        cartridge.ImportExternalRam(source: save.AsSpan(start: 0, length: TradeSaveFactory.SramByteCount));
-        cartridge.ImportPersistentClock(source: save.AsSpan(start: TradeSaveFactory.SramByteCount, length: TradeSaveFactory.RtcFooterByteCount));
+        cartridge.ImportExternalRam(source: save.AsSpan(
+            start: 0,
+            length: TradeSaveFactory.SramByteCount
+        ));
+        cartridge.ImportPersistentClock(source: save.AsSpan(
+            start: TradeSaveFactory.SramByteCount,
+            length: TradeSaveFactory.RtcFooterByteCount
+        ));
 
         return machine;
     }
@@ -106,11 +115,21 @@ internal static class ScriptedTradeHarness {
     /// <param name="bootRom">An optional boot ROM image.</param>
     /// <returns>The assembled machine; the caller owns and disposes it.</returns>
     public static MachineInstance BuildFromSave(byte[] rom, byte[] save, ConsoleModel model = ConsoleModel.Cgb, byte[]? bootRom = null) {
-        var machine = PostMachine.Build(model: model, rom: rom, bootRom: bootRom);
+        var machine = PostMachine.Build(
+            model: model,
+            rom: rom,
+            bootRom: bootRom
+        );
         var cartridge = machine.GetRequiredService<ICartridge>();
 
-        cartridge.ImportExternalRam(source: save.AsSpan(start: 0, length: TradeSaveFactory.SramByteCount));
-        cartridge.ImportPersistentClock(source: save.AsSpan(start: TradeSaveFactory.SramByteCount, length: TradeSaveFactory.RtcFooterByteCount));
+        cartridge.ImportExternalRam(source: save.AsSpan(
+            start: 0,
+            length: TradeSaveFactory.SramByteCount
+        ));
+        cartridge.ImportPersistentClock(source: save.AsSpan(
+            start: TradeSaveFactory.SramByteCount,
+            length: TradeSaveFactory.RtcFooterByteCount
+        ));
 
         return machine;
     }
@@ -127,21 +146,30 @@ internal static class ScriptedTradeHarness {
     /// <param name="machine">The machine to peek.</param>
     /// <returns>The connection-status byte ($01/$02/$FF).</returns>
     public static byte ConnectionStatus(MachineInstance machine) =>
-        Peek(machine: machine, address: SerialConnectionStatusAddress);
+        Peek(
+        machine: machine,
+        address: SerialConnectionStatusAddress
+    );
 
     /// <summary>Reads a machine's live <c>wMapGroup</c> (<see cref="LiveMapGroupAddress"/>) — <c>20</c> once the crafted
     /// save has loaded into the POKECENTER_2F Cable Club floor.</summary>
     /// <param name="machine">The machine to peek.</param>
     /// <returns>The live map group.</returns>
     public static byte LiveMapGroup(MachineInstance machine) =>
-        Peek(machine: machine, address: LiveMapGroupAddress);
+        Peek(
+        machine: machine,
+        address: LiveMapGroupAddress
+    );
 
     /// <summary>Reads a machine's live <c>wMapNumber</c> (<see cref="LiveMapGroupAddress"/>+1) — <c>1</c> once the crafted
     /// save has loaded into the POKECENTER_2F Cable Club floor.</summary>
     /// <param name="machine">The machine to peek.</param>
     /// <returns>The live map number.</returns>
     public static byte LiveMapNumber(MachineInstance machine) =>
-        Peek(machine: machine, address: (ushort)(LiveMapGroupAddress + 1));
+        Peek(
+        machine: machine,
+        address: (ushort)(LiveMapGroupAddress + 1)
+    );
 
     /// <summary>Whether a machine's live map position is the POKECENTER_2F Cable Club floor — the observable that the
     /// crafted save's CONTINUE was accepted and the overworld loaded.</summary>
@@ -182,10 +210,15 @@ internal static class ScriptedTradeHarness {
     /// <returns>The frozen CONTINUE-selection script.</returns>
     public static LinkInputScript ContinueScript() =>
         new(
-            (150, JoypadButtons.A), (158, JoypadButtons.None),
-            (220, JoypadButtons.A), (228, JoypadButtons.None),
-            (290, JoypadButtons.A), (298, JoypadButtons.None),
-            (360, JoypadButtons.A), (368, JoypadButtons.None),
-            (430, JoypadButtons.A), (438, JoypadButtons.None)
-        );
+        (150, JoypadButtons.A),
+        (158, JoypadButtons.None),
+        (220, JoypadButtons.A),
+        (228, JoypadButtons.None),
+        (290, JoypadButtons.A),
+        (298, JoypadButtons.None),
+        (360, JoypadButtons.A),
+        (368, JoypadButtons.None),
+        (430, JoypadButtons.A),
+        (438, JoypadButtons.None)
+    );
 }

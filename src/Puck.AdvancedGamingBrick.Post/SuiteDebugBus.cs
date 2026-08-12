@@ -31,55 +31,108 @@ internal sealed class SuiteDebugBus : IAgbBus {
     public void Halt(bool stop) => m_inner.Halt(stop: stop);
     public void RunUntilInterrupt() => m_inner.RunUntilInterrupt();
     public byte Read8(uint address, BusAccessType access) {
-        if (TryReadDebug(address: address, width: 1, out var value)) {
+        if (TryReadDebug(
+            address: address,
+            width: 1,
+            out var value
+        )) {
             return (byte)value;
         }
 
-        return m_inner.Read8(address: address, access: access);
+        return m_inner.Read8(
+            address: address,
+            access: access
+        );
     }
     public ushort Read16(uint address, BusAccessType access) {
-        if (TryReadDebug(address: address, width: 2, out var value)) {
+        if (TryReadDebug(
+            address: address,
+            width: 2,
+            out var value
+        )) {
             return (ushort)value;
         }
 
-        return m_inner.Read16(address: address, access: access);
+        return m_inner.Read16(
+            address: address,
+            access: access
+        );
     }
     public uint Read32(uint address, BusAccessType access) {
-        if (TryReadDebug(address: address, width: 4, out var value)) {
+        if (TryReadDebug(
+            address: address,
+            width: 4,
+            out var value
+        )) {
             return value;
         }
 
-        return m_inner.Read32(address: address, access: access);
+        return m_inner.Read32(
+            address: address,
+            access: access
+        );
     }
-    public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(address: address, access: access);
-    public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(address: address, access: access);
+    public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(
+        address: address,
+        access: access
+    );
+    public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(
+        address: address,
+        access: access
+    );
     public void Write8(uint address, byte value, BusAccessType access) {
-        if (WriteDebug(address: address, width: 1, value: value)) {
+        if (WriteDebug(
+            address: address,
+            width: 1,
+            value: value
+        )) {
             return;
         }
 
-        m_inner.Write8(address: address, value: value, access: access);
+        m_inner.Write8(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Write16(uint address, ushort value, BusAccessType access) {
-        if (WriteDebug(address: address, width: 2, value: value)) {
+        if (WriteDebug(
+            address: address,
+            width: 2,
+            value: value
+        )) {
             return;
         }
 
-        m_inner.Write16(address: address, value: value, access: access);
+        m_inner.Write16(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Write32(uint address, uint value, BusAccessType access) {
-        if (WriteDebug(address: address, width: 4, value: value)) {
+        if (WriteDebug(
+            address: address,
+            width: 4,
+            value: value
+        )) {
             return;
         }
 
-        m_inner.Write32(address: address, value: value, access: access);
+        m_inner.Write32(
+            address: address,
+            value: value,
+            access: access
+        );
     }
     public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
     public void ProcessEvents() => m_inner.ProcessEvents();
 
     private bool TryReadDebug(uint address, int width, out uint value) {
         if (address == DebugEnable) {
-            value = (m_enabled ? 0x1DEAu : 0u);
+            value = (m_enabled
+                ? 0x1DEAu
+                : 0u);
 
             return true;
         }
@@ -89,7 +142,9 @@ internal sealed class SuiteDebugBus : IAgbBus {
             var keys = (uint)Keys;
 
             value = width switch {
-                1 => (((address & 1u) == 0u) ? keys & 0xFFu : (keys >> 8) & 0xFFu),
+                1 => (((address & 1u) == 0u)
+                ? keys & 0xFFu
+                : (keys >> 8) & 0xFFu),
                 _ => keys,
             };
 
@@ -115,7 +170,10 @@ internal sealed class SuiteDebugBus : IAgbBus {
             return true;
         }
 
-        if ((address >= DebugString) && (address < DebugFlags)) {
+        if (
+            (address >= DebugString) &&
+            (address < DebugFlags)
+        ) {
             for (var i = 0; (i < width); ++i) {
                 var index = (int)((address - DebugString) + (uint)i);
 
@@ -130,12 +188,22 @@ internal sealed class SuiteDebugBus : IAgbBus {
         return false;
     }
     private void Flush(int level) {
-        var length = Array.IndexOf(array: m_string, value: (byte)0);
+        var length = Array.IndexOf(
+            array: m_string,
+            value: (byte)0
+        );
 
         if (length < 0) {
             length = m_string.Length;
         }
 
-        m_onLog(arg1: level, arg2: Encoding.ASCII.GetString(bytes: m_string, index: 0, count: length));
+        m_onLog(
+            arg1: level,
+            arg2: Encoding.ASCII.GetString(
+                bytes: m_string,
+                index: 0,
+                count: length
+            )
+        );
     }
 }

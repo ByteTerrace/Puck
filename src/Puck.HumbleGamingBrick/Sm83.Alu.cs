@@ -40,64 +40,118 @@ public sealed partial class Sm83 {
     private void AluAdd(byte value) {
         var result = (m_a + value);
 
-        SetFlags(zero: ((result & 0xFF) == 0), subtract: false, halfCarry: (((m_a & 0xF) + (value & 0xF)) > 0xF), carry: (result > 0xFF));
+        SetFlags(
+            zero: ((result & 0xFF) == 0),
+            subtract: false,
+            halfCarry: (((m_a & 0xF) + (value & 0xF)) > 0xF),
+            carry: (result > 0xFF)
+        );
 
         m_a = (byte)result;
     }
     private void AluAdc(byte value) {
-        var carry = (CarryFlagSet ? 1 : 0);
+        var carry = (CarryFlagSet
+            ? 1
+            : 0);
         var result = ((m_a + value) + carry);
 
-        SetFlags(zero: ((result & 0xFF) == 0), subtract: false, halfCarry: ((((m_a & 0xF) + (value & 0xF)) + carry) > 0xF), carry: (result > 0xFF));
+        SetFlags(
+            zero: ((result & 0xFF) == 0),
+            subtract: false,
+            halfCarry: ((((m_a & 0xF) + (value & 0xF)) + carry) > 0xF),
+            carry: (result > 0xFF)
+        );
 
         m_a = (byte)result;
     }
     private void AluSub(byte value) {
         var result = (m_a - value);
 
-        SetFlags(zero: ((result & 0xFF) == 0), subtract: true, halfCarry: (((m_a & 0xF) - (value & 0xF)) < 0), carry: (result < 0));
+        SetFlags(
+            zero: ((result & 0xFF) == 0),
+            subtract: true,
+            halfCarry: (((m_a & 0xF) - (value & 0xF)) < 0),
+            carry: (result < 0)
+        );
 
         m_a = (byte)result;
     }
     private void AluSbc(byte value) {
-        var carry = (CarryFlagSet ? 1 : 0);
+        var carry = (CarryFlagSet
+            ? 1
+            : 0);
         var result = ((m_a - value) - carry);
 
-        SetFlags(zero: ((result & 0xFF) == 0), subtract: true, halfCarry: ((((m_a & 0xF) - (value & 0xF)) - carry) < 0), carry: (result < 0));
+        SetFlags(
+            zero: ((result & 0xFF) == 0),
+            subtract: true,
+            halfCarry: ((((m_a & 0xF) - (value & 0xF)) - carry) < 0),
+            carry: (result < 0)
+        );
 
         m_a = (byte)result;
     }
     private void AluAnd(byte value) {
         m_a &= value;
 
-        SetFlags(zero: (m_a == 0), subtract: false, halfCarry: true, carry: false);
+        SetFlags(
+            zero: (m_a == 0),
+            subtract: false,
+            halfCarry: true,
+            carry: false
+        );
     }
     private void AluXor(byte value) {
         m_a ^= value;
 
-        SetFlags(zero: (m_a == 0), subtract: false, halfCarry: false, carry: false);
+        SetFlags(
+            zero: (m_a == 0),
+            subtract: false,
+            halfCarry: false,
+            carry: false
+        );
     }
     private void AluOr(byte value) {
         m_a |= value;
 
-        SetFlags(zero: (m_a == 0), subtract: false, halfCarry: false, carry: false);
+        SetFlags(
+            zero: (m_a == 0),
+            subtract: false,
+            halfCarry: false,
+            carry: false
+        );
     }
     private void AluCp(byte value) {
         var result = (m_a - value);
 
-        SetFlags(zero: ((result & 0xFF) == 0), subtract: true, halfCarry: (((m_a & 0xF) - (value & 0xF)) < 0), carry: (result < 0));
+        SetFlags(
+            zero: ((result & 0xFF) == 0),
+            subtract: true,
+            halfCarry: (((m_a & 0xF) - (value & 0xF)) < 0),
+            carry: (result < 0)
+        );
     }
     private byte IncByte(byte value) {
         var result = (byte)(value + 1);
 
-        SetFlags(zero: (result == 0), subtract: false, halfCarry: ((value & 0xF) == 0xF), carry: CarryFlagSet);
+        SetFlags(
+            zero: (result == 0),
+            subtract: false,
+            halfCarry: ((value & 0xF) == 0xF),
+            carry: CarryFlagSet
+        );
 
         return result;
     }
     private byte DecByte(byte value) {
         var result = (byte)(value - 1);
 
-        SetFlags(zero: (result == 0), subtract: true, halfCarry: ((value & 0xF) == 0), carry: CarryFlagSet);
+        SetFlags(
+            zero: (result == 0),
+            subtract: true,
+            halfCarry: ((value & 0xF) == 0),
+            carry: CarryFlagSet
+        );
 
         return result;
     }
@@ -105,7 +159,12 @@ public sealed partial class Sm83 {
         var hl = (int)Hl;
         var result = (hl + value);
 
-        SetFlags(zero: ZeroFlagSet, subtract: false, halfCarry: (((hl & 0xFFF) + (value & 0xFFF)) > 0xFFF), carry: (result > 0xFFFF));
+        SetFlags(
+            zero: ZeroFlagSet,
+            subtract: false,
+            halfCarry: (((hl & 0xFFF) + (value & 0xFFF)) > 0xFFF),
+            carry: (result > 0xFFFF)
+        );
 
         Hl = (ushort)result;
 
@@ -131,12 +190,18 @@ public sealed partial class Sm83 {
         var value = (int)m_a;
 
         if (!subtract) {
-            if (carry || (value > 0x99)) {
+            if (
+                carry ||
+                (value > 0x99)
+            ) {
                 value += 0x60;
                 carry = true;
             }
 
-            if (halfCarry || ((value & 0x0F) > 0x09)) {
+            if (
+                halfCarry ||
+                ((value & 0x0F) > 0x09)
+            ) {
                 value += 0x06;
             }
         } else {
@@ -151,7 +216,12 @@ public sealed partial class Sm83 {
 
         m_a = (byte)value;
 
-        SetFlags(zero: (m_a == 0), subtract: subtract, halfCarry: false, carry: carry);
+        SetFlags(
+            zero: (m_a == 0),
+            subtract: subtract,
+            halfCarry: false,
+            carry: carry
+        );
     }
     private void ComplementAccumulator() {
         m_a = (byte)~m_a;
@@ -160,36 +230,62 @@ public sealed partial class Sm83 {
     private void SetCarryFlag() =>
         m_f = (byte)((m_f & FlagZero) | FlagCarry);
     private void ComplementCarryFlag() =>
-        m_f = (byte)((m_f & FlagZero) | (CarryFlagSet ? 0 : FlagCarry));
+        m_f = (byte)((m_f & FlagZero) | (CarryFlagSet
+        ? 0
+        : FlagCarry));
     private void RotateAccumulatorLeftCircular() {
         var carry = (m_a >> 7) & 1;
 
         m_a = (byte)((m_a << 1) | carry);
 
-        SetFlags(zero: false, subtract: false, halfCarry: false, carry: (carry != 0));
+        SetFlags(
+            zero: false,
+            subtract: false,
+            halfCarry: false,
+            carry: (carry != 0)
+        );
     }
     private void RotateAccumulatorRightCircular() {
         var carry = m_a & 1;
 
         m_a = (byte)((m_a >> 1) | (carry << 7));
 
-        SetFlags(zero: false, subtract: false, halfCarry: false, carry: (carry != 0));
+        SetFlags(
+            zero: false,
+            subtract: false,
+            halfCarry: false,
+            carry: (carry != 0)
+        );
     }
     private void RotateAccumulatorLeft() {
-        var carryIn = (CarryFlagSet ? 1 : 0);
+        var carryIn = (CarryFlagSet
+            ? 1
+            : 0);
         var carryOut = (m_a >> 7) & 1;
 
         m_a = (byte)((m_a << 1) | carryIn);
 
-        SetFlags(zero: false, subtract: false, halfCarry: false, carry: (carryOut != 0));
+        SetFlags(
+            zero: false,
+            subtract: false,
+            halfCarry: false,
+            carry: (carryOut != 0)
+        );
     }
     private void RotateAccumulatorRight() {
-        var carryIn = (CarryFlagSet ? 1 : 0);
+        var carryIn = (CarryFlagSet
+            ? 1
+            : 0);
         var carryOut = m_a & 1;
 
         m_a = (byte)((m_a >> 1) | (carryIn << 7));
 
-        SetFlags(zero: false, subtract: false, halfCarry: false, carry: (carryOut != 0));
+        SetFlags(
+            zero: false,
+            subtract: false,
+            halfCarry: false,
+            carry: (carryOut != 0)
+        );
     }
     private byte RotateOrShift(int operation, byte value) {
         int result;
@@ -208,12 +304,16 @@ public sealed partial class Sm83 {
                 break;
             case 2: // RL
                 carryOut = (value >> 7) & 1;
-                result = (value << 1) | (CarryFlagSet ? 1 : 0);
+                result = (value << 1) | (CarryFlagSet
+                    ? 1
+                    : 0);
 
                 break;
             case 3: // RR
                 carryOut = value & 1;
-                result = (value >> 1) | (CarryFlagSet ? 0x80 : 0);
+                result = (value >> 1) | (CarryFlagSet
+                    ? 0x80
+                    : 0);
 
                 break;
             case 4: // SLA
@@ -240,10 +340,17 @@ public sealed partial class Sm83 {
 
         var truncated = (byte)result;
 
-        SetFlags(zero: (truncated == 0), subtract: false, halfCarry: false, carry: (carryOut != 0));
+        SetFlags(
+            zero: (truncated == 0),
+            subtract: false,
+            halfCarry: false,
+            carry: (carryOut != 0)
+        );
 
         return truncated;
     }
     private void TestBit(int bit, byte value) =>
-        m_f = (byte)((m_f & FlagCarry) | FlagHalfCarry | ((((value >> bit) & 1) == 0) ? FlagZero : 0));
+        m_f = (byte)((m_f & FlagCarry) | FlagHalfCarry | ((((value >> bit) & 1) == 0)
+        ? FlagZero
+        : 0));
 }

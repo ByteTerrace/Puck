@@ -6,7 +6,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 // --render <rom> <out.png> [steps]: boot a ROM and dump its framebuffer, to eyeball the PPU output.
 internal static partial class Diagnostics {
     public static void Render(string romPath, string outputPath, long steps = 6_000_000) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 
@@ -29,7 +33,8 @@ internal static partial class Diagnostics {
                 height: 160,
                 path: outputPath,
                 rgba: MemoryMarshal.AsBytes(span: machine.Framebuffer),
-                width: 240);
+                width: 240
+            );
 
             Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} -> {outputPath}");
         }

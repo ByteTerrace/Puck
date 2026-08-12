@@ -86,7 +86,10 @@ public sealed class Machine {
         // The section table's per-component names, derived once from each snapshotable's runtime type in the fixed
         // save/restore order (the leading "clock" section is recorded separately in Snapshot(), before this array is
         // walked). Metadata only: it labels byte ranges the writer already visited and never alters the serialized bytes.
-        m_snapshotableNames = Array.ConvertAll(array: m_snapshotables, converter: static component => component.GetType().Name);
+        m_snapshotableNames = Array.ConvertAll(
+            array: m_snapshotables,
+            converter: static component => component.GetType().Name
+        );
     }
 
     /// <summary>Gets the machine's master clock.</summary>
@@ -138,7 +141,10 @@ public sealed class Machine {
         }
 
         foreach (var poke in pokes) {
-            m_memory.PokeCpuByte(address: poke.Address, value: poke.Value);
+            m_memory.PokeCpuByte(
+                address: poke.Address,
+                value: poke.Value
+            );
         }
     }
 
@@ -201,16 +207,31 @@ public sealed class Machine {
         var offset = 0;
 
         m_stateWriter.WriteUInt64(value: Now.RawBits);
-        sections[0] = new SnapshotSection(Name: "clock", Offset: offset, Length: (m_stateWriter.Length - offset));
+        sections[0] = new SnapshotSection(
+            Name: "clock",
+            Offset: offset,
+            Length: (m_stateWriter.Length - offset)
+        );
         offset = m_stateWriter.Length;
 
         for (var index = 0; (index < m_snapshotables.Length); ++index) {
             m_snapshotables[index].SaveState(writer: m_stateWriter);
-            sections[(index + 1)] = new SnapshotSection(Name: m_snapshotableNames[index], Offset: offset, Length: (m_stateWriter.Length - offset));
+            sections[(index + 1)] = new SnapshotSection(
+                Name: m_snapshotableNames[index],
+                Offset: offset,
+                Length: (m_stateWriter.Length - offset)
+            );
             offset = m_stateWriter.Length;
         }
 
-        return new MachineSnapshot(identity: m_identity, takenAt: Now, image: new SnapshotImage(data: m_stateWriter.ToArray(), sections: sections));
+        return new MachineSnapshot(
+            identity: m_identity,
+            takenAt: Now,
+            image: new SnapshotImage(
+                data: m_stateWriter.ToArray(),
+                sections: sections
+            )
+        );
     }
 
     /// <summary>Serializes the machine's entire mutable state into a writer, in the same clock-first, then-each-component
@@ -258,9 +279,7 @@ public sealed class Machine {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
         if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(
-                message: "Snapshot identity (format version / model / boot+cartridge ROM) does not match this machine; refusing to restore a mismatched image."
-            );
+            throw new InvalidOperationException(message: "Snapshot identity (format version / model / boot+cartridge ROM) does not match this machine; refusing to restore a mismatched image.");
         }
 
         var reader = snapshot.OpenReader();
@@ -271,9 +290,7 @@ public sealed class Machine {
         // LoadState field-order drift that would otherwise be read as silently-wrong state — fault deterministically so a
         // byte difference stays a genuine divergence, never a misread.
         if (reader.Position != snapshot.Size) {
-            throw new InvalidOperationException(
-                message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted."
-            );
+            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
         }
     }
 }

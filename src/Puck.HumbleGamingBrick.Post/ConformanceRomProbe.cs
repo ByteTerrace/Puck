@@ -37,7 +37,10 @@ internal static class ConformanceRomProbe {
     public static (ConformanceRomResult Result, string Detail) Run(RomCase romCase) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
-        using var machine = PostMachine.Build(model: romCase.Model, rom: rom);
+        using var machine = PostMachine.Build(
+            model: romCase.Model,
+            rom: rom
+        );
 
         var bus = machine.GetRequiredService<ISystemBus>();
         var serialText = new StringBuilder();
@@ -47,21 +50,32 @@ internal static class ConformanceRomProbe {
         var sawRunning = false;
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
-            PostMachine.RunFrames(instance: machine, frames: 1);
+            PostMachine.RunFrames(
+                instance: machine,
+                frames: 1
+            );
 
             var rendered = serialText.ToString();
 
-            if (rendered.Contains(value: "Passed", comparisonType: StringComparison.Ordinal)) {
+            if (rendered.Contains(
+                value: "Passed",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return (ConformanceRomResult.Pass, Clean(text: rendered));
             }
 
-            if (rendered.Contains(value: "Failed", comparisonType: StringComparison.Ordinal)) {
+            if (rendered.Contains(
+                value: "Failed",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return (ConformanceRomResult.Fail, Clean(text: rendered));
             }
 
-            if ((bus.ReadByte(address: Signature0Address) == Signature0)
-                && (bus.ReadByte(address: Signature1Address) == Signature1)
-                && (bus.ReadByte(address: Signature2Address) == Signature2)) {
+            if (
+                (bus.ReadByte(address: Signature0Address) == Signature0) &&
+                (bus.ReadByte(address: Signature1Address) == Signature1) &&
+                (bus.ReadByte(address: Signature2Address) == Signature2)
+            ) {
                 var status = bus.ReadByte(address: StatusAddress);
 
                 if (status == RunningStatus) {
@@ -76,11 +90,17 @@ internal static class ConformanceRomProbe {
 
         var final = serialText.ToString();
 
-        if (final.Contains(value: "Passed", comparisonType: StringComparison.Ordinal)) {
+        if (final.Contains(
+            value: "Passed",
+            comparisonType: StringComparison.Ordinal
+        )) {
             return (ConformanceRomResult.Pass, Clean(text: final));
         }
 
-        if (final.Contains(value: "Failed", comparisonType: StringComparison.Ordinal)) {
+        if (final.Contains(
+            value: "Failed",
+            comparisonType: StringComparison.Ordinal
+        )) {
             return (ConformanceRomResult.Fail, Clean(text: final));
         }
 
@@ -92,9 +112,17 @@ internal static class ConformanceRomProbe {
         var builder = new StringBuilder(capacity: text.Length);
 
         foreach (var character in text) {
-            _ = builder.Append(value: (char.IsControl(c: character) ? ' ' : character));
+            _ = builder.Append(value: (char.IsControl(c: character)
+                ? ' '
+                : character));
         }
 
-        return string.Join(separator: ' ', values: builder.ToString().Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries));
+        return string.Join(
+            separator: ' ',
+            values: builder.ToString().Split(
+                separator: (char[]?)null,
+                options: StringSplitOptions.RemoveEmptyEntries
+            )
+        );
     }
 }

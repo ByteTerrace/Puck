@@ -60,7 +60,10 @@ public sealed partial class AgbApu : IAgbApu {
     public int DrainSamples(Span<short> destination) {
         var written = 0;
 
-        while ((written < destination.Length) && (m_outputRead != m_outputWrite)) {
+        while (
+            (written < destination.Length) &&
+            (m_outputRead != m_outputWrite)
+        ) {
             destination[written++] = m_outputRing[m_outputRead];
             m_outputRead = ((m_outputRead + 1) % m_outputRing.Length);
         }
@@ -108,7 +111,10 @@ public sealed partial class AgbApu : IAgbApu {
         // by one byte. The DMA request originating ONLY here is what upholds the hardware invariant that two DMA
         // requests can never occur without an intervening timer overflow (see DirectSoundFifo).
         if (((m_soundControlHigh >> 10) & 1) == timer) {
-            if (m_fifoA.Tick(needsDma: out var dmaA, sample: out var sampleA)) {
+            if (m_fifoA.Tick(
+                needsDma: out var dmaA,
+                sample: out var sampleA
+            )) {
                 m_directSoundA = sampleA;
             }
 
@@ -116,7 +122,10 @@ public sealed partial class AgbApu : IAgbApu {
         }
 
         if (((m_soundControlHigh >> 14) & 1) == timer) {
-            if (m_fifoB.Tick(needsDma: out var dmaB, sample: out var sampleB)) {
+            if (m_fifoB.Tick(
+                needsDma: out var dmaB,
+                sample: out var sampleB
+            )) {
                 m_directSoundB = sampleB;
             }
 
@@ -156,11 +165,21 @@ public sealed partial class AgbApu : IAgbApu {
             // pair (mask 0xFF77), and bits 4-7 plus the write-only FIFO reset bits 11/15 of the mixer (mask 0x770F).
             0x80u => (ushort)(m_soundControlLow & 0xFF77u),
             0x82u => (ushort)(m_soundControlHigh & 0x770Fu),
-            0x84u => (ushort)((m_masterEnable ? 0x80u : 0u)
-                | (m_pulse1.Active ? 0x1u : 0u)
-                | (m_pulse2.Active ? 0x2u : 0u)
-                | (m_wave.Active ? 0x4u : 0u)
-                | (m_noise.Active ? 0x8u : 0u)),
+            0x84u => (ushort)((m_masterEnable
+            ? 0x80u
+            : 0u)
+                | (m_pulse1.Active
+            ? 0x1u
+            : 0u)
+                | (m_pulse2.Active
+            ? 0x2u
+            : 0u)
+                | (m_wave.Active
+            ? 0x4u
+            : 0u)
+                | (m_noise.Active
+            ? 0x8u
+            : 0u)),
             0x88u => m_soundBias,
             0x70u => m_wave.ReadEnable(),
             0x72u => (ushort)(m_wave.ReadVolume() << 8),
@@ -174,7 +193,12 @@ public sealed partial class AgbApu : IAgbApu {
     public void WriteRegister(uint offset, ushort value) {
         // Sound is fully writable only while the master enable is set, except for the master enable (0x84) and
         // SOUNDBIAS (0x88), which are always accessible (they sit outside the gated PSG/FIFO control block).
-        if (!m_masterEnable && (offset != 0x84u) && (offset != 0x88u) && (offset < 0x90u)) {
+        if (
+            !m_masterEnable &&
+            (offset != 0x84u) &&
+            (offset != 0x88u) &&
+            (offset < 0x90u)
+        ) {
             return;
         }
 
@@ -253,8 +277,14 @@ public sealed partial class AgbApu : IAgbApu {
 
                 break;
             case >= 0x90u and <= 0x9Fu:
-                m_wave.WriteRam(index: (int)(offset - 0x90u), value: (byte)value);
-                m_wave.WriteRam(index: ((int)(offset - 0x90u) + 1), value: (byte)(value >> 8));
+                m_wave.WriteRam(
+                    index: (int)(offset - 0x90u),
+                    value: (byte)value
+                );
+                m_wave.WriteRam(
+                    index: ((int)(offset - 0x90u) + 1),
+                    value: (byte)(value >> 8)
+                );
 
                 break;
             case >= 0xA0u and <= 0xA3u:
@@ -278,7 +308,9 @@ public sealed partial class AgbApu : IAgbApu {
         // The 0xA0-0xA7 FIFO register windows accept 8/16/32-bit writes; the bus decomposes each to the exact bytes
         // it carries and streams them here in write order (a narrow write fills only part of the next word). A whole
         // word (four streamed bytes) is pushed into the ring; the common MP2K path is a 32-bit DMA fill.
-        ((fifo == 0) ? m_fifoA : m_fifoB).WriteByte(value: value);
+        ((fifo == 0)
+            ? m_fifoA
+            : m_fifoB).WriteByte(value: value);
     }
 
     private void ClockFrameSequencer() {
@@ -290,7 +322,10 @@ public sealed partial class AgbApu : IAgbApu {
             m_noise.ClockLength();
         }
 
-        if ((m_frameSequencerStep == 2) || (m_frameSequencerStep == 6)) {
+        if (
+            (m_frameSequencerStep == 2) ||
+            (m_frameSequencerStep == 6)
+        ) {
             m_pulse1.ClockSweep();
         }
 
@@ -321,14 +356,34 @@ public sealed partial class AgbApu : IAgbApu {
             var rightEnable = (m_soundControlLow >> 8) & 0xF;
             var leftEnable = (m_soundControlLow >> 12) & 0xF;
 
-            var psgRight = ((((((rightEnable & 0x1) != 0) ? p1 : 0) + (((rightEnable & 0x2) != 0) ? p2 : 0))
-                + (((rightEnable & 0x4) != 0) ? wv : 0)) + (((rightEnable & 0x8) != 0) ? ns : 0));
-            var psgLeft = ((((((leftEnable & 0x1) != 0) ? p1 : 0) + (((leftEnable & 0x2) != 0) ? p2 : 0))
-                + (((leftEnable & 0x4) != 0) ? wv : 0)) + (((leftEnable & 0x8) != 0) ? ns : 0));
+            var psgRight = ((((((rightEnable & 0x1) != 0)
+                ? p1
+                : 0) + (((rightEnable & 0x2) != 0)
+                ? p2
+                : 0))
+                + (((rightEnable & 0x4) != 0)
+                ? wv
+                : 0)) + (((rightEnable & 0x8) != 0)
+                ? ns
+                : 0));
+            var psgLeft = ((((((leftEnable & 0x1) != 0)
+                ? p1
+                : 0) + (((leftEnable & 0x2) != 0)
+                ? p2
+                : 0))
+                + (((leftEnable & 0x4) != 0)
+                ? wv
+                : 0)) + (((leftEnable & 0x8) != 0)
+                ? ns
+                : 0));
 
             // SOUNDCNT_H bits 0-1: PSG mix ratio 25/50/100%. Master volume (0-7) scales as (vol+1)/8.
             var psgRatio = m_soundControlHigh & 0x3;
-            var psgScale = ((psgRatio == 0) ? 1 : ((psgRatio == 1) ? 2 : 4)); // 25% / 50% / 100% (×4 = full)
+            var psgScale = ((psgRatio == 0)
+                ? 1
+                : ((psgRatio == 1)
+                    ? 2
+                    : 4)); // 25% / 50% / 100% (×4 = full)
             var volRight = ((m_soundControlLow & 0x7) + 1);
             var volLeft = (((m_soundControlLow >> 4) & 0x7) + 1);
 
@@ -338,22 +393,42 @@ public sealed partial class AgbApu : IAgbApu {
             var psgMixRight = ((((psgRight * 2) - (CountBits(nibble: rightEnable) * 15)) * psgScale) * volRight);
             var psgMixLeft = ((((psgLeft * 2) - (CountBits(nibble: leftEnable) * 15)) * psgScale) * volLeft);
 
-            var dsaShift = (((m_soundControlHigh & 0x4) != 0) ? 3 : 2); // 100% / 50%
-            var dsbShift = (((m_soundControlHigh & 0x8) != 0) ? 3 : 2);
+            var dsaShift = (((m_soundControlHigh & 0x4) != 0)
+                ? 3
+                : 2); // 100% / 50%
+            var dsbShift = (((m_soundControlHigh & 0x8) != 0)
+                ? 3
+                : 2);
             var dsa = (m_directSoundA << dsaShift);
             var dsb = (m_directSoundB << dsbShift);
 
             var mixRight = ((psgMixRight
-                + (((m_soundControlHigh & 0x0100) != 0) ? dsa : 0))
-                + (((m_soundControlHigh & 0x1000) != 0) ? dsb : 0));
+                + (((m_soundControlHigh & 0x0100) != 0)
+                ? dsa
+                : 0))
+                + (((m_soundControlHigh & 0x1000) != 0)
+                ? dsb
+                : 0));
             var mixLeft = ((psgMixLeft
-                + (((m_soundControlHigh & 0x0200) != 0) ? dsa : 0))
-                + (((m_soundControlHigh & 0x2000) != 0) ? dsb : 0));
+                + (((m_soundControlHigh & 0x0200) != 0)
+                ? dsa
+                : 0))
+                + (((m_soundControlHigh & 0x2000) != 0)
+                ? dsb
+                : 0));
 
             // SOUNDBIAS adds a DC offset to the final mix on hardware; it nets out for line-level output, so we
             // clamp around zero. (The bias level field is honoured by games probing it; the audible effect is nil.)
-            right = (short)Math.Clamp(value: mixRight, min: -32768, max: 32767);
-            left = (short)Math.Clamp(value: mixLeft, min: -32768, max: 32767);
+            right = (short)Math.Clamp(
+                value: mixRight,
+                min: -32768,
+                max: 32767
+            );
+            left = (short)Math.Clamp(
+                value: mixLeft,
+                min: -32768,
+                max: 32767
+            );
         }
 
         m_outputRing[m_outputWrite] = left;
@@ -366,15 +441,21 @@ public sealed partial class AgbApu : IAgbApu {
 
     /// <summary>The number of filled 32-bit words in a Direct Sound FIFO's ring (0-7) — a diagnostic peek that does
     /// not disturb state; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
-    public int DebugFifoWordCount(int fifo) => ((fifo == 0) ? m_fifoA : m_fifoB).WordCount;
+    public int DebugFifoWordCount(int fifo) => ((fifo == 0)
+        ? m_fifoA
+        : m_fifoB).WordCount;
 
     /// <summary>The number of bytes remaining in a Direct Sound FIFO's 32-bit playing buffer (0-4) — a diagnostic
     /// peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
-    public int DebugFifoPlayingBytes(int fifo) => ((fifo == 0) ? m_fifoA : m_fifoB).PlayingBytes;
+    public int DebugFifoPlayingBytes(int fifo) => ((fifo == 0)
+        ? m_fifoA
+        : m_fifoB).PlayingBytes;
 
     /// <summary>The 8-bit signed sample a Direct Sound channel is currently driving to the DAC (the last byte the
     /// playing buffer produced) — a diagnostic peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
-    public int DebugDirectSound(int fifo) => ((fifo == 0) ? m_directSoundA : m_directSoundB);
+    public int DebugDirectSound(int fifo) => ((fifo == 0)
+        ? m_directSoundA
+        : m_directSoundB);
 
     /// <summary>
     /// The hardware-measured Direct Sound FIFO: a 7-word (28-byte) ring buffer plus a separate 32-bit playing
@@ -449,7 +530,10 @@ public sealed partial class AgbApu : IAgbApu {
             needsDma = ((RingWords - m_count) >= 4);
 
             // (b) Independently, an empty playing buffer pulls the next word from the ring.
-            if ((m_playingBytes == 0) && (m_count > 0)) {
+            if (
+                (m_playingBytes == 0) &&
+                (m_count > 0)
+            ) {
                 m_playing = m_ring[m_head];
                 m_head = ((m_head + 1) % RingWords);
                 --m_count;

@@ -12,7 +12,10 @@ public static class Cartridge {
     public static ICartridge Load(byte[] rom) {
         ArgumentNullException.ThrowIfNull(argument: rom);
 
-        return Load(rom: rom, header: CartridgeHeader.Parse(rom: rom));
+        return Load(
+            rom: rom,
+            header: CartridgeHeader.Parse(rom: rom)
+        );
     }
     /// <summary>Builds the cartridge for an already-parsed header — the overload the machine's composition uses so the
     /// header shared through the container is parsed exactly once.</summary>
@@ -26,16 +29,46 @@ public static class Cartridge {
         ArgumentNullException.ThrowIfNull(argument: header);
 
         return header.Mapper switch {
-            MapperKind.RomOnly => new RomOnlyCartridge(rom: rom, header: header),
-            MapperKind.Mbc1 => new Mbc1Cartridge(rom: rom, header: header),
-            MapperKind.Mbc2 => new Mbc2Cartridge(rom: rom, header: header),
-            MapperKind.Mbc3 => new Mbc3Cartridge(rom: rom, header: header),
-            MapperKind.Mbc5 => new Mbc5Cartridge(rom: rom, header: header),
-            MapperKind.Mbc7 => new Mbc7Cartridge(rom: rom, header: header),
-            MapperKind.Mmm01 => new Mmm01Cartridge(rom: rom, header: header),
-            MapperKind.HuC1 => new HuC1Cartridge(rom: rom, header: header),
-            MapperKind.HuC3 => new HuC3Cartridge(rom: rom, header: header),
-            MapperKind.Camera => new CameraCartridge(rom: rom, header: header),
+            MapperKind.RomOnly => new RomOnlyCartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mbc1 => new Mbc1Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mbc2 => new Mbc2Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mbc3 => new Mbc3Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mbc5 => new Mbc5Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mbc7 => new Mbc7Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Mmm01 => new Mmm01Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.HuC1 => new HuC1Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.HuC3 => new HuC3Cartridge(
+            rom: rom,
+            header: header
+        ),
+            MapperKind.Camera => new CameraCartridge(
+            rom: rom,
+            header: header
+        ),
             _ => throw new NotSupportedException(message: $"The mapper '{header.Mapper}' is not yet implemented."),
         };
     }

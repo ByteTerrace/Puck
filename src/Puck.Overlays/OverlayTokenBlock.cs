@@ -284,7 +284,7 @@ public static class OverlayTokenBlock {
     }
 
     private static void WriteColor(Span<uint> destination, OverlayColorRole role, RgbaColor color) {
-        var offset = ((int)role * 4);
+        var offset = (((int)role) * 4);
 
         destination[offset] = BitConverter.SingleToUInt32Bits(value: color.R);
         destination[(offset + 1)] = BitConverter.SingleToUInt32Bits(value: color.G);
@@ -292,6 +292,6 @@ public static class OverlayTokenBlock {
         destination[(offset + 3)] = BitConverter.SingleToUInt32Bits(value: color.A);
     }
     private static void WriteScalar(Span<uint> destination, Scalar scalar, float value) {
-        destination[((RoleCount * 4) + (int)scalar)] = BitConverter.SingleToUInt32Bits(value: value);
+        destination[((RoleCount * 4) + ((int)scalar))] = BitConverter.SingleToUInt32Bits(value: value);
     }
 }

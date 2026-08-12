@@ -35,11 +35,17 @@ internal static class Bess {
     /// <param name="tag">The exact 4-character ASCII tag.</param>
     /// <param name="payload">The block payload.</param>
     public static void WriteBlock(List<byte> destination, string tag, ReadOnlySpan<byte> payload) {
-        WriteTag(destination: destination, tag: tag);
+        WriteTag(
+            destination: destination,
+            tag: tag
+        );
 
         var length = new byte[4];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: length, value: (uint)payload.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: length,
+            value: (uint)payload.Length
+        );
         destination.AddRange(collection: length);
         destination.AddRange(collection: payload.ToArray());
     }
@@ -49,9 +55,15 @@ internal static class Bess {
     public static void WriteFooter(List<byte> destination, uint firstBlockOffset) {
         var offset = new byte[4];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: offset, value: firstBlockOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: offset,
+            value: firstBlockOffset
+        );
         destination.AddRange(collection: offset);
-        WriteTag(destination: destination, tag: "BESS");
+        WriteTag(
+            destination: destination,
+            tag: "BESS"
+        );
     }
     /// <summary>Locates the first BESS block via the trailing footer.</summary>
     /// <param name="file">The whole file's bytes.</param>
@@ -72,7 +84,10 @@ internal static class Bess {
 
         firstBlockOffset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: footer[..4]);
 
-        return ((firstBlockOffset >= 0) && (firstBlockOffset < (file.Length - FooterLength)));
+        return (
+            (firstBlockOffset >= 0) &&
+            (firstBlockOffset < (file.Length - FooterLength))
+        );
     }
     /// <summary>Reads one block header at a position, bounds-checked against the file so a malformed length or a
     /// truncated file is reported rather than throwing mid-parse — the block-graph half of the "validate the complete
@@ -90,19 +105,35 @@ internal static class Bess {
         payload = default;
         next = end;
 
-        if ((offset < 0) || ((offset + 8) > end)) {
+        if (
+            (offset < 0) ||
+            ((offset + 8) > end)
+        ) {
             return false;
         }
 
-        var length = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: file.Slice(start: (offset + 4), length: 4));
-        var payloadEnd = (offset + 8 + length);
+        var length = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: file.Slice(
+            start: (offset + 4),
+            length: 4
+        ));
+        var payloadEnd = ((offset + 8) + length);
 
-        if ((length < 0) || (payloadEnd < 0) || (payloadEnd > end)) {
+        if (
+            (length < 0) ||
+            (payloadEnd < 0) ||
+            (payloadEnd > end)
+        ) {
             return false;
         }
 
-        tag = Encoding.ASCII.GetString(bytes: file.Slice(start: offset, length: 4));
-        payload = file.Slice(start: (offset + 8), length: length);
+        tag = Encoding.ASCII.GetString(bytes: file.Slice(
+            start: offset,
+            length: 4
+        ));
+        payload = file.Slice(
+            start: (offset + 8),
+            length: length
+        );
         next = payloadEnd;
 
         return true;
@@ -117,10 +148,14 @@ internal static class Bess {
             // The Advance's Dmg/Cgb-compatibility mode: family 'C' (the Cgb/Agb family), model 'A' (the Agb line).
             _ => "CA  "u8.ToArray(),
         };
+
     private static void WriteTag(List<byte> destination, string tag) {
         var bytes = new byte[4];
 
-        Encoding.ASCII.GetBytes(chars: tag, bytes: bytes);
+        Encoding.ASCII.GetBytes(
+            chars: tag,
+            bytes: bytes
+        );
         destination.AddRange(collection: bytes);
     }
 }

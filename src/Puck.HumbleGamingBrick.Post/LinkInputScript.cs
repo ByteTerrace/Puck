@@ -21,7 +21,10 @@ internal sealed class LinkInputScript {
 
         for (var index = 1; (index < keyframes.Length); ++index) {
             if (keyframes[index].Frame <= keyframes[(index - 1)].Frame) {
-                throw new ArgumentException(message: "link-script keyframes must be in strictly ascending frame order.", paramName: nameof(keyframes));
+                throw new ArgumentException(
+                    message: "link-script keyframes must be in strictly ascending frame order.",
+                    paramName: nameof(keyframes)
+                );
             }
         }
 
@@ -59,15 +62,25 @@ internal sealed class LinkInputScript {
         foreach (var raw in File.ReadAllLines(path: path)) {
             var line = raw.Trim();
 
-            if ((line.Length == 0) || line.StartsWith(value: '#')) {
+            if (
+                (line.Length == 0) ||
+                line.StartsWith(value: '#')
+            ) {
                 continue;
             }
 
             var space = line.IndexOf(value: ' ');
-            var frameToken = ((space < 0) ? line : line[..space]);
-            var buttonToken = ((space < 0) ? "None" : line[(space + 1)..].Trim());
+            var frameToken = ((space < 0)
+                ? line
+                : line[..space]);
+            var buttonToken = ((space < 0)
+                ? "None"
+                : line[(space + 1)..].Trim());
 
-            if (!int.TryParse(s: frameToken, result: out var frame)) {
+            if (!int.TryParse(
+                s: frameToken,
+                result: out var frame
+            )) {
                 throw new FormatException(message: $"link-script line '{raw}' does not start with a frame number");
             }
 
@@ -84,7 +97,10 @@ internal sealed class LinkInputScript {
     public static JoypadButtons ParseButtons(string text) {
         var buttons = JoypadButtons.None;
 
-        foreach (var name in text.Split(separator: ['+', ','], options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+        foreach (var name in text.Split(
+            separator: ['+', ','],
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        )) {
             buttons |= name.ToLowerInvariant() switch {
                 "none" => JoypadButtons.None,
                 "right" => JoypadButtons.Right,

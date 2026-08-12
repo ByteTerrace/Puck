@@ -29,7 +29,9 @@ public abstract class CartridgeBase : ICartridge {
         ArgumentNullException.ThrowIfNull(argument: header);
 
         Header = header;
-        m_ram = new byte[((ramByteCount < 0) ? header.RamByteCount : ramByteCount)];
+        m_ram = new byte[((ramByteCount < 0)
+            ? header.RamByteCount
+            : ramByteCount)];
         m_rom = rom;
     }
 
@@ -64,11 +66,20 @@ public abstract class CartridgeBase : ICartridge {
             return;
         }
 
-        m_ram.AsSpan(start: offset, length: Math.Min(val1: available, val2: destination.Length)).CopyTo(destination: destination);
+        m_ram.AsSpan(
+            start: offset,
+            length: Math.Min(
+                val1: available,
+                val2: destination.Length
+            )
+        ).CopyTo(destination: destination);
     }
     /// <inheritdoc/>
     public void ImportExternalRam(ReadOnlySpan<byte> source) {
-        source[..Math.Min(val1: source.Length, val2: m_ram.Length)].CopyTo(destination: m_ram);
+        source[..Math.Min(
+            val1: source.Length,
+            val2: m_ram.Length
+        )].CopyTo(destination: m_ram);
         ExternalRamDirty = false;
     }
     /// <inheritdoc/>
@@ -96,7 +107,9 @@ public abstract class CartridgeBase : ICartridge {
 
         var offset = MapRamOffset(address: address);
 
-        return (((uint)offset < (uint)m_ram.Length) ? m_ram[offset] : (byte)0xFF);
+        return (((uint)offset < (uint)m_ram.Length)
+            ? m_ram[offset]
+            : (byte)0xFF);
     }
     /// <inheritdoc/>
     public virtual void WriteRam(ushort address, byte value) {
@@ -141,7 +154,13 @@ public abstract class CartridgeBase : ICartridge {
         }
 
         offset = MapRamOffset(address: MemoryMap.ExternalRamStart);
-        length = Math.Max(val1: 0, val2: Math.Min(val1: (m_ram.Length - offset), val2: RamWindowByteCount));
+        length = Math.Max(
+            val1: 0,
+            val2: Math.Min(
+                val1: (m_ram.Length - offset),
+                val2: RamWindowByteCount
+            )
+        );
 
         return true;
     }
@@ -173,7 +192,10 @@ public abstract class CartridgeBase : ICartridge {
     /// <param name="offset">The absolute byte offset into save RAM (independent of the current bank selection).</param>
     /// <param name="source">The bytes to deposit.</param>
     protected void DepositExternalRam(int offset, ReadOnlySpan<byte> source) {
-        if ((offset < 0) || (((long)offset + source.Length) > m_ram.Length)) {
+        if (
+            (offset < 0) ||
+            (((long)offset + source.Length) > m_ram.Length)
+        ) {
             return;
         }
 
@@ -190,7 +212,9 @@ public abstract class CartridgeBase : ICartridge {
     protected static int ComputeBankWrapMask(int byteCount, int bankSize) {
         var bankCount = (byteCount / bankSize);
 
-        return (((bankCount > 1) && BitOperations.IsPow2(value: (uint)bankCount)) ? (bankCount - 1) : 0);
+        return (((bankCount > 1) && BitOperations.IsPow2(value: (uint)bankCount))
+            ? (bankCount - 1)
+            : 0);
     }
 
     /// <summary>Maps a ROM-region address to an absolute byte offset into the ROM image (mirrored on read).</summary>

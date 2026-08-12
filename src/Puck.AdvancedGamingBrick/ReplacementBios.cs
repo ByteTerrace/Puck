@@ -16,7 +16,10 @@ public sealed class ReplacementBios : IBios {
     /// <exception cref="ArgumentException"><paramref name="image"/> is not exactly <see cref="ImageSize"/> bytes.</exception>
     public ReplacementBios(ReadOnlySpan<byte> image) {
         if (image.Length != ImageSize) {
-            throw new ArgumentException(message: $"The BIOS image must be exactly {ImageSize} bytes; got {image.Length}.", paramName: nameof(image));
+            throw new ArgumentException(
+                message: $"The BIOS image must be exactly {ImageSize} bytes; got {image.Length}.",
+                paramName: nameof(image)
+            );
         }
 
         m_image = image.ToArray();

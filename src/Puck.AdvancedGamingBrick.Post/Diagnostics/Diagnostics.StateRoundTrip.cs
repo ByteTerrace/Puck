@@ -14,7 +14,11 @@ internal static partial class Diagnostics {
         var failures = 0;
 
         foreach (var kind in MicroRoms.Kinds) {
-            var (pass, _) = StateRoundTripProbe.Run(rom: MicroRoms.GenerateBytes(kind: kind), label: $"micro:{kind}", bios: BiosImage);
+            var (pass, _) = StateRoundTripProbe.Run(
+                rom: MicroRoms.GenerateBytes(kind: kind),
+                label: $"micro:{kind}",
+                bios: BiosImage
+            );
 
             if (!pass) {
                 ++failures;
@@ -23,7 +27,11 @@ internal static partial class Diagnostics {
 
         if (!string.IsNullOrEmpty(value: romPath)) {
             if (File.Exists(path: romPath)) {
-                var (pass, _) = StateRoundTripProbe.Run(rom: File.ReadAllBytes(path: romPath), label: $"rom:{Path.GetFileName(path: romPath)}", bios: BiosImage);
+                var (pass, _) = StateRoundTripProbe.Run(
+                    rom: File.ReadAllBytes(path: romPath),
+                    label: $"rom:{Path.GetFileName(path: romPath)}",
+                    bios: BiosImage
+                );
 
                 if (!pass) {
                     ++failures;
@@ -33,8 +41,12 @@ internal static partial class Diagnostics {
             }
         }
 
-        Console.WriteLine(value: $"== savestate round-trip: {((failures == 0) ? "PASS" : $"FAIL ({failures} ROM(s))")} ==");
+        Console.WriteLine(value: $"== savestate round-trip: {((failures == 0)
+            ? "PASS"
+            : $"FAIL ({failures} ROM(s))")} ==");
 
-        return ((failures == 0) ? 0 : 1);
+        return ((failures == 0)
+            ? 0
+            : 1);
     }
 }

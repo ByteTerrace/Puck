@@ -22,7 +22,10 @@ internal sealed class ThroughputStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(bios: context.BiosImage, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            bios: context.BiosImage,
+            rom: SyntheticRom.Create()
+        );
 
         machine.RunFrames(frames: WarmFrames);
 
@@ -35,8 +38,6 @@ internal sealed class ThroughputStage : IPostStage {
         var realtimeMultiple = (fps / PostMachine.HardwareFps);
         var megaCyclesPerSecond = ((fps * PostMachine.CyclesPerFrame) / 1e6);
 
-        return PostStageOutcome.Pass(
-            detail: $"{fps:F0} fps ({realtimeMultiple:F1}x realtime, {megaCyclesPerSecond:F1} Mcycle/s) over {BenchFrames} frames"
-        );
+        return PostStageOutcome.Pass(detail: $"{fps:F0} fps ({realtimeMultiple:F1}x realtime, {megaCyclesPerSecond:F1} Mcycle/s) over {BenchFrames} frames");
     }
 }

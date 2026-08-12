@@ -182,9 +182,9 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
 
     void IOverlaySeatEmitter<OverlayEditorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) =>
         EmitSeat(
-        builder: builder,
-        seat: in seat
-    );
+            builder: builder,
+            seat: in seat
+        );
 
     private static float EmitLine(OverlayFrameBuilder builder, string text, OverlayColorRole role, float x, float y, int cellHeight, float lineStep) {
         if (text.Length == 0) {
@@ -205,5 +205,6 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
     }
     private static int CountPresent(string text) => ((text.Length > 0)
         ? 1
-        : 0);
+        : 0
+    );
 }

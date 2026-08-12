@@ -38,7 +38,10 @@ public sealed class SystemMemory : ISnapshotable {
     /// <summary>Gets or sets the selected work RAM bank for the switchable half (1–7); a written 0 selects bank 1.</summary>
     public int WorkRamBank {
         get => m_workRamBank;
-        set => m_workRamBank = Math.Max(val1: 1, val2: value & 0x07);
+        set => m_workRamBank = Math.Max(
+        val1: 1,
+        val2: value & 0x07
+    );
     }
 
     /// <summary>Repages the switchable RAM windows to their DMG-equivalent banks (VRAM bank 0, work RAM bank 1) — the
@@ -57,10 +60,22 @@ public sealed class SystemMemory : ISnapshotable {
     /// <param name="address">The CPU-space address.</param>
     /// <param name="value">The byte to store.</param>
     public void PokeCpuByte(ushort address, byte value) {
-        if ((address >= MemoryMap.HighRamStart) && (address <= MemoryMap.HighRamEnd)) {
-            WriteHighRam(address: address, value: value);
-        } else if ((address >= MemoryMap.WorkRamBank0Start) && (address <= MemoryMap.EchoRamEnd)) {
-            WriteWorkRam(address: address, value: value);
+        if (
+            (address >= MemoryMap.HighRamStart) &&
+            (address <= MemoryMap.HighRamEnd)
+        ) {
+            WriteHighRam(
+                address: address,
+                value: value
+            );
+        } else if (
+            (address >= MemoryMap.WorkRamBank0Start) &&
+            (address <= MemoryMap.EchoRamEnd)
+        ) {
+            WriteWorkRam(
+                address: address,
+                value: value
+            );
         }
     }
 

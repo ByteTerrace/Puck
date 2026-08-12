@@ -21,7 +21,10 @@ internal static class RenderHashProbe {
     public static (bool? Pass, ulong Hash, string Detail) Run(string romPath, long steps, ulong expected, ReadOnlyMemory<byte> bios) {
         var rom = File.ReadAllBytes(path: romPath);
 
-        using var machine = PostMachine.Build(bios: bios, rom: rom);
+        using var machine = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
 
         for (long i = 0; (i < steps); ++i) {
             machine.Machine.Step();

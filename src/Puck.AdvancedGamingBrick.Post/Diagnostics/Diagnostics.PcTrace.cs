@@ -10,7 +10,11 @@ internal static partial class Diagnostics {
     /// <summary>Prints the executing instruction address for each game-ROM (0x08…) instruction, matching the
     /// cosim oracle's --pctrace format, so the two streams can be diffed to find the first execution divergence.</summary>
     public static void PcTrace(string romPath, long steps) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 
@@ -27,7 +31,9 @@ internal static partial class Diagnostics {
             for (long i = 0; (i < steps); ++i) {
                 var thumb = ((cpu.Cpsr & 0x20u) != 0u);
 
-                output.WriteLine(value: $"{cpu.GetRegister(index: 15):X8} {(thumb ? 'T' : 'A')} {bus.Cycles}");
+                output.WriteLine(value: $"{cpu.GetRegister(index: 15):X8} {(thumb
+                    ? 'T'
+                    : 'A')} {bus.Cycles}");
 
                 machine.Step();
             }

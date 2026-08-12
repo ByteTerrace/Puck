@@ -71,9 +71,9 @@ public static class BindingBarLayout {
     /// <returns>The anchor point.</returns>
     public static Vector2 BarAnchor(float aspect, float anchorOffsetY) =>
         new(
-        x: (aspect * 0.5f),
-        y: (1f - anchorOffsetY)
-    );
+            x: (aspect * 0.5f),
+            y: (1f - anchorOffsetY)
+        );
 
     /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
     /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's

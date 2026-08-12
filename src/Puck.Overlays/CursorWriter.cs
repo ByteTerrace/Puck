@@ -65,7 +65,8 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
         // the authored ring radius: the center dot rides at roughly a fifth of it, the label clear of the ring.
         var role = (seat.Hover
             ? OverlayColorRole.Accent
-            : seat.Role);
+            : seat.Role
+        );
         var ringRadius = Math.Clamp(
             value: seat.SizePx,
             min: 1f,
@@ -120,7 +121,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
 
     void IOverlaySeatEmitter<OverlayCursorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) =>
         EmitSeat(
-        builder: builder,
-        seat: in seat
-    );
+            builder: builder,
+            seat: in seat
+        );
 }

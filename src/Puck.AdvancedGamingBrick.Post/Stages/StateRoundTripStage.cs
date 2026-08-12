@@ -28,7 +28,11 @@ internal sealed class StateRoundTripStage : IPostStage {
         foreach (var kind in MicroRoms.Kinds) {
             ++total;
 
-            var (pass, _) = StateRoundTripProbe.Run(rom: MicroRoms.GenerateBytes(kind: kind), label: $"micro:{kind}", bios: context.BiosImage);
+            var (pass, _) = StateRoundTripProbe.Run(
+                rom: MicroRoms.GenerateBytes(kind: kind),
+                label: $"micro:{kind}",
+                bios: context.BiosImage
+            );
 
             if (!pass) {
                 ++failures;

@@ -63,12 +63,12 @@ public sealed class ConsolePanelWriter {
         var availableWidth = ((builder.Width - (2f * margin)) - (2f * pad));
         var availableHeight = (((builder.Height * 0.55f) - bandHeight) - (2f * pad));
         var cols = Math.Clamp(
-            value: (int)(availableWidth / cellWidth),
+            value: ((int)(availableWidth / cellWidth)),
             min: 8,
             max: MaxColumns
         );
         var rows = Math.Clamp(
-            value: (int)(availableHeight / cellHeight),
+            value: ((int)(availableHeight / cellHeight)),
             min: 4,
             max: MaxRows
         );

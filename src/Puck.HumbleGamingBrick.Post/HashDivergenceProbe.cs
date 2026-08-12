@@ -80,7 +80,15 @@ internal static class HashDivergenceProbe {
             return 2;
         }
 
-        return Run(romA: romA, romALabel: romALabel, romB: romB, romBLabel: romBLabel, frames: frames, fine: fine, perturbAtFrame: perturbAtFrame);
+        return Run(
+            romA: romA,
+            romALabel: romALabel,
+            romB: romB,
+            romBLabel: romBLabel,
+            frames: frames,
+            fine: fine,
+            perturbAtFrame: perturbAtFrame
+        );
     }
 
     /// <summary>The in-memory counterpart of <see cref="Run(string, string, int, bool, int?)"/>, for callers that
@@ -97,8 +105,14 @@ internal static class HashDivergenceProbe {
     public static int Run(byte[] romA, string romALabel, byte[]? romB, string? romBLabel, int frames, bool fine, int? perturbAtFrame) {
         var model = ModelFromHeader(rom: romA);
 
-        using var hostA = PostMachine.Build(model: model, rom: romA);
-        using var hostB = PostMachine.Build(model: model, rom: (romB ?? romA));
+        using var hostA = PostMachine.Build(
+            model: model,
+            rom: romA
+        );
+        using var hostB = PostMachine.Build(
+            model: model,
+            rom: (romB ?? romA)
+        );
         var machineA = hostA.Machine;
         var machineB = hostB.Machine;
 
@@ -108,7 +122,9 @@ internal static class HashDivergenceProbe {
                 ? $"rom={romALabel} (self-check + deliberate perturbation @frame {perturbAtFrame})"
                 : $"rom={romALabel} (self-check)"));
 
-        Console.WriteLine(value: $"== hash-divergence localizer: {mode} ({model}), {frames} frames{(fine ? ", --fine (per-scanline)" : "")} ==");
+        Console.WriteLine(value: $"== hash-divergence localizer: {mode} ({model}), {frames} frames{(fine
+            ? ", --fine (per-scanline)"
+            : "")} ==");
 
         // Drive both machines against one shared, absolute cumulative cycle target rather than each machine's private
         // pacing accumulator, so a perturbation's snapshot/restore (which reanchors that accumulator) can never desync
@@ -118,15 +134,29 @@ internal static class HashDivergenceProbe {
         for (var frame = 0; (frame < frames); ++frame) {
             if (fine) {
                 for (var scanline = 0; (scanline < ScanlinesPerFrame); ++scanline) {
-                    if ((perturbAtFrame == frame) && (scanline == 0)) {
+                    if (
+                        (perturbAtFrame == frame) &&
+                        (scanline == 0)
+                    ) {
                         Perturb(machine: machineB);
                     }
 
                     target += ScanlineCycles;
-                    RunTo(machine: machineA, target: target);
-                    RunTo(machine: machineB, target: target);
+                    RunTo(
+                        machine: machineA,
+                        target: target
+                    );
+                    RunTo(
+                        machine: machineB,
+                        target: target
+                    );
 
-                    if (!TryCompare(machineA: machineA, machineB: machineB, frame: frame, scanline: scanline)) {
+                    if (!TryCompare(
+                        machineA: machineA,
+                        machineB: machineB,
+                        frame: frame,
+                        scanline: scanline
+                    )) {
                         return 1;
                     }
                 }
@@ -136,10 +166,21 @@ internal static class HashDivergenceProbe {
                 }
 
                 target += (ScanlineCycles * ScanlinesPerFrame);
-                RunTo(machine: machineA, target: target);
-                RunTo(machine: machineB, target: target);
+                RunTo(
+                    machine: machineA,
+                    target: target
+                );
+                RunTo(
+                    machine: machineB,
+                    target: target
+                );
 
-                if (!TryCompare(machineA: machineA, machineB: machineB, frame: frame, scanline: null)) {
+                if (!TryCompare(
+                    machineA: machineA,
+                    machineB: machineB,
+                    frame: frame,
+                    scanline: null
+                )) {
                     return 1;
                 }
             }
@@ -159,7 +200,11 @@ internal static class HashDivergenceProbe {
     /// <param name="b">The second snapshot.</param>
     /// <returns>The one-line localization detail.</returns>
     public static string DescribeDivergence(MachineSnapshot a, MachineSnapshot b) {
-        var diff = SnapshotDivergence.FindFirstDifference(a: a.Data, b: b.Data, sections: a.Sections);
+        var diff = SnapshotDivergence.FindFirstDifference(
+            a: a.Data,
+            b: b.Data,
+            sections: a.Sections
+        );
 
         if (diff is null) {
             return ((a.Identity != b.Identity)
@@ -184,10 +229,15 @@ internal static class HashDivergenceProbe {
             return true;
         }
 
-        var where = ((scanline is not null) ? $"frame {frame} scanline {scanline}" : $"frame {frame}");
+        var where = ((scanline is not null)
+            ? $"frame {frame} scanline {scanline}"
+            : $"frame {frame}");
 
         Console.WriteLine(value: $"== HASH DIVERGENCE at {where}: A=0x{hashA:X16}  B=0x{hashB:X16} ==");
-        PrintDivergenceReport(a: snapshotA, b: snapshotB);
+        PrintDivergenceReport(
+            a: snapshotA,
+            b: snapshotB
+        );
 
         return false;
     }
@@ -195,9 +245,16 @@ internal static class HashDivergenceProbe {
     // The fine localizer's console form: prints the one-line component/offset detail, then a short hex window of both
     // sides around the first differing byte.
     private static void PrintDivergenceReport(MachineSnapshot a, MachineSnapshot b) {
-        Console.WriteLine(value: $"  {DescribeDivergence(a: a, b: b)}");
+        Console.WriteLine(value: $"  {DescribeDivergence(
+            a: a,
+            b: b
+        )}");
 
-        var diff = SnapshotDivergence.FindFirstDifference(a: a.Data, b: b.Data, sections: a.Sections);
+        var diff = SnapshotDivergence.FindFirstDifference(
+            a: a.Data,
+            b: b.Data,
+            sections: a.Sections
+        );
 
         if (diff is null) {
             return;
@@ -205,8 +262,16 @@ internal static class HashDivergenceProbe {
 
         var (_, _, absoluteOffset) = diff.Value;
 
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(label: "A", data: a.Data, offset: absoluteOffset));
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(label: "B", data: b.Data, offset: absoluteOffset));
+        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
+            label: "A",
+            data: a.Data,
+            offset: absoluteOffset
+        ));
+        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
+            label: "B",
+            data: b.Data,
+            offset: absoluteOffset
+        ));
     }
 
     // Corrupts one work-RAM byte in `machine` without spending any bus cycle: snapshot it, flip a byte inside the
@@ -215,10 +280,16 @@ internal static class HashDivergenceProbe {
     // observable change is the one flipped byte — a surgical, deterministic divergence for testing the localizer.
     private static void Perturb(Machine machine) {
         var snapshot = machine.Snapshot();
-        var section = FindSectionByName(sections: snapshot.Sections, name: PerturbSectionName);
+        var section = FindSectionByName(
+            sections: snapshot.Sections,
+            name: PerturbSectionName
+        );
         var absoluteOffset = (section.Offset + PerturbSectionOffset);
         var current = snapshot.Data[absoluteOffset];
-        var poked = snapshot.WithPokedByte(offset: absoluteOffset, value: (byte)(current ^ 0xFF));
+        var poked = snapshot.WithPokedByte(
+            offset: absoluteOffset,
+            value: (byte)(current ^ 0xFF)
+        );
 
         machine.Restore(snapshot: poked);
     }
@@ -249,5 +320,7 @@ internal static class HashDivergenceProbe {
         }
     }
     private static ConsoleModel ModelFromHeader(byte[] rom) =>
-        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80))) ? ConsoleModel.Cgb : ConsoleModel.Dmg);
+        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
+        ? ConsoleModel.Cgb
+        : ConsoleModel.Dmg);
 }

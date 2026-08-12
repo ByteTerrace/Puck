@@ -56,7 +56,9 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
         // Reads return the committed [0] stage — not the just-written value.
         0x200u => m_enable0,
         0x202u => m_flag0,
-        0x208u => (ushort)(m_ime0 ? 1u : 0u),
+        0x208u => (ushort)(m_ime0
+        ? 1u
+        : 0u),
         _ => 0,
     };
 

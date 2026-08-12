@@ -53,9 +53,20 @@ internal static class BessScope {
         var scratch = new StateWriter(capacity: Sm83StateCodec.ByteCount);
         var scratchBuffer = new byte[Sm83StateCodec.ByteCount];
 
-        Sm83StateCodec.ReadTail(cpu: cpu, scratch: scratch, buffer: scratchBuffer, halted: out var halted, ime: out var ime, eiPending: out _);
+        Sm83StateCodec.ReadTail(
+            cpu: cpu,
+            scratch: scratch,
+            buffer: scratchBuffer,
+            halted: out var halted,
+            ime: out var ime,
+            eiPending: out _
+        );
 
-        var executionState = (byte)(key1.IsStopped ? 2 : (halted ? 1 : 0));
+        var executionState = (byte)(key1.IsStopped
+            ? 2
+            : (halted
+                ? 1
+                : 0));
         var isColor = model.SupportsColor();
 
         return new BessScopeCapture(
@@ -68,14 +79,44 @@ internal static class BessScope {
             Ime: ime,
             Ie: (byte)interrupts.Enabled,
             ExecutionState: executionState,
-            RegisterPage: ReadRange(bus: bus, start: MemoryMap.IoRegistersStart, length: Bess.RegisterPageLength),
-            Ram: ReadRange(bus: bus, start: MemoryMap.WorkRamBank0Start, length: 0x2000),
-            Vram: ReadRange(bus: bus, start: MemoryMap.VideoRamStart, length: 0x2000),
+            RegisterPage: ReadRange(
+                bus: bus,
+                start: MemoryMap.IoRegistersStart,
+                length: Bess.RegisterPageLength
+            ),
+            Ram: ReadRange(
+                bus: bus,
+                start: MemoryMap.WorkRamBank0Start,
+                length: 0x2000
+            ),
+            Vram: ReadRange(
+                bus: bus,
+                start: MemoryMap.VideoRamStart,
+                length: 0x2000
+            ),
             MbcRam: cartridge.ExportExternalRam(),
-            Oam: ReadRange(bus: bus, start: MemoryMap.ObjectAttributeMemoryStart, length: 0xA0),
-            Hram: ReadRange(bus: bus, start: MemoryMap.HighRamStart, length: 0x7F),
-            BackgroundPalette: (isColor ? ReadColorPalette(bus: bus, registers: BackgroundPaletteRegisters) : []),
-            ObjectPalette: (isColor ? ReadColorPalette(bus: bus, registers: ObjectPaletteRegisters) : [])
+            Oam: ReadRange(
+                bus: bus,
+                start: MemoryMap.ObjectAttributeMemoryStart,
+                length: 0xA0
+            ),
+            Hram: ReadRange(
+                bus: bus,
+                start: MemoryMap.HighRamStart,
+                length: 0x7F
+            ),
+            BackgroundPalette: (isColor
+            ? ReadColorPalette(
+                bus: bus,
+                registers: BackgroundPaletteRegisters
+            )
+            : []),
+            ObjectPalette: (isColor
+            ? ReadColorPalette(
+                bus: bus,
+                registers: ObjectPaletteRegisters
+            )
+            : [])
         );
     }
     /// <summary>Fingerprints exactly the bytes an export/import round trip is expected to preserve — the register page
@@ -92,11 +133,11 @@ internal static class BessScope {
     public static ulong Fingerprint(BessScopeCapture capture) {
         var maskedPage = (byte[])capture.RegisterPage.Clone();
 
-        maskedPage[MemoryMap.OamDmaSource - MemoryMap.IoRegistersStart] = 0;
-        maskedPage[MemoryMap.HdmaControl - MemoryMap.IoRegistersStart] = 0;
-        maskedPage[MemoryMap.LcdStatus - MemoryMap.IoRegistersStart] &= 0xF8;
-        maskedPage[MemoryMap.LcdY - MemoryMap.IoRegistersStart] = 0;
-        maskedPage[MemoryMap.AudioMasterControl - MemoryMap.IoRegistersStart] &= 0xF0;
+        maskedPage[(MemoryMap.OamDmaSource - MemoryMap.IoRegistersStart)] = 0;
+        maskedPage[(MemoryMap.HdmaControl - MemoryMap.IoRegistersStart)] = 0;
+        maskedPage[(MemoryMap.LcdStatus - MemoryMap.IoRegistersStart)] &= 0xF8;
+        maskedPage[(MemoryMap.LcdY - MemoryMap.IoRegistersStart)] = 0;
+        maskedPage[(MemoryMap.AudioMasterControl - MemoryMap.IoRegistersStart)] &= 0xF0;
 
         var writer = new StateWriter();
 
@@ -139,11 +180,17 @@ internal static class BessScope {
         var palette = new byte[0x40];
 
         for (var index = 0; (index < palette.Length); ++index) {
-            bus.WriteByte(address: registers.Index, value: (byte)index);
+            bus.WriteByte(
+                address: registers.Index,
+                value: (byte)index
+            );
             palette[index] = bus.ReadByte(address: registers.Data);
         }
 
-        bus.WriteByte(address: registers.Index, value: original);
+        bus.WriteByte(
+            address: registers.Index,
+            value: original
+        );
 
         return palette;
     }
@@ -157,10 +204,19 @@ internal static class BessScope {
         }
 
         for (var index = 0; (index < palette.Length); ++index) {
-            bus.WriteByte(address: registers.Index, value: (byte)index);
-            bus.WriteByte(address: registers.Data, value: palette[index]);
+            bus.WriteByte(
+                address: registers.Index,
+                value: (byte)index
+            );
+            bus.WriteByte(
+                address: registers.Data,
+                value: palette[index]
+            );
         }
 
-        bus.WriteByte(address: registers.Index, value: finalIndexRegister);
+        bus.WriteByte(
+            address: registers.Index,
+            value: finalIndexRegister
+        );
     }
 }

@@ -9,7 +9,10 @@ public sealed class RomOnlyCartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public RomOnlyCartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) { }
+        : base(
+        rom: rom,
+        header: header
+    ) { }
 
     /// <inheritdoc/>
     protected override bool RamAccessible =>

@@ -55,7 +55,7 @@ public sealed record OverlayServices {
     public static OverlayServices Build(IServiceProvider serviceProvider, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        T Resolve<T>() => (T)serviceProvider.GetService(serviceType: typeof(T))!;
+        T Resolve<T>() => ((T)serviceProvider.GetService(serviceType: typeof(T))!);
 
         var deviceContext = Resolve<IGpuDeviceContext>();
         var renderTargetFactory = Resolve<IGpuRenderTargetFactory>();

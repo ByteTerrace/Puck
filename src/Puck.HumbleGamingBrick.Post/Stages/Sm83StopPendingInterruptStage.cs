@@ -62,8 +62,14 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage {
         using var machine = BuildMachine();
         var bus = machine.GetRequiredService<ISystemBus>();
 
-        bus.WriteByte(address: MemoryMap.InterruptEnable, value: (byte)InterruptKind.VBlank);
-        bus.WriteByte(address: MemoryMap.InterruptFlag, value: (byte)InterruptKind.VBlank);
+        bus.WriteByte(
+            address: MemoryMap.InterruptEnable,
+            value: (byte)InterruptKind.VBlank
+        );
+        bus.WriteByte(
+            address: MemoryMap.InterruptFlag,
+            value: (byte)InterruptKind.VBlank
+        );
 
         machine.Machine.StepInstruction();
 
@@ -82,8 +88,14 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage {
     private static MachineInstance BuildMachine() {
         var rom = new byte[0x8000];
 
-        Program.CopyTo(array: rom, index: 0x0100);
+        Program.CopyTo(
+            array: rom,
+            index: 0x0100
+        );
 
-        return PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        return PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
     }
 }

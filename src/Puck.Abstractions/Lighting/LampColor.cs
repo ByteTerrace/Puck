@@ -44,12 +44,13 @@ public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte In
             ? 0f
             : ((scale > 1f)
                 ? 1f
-                : scale));
+                : scale
+        ));
 
         return this with {
-            Red = (byte)(Red * clamped),
-            Green = (byte)(Green * clamped),
-            Blue = (byte)(Blue * clamped),
+            Red = ((byte)(Red * clamped)),
+            Green = ((byte)(Green * clamped)),
+            Blue = ((byte)(Blue * clamped)),
         };
     }
 }

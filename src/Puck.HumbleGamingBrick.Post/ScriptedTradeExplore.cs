@@ -1,5 +1,5 @@
-using Puck.Recording.Capture;
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Recording.Capture;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -26,8 +26,18 @@ internal static class ScriptedTradeExplore {
         // --trade-export [--out DIR]: write the two crafted trade saves (side A RATTATA, side B PIDGEY) + a README to an
         // artifacts location the demo can point per-cabinet saves at. No ROM is needed because the save is a pure
         // function of the crafted trainers.
-        if (Array.IndexOf(array: args, value: "--trade-export") >= 0) {
-            ExportSaves(outDir: (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: "artifacts", path2: "gb-post", path3: "trade-saves")));
+        if (Array.IndexOf(
+            array: args,
+            value: "--trade-export"
+        ) >= 0) {
+            ExportSaves(outDir: (CommandLineArguments.Value(
+                args: args,
+                name: "--out"
+            ) ?? Path.Combine(
+                path1: "artifacts",
+                path2: "gb-post",
+                path3: "trade-saves"
+            )));
 
             return true;
         }
@@ -40,12 +50,20 @@ internal static class ScriptedTradeExplore {
         // halt/loop" (a handful of PCs).
         // --trade-talk <rom>: continue, tap UP to face the crafted receptionist, then mash A — logging facing, the
         // receptionist object, and script/link state each step to see whether the interaction fires.
-        var talkIndex = Array.IndexOf(array: args, value: "--trade-talk");
+        var talkIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-talk"
+        );
 
         if (talkIndex >= 0) {
-            var talkRom = (((talkIndex + 1) < args.Length) ? args[(talkIndex + 1)] : null);
+            var talkRom = (((talkIndex + 1) < args.Length)
+                ? args[(talkIndex + 1)]
+                : null);
 
-            if ((talkRom is null) || !File.Exists(path: talkRom)) {
+            if (
+                (talkRom is null) ||
+                !File.Exists(path: talkRom)
+            ) {
                 Console.WriteLine(value: "  --trade-talk needs a trade-cart ROM path");
 
                 return true;
@@ -60,12 +78,20 @@ internal static class ScriptedTradeExplore {
         // (0,7) down-stairs (dest POKECENTER_2F / warp -1, the dynamic "return to backup" warp) re-enters POKECENTER_2F via
         // MapSetupScript_Warp (SpawnPlayer + LoadMapObjects), spawning the receptionists the CONTINUE path skips. Walk the
         // player to (0,7), step the warp, and report whether wObject1Struct (the receptionist) came alive.
-        var warpIndex = Array.IndexOf(array: args, value: "--trade-warp");
+        var warpIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-warp"
+        );
 
         if (warpIndex >= 0) {
-            var warpRom = (((warpIndex + 1) < args.Length) ? args[(warpIndex + 1)] : null);
+            var warpRom = (((warpIndex + 1) < args.Length)
+                ? args[(warpIndex + 1)]
+                : null);
 
-            if ((warpRom is null) || !File.Exists(path: warpRom)) {
+            if (
+                (warpRom is null) ||
+                !File.Exists(path: warpRom)
+            ) {
                 Console.WriteLine(value: "  --trade-warp needs a trade-cart ROM path");
 
                 return true;
@@ -80,12 +106,20 @@ internal static class ScriptedTradeExplore {
         // CONTINUE through the post-E4 WARP entry path (MapSetupScript_Warp -> SpawnPlayer + LoadMapObjects) so the game
         // fully populates wObjectStructs + wMapObjects from ROM — a clean source to capture a real, active standing player
         // object struct (and NPC structs) to bake into the crafted save (the CONTINUE path never spawns them).
-        var capIndex = Array.IndexOf(array: args, value: "--trade-capture");
+        var capIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-capture"
+        );
 
         if (capIndex >= 0) {
-            var capRom = (((capIndex + 1) < args.Length) ? args[(capIndex + 1)] : null);
+            var capRom = (((capIndex + 1) < args.Length)
+                ? args[(capIndex + 1)]
+                : null);
 
-            if ((capRom is null) || !File.Exists(path: capRom)) {
+            if (
+                (capRom is null) ||
+                !File.Exists(path: capRom)
+            ) {
                 Console.WriteLine(value: "  --trade-capture needs a trade-cart ROM path");
 
                 return true;
@@ -98,12 +132,20 @@ internal static class ScriptedTradeExplore {
 
         // --trade-diff <rom>: continue to overworld, then report which HRAM/WRAM bytes change over one idle frame (liveness)
         // and which change when a button is held (input reach) — address-agnostic freeze diagnosis.
-        var diffIndex = Array.IndexOf(array: args, value: "--trade-diff");
+        var diffIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-diff"
+        );
 
         if (diffIndex >= 0) {
-            var diffRom = (((diffIndex + 1) < args.Length) ? args[(diffIndex + 1)] : null);
+            var diffRom = (((diffIndex + 1) < args.Length)
+                ? args[(diffIndex + 1)]
+                : null);
 
-            if ((diffRom is null) || !File.Exists(path: diffRom)) {
+            if (
+                (diffRom is null) ||
+                !File.Exists(path: diffRom)
+            ) {
                 Console.WriteLine(value: "  --trade-diff needs a trade-cart ROM path");
 
                 return true;
@@ -114,28 +156,50 @@ internal static class ScriptedTradeExplore {
             return true;
         }
 
-        var pcIndex = Array.IndexOf(array: args, value: "--trade-pc");
+        var pcIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-pc"
+        );
 
         if (pcIndex >= 0) {
-            var pcRom = (((pcIndex + 1) < args.Length) ? args[(pcIndex + 1)] : null);
+            var pcRom = (((pcIndex + 1) < args.Length)
+                ? args[(pcIndex + 1)]
+                : null);
 
-            if ((pcRom is null) || !File.Exists(path: pcRom)) {
+            if (
+                (pcRom is null) ||
+                !File.Exists(path: pcRom)
+            ) {
                 Console.WriteLine(value: "  --trade-pc needs a trade-cart ROM path");
 
                 return true;
             }
 
-            ProbePc(rom: File.ReadAllBytes(path: pcRom), hold: (CommandLineArguments.Value(args: args, name: "--hold") ?? "Down"));
+            ProbePc(
+                rom: File.ReadAllBytes(path: pcRom),
+                hold: (CommandLineArguments.Value(
+                    args: args,
+                    name: "--hold"
+                ) ?? "Down")
+            );
 
             return true;
         }
 
-        var tradeIndex = Array.IndexOf(array: args, value: "--trade-run");
+        var tradeIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-run"
+        );
 
         if (tradeIndex >= 0) {
-            var tradeRom = (((tradeIndex + 1) < args.Length) ? args[(tradeIndex + 1)] : null);
+            var tradeRom = (((tradeIndex + 1) < args.Length)
+                ? args[(tradeIndex + 1)]
+                : null);
 
-            if ((tradeRom is null) || !File.Exists(path: tradeRom)) {
+            if (
+                (tradeRom is null) ||
+                !File.Exists(path: tradeRom)
+            ) {
                 Console.WriteLine(value: "  --trade-run needs a trade-cart ROM path");
 
                 return true;
@@ -143,63 +207,131 @@ internal static class ScriptedTradeExplore {
 
             RunTrade(
                 rom: File.ReadAllBytes(path: tradeRom),
-                dumpEvery: IntArg(args: args, name: "--dump-every", fallback: 60),
-                outDir: (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-run"))
+                dumpEvery: IntArg(
+                    args: args,
+                    name: "--dump-every",
+                    fallback: 60
+                ),
+                outDir: (CommandLineArguments.Value(
+                    args: args,
+                    name: "--out"
+                ) ?? Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: "trade-run"
+                ))
             );
 
             return true;
         }
 
-        var index = Array.IndexOf(array: args, value: "--trade-explore");
+        var index = Array.IndexOf(
+            array: args,
+            value: "--trade-explore"
+        );
 
         if (index < 0) {
             return false;
         }
 
-        var romPath = (((index + 1) < args.Length) ? args[(index + 1)] : null);
+        var romPath = (((index + 1) < args.Length)
+            ? args[(index + 1)]
+            : null);
 
-        if ((romPath is null) || !File.Exists(path: romPath)) {
+        if (
+            (romPath is null) ||
+            !File.Exists(path: romPath)
+        ) {
             Console.WriteLine(value: "  --trade-explore needs a trade-cart ROM path");
 
             return true;
         }
 
         var rom = File.ReadAllBytes(path: romPath);
-        var frames = IntArg(args: args, name: "--frames", fallback: 1200);
-        var dumpEvery = IntArg(args: args, name: "--dump-every", fallback: 120);
-        var outDir = (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine(path1: Path.GetTempPath(), path2: "trade-explore"));
-        var linked = (Array.IndexOf(array: args, value: "--linked") >= 0);
+        var frames = IntArg(
+            args: args,
+            name: "--frames",
+            fallback: 1200
+        );
+        var dumpEvery = IntArg(
+            args: args,
+            name: "--dump-every",
+            fallback: 120
+        );
+        var outDir = (CommandLineArguments.Value(
+            args: args,
+            name: "--out"
+        ) ?? Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "trade-explore"
+        ));
+        var linked = (Array.IndexOf(
+            array: args,
+            value: "--linked"
+        ) >= 0);
 
-        s_spawnOverride = CommandLineArguments.Value(args: args, name: "--spawn");
+        SpawnOverride = CommandLineArguments.Value(
+            args: args,
+            name: "--spawn"
+        );
 
-        var bootRomPath = CommandLineArguments.Value(args: args, name: "--bootrom");
+        var bootRomPath = CommandLineArguments.Value(
+            args: args,
+            name: "--bootrom"
+        );
 
-        s_bootRom = (((bootRomPath is not null) && File.Exists(path: bootRomPath)) ? File.ReadAllBytes(path: bootRomPath) : null);
-        s_model = (CommandLineArguments.Value(args: args, name: "--model")?.ToLowerInvariant()) switch {
+        BootRom = (((bootRomPath is not null) && File.Exists(path: bootRomPath))
+            ? File.ReadAllBytes(path: bootRomPath)
+            : null);
+        s_model = (CommandLineArguments.Value(
+            args: args,
+            name: "--model"
+        )?.ToLowerInvariant()) switch {
             "dmg" => ConsoleModel.Dmg,
             "agb" => ConsoleModel.Agb,
             _ => ConsoleModel.Cgb,
         };
 
-        var scriptA = LoadScript(path: CommandLineArguments.Value(args: args, name: "--scriptA"));
-        var scriptB = LoadScript(path: CommandLineArguments.Value(args: args, name: "--scriptB"));
+        var scriptA = LoadScript(path: CommandLineArguments.Value(
+            args: args,
+            name: "--scriptA"
+        ));
+        var scriptB = LoadScript(path: CommandLineArguments.Value(
+            args: args,
+            name: "--scriptB"
+        ));
 
         Directory.CreateDirectory(path: outDir);
 
         if (linked) {
-            RunLinked(rom: rom, scriptA: scriptA, scriptB: scriptB, frames: frames, dumpEvery: dumpEvery, outDir: outDir);
+            RunLinked(
+                rom: rom,
+                scriptA: scriptA,
+                scriptB: scriptB,
+                frames: frames,
+                dumpEvery: dumpEvery,
+                outDir: outDir
+            );
         } else {
-            RunLone(rom: rom, script: scriptA, frames: frames, dumpEvery: dumpEvery, outDir: outDir);
+            RunLone(
+                rom: rom,
+                script: scriptA,
+                frames: frames,
+                dumpEvery: dumpEvery,
+                outDir: outDir
+            );
         }
 
         return true;
     }
 
-    private static string? s_spawnOverride;
-    private static byte[]? s_bootRom;
+    private static string? SpawnOverride;
+    private static byte[]? BootRom;
 
     private static void ProbeTalk(byte[] rom) {
-        using var machine = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
+        using var machine = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
 
         var joypad = machine.GetRequiredService<IJoypad>();
         var bus = machine.GetRequiredService<ISystemBus>();
@@ -223,8 +355,14 @@ internal static class ScriptedTradeExplore {
         }
 
         Log(tag: "spawned");
-        Run(b: JoypadButtons.Up, frames: 2);
-        Run(b: JoypadButtons.None, frames: 4);
+        Run(
+            b: JoypadButtons.Up,
+            frames: 2
+        );
+        Run(
+            b: JoypadButtons.None,
+            frames: 4
+        );
         Log(tag: "faced-up");
 
         var cpu = machine.GetRequiredService<Puck.HumbleGamingBrick.Interfaces.ICpu>();
@@ -241,12 +379,26 @@ internal static class ScriptedTradeExplore {
                 rgba[((p * 4) + 3)] = 0xFF;
             }
 
-            PngEncoder.Write(path: Path.Combine(path1: Path.GetTempPath(), path2: name), rgba: rgba, width: fb.Width, height: fb.Height);
+            PngEncoder.Write(
+                path: Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: name
+                ),
+                rgba: rgba,
+                width: fb.Width,
+                height: fb.Height
+            );
         }
 
         for (var tap = 0; (tap < 10); ++tap) {
-            Run(b: JoypadButtons.A, frames: 2);
-            Run(b: JoypadButtons.None, frames: 6);
+            Run(
+                b: JoypadButtons.A,
+                frames: 2
+            );
+            Run(
+                b: JoypadButtons.None,
+                frames: 6
+            );
             Log(tag: $"A#{tap} PC={cpu.ProgramCounter:X4} SP={cpu.StackPointer:X4}");
             DumpFb(name: $"trade-talk-{tap}.png");
         }
@@ -271,7 +423,10 @@ internal static class ScriptedTradeExplore {
         save[0x2079] = mx; save[0x207A] = my; // InitX/InitY
         TradeSaveFactory.RewriteChecksum(saveFile: save);
 
-        using var machine = ScriptedTradeHarness.BuildFromSave(rom: rom, save: save);
+        using var machine = ScriptedTradeHarness.BuildFromSave(
+            rom: rom,
+            save: save
+        );
 
         var joypad = machine.GetRequiredService<IJoypad>();
         var bus = machine.GetRequiredService<ISystemBus>();
@@ -296,14 +451,24 @@ internal static class ScriptedTradeExplore {
         // Walk toward the (0,7) stairs. Movement is a continuous hold (~16 frames/step); log the path in 16-frame slices.
         void WalkLog(JoypadButtons b, string tag, int steps) {
             for (var s = 0; (s < steps); ++s) {
-                Hold(b: b, frames: 16);
+                Hold(
+                    b: b,
+                    frames: 16
+                );
                 Console.WriteLine(value: $"    {tag}[{s}] yx={Y():X2},{X():X2} map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2}");
             }
         }
 
-        WalkLog(b: JoypadButtons.Left, tag: "LEFT", steps: 6);
+        WalkLog(
+            b: JoypadButtons.Left,
+            tag: "LEFT",
+            steps: 6
+        );
 
-        Hold(b: JoypadButtons.None, frames: 60);
+        Hold(
+            b: JoypadButtons.None,
+            frames: 60
+        );
 
         var recSprite = bus.ReadByte(address: 0xD225); // wObject1Struct sprite ($D225).
         var recSprite2 = bus.ReadByte(address: (ushort)(0xD225 + 40)); // wObject2Struct.
@@ -318,7 +483,10 @@ internal static class ScriptedTradeExplore {
         save[0x2043] = 1;
         TradeSaveFactory.RewriteChecksum(saveFile: save);
 
-        using var machine = ScriptedTradeHarness.BuildFromSave(rom: rom, save: save);
+        using var machine = ScriptedTradeHarness.BuildFromSave(
+            rom: rom,
+            save: save
+        );
 
         var joypad = machine.GetRequiredService<IJoypad>();
         var bus = machine.GetRequiredService<ISystemBus>();
@@ -343,11 +511,22 @@ internal static class ScriptedTradeExplore {
             return buffer;
         }
 
-        var structs = Read(b: bus, start: 0xD1FD, length: (13 * 40));
-        var mapObjects = Read(b: bus, start: 0xD445, length: (16 * 16));
+        var structs = Read(
+            b: bus,
+            start: 0xD1FD,
+            length: (13 * 40)
+        );
+        var mapObjects = Read(
+            b: bus,
+            start: 0xD445,
+            length: (16 * 16)
+        );
 
         for (var obj = 0; (obj < 13); ++obj) {
-            var s = structs.AsSpan(start: (obj * 40), length: 40);
+            var s = structs.AsSpan(
+                start: (obj * 40),
+                length: 40
+            );
 
             if (s[0] == 0) {
                 continue; // sprite 0 = inactive slot.
@@ -357,7 +536,10 @@ internal static class ScriptedTradeExplore {
         }
 
         for (var obj = 0; (obj < 16); ++obj) {
-            var m = mapObjects.AsSpan(start: (obj * 16), length: 16);
+            var m = mapObjects.AsSpan(
+                start: (obj * 16),
+                length: 16
+            );
 
             if (m[1] == 0) {
                 continue;
@@ -367,7 +549,10 @@ internal static class ScriptedTradeExplore {
         }
     }
     private static void ProbeDiff(byte[] rom) {
-        using var machine = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
+        using var machine = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
 
         var joypad = machine.GetRequiredService<IJoypad>();
         var bus = machine.GetRequiredService<ISystemBus>();
@@ -397,7 +582,10 @@ internal static class ScriptedTradeExplore {
                 }
             }
 
-            Console.WriteLine(value: $"  {tag}: {changes.Count} changed  {string.Join(separator: " ", values: changes.Take(count: 40))}");
+            Console.WriteLine(value: $"  {tag}: {changes.Count} changed  {string.Join(
+                separator: " ",
+                values: changes.Take(count: 40)
+            )}");
         }
 
         // OAM sprite population: count non-blank sprites ($FE00-$FE9F, 40 * 4 bytes; a sprite with Y in 1..159 is on screen).
@@ -406,7 +594,10 @@ internal static class ScriptedTradeExplore {
         for (var sprite = 0; (sprite < 40); ++sprite) {
             var y = bus.ReadByte(address: (ushort)(0xFE00 + (sprite * 4)));
 
-            if ((y > 0) && (y < 160)) {
+            if (
+                (y > 0) &&
+                (y < 160)
+            ) {
                 ++oamSprites;
             }
         }
@@ -428,7 +619,11 @@ internal static class ScriptedTradeExplore {
         joypad.SetButtons(pressed: JoypadButtons.None);
         machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
 
-        Diff(tag: "idle-frame", before: idle0, after: Snap(b: bus));
+        Diff(
+            tag: "idle-frame",
+            before: idle0,
+            after: Snap(b: bus)
+        );
 
         // Input reach: hold DOWN for 4 frames from the settled state.
         var pre = Snap(b: bus);
@@ -438,13 +633,20 @@ internal static class ScriptedTradeExplore {
             machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
         }
 
-        Diff(tag: "hold-down-4f", before: pre, after: Snap(b: bus));
+        Diff(
+            tag: "hold-down-4f",
+            before: pre,
+            after: Snap(b: bus)
+        );
     }
 
     // Continue to the overworld, hold a button, and histogram the CPU PC over a long instruction window to see whether the
     // overworld main loop is actually running.
     private static void ProbePc(byte[] rom, string hold) {
-        using var machine = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
+        using var machine = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
 
         var joypad = machine.GetRequiredService<IJoypad>();
         var cpu = machine.GetRequiredService<Puck.HumbleGamingBrick.Interfaces.ICpu>();
@@ -455,13 +657,49 @@ internal static class ScriptedTradeExplore {
             machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
         }
 
-        Console.WriteLine(value: $"  after continue: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(machine: machine, address: 0xDA02):X2},{ScriptedTradeHarness.Peek(machine: machine, address: 0xDA03):X2}");
+        Console.WriteLine(value: $"  after continue: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA02
+        ):X2},{ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA03
+        ):X2}");
 
         static string StateLine(MachineInstance m) =>
-            ((($"yx={ScriptedTradeHarness.Peek(machine: m, address: 0xDA02):X2},{ScriptedTradeHarness.Peek(machine: m, address: 0xDA03):X2} "
-            + $"pState={ScriptedTradeHarness.Peek(machine: m, address: 0xD682):X2} pDir={ScriptedTradeHarness.Peek(machine: m, address: 0xD205):X2} pFacing={ScriptedTradeHarness.Peek(machine: m, address: 0xD20A):X2} ")
-            + $"linkMode={ScriptedTradeHarness.Peek(machine: m, address: 0xD042):X2} scriptVar={ScriptedTradeHarness.Peek(machine: m, address: 0xD173):X2} ")
-            + $"vblank={ScriptedTradeHarness.Peek(machine: m, address: 0xFF8C):X2} hJoypadDown={ScriptedTradeHarness.Peek(machine: m, address: 0xFF9C):X2} hJoyDown={ScriptedTradeHarness.Peek(machine: m, address: 0xFFA0):X2}");
+            ((($"yx={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xDA02
+        ):X2},{ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xDA03
+        ):X2} "
+            + $"pState={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xD682
+        ):X2} pDir={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xD205
+        ):X2} pFacing={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xD20A
+        ):X2} ")
+            + $"linkMode={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xD042
+        ):X2} scriptVar={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xD173
+        ):X2} ")
+            + $"vblank={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xFF8C
+        ):X2} hJoypadDown={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xFF9C
+        ):X2} hJoyDown={ScriptedTradeHarness.Peek(
+            machine: m,
+            address: 0xFFA0
+        ):X2}");
 
         Console.WriteLine(value: $"  no-input : {StateLine(m: machine)}");
 
@@ -482,12 +720,17 @@ internal static class ScriptedTradeExplore {
 
         var histogram = new Dictionary<ushort, int>();
         var haltCount = 0;
-        const int steps = 400_000;
+        const int Steps = 400_000;
 
-        for (var step = 0; (step < steps); ++step) {
+        for (var step = 0; (step < Steps); ++step) {
             var pc = cpu.ProgramCounter;
 
-            histogram[pc] = (histogram.TryGetValue(key: pc, value: out var count) ? (count + 1) : 1);
+            histogram[pc] = (histogram.TryGetValue(
+                key: pc,
+                value: out var count
+            )
+                ? (count + 1)
+                : 1);
 
             if (cpu.IsHalted) {
                 ++haltCount;
@@ -496,8 +739,14 @@ internal static class ScriptedTradeExplore {
             machine.Machine.StepInstruction();
         }
 
-        Console.WriteLine(value: $"  holding {hold}: {steps} instructions, {histogram.Count} distinct PCs, halted at {haltCount} samples ({((100.0 * haltCount) / steps):F1}%)");
-        Console.WriteLine(value: $"  after window: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(machine: machine, address: 0xDA02):X2},{ScriptedTradeHarness.Peek(machine: machine, address: 0xDA03):X2}");
+        Console.WriteLine(value: $"  holding {hold}: {Steps} instructions, {histogram.Count} distinct PCs, halted at {haltCount} samples ({((100.0 * haltCount) / Steps):F1}%)");
+        Console.WriteLine(value: $"  after window: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA02
+        ):X2},{ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA03
+        ):X2}");
 
         foreach (var entry in histogram.OrderByDescending(keySelector: e => e.Value).Take(count: 20)) {
             Console.WriteLine(value: $"    PC 0x{entry.Key:X4}: {entry.Value}");
@@ -516,23 +765,63 @@ internal static class ScriptedTradeExplore {
         var result = ScriptedTradeDriver.Run(
             rom: rom,
             onFrame: frame => {
-                if (!Equals(objA: frame.Phase, objB: lastPhase)) {
+                if (!Equals(
+                    objA: frame.Phase,
+                    objB: lastPhase
+                )) {
                     Console.WriteLine(value: $"  [{frame.Frame:D5}] -> phase {frame.Phase} (A status=0x{ScriptedTradeHarness.ConnectionStatus(machine: frame.Driver.MachineA):X2} B status=0x{ScriptedTradeHarness.ConnectionStatus(machine: frame.Driver.MachineB):X2} A map={ScriptedTradeHarness.LiveMapGroup(machine: frame.Driver.MachineA):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: frame.Driver.MachineA):X2} B map={ScriptedTradeHarness.LiveMapGroup(machine: frame.Driver.MachineB):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: frame.Driver.MachineB):X2})");
                     lastPhase = frame.Phase;
                 }
 
-                var logEvery = (string.Equals(a: frame.Phase.ToString(), b: "Approach", comparisonType: StringComparison.Ordinal) ? 16 : 80);
+                var logEvery = (string.Equals(
+                    a: frame.Phase.ToString(),
+                    b: "Approach",
+                    comparisonType: StringComparison.Ordinal
+                )
+                    ? 16
+                    : 80);
 
                 if (((frame.Frame + 1) % logEvery) == 0) {
                     var a = frame.Driver.MachineA;
                     var b = frame.Driver.MachineB;
 
-                    Console.WriteLine(value: $"    [{frame.Frame:D5}] {frame.Phase} statA={ScriptedTradeHarness.ConnectionStatus(machine: a):X2} statB={ScriptedTradeHarness.ConnectionStatus(machine: b):X2} linkA={ScriptedTradeHarness.Peek(machine: a, address: 0xD042):X2}/{ScriptedTradeHarness.Peek(machine: b, address: 0xD042):X2} ayx={ScriptedTradeHarness.Peek(machine: a, address: 0xDA02):X2},{ScriptedTradeHarness.Peek(machine: a, address: 0xDA03):X2} aDir={ScriptedTradeHarness.Peek(machine: a, address: 0xD205):X2} byx={ScriptedTradeHarness.Peek(machine: b, address: 0xDA02):X2},{ScriptedTradeHarness.Peek(machine: b, address: 0xDA03):X2} mapA={ScriptedTradeHarness.LiveMapGroup(machine: a):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: a):X2}");
+                    Console.WriteLine(value: $"    [{frame.Frame:D5}] {frame.Phase} statA={ScriptedTradeHarness.ConnectionStatus(machine: a):X2} statB={ScriptedTradeHarness.ConnectionStatus(machine: b):X2} linkA={ScriptedTradeHarness.Peek(
+                        machine: a,
+                        address: 0xD042
+                    ):X2}/{ScriptedTradeHarness.Peek(
+                        machine: b,
+                        address: 0xD042
+                    ):X2} ayx={ScriptedTradeHarness.Peek(
+                        machine: a,
+                        address: 0xDA02
+                    ):X2},{ScriptedTradeHarness.Peek(
+                        machine: a,
+                        address: 0xDA03
+                    ):X2} aDir={ScriptedTradeHarness.Peek(
+                        machine: a,
+                        address: 0xD205
+                    ):X2} byx={ScriptedTradeHarness.Peek(
+                        machine: b,
+                        address: 0xDA02
+                    ):X2},{ScriptedTradeHarness.Peek(
+                        machine: b,
+                        address: 0xDA03
+                    ):X2} mapA={ScriptedTradeHarness.LiveMapGroup(machine: a):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: a):X2}");
                 }
 
                 if (((frame.Frame + 1) % dumpEvery) == 0) {
-                    Dump(machine: frame.Driver.MachineA, outDir: outDir, tag: "A", frame: (frame.Frame + 1));
-                    Dump(machine: frame.Driver.MachineB, outDir: outDir, tag: "B", frame: (frame.Frame + 1));
+                    Dump(
+                        machine: frame.Driver.MachineA,
+                        outDir: outDir,
+                        tag: "A",
+                        frame: (frame.Frame + 1)
+                    );
+                    Dump(
+                        machine: frame.Driver.MachineB,
+                        outDir: outDir,
+                        tag: "B",
+                        frame: (frame.Frame + 1)
+                    );
                 }
             }
         );
@@ -552,8 +841,16 @@ internal static class ScriptedTradeExplore {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
             machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
 
-            if ((((frame + 1) % dumpEvery) == 0) || ((frame + 1) == frames)) {
-                Dump(machine: machine, outDir: outDir, tag: "A", frame: (frame + 1));
+            if (
+                (((frame + 1) % dumpEvery) == 0) ||
+                ((frame + 1) == frames)
+            ) {
+                Dump(
+                    machine: machine,
+                    outDir: outDir,
+                    tag: "A",
+                    frame: (frame + 1)
+                );
             }
         }
 
@@ -567,7 +864,10 @@ internal static class ScriptedTradeExplore {
         var bus = machine.GetRequiredService<ISystemBus>();
 
         for (var address = 0xC000; (address <= 0xDFFE); ++address) {
-            if ((bus.ReadByte(address: (ushort)address) == 0x14) && (bus.ReadByte(address: (ushort)(address + 1)) == 0x01)) {
+            if (
+                (bus.ReadByte(address: (ushort)address) == 0x14) &&
+                (bus.ReadByte(address: (ushort)(address + 1)) == 0x01)
+            ) {
                 var y = bus.ReadByte(address: (ushort)(address + 2));
                 var x = bus.ReadByte(address: (ushort)(address + 3));
 
@@ -576,17 +876,40 @@ internal static class ScriptedTradeExplore {
         }
     }
     private static void RunLinked(byte[] rom, LinkInputScript scriptA, LinkInputScript scriptB, int frames, int dumpEvery, string outDir) {
-        using var machineA = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideA);
-        using var machineB = ScriptedTradeHarness.Build(rom: rom, trainer: TradeSaveFactory.SideB);
+        using var machineA = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        using var machineB = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideB
+        );
 
         Console.WriteLine(value: $"== trade-explore (linked Cgb↔Cgb) {frames} frames, dump every {dumpEvery} ==");
 
         var result = LinkReplay.Run(
-            first: machineA, firstScript: scriptA, second: machineB, secondScript: scriptB, frames: frames,
+            first: machineA,
+            firstScript: scriptA,
+            second: machineB,
+            secondScript: scriptB,
+            frames: frames,
             onFrame: frame => {
-                if ((((frame + 1) % dumpEvery) == 0) || ((frame + 1) == frames)) {
-                    Dump(machine: machineA, outDir: outDir, tag: "A", frame: (frame + 1));
-                    Dump(machine: machineB, outDir: outDir, tag: "B", frame: (frame + 1));
+                if (
+                    (((frame + 1) % dumpEvery) == 0) ||
+                    ((frame + 1) == frames)
+                ) {
+                    Dump(
+                        machine: machineA,
+                        outDir: outDir,
+                        tag: "A",
+                        frame: (frame + 1)
+                    );
+                    Dump(
+                        machine: machineB,
+                        outDir: outDir,
+                        tag: "B",
+                        frame: (frame + 1)
+                    );
                 }
             }
         );
@@ -609,22 +932,60 @@ internal static class ScriptedTradeExplore {
             rgba[(offset + 3)] = 0xFF;
         }
 
-        var path = Path.Combine(path1: outDir, path2: $"{tag}_{frame:D5}.png");
+        var path = Path.Combine(
+            path1: outDir,
+            path2: $"{tag}_{frame:D5}.png"
+        );
 
-        PngEncoder.Write(path: path, rgba: rgba, width: framebuffer.Width, height: framebuffer.Height);
+        PngEncoder.Write(
+            path: path,
+            rgba: rgba,
+            width: framebuffer.Width,
+            height: framebuffer.Height
+        );
 
         var status = ScriptedTradeHarness.ConnectionStatus(machine: machine);
-        var control = ScriptedTradeHarness.Peek(machine: machine, address: 0xFF02);
+        var control = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFF02
+        );
         var lead = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machine));
-        var group = ScriptedTradeHarness.Peek(machine: machine, address: 0xDA00);
-        var map = ScriptedTradeHarness.Peek(machine: machine, address: 0xDA01);
-        var yCoord = ScriptedTradeHarness.Peek(machine: machine, address: 0xDA02);
-        var xCoord = ScriptedTradeHarness.Peek(machine: machine, address: 0xDA03);
-        var lcdc = ScriptedTradeHarness.Peek(machine: machine, address: 0xFF40);
-        var ly = ScriptedTradeHarness.Peek(machine: machine, address: 0xFF44);
-        var key1 = ScriptedTradeHarness.Peek(machine: machine, address: 0xFF4D);
-        var iflag = ScriptedTradeHarness.Peek(machine: machine, address: 0xFF0F);
-        var ienable = ScriptedTradeHarness.Peek(machine: machine, address: 0xFFFF);
+        var group = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA00
+        );
+        var map = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA01
+        );
+        var yCoord = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA02
+        );
+        var xCoord = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xDA03
+        );
+        var lcdc = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFF40
+        );
+        var ly = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFF44
+        );
+        var key1 = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFF4D
+        );
+        var iflag = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFF0F
+        );
+        var ienable = ScriptedTradeHarness.Peek(
+            machine: machine,
+            address: 0xFFFF
+        );
 
         Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{HashPixels(pixels: pixels):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
     }
@@ -644,14 +1005,25 @@ internal static class ScriptedTradeExplore {
     private static MachineInstance BuildSideA(byte[] rom) {
         var save = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
 
-        if (s_spawnOverride is { } spawn) {
+        if (SpawnOverride is { } spawn) {
             var parts = spawn.Split(separator: ':');
 
-            TradeSaveFactory.PatchSpawn(saveFile: save, group: byte.Parse(s: parts[0]), map: byte.Parse(s: parts[1]), y: byte.Parse(s: parts[2]), x: byte.Parse(s: parts[3]));
+            TradeSaveFactory.PatchSpawn(
+                saveFile: save,
+                group: byte.Parse(s: parts[0]),
+                map: byte.Parse(s: parts[1]),
+                y: byte.Parse(s: parts[2]),
+                x: byte.Parse(s: parts[3])
+            );
             Console.WriteLine(value: $"  [debug spawn override -> group {parts[0]} map {parts[1]} y {parts[2]} x {parts[3]}]");
         }
 
-        return ScriptedTradeHarness.BuildFromSave(rom: rom, save: save, model: s_model, bootRom: s_bootRom);
+        return ScriptedTradeHarness.BuildFromSave(
+            rom: rom,
+            save: save,
+            model: s_model,
+            bootRom: BootRom
+        );
     }
 
     // Writes the two crafted trade saves + a README to outDir (created if absent). Each .sav is [32 KiB SRAM][48-byte MBC3
@@ -661,16 +1033,37 @@ internal static class ScriptedTradeExplore {
 
         var sideA = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
         var sideB = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideB);
-        var pathA = Path.Combine(path1: outDir, path2: "trade-side-a-rattata.sav");
-        var pathB = Path.Combine(path1: outDir, path2: "trade-side-b-pidgey.sav");
+        var pathA = Path.Combine(
+            path1: outDir,
+            path2: "trade-side-a-rattata.sav"
+        );
+        var pathB = Path.Combine(
+            path1: outDir,
+            path2: "trade-side-b-pidgey.sav"
+        );
 
-        File.WriteAllBytes(path: pathA, bytes: sideA);
-        File.WriteAllBytes(path: pathB, bytes: sideB);
-        File.WriteAllText(path: Path.Combine(path1: outDir, path2: "README.md"), contents: ReadmeText());
+        File.WriteAllBytes(
+            path: pathA,
+            bytes: sideA
+        );
+        File.WriteAllBytes(
+            path: pathB,
+            bytes: sideB
+        );
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: outDir,
+                path2: "README.md"
+            ),
+            contents: ReadmeText()
+        );
 
         Console.WriteLine(value: $"  --trade-export -> {pathA} ({sideA.Length} bytes)");
         Console.WriteLine(value: $"  --trade-export -> {pathB} ({sideB.Length} bytes)");
-        Console.WriteLine(value: $"  --trade-export -> {Path.Combine(path1: outDir, path2: "README.md")}");
+        Console.WriteLine(value: $"  --trade-export -> {Path.Combine(
+            path1: outDir,
+            path2: "README.md"
+        )}");
     }
     private static string ReadmeText() =>
         """
@@ -700,10 +1093,20 @@ internal static class ScriptedTradeExplore {
         CANCEL exit back to the overworld.
         """;
     private static LinkInputScript LoadScript(string? path) =>
-        (((path is not null) && File.Exists(path: path)) ? LinkInputScript.Load(path: path) : new LinkInputScript());
+        (((path is not null) && File.Exists(path: path))
+        ? LinkInputScript.Load(path: path)
+        : new LinkInputScript());
     private static int IntArg(string[] args, string name, int fallback) {
-        var value = CommandLineArguments.Value(args: args, name: name);
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
 
-        return (((value is not null) && int.TryParse(s: value, result: out var parsed)) ? parsed : fallback);
+        return (((value is not null) && int.TryParse(
+            s: value,
+            result: out var parsed
+        ))
+            ? parsed
+            : fallback);
     }
 }

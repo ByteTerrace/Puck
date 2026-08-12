@@ -45,7 +45,11 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mbc7Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header, ramByteCount: 0) {
+        : base(
+        rom: rom,
+        header: header,
+        ramByteCount: 0
+    ) {
         m_dataOut = true;
         m_eeprom = new byte[EepromByteCount];
         m_readShift = 0xFFFF;
@@ -100,7 +104,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <returns>The selected register byte, or <c>0xFF</c>.</returns>
     public override byte ReadRam(ushort address) {
-        if (!RamAccessible || (address >= 0xB000)) {
+        if (
+            !RamAccessible ||
+            (address >= 0xB000)
+        ) {
             return 0xFF;
         }
 
@@ -119,7 +126,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <param name="value">The value written.</param>
     public override void WriteRam(ushort address, byte value) {
-        if (!RamAccessible || (address >= 0xB000)) {
+        if (
+            !RamAccessible ||
+            (address >= 0xB000)
+        ) {
             return;
         }
 
@@ -133,9 +143,15 @@ public sealed class Mbc7Cartridge : CartridgeBase {
 
                 break;
             case 0x01: // latch: capture a reading from the tilt sensor, only after an erase
-                if ((value == 0xAA) && m_latchErased) {
+                if (
+                    (value == 0xAA) &&
+                    m_latchErased
+                ) {
                     m_latchErased = false;
-                    m_sensor.Read(x: out m_xLatch, y: out m_yLatch);
+                    m_sensor.Read(
+                        x: out m_xLatch,
+                        y: out m_yLatch
+                    );
                 }
 
                 break;
@@ -160,8 +176,8 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart);
@@ -203,14 +219,26 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     }
 
     private byte ReadEepromPins() =>
-        (byte)((m_dataOut ? 0x01 : 0x00) | (m_dataIn ? 0x02 : 0x00) | (m_clockLine ? 0x40 : 0x00) | (m_chipSelect ? 0x80 : 0x00));
+        (byte)((m_dataOut
+        ? 0x01
+        : 0x00) | (m_dataIn
+        ? 0x02
+        : 0x00) | (m_clockLine
+        ? 0x40
+        : 0x00) | (m_chipSelect
+        ? 0x80
+        : 0x00));
     private void WriteEepromPins(byte value) {
         m_chipSelect = ((value & 0x80) != 0);
         m_dataIn = ((value & 0x02) != 0);
 
         var clockHigh = ((value & 0x40) != 0);
 
-        if (m_chipSelect && clockHigh && !m_clockLine) {
+        if (
+            m_chipSelect &&
+            clockHigh &&
+            !m_clockLine
+        ) {
             // A rising clock edge while selected: DO presents the next read/ready bit, then the incoming bit shifts
             // into whichever phase is active — the 11-bit command or a programming command's 16 data bits.
             m_dataOut = ((m_readShift & 0x8000) != 0);
@@ -226,7 +254,9 @@ public sealed class Mbc7Cartridge : CartridgeBase {
         m_clockLine = clockHigh;
     }
     private void ShiftCommandBit() {
-        m_commandShift = (m_commandShift << 1) | (m_dataIn ? 1 : 0);
+        m_commandShift = (m_commandShift << 1) | (m_dataIn
+            ? 1
+            : 0);
 
         if ((m_commandShift & 0x400) == 0) {
             // The start bit has not reached the top yet: still collecting the start + opcode + address bits.
@@ -250,7 +280,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
                 break;
             case 0x2: // ERAL: erase every word
                 if (m_writeEnabled) {
-                    Array.Fill(array: m_eeprom, value: (byte)0xFF);
+                    Array.Fill(
+                        array: m_eeprom,
+                        value: (byte)0xFF
+                    );
                     m_readShift = 0x00FF;
                 }
 
@@ -264,7 +297,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
                 break;
             case <= 0x7: // WRITE: clear the addressed word, then collect 16 data bits to OR into it
                 if (m_writeEnabled) {
-                    WriteEepromWord(word: m_commandShift & 0x7F, value: 0x0000);
+                    WriteEepromWord(
+                        word: m_commandShift & 0x7F,
+                        value: 0x0000
+                    );
                 }
 
                 m_argumentBitsLeft = 16;
@@ -277,7 +313,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
                 break;
             default: // ERASE: drive the addressed word to all ones
                 if (m_writeEnabled) {
-                    WriteEepromWord(word: m_commandShift & 0x7F, value: 0xFFFF);
+                    WriteEepromWord(
+                        word: m_commandShift & 0x7F,
+                        value: 0xFFFF
+                    );
                     m_readShift = 0x3FFF;
                 }
 
@@ -292,23 +331,34 @@ public sealed class Mbc7Cartridge : CartridgeBase {
 
         // Clear-then-OR: the command already cleared the target, so each 1 data bit ORs in at its position. EWDS
         // protection covers the data phase too — a write-disabled command consumes its bits without programming.
-        if (m_dataIn && m_writeEnabled) {
+        if (
+            m_dataIn &&
+            m_writeEnabled
+        ) {
             var bit = (1 << m_argumentBitsLeft);
 
             if ((m_commandShift & 0x100) != 0) {
                 var word = m_commandShift & 0x7F;
 
-                WriteEepromWord(word: word, value: ReadEepromWord(word: word) | bit);
+                WriteEepromWord(
+                    word: word,
+                    value: ReadEepromWord(word: word) | bit
+                );
             } else {
                 for (var word = 0; (word < EepromWordCount); ++word) {
-                    WriteEepromWord(word: word, value: ReadEepromWord(word: word) | bit);
+                    WriteEepromWord(
+                        word: word,
+                        value: ReadEepromWord(word: word) | bit
+                    );
                 }
             }
         }
 
         if (m_argumentBitsLeft == 0) {
             // Programming has finished: DO reads busy (low) for a spell and then ready (high), which games poll.
-            m_readShift = (((m_commandShift & 0x100) != 0) ? 0x00FF : 0x3FFF);
+            m_readShift = (((m_commandShift & 0x100) != 0)
+                ? 0x00FF
+                : 0x3FFF);
             m_commandShift = 0;
         }
     }
