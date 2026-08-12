@@ -232,7 +232,7 @@ world.wait $twoSecondWait
 player.fly $islandApproach 0 0 0 4 4
 world.wait $fourSecondWait
 player.stop 4
-world.wait $fourSecondWait
+world.wait $twoSecondWait
 player.where 4
 $continuation
 player.where 4
