@@ -1,24 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!--
-        PROMOTED 2026-08-09 — the World game socket's admission door (Puck.World.Server's WorldTcpHost)
-        is the first live consumer: a challenge-response handshake verifies a connecting peer's signed
-        claim against this document's admission trust list before minting anything, using exactly the
-        CarriageVerifier/TrustList/KeyId machinery this project already implemented. That is what
-        docs/world-model.md's "the credentials to fix it exist, so this is wiring rather than invention"
-        refers to. The project stays a real console harness (OutputType Exe, Program.cs's export/verify/
-        cross-check verbs are unchanged) AND a referenced library — .NET allows both from one csproj.
-        BCL only: System.Formats.Cbor and System.Security.Cryptography ship inbox, so no PackageReference
-        beyond the CBOR package is needed.
+        Deliberately both a console harness (Program.cs's scenario run and export/verify interchange
+        verbs — see README.md) and a referenced library; .NET allows both from one csproj.
     -->
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <RootNamespace>Puck.Carriage</RootNamespace>
         <AssemblyName>Puck.Carriage</AssemblyName>
-        <!--
-            Leaf contracts and data: this project has zero Puck.* dependencies (BCL + one NuGet package
-            only), the same shape as Puck.Maths/Puck.Storage/Puck.Assets on this row, so it sits beneath
-            every layer that now consumes it (Puck.World.Data, Puck.World.Server, Puck.World).
-        -->
+        <!-- Leaf contracts and data: zero Puck.* dependencies (BCL + one NuGet package only), so it sits beneath every layer that consumes it. -->
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
     </PropertyGroup>

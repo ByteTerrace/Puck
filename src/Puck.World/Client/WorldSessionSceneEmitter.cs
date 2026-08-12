@@ -255,9 +255,8 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
     }
 
     // Resolves this frame's camera: the bind-time-effective named camera if it still exists, else the destination's
-    // first declared camera, else a fixed overview derived from its spawn points (docs/world-model.md Campaign 1
-    // item 4: absent camera = "its first declared camera, else a fixed overview framing derived from its spawn
-    // points"). Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
+    // first declared camera, else a fixed overview derived from its spawn points.
+    // Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
     // live pose/aim/lens edit on the destination's own camera row is visible without rebinding the session face.
     private CameraSnapshot ResolveCamera(uint width, uint height) {
         var definition = m_mirror.Definition;

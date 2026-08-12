@@ -177,6 +177,68 @@ default is shipping a hole because its citation rotted.
 absent from the branch does not mean its content is absent — that has produced two false alarms
 here. And a search hit is not a repository fact until the file is tracked.
 
+## The federation remainder
+
+The model these rows serve is [vision.md's world model](vision.md#the-world-model). This is the open
+work; like everything here, verify a row is still open before scheduling it.
+
+**Local portal completion, still open:** per-viewport user/group-scoped destination images (one
+image per screen index cannot serve split-screen viewers two destinations); a destination-clock
+interpolation ease (poses stage at snapshot boundaries); multi-authority replay — a boot-side
+departure is taped but a destination-side arrival is not, so `replay.verify` has no defined crossing
+meaning; bounded queues/backpressure and projection/query redaction on the observation feed;
+derived-band read-back and a long-run remainder-drift demonstration for authored per-world time.
+
+**The wire admits too early.** The hello proves protocol compatibility, then identity against the
+document's authored `admission` trust list — but a verified peer is then admitted straight to a
+population body. Still open, in order: destination/session resolution on the wire, an unembodied
+session authority (no session principal exists for observation without embodiment), projection
+authorization, and only then optional body reservation/allocation. With them: issuer-qualified
+GROUP/document claims (only per-identity entries exist), entry reservations and idempotent handoff
+tokens over the wire fenced by epochs/leases and durable commit records, hydrate/suspend/migrate for
+persisted worlds without changing identity, and durable recovery when an authority dies
+mid-transaction rather than merely becoming unavailable.
+
+**Hardening carried out of the model:** cross-document write-back that survives a retry (an
+operation id so a repeated Add adds once, a precondition or owner version so a delayed Set cannot
+overwrite newer state, atomic persistence, and a receipt the visitor can observe); cloud-catalog
+discovery (a container LIST cannot pass the platform edge, so discovery rides the separately
+authored `storage.discoveryEndpoint` direct-to-account — only hermetic verification stands behind
+it); latency equalisation (a hold is applied but nothing measures round-trip time, and the measured
+value is taken from the intent that benefits from it — view holds for parity wait on a real RTT
+source); and local `Join`'s pre-allocation gap (it requires a preexisting `Drive/body` hold, which
+target policy must express as enforceable admission semantics before allocation).
+
+**The gated ladder** — each row waits on the one before it:
+
+| Work | Gated by |
+|---|---|
+| Extension registry as THE selection mechanism (primitive exists; screen-machine engines are its one consumer — the schema stops growing only when renderers and backends select this way too) | — |
+| Extensions validate their own configuration; cartridges become pinned content (address + hash, store wired to the machine host); renderers become extensions; renderer ceilings leave the world document | extension registry |
+| Sinks become first-class (viewport, quadrants, recordings, streams); render extent moves from camera to sink; one view/sink compositor for split-screen, multi-viewer and diegetic screens | sinks |
+| Screen row collapses into a placement facet; screen identity becomes a string id; links stop addressing by index; camera binding as an authored mode (fixed camera = TV, viewer-eye camera = window) | screen/placement collapse |
+| World as a screen source with target-selected fidelity (full, redacted, frames) and admission/disclosure enforcement; a specified client wire (the seam exists, the format is internal); replication — full simulation state, catch-up, resynchronisation, a downstream codec, version agreement | the wire order above |
+| Proximity co-location on the document's interaction flag, bound preemptively while people walk; occlusion-aware candidacy DERIVED from whether every declared interaction respects cover; transfer stability (asymmetric hysteresis + deterministic tie-break); co-location acceptance (a standing declaration in the body's own document, asymmetric, fails closed); junction headroom; contention facts with authored responses — a refusal must carry a consequence, or declining becomes the dominant strategy; adjacency as scheduling affinity; tick health as an observable fact | seamless crossing (shipped) |
+| Contact-counterpart / region-occupant targets | a body-to-body contact seam |
+| Threat tables | a keyed-table primitive; slots are scalars |
+| Spatial partitioning for proximity — nothing yet establishes the capacity-wide scan as the dominant cost; ranking separate from filtering | measurement |
+| Native AOT for the game | replacing reflection-based JSON and built-in COM interop |
+
+**Open questions** — each changes a design rather than a detail: the pre-allocation embodiment
+subject (capability-shaped target policy that authorizes a future body while `Drive/body` stays the
+concrete hold); multi-world replay tape ownership across participating authorities; ephemeral
+terminal policy (completion, abandonment, timeout, reset — without observation leases becoming
+authoritative); federated group proof (issuer-qualified group ids; local `Group` principals are not
+remote proof); the admission-policy representation (document-scoped and readable before any
+authority exists, without becoming a second trust list that can disagree with grants); what
+`replay.verify` can honestly claim about remote or unavailable targets; and in-flight state at
+transfer — the rule is *drop and re-derive what the engine can recompute; carry what the player can
+perceive*.
+
+**Unmeasured, deliberately:** contact sampling budgets, the compound-collider volume ceiling,
+mirrored stamps doubling instance-grid contribution, per-tick input-hold bookkeeping, and N
+simulations per host. Measurement waits until the model stops moving.
+
 ## Work list carried out of retired plans
 
 Retired 2026-08-10 with their decisions moved into the code they govern:

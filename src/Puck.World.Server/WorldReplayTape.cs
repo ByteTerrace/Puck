@@ -277,7 +277,7 @@ public sealed class WorldReplayTape {
     }
 
     /// <summary>Records one same-process transfer's decided outcome into the active recording's authority stream —
-    /// docs/world-model.md's local multi-authority tape contract. A no-op while <see cref="Mode"/> is
+    /// the local multi-authority tape contract. A no-op while <see cref="Mode"/> is
     /// <see cref="WorldReplayMode.Idle"/>. The live cohort/resolver machinery lives on
     /// <c>Puck.World.WorldInstanceHost</c>, a layer above this assembly (the same reason <see cref="NoteRateLever"/>
     /// is called directly rather than tapped through the loopback), so <c>WorldInstanceHost.ApplyTransfer</c> calls

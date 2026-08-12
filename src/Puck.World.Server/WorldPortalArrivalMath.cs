@@ -23,7 +23,7 @@ namespace Puck.World.Server;
 /// frame's <c>Origin</c> instead of its seam lands a traveler at the door's center rather than the point it actually
 /// crossed: harmless for a picture-frame portal a player glances through, fatal for contiguous terrain, where an
 /// off-center crossing must land at the exact corresponding point for the ground to read as one continuous surface.
-/// docs/world-model.md's "Where portal work stands" section carries the same contract.</para>
+/// docs/vision.md's "Adjacency and crossing" section carries the same contract.</para>
 /// <para><b>The isometry.</b> Source frame F_s = (sourcePosition, sourceYaw); destination frame F_d =
 /// (destinationPosition, destinationYaw). A traveler's world pose maps as <c>F_d ∘ Flip ∘ F_s⁻¹</c>, where Flip is a
 /// 180° rotation about vertical: walking out of the source face (facing its outward normal) must walk in through the

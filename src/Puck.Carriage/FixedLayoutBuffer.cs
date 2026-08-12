@@ -7,7 +7,7 @@ namespace Puck.Carriage;
 /// Append-only writer for the fixed byte layout: every variable-length field is a 4-byte big-endian length
 /// prefix followed by that many bytes, and every optional field is a 1-byte presence flag followed by the
 /// value when present. No field is ever self-describing beyond that — the field ORDER is the schema, fixed
-/// by the caller, and both sides must agree on it out of band (docs/world-model.md, "Signed carriage": "The
+/// by the caller, and both sides must agree on it out of band (README.md, "Signed carriage": "The
 /// byte layout is all that must agree").
 /// </summary>
 internal sealed class FixedLayoutWriter {
@@ -90,7 +90,7 @@ internal ref struct FixedLayoutReader(ReadOnlySpan<byte> buffer) {
     /// Reads a presence flag, refusing every byte but <c>0x00</c> and <c>0x01</c>. Treating "non-zero" as
     /// true is the whole of this layout's canonicality story going wrong: the writer only ever emits
     /// <c>0x01</c>, so accepting <c>0x02</c> gives one model 255 wire forms, and a receiver deduplicating
-    /// on wire bytes then sees one claim as many. docs/signed-carriage-wire.md §3 rule "one model, exactly
+    /// on wire bytes then sees one claim as many. README.md §3 rule "one model, exactly
     /// one encoding" is a DECODER obligation, and §16 leans on this layout meeting it by construction.
     /// </summary>
     /// <exception cref="FormatException">The flag byte is neither <c>0x00</c> nor <c>0x01</c>.</exception>

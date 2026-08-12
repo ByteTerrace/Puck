@@ -951,7 +951,7 @@ internal sealed class WorldPortalArrivalJsonConverter : JsonConverter<WorldPorta
 }
 
 /// <summary>
-/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/world-model.md's "Durability,
+/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/vision.md's "Durability,
 /// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>) rather than the context's camelCase enum
 /// policy, mirroring <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>

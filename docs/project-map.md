@@ -37,6 +37,9 @@ project. See [agent-guide.md](agent-guide.md) for verification procedures.
 - **Fluid:** `Puck.World`, document additions, authoring tools, and emulator
   integration. Treat these as consumers, not architectural precedent.
 
+A stability level determines the evidence a change requires, never whether the
+change is allowed.
+
 ## Layering
 
 This block is GENERATED — `puck architecture --map` prints it from each
@@ -140,8 +143,6 @@ the wrong ones.
 | `Puck.DirectX` | Direct3D 12 and DXGI device, resource, command, sharing, and synchronization implementation. |
 | `Puck.DirectX.Presentation` | Direct3D 12 presenter and compute-service adapters. |
 
-The backend-parity summary and table were deleted 2026-08-02: both reported a
-per-capability parity status that `Puck.Post`'s quarantine made unverifiable.
 Nothing measures cross-backend parity today.
 
 ## Engine services
@@ -170,26 +171,17 @@ Nothing measures cross-backend parity today.
 
 ## Experimental projects
 
-`experimental/` holds `Puck.BareMetal` and the quarantined `Puck.Demo`,
-`Puck.Post`, `tools/`, and both `scripts/` trees; the GamingBrick cores live in
-`src/` alongside the rest of the split projects. The quarantine governs work,
-not reading (owner ruling 2026-08-08, superseding the 2026-08-02 blanket ban):
-the source is read and cited as prior art, and deleted once live code eclipses
-it, but never improved, fixed, built, run, or revived in place. Expect those
-builds to break as deletions land. The ruling and its retirement procedure live
-in [CLAUDE.md](../CLAUDE.md) and
-[experimental/README.md](../experimental/README.md).
-No experimental tree is in `Puck.slnx`, in the root
-build, or in the architecture gate's scope — each carries its own
+`experimental/` holds `Puck.BareMetal` (freestanding Native AOT runtime, UEFI
+kernels, direct hardware bring-up) and the quarantined `Puck.Demo`,
+`Puck.Post`, `tools/`, and both `scripts/` trees. The quarantine rules —
+read as prior art, never build, run, fix, or revive — live in
+[CLAUDE.md](../CLAUDE.md) and
+[experimental/README.md](../experimental/README.md); this map carries only
+the structural fact: no experimental tree is in `Puck.slnx`, the root build,
+or the architecture gate's scope — each carries its own
 `Directory.Build.props`/`.targets` firewall pair that stops MSBuild's upward
-discovery at the tree, so the isolation is structural rather than a path filter
-somewhere else.
-
-| Project | Responsibility |
-|---|---|
-| `Puck.BareMetal` | Freestanding Native AOT runtime, UEFI kernels, native experiments, and direct hardware bring-up. |
-| `Puck.Demo` | Quarantined 2026-08-01 by owner ruling: read it as prior art, never build or run it. It does not build at this path anyway: its seventeen `ProjectReference`s are relative paths written when it lived under `src/`, and they all dangle. `dotnet restore` there EXITS 0 while silently discarding every one of them (warning-level "Skipping project ... because it was not found"), and the build then fails as a flood of `CS0234` errors pointing at source files rather than at the dangling edges — so do not trust a green restore in that tree. **Nothing is porting its behavior anywhere.** The plan that sequenced that work was deleted; capabilities that lived only here are absent from the product with no scheduled return. |
-| `Puck.Post` | Quarantined 2026-08-02 by owner ruling: read it as prior art, never build or run it. It was the engine's power-on self-test across CPU, same-device GPU, cross-backend, and live-subsystem tiers. **Nothing gates the shared engine contract today** — the cross-backend render path, the SDF VM ISA, the document schemas, and the deterministic numerics have no automated check. Do not cite it as coverage and do not write a stage for it. |
+discovery at the tree, so the isolation is structural rather than a path
+filter somewhere else.
 
 ## Repository data and tools
 

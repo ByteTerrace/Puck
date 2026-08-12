@@ -2356,7 +2356,7 @@ public abstract record WorldScreenSource {
     public sealed record Qr(string Payload, string EcLevel = "M", int QuietZoneModules = 4) : WorldScreenSource;
 
     /// <summary>
-    /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/world-model.md,
+    /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/vision.md,
     /// "Observation and display"). The face/screen resolves the same resolver-owned identity a
     /// portal crossing at the same door would land in (<see cref="Puck.World.WorldSessionResolver"/>), attaches an
     /// observation lease to the resolved instance's server, and mirrors just enough of its delivered
@@ -2378,7 +2378,7 @@ public abstract record WorldScreenSource {
     /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
     /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
     /// non-global destination refuses at bind time by name rather than binding to an arbitrary viewer's resolution.
-    /// Per-viewport binding is future work (docs/world-model.md, "User/group-scoped destinations make images
+    /// Per-viewport binding is future work (docs/vision.md, "User/group-scoped destinations make images
     /// viewer-dependent").</para>
     /// </remarks>
     /// <param name="Destination">The <see cref="Puck.World.WorldDestination.Name"/> this face/screen observes. Must
@@ -3661,7 +3661,7 @@ public sealed record WorldHostDefaults(
 /// vocabulary of which identities/issuers this world's TCP socket admits (see <see cref="WorldAdmissionEntry"/>),
 /// and what each is minted once verified. <see cref="WorldAdmissionDoor"/> is the one consumer, at the Hello
 /// handshake, off the tick thread — this replaces the game socket's former blanket "admit as Control/all" wire
-/// admission (docs/world-model.md's "Authenticating the game wire" row) with a verified-identity-to-principal
+/// admission with a verified-identity-to-principal
 /// mapping. boot-only like <see cref="References"/>/<see cref="Portals"/>/<see cref="Destinations"/> — no live
 /// mutation arm. A trailing addition over the section set shipped before it, never reordered among it — the same
 /// trailing convention <see cref="Market"/> follows after it.</param>

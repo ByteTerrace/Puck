@@ -6,14 +6,14 @@ using System.Text;
 namespace Puck.Carriage;
 
 /// <summary>
-/// The prototype's verification harness (docs/world-model.md, "Signed carriage"). Not a persisted test
+/// The prototype's verification harness (README.md, "Signed carriage"). Not a persisted test
 /// project — this console entry point IS the prototype's proof, run with
 /// <c>dotnet run --project src/Puck.Carriage -c Release</c>. Every scenario prints PASS or FAIL and the
 /// process exits non-zero if anything failed.
 /// </summary>
 /// <remarks>
 /// Two extra modes drive the cross-implementation check against the other independent implementation of
-/// docs/signed-carriage-wire.md: <c>export &lt;directory&gt;</c> mints a chain to files, and
+/// README.md: <c>export &lt;directory&gt;</c> mints a chain to files, and
 /// <c>verify &lt;directory&gt;</c> pins an exported root and verifies the chain beneath it. See
 /// <see cref="CarriageInterchange"/>.
 /// </remarks>
@@ -22,7 +22,7 @@ internal static class Program {
     private static int s_failed;
 
     /// <summary>
-    /// The harness entry point, and the two interchange verbs docs/signed-carriage-wire.md §17 fixes.
+    /// The harness entry point, and the two interchange verbs README.md §17 fixes.
     /// </summary>
     /// <remarks>
     /// The exit-code contract is normative (§17): <b>0</b> when every check passed, <b>1</b> when at least
@@ -927,7 +927,7 @@ internal static class Program {
         );
 
         // A domain of the wrong width. This is well-formed, canonically encoded CBOR of the right shape —
-        // only the fingerprint-width rule refuses it (docs/signed-carriage-wire.md §15 row 3), and without
+        // only the fingerprint-width rule refuses it (README.md §15 row 3), and without
         // that rule two implementations do not agree on what a domain even is.
         ExpectThrows<FormatException>(
             scenario: "[cbor-v1] fingerprint width: a 31-byte domain field (control: the parser control above)",

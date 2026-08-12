@@ -1,7 +1,7 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// The fixed-layout <see cref="ICarriageCodec"/> — the shelved alternative of docs/signed-carriage-wire.md
+/// The fixed-layout <see cref="ICarriageCodec"/> — the shelved alternative of README.md
 /// §16, kept for a context that cannot carry a CBOR implementation or wants every byte hand-specified: a
 /// versioned byte stream with no unauthenticated parsing beyond bounded, length-prefixed reads (see
 /// <see cref="FixedLayoutReader"/>). Field order (also the signed-portion order):
@@ -76,7 +76,7 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
 
         // The signed portion is the prefix of the envelope up to the signature's length prefix, so the
         // bytes that were signed are sliced out of what ARRIVED rather than re-encoded from what was parsed
-        // out of them (docs/signed-carriage-wire.md §2, and §16 which adopts it unchanged).
+        // out of them (README.md §2, and §16 which adopts it unchanged).
         var signedPortion = wire[..reader.Position].ToArray();
         var signature = reader.ReadBytes().ToArray();
 
@@ -234,7 +234,7 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
         var sequence = reader.ReadOptionalUInt64();
         var payloadKindValue = reader.ReadByte();
 
-        // Refused at the DECODER, not left to the verifier (docs/signed-carriage-wire.md §2: "a value
+        // Refused at the DECODER, not left to the verifier (README.md §2: "a value
         // outside it MUST be refused by the decoder"). The verifier re-refuses an out-of-set kind on a
         // claim, so this is verdict-neutral today — but only today: a fourth kind, or any codec consumer
         // that does not run the verifier, turns a cast with no range check into an accepted non-kind.

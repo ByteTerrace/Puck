@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace Puck.Carriage;
 
 /// <summary>
-/// Sealed carriage: the same envelope shape with the payload encrypted (docs/world-model.md, "Signed
+/// Sealed carriage: the same envelope shape with the payload encrypted (README.md, "Signed
 /// carriage") — ECDH P-256 key agreement to an AES-256-GCM key, with the envelope's serialized context
 /// header as AEAD associated data. Literal AEAD applied twice over: the header binds the ciphertext to its
 /// context exactly as it binds a signature's payload, which is why two keypairs are provisioned (one for
@@ -38,7 +38,7 @@ public static class SealedCarriage {
     /// attempts.
     /// </summary>
     /// <remarks>
-    /// <b>Key type first, curve second</b> (docs/signed-carriage-wire.md §14). The import is what enforces
+    /// <b>Key type first, curve second</b> (README.md §14). The import is what enforces
     /// the type: <c>ECDiffieHellman.ImportSubjectPublicKeyInfo</c> refuses an SPKI whose
     /// <c>AlgorithmIdentifier</c> is not <c>id-ecPublicKey</c> (1.2.840.10045.2.1), and it has to come first
     /// because a non-EC SPKI — an RSA key, say — has no curve to ask about at all. What there is no check
@@ -141,12 +141,12 @@ public static class SealedCarriage {
         return plaintext;
     }
 
-    /// <summary>The HKDF info label, ASCII, fixed by docs/signed-carriage-wire.md §14. Two implementations that pick different labels derive different keys and fail with an AEAD tag mismatch — indistinguishable from tampering.</summary>
+    /// <summary>The HKDF info label, ASCII, fixed by README.md §14. Two implementations that pick different labels derive different keys and fail with an AEAD tag mismatch — indistinguishable from tampering.</summary>
     private static readonly byte[] s_hkdfInfoLabel = "puck.carriage.sealed.v1"u8.ToArray();
 
     /// <summary>
     /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
-    /// docs/signed-carriage-wire.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
+    /// README.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
     /// unhashed) as HKDF input keying material, HKDF-SHA256 with an absent salt, the ASCII info label
     /// <c>puck.carriage.sealed.v1</c>, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
     /// length — is a construction input to <see cref="AesGcm"/> rather than to the derivation, and lives at

@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: mapped arrival's AUTHORING and RESOLUTION halves — the two places a
 /// <see cref="WorldPlacementPortal"/> facet's <see cref="WorldPlacementPortal.Arrival"/>/<see cref="WorldPlacementPortal.Counterpart"/>
-/// pair can be refused, per docs/world-model.md's "Where portal work stands" section: <see cref="WorldDefinitionValidator"/> at BOOT (arrival/counterpart
+/// pair can be refused, per docs/vision.md's "Adjacency and crossing" section: <see cref="WorldDefinitionValidator"/> at BOOT (arrival/counterpart
 /// coherence and counterpart SHAPE — <c>"&lt;placementId&gt;/&lt;face&gt;"</c>), and <see cref="WorldPortalCounterpart"/>
 /// at TRANSFER TIME (the counterpart's cross-document EXISTENCE against the destination's own delivered
 /// definition — deliberately NOT checked at boot, since the destination document is never resolved there). The

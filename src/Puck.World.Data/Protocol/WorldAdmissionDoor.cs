@@ -51,7 +51,7 @@ public static class WorldAdmissionDoor {
     public const string Purpose = "puck.world.tcp-admission";
 
     /// <summary>The fixed audience every admission claim must be directed at. A placeholder single-audience value
-    /// until worlds carry an addressable per-document identity of their own (docs/world-model.md's "Authenticating
+    /// until worlds carry an addressable per-document identity of their own (docs/vision.md's "Authenticating
     /// the game wire" row, and the open "unembodied session authority" question) — today every World process's
     /// admission door is the same addressable thing, so one constant names it honestly rather than inventing
     /// per-world scoping this change does not need yet.</summary>

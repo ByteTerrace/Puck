@@ -1137,7 +1137,7 @@ public sealed class WorldBody {
         }
     }
 
-    /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/world-model.md's
+    /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/vision.md's
     /// "In-flight state at transfer" names ("drop and re-derive what the engine can recompute; carry what the player
     /// can perceive") applied to a same-process transfer's abort/restore path
     /// (<see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/>/<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>),

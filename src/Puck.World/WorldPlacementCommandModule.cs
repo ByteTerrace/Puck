@@ -261,8 +261,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
         return builder.Append(value: (any ? "" : " none")).Append(value: ']').ToString();
     }
     // A session-sourced face's projection state, appended to its world.faces line — destination, resolved generation
-    // (or 'unresolved'), camera, and lease state (docs/world-model.md Campaign 1 item 4: "a decision nothing can
-    // echo can only be asserted"). Empty string for every non-session face; "unresolved" when the face's DECLARED
+    // (or 'unresolved'), camera, and lease state. Empty string for every non-session face; "unresolved" when the face's DECLARED
     // source names a session but the binder never resolved it (a refused bind — see the destination's own stderr
     // refusal line and screen.state for the exact reason).
     private string DescribeSession(int index, WorldPlacement placement, string faceName) {

@@ -1,7 +1,7 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// A serialisation of the carriage envelope's ONE field list (docs/signed-carriage-wire.md). Two
+/// A serialisation of the carriage envelope's ONE field list (README.md). Two
 /// implementations exist — <see cref="CborCarriageCodec"/>, which the specification's §2 fixes as the
 /// format, and <see cref="FixedLayoutCarriageCodec"/>, which its §16 keeps on the shelf for a context that
 /// cannot carry a CBOR implementation at all. Both encode the SAME fields in the SAME order (see each
@@ -23,7 +23,7 @@ public interface ICarriageCodec {
 
     /// <summary>
     /// Encodes ONLY the context header — no payload kind, no payload, no signature. Sealed carriage uses
-    /// this as the AEAD associated data (docs/world-model.md, "Signed carriage": "the serialized context
+    /// this as the AEAD associated data (README.md, "Signed carriage": "the serialized context
     /// header as AEAD associated data"), since the header must be committed to before the ciphertext it
     /// will accompany can even be produced.
     /// </summary>

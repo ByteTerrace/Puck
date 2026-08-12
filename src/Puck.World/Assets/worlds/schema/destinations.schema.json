@@ -5,7 +5,7 @@
     "null"
   ],
   "items": {
-    "description": "One row of the destinations section \u2014 scoped selection layered over exactly one WorldReference row (docs/world-model.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
+    "description": "One row of the destinations section \u2014 scoped selection layered over exactly one WorldReference row (docs/vision.md, \u0022Reference, destination and session are different facts\u0022). A WorldReference names a document; a destination decides how an instance of that document is minted and reused. Several destinations may select one reference differently \u2014 a fresh group dungeon, a persisted user workshop, and a shared global zone can all point at the same document.",
     "type": [
       "object",
       "null"

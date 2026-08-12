@@ -2,7 +2,7 @@ namespace Puck.Carriage;
 
 /// <summary>
 /// The canonical context header that is always part of a carriage envelope's signing input
-/// (docs/world-model.md, "Signed carriage"): the associated-data half of AEAD applied to signatures, so a
+/// (README.md, "Signed carriage"): the associated-data half of AEAD applied to signatures, so a
 /// signature cannot be lifted into a situation it was never minted for. Only the payload differs between a
 /// key binding and a claim — see <see cref="CarriagePurposes.KeyBinding"/>.
 /// </summary>
@@ -69,7 +69,7 @@ public sealed record KeyBindingPayload(KeyId TargetId, ReadOnlyMemory<byte> Publ
 
 /// <summary>
 /// A sealed carriage payload: an AEAD ciphertext produced by ECDH P-256 key agreement to an AES-256-GCM
-/// key, with the envelope's serialized context header as associated data (docs/world-model.md, "Signed
+/// key, with the envelope's serialized context header as associated data (README.md, "Signed
 /// carriage"). Tampering any header byte changes the AAD, so decryption fails closed.
 /// </summary>
 /// <param name="EphemeralPublicKeySubjectPublicKeyInfo">The sender's one-time ECDH public key (SPKI bytes), carried so the recipient can redo the agreement.</param>
@@ -86,12 +86,12 @@ public sealed record SealedPayload(
 /// <summary>
 /// One signed carriage envelope: header, payload, the signature, and — decisively —
 /// <see cref="SignedPortion"/>, the exact bytes that signature covers
-/// (docs/world-model.md, "Signed carriage"). This is the one shape used for every purpose — a key binding
+/// (README.md, "Signed carriage"). This is the one shape used for every purpose — a key binding
 /// is an envelope with <see cref="CarriagePurposes.KeyBinding"/> as its purpose, never a separate artifact.
 /// </summary>
 /// <remarks>
 /// <para><b>The bytes are authoritative; the parsed fields are a projection of them.</b>
-/// docs/signed-carriage-wire.md §2 requires a verifier to check the signature against the signed-portion
+/// README.md §2 requires a verifier to check the signature against the signed-portion
 /// bytes <i>as they arrived</i>, never against a re-encoding of what it parsed out of them. An envelope
 /// that carried only the parsed fields could not honour that: the verifier would have to re-derive the
 /// signing input, and every decoder laxity anywhere in the stack would silently become an accepted

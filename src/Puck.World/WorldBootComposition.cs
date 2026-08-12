@@ -407,12 +407,12 @@ internal static class WorldBootComposition {
             link: sp.GetRequiredService<IServerLink>()
         ));
 
-        // The transport-neutral local session resolver (docs/world-model.md Campaign 1 item 3) — WorldInstanceHost's
+        // The transport-neutral local session resolver — WorldInstanceHost's
         // TriggerPortal and WorldPlacementCommandModule's world.destinations read-back both consume it, so it is
         // registered ahead of (and independent from) WorldInstanceHost itself.
         services.AddSingleton<WorldSessionResolver>();
 
-        // The process's running world instances (docs/world-model.md's "Multi-world ticking in one process" row):
+        // The process's running world instances (docs/vision.md's "Multi-world ticking in one process" row):
         // the boot world plus every instance started at runtime through the console, stepped by both boot shapes'
         // IFixedStepSimulation.Step. CORE (not presentation-only): an instance beside the boot world is render-less
         // by construction, so it works identically headless or windowed.
@@ -428,7 +428,7 @@ internal static class WorldBootComposition {
         services.AddSingleton<IWorldAdjacencySource>(implementationFactory: static sp => sp.GetRequiredService<WorldAdjacencyFields>());
         services.AddSingleton<WorldContinuum>();
 
-        // Per-instance scheduling's own read-back + live pause/resume lever (docs/world-model.md Campaign 1 item 2)
+        // Per-instance scheduling's own read-back + live pause/resume lever
         // — world.rate. Depends on WorldReplayTape (registered above) to tape a boot-instance pause/resume as an
         // ordered rate-lever event. CORE for the same reason WorldInstanceCommandModule is: an instance beside the
         // boot world is render-less by construction, so it works identically headless or windowed.

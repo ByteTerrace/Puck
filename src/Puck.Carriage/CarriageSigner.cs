@@ -4,7 +4,7 @@ namespace Puck.Carriage;
 
 /// <summary>
 /// Mints carriage envelopes. Minting is randomised (ECDSA signing draws fresh randomness per signature)
-/// and happens outside the tick (docs/world-model.md, "Signed carriage") — nothing here is deterministic,
+/// and happens outside the tick (README.md, "Signed carriage") — nothing here is deterministic,
 /// and nothing here needs to be; only verification does.
 /// </summary>
 public static class CarriageSigner {

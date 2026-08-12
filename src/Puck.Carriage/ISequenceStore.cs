@@ -1,7 +1,7 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// The bearer-claim replay check seam (docs/world-model.md, "Signed carriage"): a durable per-(issuer,
+/// The bearer-claim replay check seam (README.md, "Signed carriage"): a durable per-(issuer,
 /// subject) high-water sequence mark. Storage, durability, and retention-coupled-to-window are the engine's
 /// problem, not this prototype's; <see cref="InMemorySequenceStore"/> exists only to make the harness
 /// runnable and is not a production implementation.
@@ -36,7 +36,7 @@ public interface ISequenceStore {
     /// <para><b>Deny by default when the store cannot decide.</b> A store that is unreachable, cannot read
     /// its mark, or cannot durably record the advance must not return <see langword="true"/>. It may return
     /// <see langword="false"/> or raise; <see cref="CarriageVerifier"/> refuses either way, and never lets
-    /// the failure propagate to its caller (docs/signed-carriage-wire.md §8). The reading this forecloses is
+    /// the failure propagate to its caller (README.md §8). The reading this forecloses is
     /// "accept because the store is down", which admits exactly the replay the mark exists to refuse.</para>
     /// </remarks>
     bool TryAdvance(string domain, string subject, ulong sequence);

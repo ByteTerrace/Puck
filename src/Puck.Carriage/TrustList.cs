@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace Puck.Carriage;
 
-/// <summary>Whether a trust list entry's key signs claims itself or vouches for others (docs/world-model.md, "Signed carriage").</summary>
+/// <summary>Whether a trust list entry's key signs claims itself or vouches for others (README.md, "Signed carriage").</summary>
 public enum CarriageTrustMode {
     /// <summary>
     /// The pinned key signs claims directly and no chain is walked beneath it — the entry pins one
@@ -15,7 +15,7 @@ public enum CarriageTrustMode {
 
     /// <summary>
     /// The pinned key is a domain's root and vouches for an issuing key, which vouches for subjects — the
-    /// chain, always exactly two bindings deep (docs/world-model.md: "A chain is at most two hops, because
+    /// chain, always exactly two bindings deep (README.md: "A chain is at most two hops, because
     /// one cannot hold").
     /// </summary>
     Vouches,
@@ -24,7 +24,7 @@ public enum CarriageTrustMode {
 /// <summary>
 /// One trust list entry: a pinned id, the actual key bytes it names (needed for offline verification — a
 /// hash alone cannot verify a signature), whether it signs directly or vouches, and which slots it reaches.
-/// "Trusting a domain and pinning a key are one act" (docs/world-model.md) — a
+/// "Trusting a domain and pinning a key are one act" (README.md) — a
 /// <see cref="CarriageTrustMode.Vouches"/> entry pins the domain's root id, which is what makes the whole
 /// chain beneath it trusted.
 /// </summary>
@@ -32,7 +32,7 @@ public enum CarriageTrustMode {
 /// <param name="PublicKeySubjectPublicKeyInfo">The pinned key's actual SPKI bytes, authored alongside the id (never fetched).</param>
 /// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
 /// <param name="Reach">
-/// The slot names claims admitted by this entry may reach (docs/world-model.md: a trust entry says "which
+/// The slot names claims admitted by this entry may reach (README.md: a trust entry says "which
 /// slots it reaches"). Deny by default — an empty set admits a claim that reaches nothing, and there is
 /// deliberately no wildcard, because a wildcard is how a scope silently widens when a game adds a slot.
 /// The verifier returns this set with an accepted claim (<see cref="CarriageVerifyResult.Reach"/>); it
@@ -100,7 +100,7 @@ public sealed record TrustListEntry(
 }
 
 /// <summary>
-/// The authored set of issuers a world accepts (docs/world-model.md, "Signed carriage"). An empty list
+/// The authored set of issuers a world accepts (README.md, "Signed carriage"). An empty list
 /// honours no foreign claim — deny by default like every other capability; the engine compiles in no root.
 /// Every entry is validated at construction, so the verifier never walks an inconsistent list.
 /// </summary>

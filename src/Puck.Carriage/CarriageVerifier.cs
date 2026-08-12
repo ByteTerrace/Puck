@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace Puck.Carriage;
 
 /// <summary>
-/// The one verify path for everything (docs/world-model.md, "Signed carriage"): a key binding and a claim
+/// The one verify path for everything (README.md, "Signed carriage"): a key binding and a claim
 /// are both envelopes, and <see cref="VerifyChain"/> is the only entry point either goes through — a
 /// binding is verified as a chain hop inside this method, never through a separate code path. Offline by
 /// construction: a claim that arrives without its full chain is refused here, never resolved by fetching.
@@ -57,14 +57,14 @@ public static class CarriageVerifier {
     /// <param name="sequenceStore">
     /// The durable per-(issuer domain, subject) high-water mark seam. Required whenever the claim carries a
     /// sequence — which a directed claim may also do, since binding an audience defends only against replay
-    /// at another world and never against replay at the audience itself (docs/world-model.md: "Same-world
+    /// at another world and never against replay at the audience itself (README.md: "Same-world
     /// replay needs the sequence either way"). May be <see langword="null"/> only if the caller knows no
     /// claim carrying a sequence will ever be presented; one that does is refused, never silently accepted.
     /// <para>The store's <see cref="ISequenceStore.TryAdvance"/> must be atomic per pair. This method makes
     /// exactly one call into it and treats the returned bool as the verdict, so a store that compares and
     /// advances non-atomically hands two concurrent receivers of one bearer claim two acceptances — and
     /// this specification's other implementation is a web service, where concurrent is the normal case
-    /// rather than the exotic one (docs/signed-carriage-wire.md §8).</para>
+    /// rather than the exotic one (README.md §8).</para>
     /// </param>
     public static CarriageVerifyResult VerifyChain(
         ICarriageCodec codec,
@@ -307,7 +307,7 @@ public static class CarriageVerifier {
             // check-then-act race on the one check whose entire job is to make a claim usable once.
             //
             // A store that is unreachable, unreadable, or cannot durably record the advance REFUSES the
-            // claim — it does not propagate (docs/signed-carriage-wire.md §8). "Accept because the store is
+            // claim — it does not propagate (README.md §8). "Accept because the store is
             // down" inverts the one rule the mark exists for: an unavailable store means the declared replay
             // defence is absent, and an absent replay defence is already a refusal three lines above. An
             // indeterminate outcome — a timeout, an aborted transaction, a lock nobody won — is not an
@@ -403,7 +403,7 @@ public static class CarriageVerifier {
     /// </summary>
     /// <remarks>
     /// The signing input is <see cref="SignedCarriageEnvelope.SignedPortion"/> — the bytes that arrived —
-    /// and never a re-encoding of the parsed model (docs/signed-carriage-wire.md §2). Re-encoding would
+    /// and never a re-encoding of the parsed model (README.md §2). Re-encoding would
     /// make this method verify a claim nobody signed whenever a decoder anywhere accepted two wire forms
     /// for one model: the forged bytes would be normalised away before the signature ever saw them, and
     /// every such laxity would silently become an accepted alternate encoding of a real claim.
@@ -435,7 +435,7 @@ public static class CarriageVerifier {
     }
 
     /// <summary>
-    /// Applies both ends of the validity rule (docs/world-model.md: "Validity is authored at both ends").
+    /// Applies both ends of the validity rule (README.md: "Validity is authored at both ends").
     /// There is deliberately no clock-skew tolerance: an issuer that wants slack backdates
     /// <see cref="CarriageEnvelopeHeader.NotBefore"/>, which is authored, auditable and travels signed —
     /// unlike a verifier-side grace window, which every verifier would size differently and which would

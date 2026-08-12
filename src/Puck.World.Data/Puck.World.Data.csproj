@@ -23,7 +23,7 @@
     -->
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <!-- The signed-carriage envelope/trust-list/verifier machinery (docs/world-model.md, "Signed carriage") —
+        <!-- The signed-carriage envelope/trust-list/verifier machinery (docs/vision.md, "Signed carriage") —
              the admission section's WorldAdmissionDoor verifies a connecting peer's claim against the document's
              own admission trust list through this, off the tick thread, at the TCP hello boundary. Leaf contracts
              and data, so this edge introduces no new layer dependency. -->

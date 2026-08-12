@@ -5,8 +5,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Proves the observation-lifetime repair the portal campaign's Campaign 1 item 4 owes
-/// (<c>docs/world-model.md</c>'s "Observation and display" section): a typed-lane subscription is independently
+/// Proves the observation-lifetime contract (<c>docs/vision.md</c>'s "Observation and display"
+/// section): a typed-lane subscription is independently
 /// disposable, a late attach's non-consuming primer never steals a one-shot continuity hint an already-attached sink
 /// is due to observe, and a faulting sink is isolated rather than taking the tick down with it. All three exercise
 /// <see cref="Puck.World.Server.WorldServer.AttachSink"/>/<see cref="Puck.World.Server.WorldOutputHub"/> directly

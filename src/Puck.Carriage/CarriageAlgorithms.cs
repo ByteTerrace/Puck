@@ -13,7 +13,7 @@ public enum CarriageKeyRole {
 /// <summary>
 /// One algorithm the carriage envelope understands, fully naming curve, signature hash (for signing) or
 /// key-agreement/AEAD scheme (for sealing). <see cref="KeyId.Algorithm"/> stores the <see cref="Name"/> of
-/// one of these; nothing else may appear there, and the algorithm rule (docs/world-model.md, "Signed
+/// one of these; nothing else may appear there, and the algorithm rule (README.md, "Signed
 /// carriage") requires the verifier to resolve the actual crypto parameters from this table via the
 /// pinned key's algorithm — never from an untrusted envelope field.
 /// </summary>

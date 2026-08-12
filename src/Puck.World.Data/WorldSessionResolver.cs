@@ -3,7 +3,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The transport-neutral local resolver docs/world-model.md's "Resolve once; consume with separate lifetimes" and
+/// The transport-neutral local resolver docs/vision.md's "Resolve once; consume with separate lifetimes" and
 /// "Durability, scope and generation" sections describe — the one place a <see cref="WorldDestination"/> row plus a
 /// traveling cohort's claims become a scoped identity: a target-issued generation, a scope key, and the
 /// process-local instance name that generation resolves to. <c>Puck.World.WorldInstanceHost</c>'s portal-scan path
@@ -22,7 +22,7 @@ namespace Puck.World;
 /// <para><b>Idempotent by construction.</b> Resolving the same (destination, durability, scope key, referenced
 /// document) while a generation is still active returns the identical generation id and instance name — never a
 /// fresh mint — so two travelers crossing the same scoped door in the same tick, or a later display/entry consumer
-/// resolving the same door again, land on one generation (docs/world-model.md "Idempotent resolution"). A
+/// resolving the same door again, land on one generation (docs/vision.md "Idempotent resolution"). A
 /// generation is minted exactly once, from <see cref="m_nextGenerationId"/> — an ordered counter this resolver
 /// alone owns, advancing only when a caller actually asks (the same "moves only when asked, never with time" shape
 /// <c>Puck.World.Server.WorldHandleTable.m_nextGeneration</c> already follows) — and the mint is recorded in
@@ -42,8 +42,8 @@ namespace Puck.World;
 /// <c>ReapIfEmpty</c> (a persisted-lifetime resolution is retained — see
 /// <c>Puck.World.WorldInstanceHost.TransferDestination</c>'s own remarks) — only an explicit
 /// <c>world.instance.stop</c> clears it, mirroring "an explicit reset ends a generation through the same target
-/// decision" (docs/world-model.md). Releasing an observation lease alone never advances anything here, because
-/// nothing about observation reaches this type yet — see docs/world-model.md's own "Observation and display"
+/// decision" (docs/vision.md). Releasing an observation lease alone never advances anything here, because
+/// nothing about observation reaches this type yet — see docs/vision.md's own "Observation and display"
 /// gap.</para>
 /// <para><b>Scope keys never collide across kinds:</b> <c>user:&lt;identity-id&gt;</c>, <c>group:&lt;group-id&gt;</c>,
 /// and the fixed <see cref="GlobalScopeKey"/> live in one namespace by construction (an identity id and a group id
@@ -54,7 +54,7 @@ namespace Puck.World;
 /// id (an anonymous member, or a cohort naming more than one identity, refuses by name). Group/named requires every
 /// member to hold the same named group's membership. Group/tagged requires every member's own unique tagged
 /// membership to resolve to the same group id — zero or multiple tagged memberships for any one member refuses by
-/// name, naming the candidates when there is more than one (docs/world-model.md "Durability, scope and
+/// name, naming the candidates when there is more than one (docs/vision.md "Durability, scope and
 /// generation").</para>
 /// </remarks>
 public sealed class WorldSessionResolver {
@@ -78,7 +78,7 @@ public sealed class WorldSessionResolver {
     // distinct persisted destinations that both resolve to the boot instance's own document — so retirement must
     // clear EVERY key this instance name was ever installed under, not just the last one.
     private readonly Dictionary<string, HashSet<(string Destination, WorldDestinationDurability Durability, string ScopeKey, string ReferencedDocument)>> m_byInstanceName = new(comparer: StringComparer.Ordinal);
-    // A PURE function of resolution order — never wall-clock, RNG, or tick-of-entry (docs/world-model.md "Resolution
+    // A PURE function of resolution order — never wall-clock, RNG, or tick-of-entry (docs/vision.md "Resolution
     // and transfer are ordered authority events"). Advances by exactly one per NEW generation minted, mirroring
     // WorldInstanceHost.m_freshCounters' own determinism shape one level up: within one process run, the Nth
     // generation minted for a given (destination, scope key) is always the SAME generation, because this resolver
@@ -87,7 +87,7 @@ public sealed class WorldSessionResolver {
 
     private readonly record struct Generation(ulong GenerationId, string InstanceName);
 
-    /// <summary>One resolved scoped session — the identity docs/world-model.md's <c>ResolvedWorldSession</c> names,
+    /// <summary>One resolved scoped session — the identity docs/vision.md's <c>ResolvedWorldSession</c> names,
     /// narrowed to what a same-process caller needs today (no remote authority/session id/epoch yet).</summary>
     /// <param name="DestinationName">The resolved <see cref="WorldDestination.Name"/>.</param>
     /// <param name="ScopeKey">The resolved scope key — <c>user:&lt;id&gt;</c>, <c>group:&lt;id&gt;</c>, or
@@ -113,7 +113,7 @@ public sealed class WorldSessionResolver {
     /// <summary>Resolves a destination row plus a traveling cohort to a scoped session identity — see this type's own
     /// remarks for the idempotence, lifecycle, and cohort-coherence rules.</summary>
     /// <param name="sourceDefinition">The cohort's own world document — group membership resolves against its
-    /// <c>groups</c> section (local seats only; docs/world-model.md names remote/foreign membership proof as an
+    /// <c>groups</c> section (local seats only; docs/vision.md names remote/foreign membership proof as an
     /// open gap).</param>
     /// <param name="destination">The destination row being resolved. Its <see cref="WorldDestination.Scope"/>/
     /// <see cref="WorldDestination.Selector"/> pairing is assumed already validated (see
@@ -234,7 +234,7 @@ public sealed class WorldSessionResolver {
 
     /// <summary>Whether (<paramref name="destinationName"/>, <paramref name="scopeKey"/>) already has an active
     /// generation — a pure read: no mint, no cache write, no side effect (the same shape as
-    /// <see cref="TryDeriveScopeKey"/>). The "return means home" seam (docs/world-model.md, <c>Puck.World.WorldInstanceHost</c>'s
+    /// <see cref="TryDeriveScopeKey"/>). The "return means home" seam (docs/vision.md, <c>Puck.World.WorldInstanceHost</c>'s
     /// own return-portal resolution) reads this first, before ever attempting an origin match: an already-active
     /// entry always wins, because the resolver's own cache is the authority on which instance a pair's generation
     /// actually names once one exists — an origin match (<see cref="TryAdopt"/>) only ever gets to apply to a pair's
@@ -261,7 +261,7 @@ public sealed class WorldSessionResolver {
 
     /// <summary>Installs <paramref name="instanceName"/> as the active generation for (<paramref name="destination"/>,
     /// <paramref name="scopeKey"/>) without minting a fresh instance or starting anything — the "return means home"
-    /// half of docs/world-model.md's destination/session model: a destination whose resolved document is the same
+    /// half of docs/vision.md's destination/session model: a destination whose resolved document is the same
     /// document a running instance was already started from must resolve to that instance, never mint a second one.
     /// This resolver carries no notion of "running instances" or "boot" at all (it is transport-neutral — see this
     /// type's own remarks); the origin comparison that decides an instance qualifies is entirely
@@ -270,7 +270,7 @@ public sealed class WorldSessionResolver {
     /// idempotent bookkeeping <see cref="TryResolve"/> already provides — a later resolution against the identical
     /// pair (through either this method again or ordinary <see cref="TryResolve"/>) reuses the installed generation
     /// rather than re-deciding anything.</summary>
-    /// <remarks><b>Precedence (stated explicitly per docs/world-model.md's own "Refuse-by-name anything
+    /// <remarks><b>Precedence (stated explicitly per docs/vision.md's own "Refuse-by-name anything
     /// ambiguous"):</b> the resolver's own cache entry for a pair always wins once one exists
     /// (<see cref="TryGetActive"/> is the gate a caller checks first) — origin-matching applies only to a pair's
     /// first resolution, and only for a running instance this resolver did not itself mint (an instance this
@@ -310,7 +310,7 @@ public sealed class WorldSessionResolver {
         }
 
         // A fresh ordered id, exactly like TryResolve's own mint branch — an adoption is a resolution event like any
-        // other (docs/world-model.md "Resolution and transfer are ordered authority events"), so it consumes the
+        // other (docs/vision.md "Resolution and transfer are ordered authority events"), so it consumes the
         // same counter rather than reusing generation 0 (which would collide with a genuinely-minted first
         // generation for some other pair).
         var generationId = m_nextGenerationId++;
@@ -351,7 +351,7 @@ public sealed class WorldSessionResolver {
     }
 
     /// <summary>Every currently active generation resolved for one destination row — <c>world.destinations</c>'s
-    /// read-back of resolution state (docs/world-model.md, "a decision nothing can echo can only be asserted").
+    /// read-back of resolution state (docs/vision.md, "a decision nothing can echo can only be asserted").
     /// Ordinal by scope key so the echo is stable across calls.</summary>
     /// <param name="destinationName">The destination row's own name.</param>
     /// <param name="durability">The calling row's own durability — part of the filter, on the same terms as
@@ -446,7 +446,7 @@ public sealed class WorldSessionResolver {
         }
     }
 
-    // User scope: the entering seat's OWN owned-identity world IS the identity (docs/world-model.md "User resolves
+    // User scope: the entering seat's OWN owned-identity world IS the identity (docs/vision.md "User resolves
     // locally to the entering seat's owned-identity world"). An anonymous member refuses by name rather than minting
     // one; a cohort spanning more than one identity refuses as a named scope mismatch rather than picking either.
     private static bool TryResolveUserScopeKey(IReadOnlyList<CohortMember> cohort, out string scopeKey, out string reason) {
@@ -477,7 +477,7 @@ public sealed class WorldSessionResolver {
     }
 
     // Group scope: `named` binds every member to ONE authored group id; `tagged` resolves each member's own UNIQUE
-    // membership carrying the tag, then requires the whole cohort to land on the SAME group id (docs/world-model.md
+    // membership carrying the tag, then requires the whole cohort to land on the SAME group id (docs/vision.md
     // "Group / tagged"). Membership itself reads the world's own `groups` section — LOCAL seats only, per this
     // resolver's own remarks; a remote/foreign membership claim is the federated campaign's job.
     private static bool TryResolveGroupScopeKey(WorldDefinition sourceDefinition, WorldDestination destination, IReadOnlyList<CohortMember> cohort, out string scopeKey, out string reason) {

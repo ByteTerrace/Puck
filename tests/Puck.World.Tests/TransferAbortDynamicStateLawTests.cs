@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="WorldPopulation.TryDetachSeatForTransfer"/>/<see cref="WorldPopulation.RestoreDetachedSeat"/>'s
 /// widened abort-exactness (a same-process transfer's abort must restore EXACT original state, not merely
-/// position/yaw) — the ratified in-flight rule docs/world-model.md states: "drop and re-derive what the engine can
+/// position/yaw) — the ratified in-flight rule docs/vision.md states: "drop and re-derive what the engine can
 /// recompute; carry what the player can perceive". <c>Puck.World</c> (the composition root, home of
 /// <c>WorldInstanceHost.ApplyTransfer</c> — the actual abort/restore CALLER) is out of reach for this project (see
 /// Fixtures.cs's own remarks), so this suite proves the PRIMITIVE the abort path depends on: detaching a body with
