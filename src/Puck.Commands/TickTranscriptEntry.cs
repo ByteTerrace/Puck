@@ -56,6 +56,10 @@ public sealed class TickTranscriptEntry {
         CommandCount = pending.CommandCount;
         OverflowCount = pending.OverflowCount;
 
-        Array.Copy(sourceArray: pending.m_commands, destinationArray: m_commands, length: pending.CommandCount);
+        Array.Copy(
+            sourceArray: pending.m_commands,
+            destinationArray: m_commands,
+            length: pending.CommandCount
+        );
     }
 }

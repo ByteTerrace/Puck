@@ -20,7 +20,12 @@ namespace Puck.Commands;
 /// <param name="Generation">The admission generation for <see cref="CommandPrincipalKind.Peer"/>; zero otherwise.</param>
 public readonly record struct CommandPrincipal(CommandPrincipalKind Kind, int Index, string? Name, int Generation) {
     /// <summary>The console/script control surface — the identity the text submission door stamps.</summary>
-    public static CommandPrincipal Console { get; } = new(Kind: CommandPrincipalKind.Console, Index: 0, Name: null, Generation: 0);
+    public static CommandPrincipal Console { get; } = new(
+        Kind: CommandPrincipalKind.Console,
+        Index: 0,
+        Name: null,
+        Generation: 0
+    );
 
     /// <summary>Whether this principal was stamped by a door at all.</summary>
     public bool IsStamped => (Kind != CommandPrincipalKind.Unspecified);
@@ -31,18 +36,33 @@ public readonly record struct CommandPrincipal(CommandPrincipalKind Kind, int In
     /// <remarks>A mixer must NOT call this to attribute a slot's input: a claimed slot may be answering to a peer or a
     /// guest module, so synthesizing a seat there attributes the claimant's action to the seat it displaced. Ask
     /// <see cref="ICommandPrincipalResolver.PrincipalOf"/> instead — the host's roster owns that answer.</remarks>
-    public static CommandPrincipal Seat(int slot) => new(Kind: CommandPrincipalKind.Seat, Index: slot, Name: null, Generation: 0);
+    public static CommandPrincipal Seat(int slot) => new(
+        Kind: CommandPrincipalKind.Seat,
+        Index: slot,
+        Name: null,
+        Generation: 0
+    );
 
     /// <summary>The guest-module principal for a descriptor name.</summary>
     /// <param name="name">The module's descriptor name.</param>
     /// <returns>The addon principal.</returns>
-    public static CommandPrincipal Addon(string name) => new(Kind: CommandPrincipalKind.Addon, Index: 0, Name: name, Generation: 0);
+    public static CommandPrincipal Addon(string name) => new(
+        Kind: CommandPrincipalKind.Addon,
+        Index: 0,
+        Name: name,
+        Generation: 0
+    );
 
     /// <summary>The peer principal for a 0-based entity index.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The peer principal.</returns>
     /// <param name="generation">The positive admission generation.</param>
-    public static CommandPrincipal Peer(int index, int generation) => new(Kind: CommandPrincipalKind.Peer, Index: index, Name: null, Generation: generation);
+    public static CommandPrincipal Peer(int index, int generation) => new(
+        Kind: CommandPrincipalKind.Peer,
+        Index: index,
+        Name: null,
+        Generation: generation
+    );
 
     /// <summary>A short stable label for echoes — <c>seat1</c>…, <c>console</c>, <c>addon:&lt;name&gt;</c>,
     /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c>.</summary>

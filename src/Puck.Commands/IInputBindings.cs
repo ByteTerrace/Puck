@@ -23,7 +23,10 @@ public interface IInputBindings {
     /// <param name="signal">The captured signal being resolved.</param>
     /// <returns>The command bindings for <paramref name="slot"/> and the signal's source, or <see langword="null"/>.</returns>
     IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
-        return Resolve(slot: slot, source: signal.Source);
+        return Resolve(
+            slot: slot,
+            source: signal.Source
+        );
     }
 
     /// <summary>

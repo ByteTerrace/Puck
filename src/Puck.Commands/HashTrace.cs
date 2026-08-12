@@ -11,7 +11,10 @@ public static class HashTrace {
         ArgumentNullException.ThrowIfNull(argument: left);
         ArgumentNullException.ThrowIfNull(argument: right);
 
-        var count = Math.Min(val1: left.Length, val2: right.Length);
+        var count = Math.Min(
+            val1: left.Length,
+            val2: right.Length
+        );
 
         for (var index = 0; (index < count); index++) {
             if (left[index] != right[index]) {
@@ -19,6 +22,8 @@ public static class HashTrace {
             }
         }
 
-        return ((left.Length == right.Length) ? -1 : count);
+        return ((left.Length == right.Length)
+            ? -1
+            : count);
     }
 }

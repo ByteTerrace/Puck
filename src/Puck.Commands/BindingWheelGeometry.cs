@@ -47,25 +47,38 @@ public static class BindingWheelGeometry {
         ArgumentNullException.ThrowIfNull(argument: style);
 
         if (mode == BindingWheelSpatialSelectionMode.Disabled) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.Disabled);
+            return new BindingWheelSelection(
+                Sector: -1,
+                Outcome: BindingWheelSelectionOutcome.Disabled
+            );
         }
 
         var distanceSquared = vector.LengthSquared();
         var inner = (unit * style.DeadZoneFraction);
 
         if (distanceSquared <= (inner * inner)) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
+            return new BindingWheelSelection(
+                Sector: -1,
+                Outcome: BindingWheelSelectionOutcome.DeadZone
+            );
         }
 
         if (mode == BindingWheelSpatialSelectionMode.HitTarget) {
-            var outer = (inner + ((ringCount + style.OuterGraceRingFraction) * unit * style.RingWidthFraction));
+            var outer = (inner + (((ringCount + style.OuterGraceRingFraction) * unit) * style.RingWidthFraction));
 
             if (distanceSquared > (outer * outer)) {
-                return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.Outside);
+                return new BindingWheelSelection(
+                    Sector: -1,
+                    Outcome: BindingWheelSelectionOutcome.Outside
+                );
             }
         }
 
-        return SelectAngle(vector: vector, sectorCount: sectorCount, style: style);
+        return SelectAngle(
+            vector: vector,
+            sectorCount: sectorCount,
+            style: style
+        );
     }
 
     /// <summary>Resolves a normalized Axis2D selector. Axis selection is always directional and retains the authored
@@ -76,16 +89,26 @@ public static class BindingWheelGeometry {
         var distanceSquared = vector.LengthSquared();
 
         if (distanceSquared <= (style.DeadZoneFraction * style.DeadZoneFraction)) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
+            return new BindingWheelSelection(
+                Sector: -1,
+                Outcome: BindingWheelSelectionOutcome.DeadZone
+            );
         }
 
         var outer = (1f + style.OuterGraceRingFraction);
 
         if (distanceSquared > (outer * outer)) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.Outside);
+            return new BindingWheelSelection(
+                Sector: -1,
+                Outcome: BindingWheelSelectionOutcome.Outside
+            );
         }
 
-        return SelectAngle(vector: vector, sectorCount: sectorCount, style: style);
+        return SelectAngle(
+            vector: vector,
+            sectorCount: sectorCount,
+            style: style
+        );
     }
 
     /// <summary>Chooses the vector used to select and qualify a spatial input's sector independently from
@@ -121,10 +144,16 @@ public static class BindingWheelGeometry {
         var thresholds = excursion.ThresholdsSquared;
         var ringCount = (thresholds.Count + 1);
 
-        if ((previousRing < 0) || (previousRing >= ringCount)) {
+        if (
+            (previousRing < 0) ||
+            (previousRing >= ringCount)
+        ) {
             var resolved = 0;
 
-            while ((resolved < thresholds.Count) && (magnitudeSquared > thresholds[resolved])) {
+            while (
+                (resolved < thresholds.Count) &&
+                (magnitudeSquared > thresholds[resolved])
+            ) {
                 resolved++;
             }
 
@@ -133,11 +162,17 @@ public static class BindingWheelGeometry {
 
         var ring = previousRing;
 
-        while ((ring < (ringCount - 1)) && (magnitudeSquared > excursion.OutwardThresholdsSquared[ring])) {
+        while (
+            (ring < (ringCount - 1)) &&
+            (magnitudeSquared > excursion.OutwardThresholdsSquared[ring])
+        ) {
             ring++;
         }
 
-        while ((ring > 0) && (magnitudeSquared < excursion.InwardThresholdsSquared[(ring - 1)])) {
+        while (
+            (ring > 0) &&
+            (magnitudeSquared < excursion.InwardThresholdsSquared[(ring - 1)])
+        ) {
             ring--;
         }
 
@@ -148,27 +183,42 @@ public static class BindingWheelGeometry {
     public static BindingWheelSelection SelectDirection(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
         ArgumentNullException.ThrowIfNull(argument: style);
 
-        return SelectAngle(vector: vector, sectorCount: sectorCount, style: style);
+        return SelectAngle(
+            vector: vector,
+            sectorCount: sectorCount,
+            style: style
+        );
     }
 
     /// <summary>Resolves the fixed hub used for one open gesture. A pointer-relative radial falls back to viewport
     /// center when that seat has no pointer location.</summary>
     public static Vector2 ResolveOpeningCenter(BindingWheelPlacement placement, bool pointerAvailable, Vector2 pointer, Vector2 viewportCenter) =>
-        (((placement == BindingWheelPlacement.Pointer) && pointerAvailable) ? pointer : viewportCenter);
+        (((placement == BindingWheelPlacement.Pointer) && pointerAvailable)
+        ? pointer
+        : viewportCenter);
 
     private static BindingWheelSelection SelectAngle(Vector2 vector, int sectorCount, BindingWheelStyleDefinition style) {
-        var clockwiseAngle = MathF.Atan2(y: vector.X, x: -vector.Y);
+        var clockwiseAngle = MathF.Atan2(
+            y: vector.X,
+            x: -vector.Y
+        );
 
         if (clockwiseAngle < 0f) {
             clockwiseAngle += MathF.Tau;
         }
 
         var rotation = (style.RotationDegrees * (MathF.PI / 180f));
-        var relative = (style.Clockwise ? (clockwiseAngle - rotation) : (rotation - clockwiseAngle));
-        relative = ((relative % MathF.Tau) + MathF.Tau) % MathF.Tau;
+        var relative = (style.Clockwise
+            ? (clockwiseAngle - rotation)
+            : (rotation - clockwiseAngle));
+
+        relative = (((relative % MathF.Tau) + MathF.Tau) % MathF.Tau);
         var span = (MathF.Tau / sectorCount);
         var sector = ((int)((relative + (span * 0.5f)) / span) % sectorCount);
 
-        return new BindingWheelSelection(Sector: sector, Outcome: BindingWheelSelectionOutcome.Sector);
+        return new BindingWheelSelection(
+            Sector: sector,
+            Outcome: BindingWheelSelectionOutcome.Sector
+        );
     }
 }

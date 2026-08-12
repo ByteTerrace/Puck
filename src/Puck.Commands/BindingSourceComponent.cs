@@ -58,14 +58,22 @@ public static class BindingSourceComponent {
 
         var suffix = source[(lastDot + 1)..];
 
-        if (string.Equals(a: suffix, b: "x", comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: suffix,
+            b: "x",
+            comparisonType: StringComparison.Ordinal
+        )) {
             component = AxisComponent.X;
             baseSource = source[..lastDot];
 
             return true;
         }
 
-        if (string.Equals(a: suffix, b: "y", comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: suffix,
+            b: "y",
+            comparisonType: StringComparison.Ordinal
+        )) {
             component = AxisComponent.Y;
             baseSource = source[..lastDot];
 

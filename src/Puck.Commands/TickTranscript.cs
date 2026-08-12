@@ -37,7 +37,10 @@ public sealed class TickTranscript {
     /// <param name="capacity">The ring capacity (ticks retained); defaults to <see cref="DefaultCapacity"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is less than 1.</exception>
     public TickTranscript(int capacity = DefaultCapacity) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: capacity, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: capacity,
+            other: 1
+        );
 
         m_ring = new TickTranscriptEntry[capacity];
 
@@ -75,11 +78,19 @@ public sealed class TickTranscript {
     public TickTranscriptEntry RecordTick(ulong tick, ulong? hashBefore, ulong? hashAfter) {
         var slot = m_ring[m_writeIndex];
 
-        slot.Seal(tick: tick, hashBefore: hashBefore, hashAfter: hashAfter, pending: m_pending);
+        slot.Seal(
+            tick: tick,
+            hashBefore: hashBefore,
+            hashAfter: hashAfter,
+            pending: m_pending
+        );
         m_pending.Clear();
 
         m_writeIndex = ((m_writeIndex + 1) % m_ring.Length);
-        m_count = Math.Min(val1: (m_count + 1), val2: m_ring.Length);
+        m_count = Math.Min(
+            val1: (m_count + 1),
+            val2: m_ring.Length
+        );
 
         return slot;
     }
@@ -89,7 +100,11 @@ public sealed class TickTranscript {
     /// <returns>Up to <paramref name="count"/> entries, oldest first. Each entry is a live ring slot — see
     /// <see cref="TickTranscriptEntry"/>'s reuse warning.</returns>
     public IReadOnlyList<TickTranscriptEntry> LastEntries(int count) {
-        var take = Math.Clamp(value: count, max: m_count, min: 0);
+        var take = Math.Clamp(
+            value: count,
+            max: m_count,
+            min: 0
+        );
         var result = new List<TickTranscriptEntry>(capacity: take);
 
         for (var offset = (take - 1); (offset >= 0); offset--) {

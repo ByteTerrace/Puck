@@ -33,11 +33,21 @@ public sealed record BindingSessionPlan(
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pageId);
 
-        var page = (document.Chords.Select(selector: static row => row.Page).FirstOrDefault(predicate: page => string.Equals(a: page?.Id, b: pageId, comparisonType: StringComparison.Ordinal))
-            ?? throw new ArgumentException(message: $"the document has no page \"{pageId}\"", paramName: nameof(pageId)));
+        var page = (document.Chords.Select(selector: static row => row.Page).FirstOrDefault(predicate: page => string.Equals(
+            a: page?.Id,
+            b: pageId,
+            comparisonType: StringComparison.Ordinal
+        ))
+            ?? throw new ArgumentException(
+            message: $"the document has no page \"{pageId}\"",
+            paramName: nameof(pageId)
+        ));
 
         if (page.Entries.Count == 0) {
-            throw new ArgumentException(message: $"page \"{pageId}\" has no entries to walk", paramName: nameof(pageId));
+            throw new ArgumentException(
+                message: $"page \"{pageId}\" has no entries to walk",
+                paramName: nameof(pageId)
+            );
         }
 
         // An activator-triggered entry (BindingPageEntryDefinition.Activator, no Source) has no single "suggested
@@ -46,7 +56,10 @@ public sealed record BindingSessionPlan(
         var sourcedEntries = page.Entries.Where(predicate: static entry => (entry.Source is not null)).ToList();
 
         if (sourcedEntries.Count == 0) {
-            throw new ArgumentException(message: $"page \"{pageId}\" has no single-source entries to walk", paramName: nameof(pageId));
+            throw new ArgumentException(
+                message: $"page \"{pageId}\" has no single-source entries to walk",
+                paramName: nameof(pageId)
+            );
         }
 
         return new BindingSessionPlan(
@@ -54,7 +67,9 @@ public sealed record BindingSessionPlan(
             ReservedSources: [.. document.Modifiers.Select(selector: static modifier => modifier.Source)],
             Steps: [.. sourcedEntries.Select(selector: static entry => new BindingSessionStep(
                 ActivateOn: entry.ActivateOn,
-                Command: ((entry.Channel is { } channel) ? BindingProfile.ChannelCommandName(channel: channel) : entry.Command!),
+                Command: ((entry.Channel is { } channel)
+            ? BindingProfile.ChannelCommandName(channel: channel)
+            : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
                 SuggestedSource: entry.Source!

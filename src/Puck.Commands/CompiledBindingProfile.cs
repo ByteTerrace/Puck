@@ -125,11 +125,18 @@ public sealed class CompiledBindingProfile {
         for (var rowIndex = 0; (rowIndex < m_rows.Length); rowIndex++) {
             var row = m_rows[rowIndex];
 
-            if ((row.GroupIndex != groupIndex) || (row.Table is null) || (row.Chord.Length <= bestLength)) {
+            if (
+                (row.GroupIndex != groupIndex) ||
+                (row.Table is null) ||
+                (row.Chord.Length <= bestLength)
+            ) {
                 continue;
             }
 
-            if (IsPrefix(chord: row.Chord, heldOrder: heldOrder)) {
+            if (IsPrefix(
+                chord: row.Chord,
+                heldOrder: heldOrder
+            )) {
                 best = rowIndex;
                 bestLength = row.Chord.Length;
             }
@@ -195,6 +202,9 @@ public sealed class CompiledBindingProfile {
     /// <param name="chord">The chord's modifier indices.</param>
     /// <param name="heldOrder">The held modifier indices, in press order.</param>
     internal static bool IsPrefix(ReadOnlySpan<int> chord, ReadOnlySpan<int> heldOrder) {
-        return ((chord.Length <= heldOrder.Length) && heldOrder[..chord.Length].SequenceEqual(other: chord));
+        return (
+            (chord.Length <= heldOrder.Length) &&
+            heldOrder[..chord.Length].SequenceEqual(other: chord)
+        );
     }
 }

@@ -33,7 +33,11 @@ public sealed record KeyId {
     public required string KeyHash { get; init; }
 
     /// <summary>Whether this id is the base case of the chain: self-referential domain and no subject.</summary>
-    public bool IsRoot => (string.Equals(a: Domain, b: KeyHash, comparisonType: StringComparison.Ordinal) && (Subject is null));
+    public bool IsRoot => (string.Equals(
+        a: Domain,
+        b: KeyHash,
+        comparisonType: StringComparison.Ordinal
+    ) && (Subject is null));
 
     /// <summary>Computes the lowercase-hex SHA-256 fingerprint of a <c>SubjectPublicKeyInfo</c> encoding.</summary>
     /// <param name="subjectPublicKeyInfo">The DER-encoded SPKI bytes exported from an EC key.</param>

@@ -21,7 +21,10 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
     /// <summary>Creates a fresh, random device id with no stable meaning across connections.</summary>
     /// <returns>A new random device id.</returns>
     public static InputDeviceId New() {
-        return new InputDeviceId(Value: Guid.NewGuid(), Persistence: InputDeviceIdentityPersistence.Connection);
+        return new InputDeviceId(
+            Value: Guid.NewGuid(),
+            Persistence: InputDeviceIdentityPersistence.Connection
+        );
     }
 
     /// <summary>
@@ -40,7 +43,10 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
             source: content
         );
 
-        return new InputDeviceId(Value: new Guid(b: digest[..16]), Persistence: InputDeviceIdentityPersistence.Reconnect);
+        return new InputDeviceId(
+            Value: new Guid(b: digest[..16]),
+            Persistence: InputDeviceIdentityPersistence.Reconnect
+        );
     }
 
     /// <summary>Derives a content-addressed id from a textual device key (UTF-8 encoded), such as a device path.</summary>

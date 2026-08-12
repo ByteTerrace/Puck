@@ -29,11 +29,19 @@ namespace Puck.Carriage;
 public readonly record struct CarriageVerifyResult(bool Verified, string? RefusalReason, IReadOnlySet<string>? Reach) {
     /// <summary>Builds a verified result carrying the admitting entry's authored slot reach.</summary>
     /// <param name="reach">The slot names the admitting trust entry reaches. Empty means the claim verified but reaches nothing.</param>
-    public static CarriageVerifyResult Accept(IReadOnlySet<string> reach) => new(Verified: true, RefusalReason: null, Reach: reach);
+    public static CarriageVerifyResult Accept(IReadOnlySet<string> reach) => new(
+        Verified: true,
+        RefusalReason: null,
+        Reach: reach
+    );
 
     /// <summary>Builds a refused result carrying why. A refusal never carries reach — there is no verified claim to scope.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>
-    public static CarriageVerifyResult Refuse(string reason) => new(Verified: false, RefusalReason: reason, Reach: null);
+    public static CarriageVerifyResult Refuse(string reason) => new(
+        Verified: false,
+        RefusalReason: reason,
+        Reach: null
+    );
 
     /// <summary>
     /// Whether this claim both verified AND was admitted by an entry whose authored reach covers

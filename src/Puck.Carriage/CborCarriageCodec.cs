@@ -32,7 +32,12 @@ public sealed class CborCarriageCodec : ICarriageCodec {
     public byte[] EncodeSignedPortion(CarriageEnvelopeHeader header, CarriagePayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-        WriteSignedPortion(writer: writer, header: header, payloadKind: payloadKind, payloadBytes: payloadBytes);
+        WriteSignedPortion(
+            writer: writer,
+            header: header,
+            payloadKind: payloadKind,
+            payloadBytes: payloadBytes
+        );
 
         return writer.Encode();
     }
@@ -44,13 +49,22 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         writer.WriteStartArray(definiteLength: 9);
         writer.WriteUInt64(value: FormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
-        WriteOptionalText(writer: writer, value: header.Subject);
+        WriteOptionalText(
+            writer: writer,
+            value: header.Subject
+        );
         writer.WriteTextString(value: header.Algorithm);
         writer.WriteTextString(value: header.Purpose);
         writer.WriteInt64(value: header.NotBefore);
         writer.WriteInt64(value: header.NotAfter);
-        WriteOptionalText(writer: writer, value: header.Audience);
-        WriteOptionalUInt(writer: writer, value: header.Sequence);
+        WriteOptionalText(
+            writer: writer,
+            value: header.Audience
+        );
+        WriteOptionalUInt(
+            writer: writer,
+            value: header.Sequence
+        );
         writer.WriteEndArray();
 
         return writer.Encode();
@@ -58,7 +72,11 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
     /// <inheritdoc/>
     public byte[] EncodeEnvelope(SignedCarriageEnvelope envelope) {
-        var signedPortion = EncodeSignedPortion(header: envelope.Header, payloadKind: envelope.PayloadKind, payloadBytes: envelope.PayloadBytes.Span);
+        var signedPortion = EncodeSignedPortion(
+            header: envelope.Header,
+            payloadKind: envelope.PayloadKind,
+            payloadBytes: envelope.PayloadBytes.Span
+        );
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
         writer.WriteStartArray(definiteLength: 2);
@@ -76,15 +94,24 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         return Decode(
             what: "envelope",
             body: () => {
-                var reader = new CborReader(data: source, conformanceMode: CborConformanceMode.Strict);
+                var reader = new CborReader(
+                    data: source,
+                    conformanceMode: CborConformanceMode.Strict
+                );
 
-                ExpectArrayLength(reader: reader, expected: 2);
+                ExpectArrayLength(
+                    reader: reader,
+                    expected: 2
+                );
 
                 var signedPortion = reader.ReadByteString();
                 var signature = reader.ReadByteString();
 
                 reader.ReadEndArray();
-                RequireFullyConsumed(reader: reader, what: "envelope");
+                RequireFullyConsumed(
+                    reader: reader,
+                    what: "envelope"
+                );
 
                 var (header, payloadKind, payloadBytes) = DecodeSignedPortion(bytes: signedPortion);
 
@@ -99,7 +126,11 @@ public sealed class CborCarriageCodec : ICarriageCodec {
                     signedPortion: signedPortion
                 );
 
-                RequireCanonical(received: source, reencoded: EncodeEnvelope(envelope: envelope), what: "envelope");
+                RequireCanonical(
+                    received: source,
+                    reencoded: EncodeEnvelope(envelope: envelope),
+                    what: "envelope"
+                );
 
                 return envelope;
             }
@@ -112,7 +143,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
         writer.WriteStartArray(definiteLength: 5);
         writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.Domain));
-        WriteOptionalText(writer: writer, value: payload.TargetId.Subject);
+        WriteOptionalText(
+            writer: writer,
+            value: payload.TargetId.Subject
+        );
         writer.WriteTextString(value: payload.TargetId.Algorithm);
         writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.KeyHash));
         writer.WriteByteString(value: payload.PublicKeySubjectPublicKeyInfo.Span);
@@ -128,18 +162,33 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         return Decode(
             what: "key binding payload",
             body: () => {
-                var reader = new CborReader(data: source, conformanceMode: CborConformanceMode.Strict);
+                var reader = new CborReader(
+                    data: source,
+                    conformanceMode: CborConformanceMode.Strict
+                );
 
-                ExpectArrayLength(reader: reader, expected: 5);
+                ExpectArrayLength(
+                    reader: reader,
+                    expected: 5
+                );
 
-                var domain = ReadFingerprint(reader: reader, what: "key binding payload's target domain");
+                var domain = ReadFingerprint(
+                    reader: reader,
+                    what: "key binding payload's target domain"
+                );
                 var subject = ReadOptionalText(reader: reader);
                 var algorithm = reader.ReadTextString();
-                var keyHash = ReadFingerprint(reader: reader, what: "key binding payload's target key hash");
+                var keyHash = ReadFingerprint(
+                    reader: reader,
+                    what: "key binding payload's target key hash"
+                );
                 var spki = reader.ReadByteString();
 
                 reader.ReadEndArray();
-                RequireFullyConsumed(reader: reader, what: "key binding payload");
+                RequireFullyConsumed(
+                    reader: reader,
+                    what: "key binding payload"
+                );
 
                 var targetId = new KeyId {
                     Algorithm = algorithm,
@@ -148,9 +197,16 @@ public sealed class CborCarriageCodec : ICarriageCodec {
                     Subject = subject,
                 };
 
-                var payload = new KeyBindingPayload(TargetId: targetId, PublicKeySubjectPublicKeyInfo: spki);
+                var payload = new KeyBindingPayload(
+                    TargetId: targetId,
+                    PublicKeySubjectPublicKeyInfo: spki
+                );
 
-                RequireCanonical(received: source, reencoded: EncodeKeyBindingPayload(payload: payload), what: "key binding payload");
+                RequireCanonical(
+                    received: source,
+                    reencoded: EncodeKeyBindingPayload(payload: payload),
+                    what: "key binding payload"
+                );
 
                 return payload;
             }
@@ -178,9 +234,15 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         return Decode(
             what: "sealed payload",
             body: () => {
-                var reader = new CborReader(data: source, conformanceMode: CborConformanceMode.Strict);
+                var reader = new CborReader(
+                    data: source,
+                    conformanceMode: CborConformanceMode.Strict
+                );
 
-                ExpectArrayLength(reader: reader, expected: 4);
+                ExpectArrayLength(
+                    reader: reader,
+                    expected: 4
+                );
 
                 var ephemeralSpki = reader.ReadByteString();
                 var nonce = reader.ReadByteString();
@@ -188,7 +250,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
                 var ciphertext = reader.ReadByteString();
 
                 reader.ReadEndArray();
-                RequireFullyConsumed(reader: reader, what: "sealed payload");
+                RequireFullyConsumed(
+                    reader: reader,
+                    what: "sealed payload"
+                );
 
                 var payload = new SealedPayload(
                     Ciphertext: ciphertext,
@@ -197,7 +262,11 @@ public sealed class CborCarriageCodec : ICarriageCodec {
                     Tag: tag
                 );
 
-                RequireCanonical(received: source, reencoded: EncodeSealedPayload(payload: payload), what: "sealed payload");
+                RequireCanonical(
+                    received: source,
+                    reencoded: EncodeSealedPayload(payload: payload),
+                    what: "sealed payload"
+                );
 
                 return payload;
             }
@@ -208,21 +277,36 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         writer.WriteStartArray(definiteLength: 11);
         writer.WriteUInt64(value: FormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
-        WriteOptionalText(writer: writer, value: header.Subject);
+        WriteOptionalText(
+            writer: writer,
+            value: header.Subject
+        );
         writer.WriteTextString(value: header.Algorithm);
         writer.WriteTextString(value: header.Purpose);
         writer.WriteInt64(value: header.NotBefore);
         writer.WriteInt64(value: header.NotAfter);
-        WriteOptionalText(writer: writer, value: header.Audience);
-        WriteOptionalUInt(writer: writer, value: header.Sequence);
+        WriteOptionalText(
+            writer: writer,
+            value: header.Audience
+        );
+        WriteOptionalUInt(
+            writer: writer,
+            value: header.Sequence
+        );
         writer.WriteUInt64(value: (ulong)payloadKind);
         writer.WriteByteString(value: payloadBytes);
         writer.WriteEndArray();
     }
     private static (CarriageEnvelopeHeader Header, CarriagePayloadKind PayloadKind, byte[] PayloadBytes) DecodeSignedPortion(byte[] bytes) {
-        var reader = new CborReader(data: bytes, conformanceMode: CborConformanceMode.Strict);
+        var reader = new CborReader(
+            data: bytes,
+            conformanceMode: CborConformanceMode.Strict
+        );
 
-        ExpectArrayLength(reader: reader, expected: 11);
+        ExpectArrayLength(
+            reader: reader,
+            expected: 11
+        );
 
         var version = reader.ReadUInt64();
 
@@ -230,7 +314,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
             throw new FormatException(message: $"The carriage envelope declares format version {version}, but this codec only understands version {FormatVersion}.");
         }
 
-        var domain = ReadFingerprint(reader: reader, what: "envelope's domain");
+        var domain = ReadFingerprint(
+            reader: reader,
+            what: "envelope's domain"
+        );
         var subject = ReadOptionalText(reader: reader);
         var algorithm = reader.ReadTextString();
         var purpose = reader.ReadTextString();
@@ -244,7 +331,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         // out-of-range wire value would silently truncate into a legitimate kind (258 becomes 2). The
         // canonicality rule would still catch that, but only as a second line — a kind outside the closed
         // set is not a canonicality problem, it is not a kind.
-        if ((payloadKindValue < (ulong)CarriagePayloadKind.Opaque) || (payloadKindValue > (ulong)CarriagePayloadKind.Sealed)) {
+        if (
+            (payloadKindValue < (ulong)CarriagePayloadKind.Opaque) ||
+            (payloadKindValue > (ulong)CarriagePayloadKind.Sealed)
+        ) {
             throw new FormatException(message: $"The carriage envelope declares payload kind {payloadKindValue}, which is outside the closed set {{1, 2, 3}}.");
         }
 
@@ -282,7 +372,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         } catch (FormatException) {
             throw;
         } catch (Exception exception) when (((exception is CborContentException) || (exception is InvalidOperationException) || (exception is OverflowException) || (exception is ArgumentException))) {
-            throw new FormatException(message: $"The carriage {what} is not well-formed CBOR of the expected shape: {exception.Message}", innerException: exception);
+            throw new FormatException(
+                message: $"The carriage {what} is not well-formed CBOR of the expected shape: {exception.Message}",
+                innerException: exception
+            );
         }
     }
 

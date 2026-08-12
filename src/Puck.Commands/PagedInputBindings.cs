@@ -96,7 +96,11 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         // per-source table below — an activator's trigger is its own ordered sequence, not necessarily the signal
         // that happens to be resolving right now (a Tapped tracker in particular must see every signal to detect
         // wrong input; see RowActivatorTracker).
-        ApplyRowActivators(slot: slot, state: state, signal: in signal);
+        ApplyRowActivators(
+            slot: slot,
+            state: state,
+            signal: in signal
+        );
 
         if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
             // A release resolves to whatever its press resolved to (see remarks), then the latch clears.
@@ -115,7 +119,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             ? bindings
             : null);
 
-        if ((signal.Phase == CommandPhase.Started) && (resolved is not null)) {
+        if (
+            (signal.Phase == CommandPhase.Started) &&
+            (resolved is not null)
+        ) {
             state.Latches[signal.Source] = resolved;
         }
 
@@ -124,10 +131,13 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
 
     /// <inheritdoc/>
     public ReadOnlySpan<BindingChordEdge> DrainChordEdges(int slot) {
-        if (!m_slots.TryGetValue(
+        if (
+            !m_slots.TryGetValue(
             key: slot,
             value: out var state
-        ) || (state.PendingEdgeCount == 0)) {
+        ) ||
+            (state.PendingEdgeCount == 0)
+        ) {
             return [];
         }
 
@@ -135,7 +145,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
 
         state.PendingEdgeCount = 0;
 
-        return state.PendingEdges.AsSpan(start: 0, length: count);
+        return state.PendingEdges.AsSpan(
+            start: 0,
+            length: count
+        );
     }
 
     /// <inheritdoc/>
@@ -162,10 +175,13 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         var profile = m_profile;
         var groupIndex = profile.DefaultGroupIndex;
 
-        if ((group is not null) && !profile.TryGetGroup(
+        if (
+            (group is not null) &&
+            !profile.TryGetGroup(
             group: group,
             groupIndex: out groupIndex
-        )) {
+        )
+        ) {
             return false;
         }
 
@@ -184,13 +200,19 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             var previousPageRowIndex = state.PageRowIndex;
 
             state.GroupIndex = groupIndex;
-            state.PageRowIndex = state.Profile.PageRowOf(groupIndex: groupIndex, heldOrder: state.Tracker.HeldOrder);
+            state.PageRowIndex = state.Profile.PageRowOf(
+                groupIndex: groupIndex,
+                heldOrder: state.Tracker.HeldOrder
+            );
 
             // A page flip changes which row activators are IN SCOPE (see ApplyRowActivators) — abandon the
             // outgoing page's partial activator progress rather than let it complete silently after the player has
             // moved on.
             if (previousPageRowIndex != state.PageRowIndex) {
-                ResetActivatorTrackers(state: state, pageRowIndex: previousPageRowIndex);
+                ResetActivatorTrackers(
+                    state: state,
+                    pageRowIndex: previousPageRowIndex
+                );
             }
 
             Publish(state: state);
@@ -205,7 +227,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     /// <param name="group">The group name to look up.</param>
     /// <returns><see langword="true"/> when the profile declares the group.</returns>
     public bool HasGroup(string group) {
-        return m_profile.TryGetGroup(group: group, groupIndex: out _);
+        return m_profile.TryGetGroup(
+            group: group,
+            groupIndex: out _
+        );
     }
 
     /// <summary>Gets the immutable view of the page a slot's active group and held chord currently select.</summary>
@@ -217,7 +242,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             value: out var state
         ))
             ? state.View
-            : m_profile.ViewOf(rowIndex: m_profile.RestingRowOf(groupIndex: ResolveGroupIndex(profile: m_profile, slot: slot))));
+            : m_profile.ViewOf(rowIndex: m_profile.RestingRowOf(groupIndex: ResolveGroupIndex(
+            profile: m_profile,
+            slot: slot
+        ))));
     }
 
     /// <summary>Gets the wheel the slot's active page presents, or <see langword="null"/> when the active page is
@@ -289,14 +317,20 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
 
             var row = profile.RowAt(rowIndex: rowIndex);
 
-            if (!CompiledBindingProfile.IsPrefix(chord: row.Chord, heldOrder: held)) {
+            if (!CompiledBindingProfile.IsPrefix(
+                chord: row.Chord,
+                heldOrder: held
+            )) {
                 state.ArmedRows[rowIndex] = false;
-                AppendEdge(state: state, edge: new BindingChordEdge(
-                    Command: row.Command!.Command,
-                    Dispatch: row.Command.DispatchRelease,
-                    Phase: CommandPhase.Completed,
-                    Value: row.Command.ReleaseValue
-                ));
+                AppendEdge(
+                    state: state,
+                    edge: new BindingChordEdge(
+                        Command: row.Command!.Command,
+                        Dispatch: row.Command.DispatchRelease,
+                        Phase: CommandPhase.Completed,
+                        Value: row.Command.ReleaseValue
+                    )
+                );
             }
         }
 
@@ -311,21 +345,30 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             // appends to the held order, so completion is the exact-match moment).
             if (held.SequenceEqual(other: row.Chord)) {
                 state.ArmedRows[rowIndex] = true;
-                AppendEdge(state: state, edge: new BindingChordEdge(
-                    Command: row.Command!.Command,
-                    Dispatch: true,
-                    Phase: CommandPhase.Started,
-                    Value: row.Command.PressValue
-                ));
+                AppendEdge(
+                    state: state,
+                    edge: new BindingChordEdge(
+                        Command: row.Command!.Command,
+                        Dispatch: true,
+                        Phase: CommandPhase.Started,
+                        Value: row.Command.PressValue
+                    )
+                );
             }
         }
 
         var previousPageRowIndex = state.PageRowIndex;
 
-        state.PageRowIndex = profile.PageRowOf(groupIndex: state.GroupIndex, heldOrder: held);
+        state.PageRowIndex = profile.PageRowOf(
+            groupIndex: state.GroupIndex,
+            heldOrder: held
+        );
 
         if (previousPageRowIndex != state.PageRowIndex) {
-            ResetActivatorTrackers(state: state, pageRowIndex: previousPageRowIndex);
+            ResetActivatorTrackers(
+                state: state,
+                pageRowIndex: previousPageRowIndex
+            );
         }
 
         Publish(state: state);
@@ -351,23 +394,31 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
 
             switch (transition) {
                 case RowActivatorTransition.Opened:
-                    AppendEdge(state: state, edge: new BindingChordEdge(
-                        Command: activatorEntry.Command,
-                        Dispatch: true,
-                        Phase: CommandPhase.Started,
-                        Value: activatorEntry.PressValue
-                    ));
+                    AppendEdge(
+                        state: state,
+                        edge: new BindingChordEdge(
+                            Command: activatorEntry.Command,
+                            Dispatch: true,
+                            Phase: CommandPhase.Started,
+                            Value: activatorEntry.PressValue
+                        )
+                    );
                     break;
                 case RowActivatorTransition.Closed:
-                    AppendEdge(state: state, edge: new BindingChordEdge(
-                        Command: activatorEntry.Command,
-                        Dispatch: activatorEntry.DispatchRelease,
-                        Phase: CommandPhase.Completed,
-                        Value: activatorEntry.ReleaseValue
-                    ));
+                    AppendEdge(
+                        state: state,
+                        edge: new BindingChordEdge(
+                            Command: activatorEntry.Command,
+                            Dispatch: activatorEntry.DispatchRelease,
+                            Phase: CommandPhase.Completed,
+                            Value: activatorEntry.ReleaseValue
+                        )
+                    );
                     break;
                 case RowActivatorTransition.Completed:
-                    AppendEdge(state: state, edge: new BindingChordEdge(
+                    AppendEdge(
+                        state: state,
+                        edge: new BindingChordEdge(
                         Command: activatorEntry.Command,
                         Dispatch: true,
                         Phase: CommandPhase.Started,
@@ -377,7 +428,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
                         // re-assertion of the press (harmless to a dispatch-gated reader, but not the clean single-
                         // entry pulse a tap is supposed to produce).
                         Momentary: true
-                    ));
+                    )
+                    );
                     m_scheduledEdges.Add(item: (slot, new BindingChordEdge(
                         Command: activatorEntry.Command,
                         Dispatch: activatorEntry.DispatchRelease,
@@ -402,7 +454,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     }
     private static void AppendEdge(SlotState state, in BindingChordEdge edge) {
         if (state.PendingEdgeCount == state.PendingEdges.Length) {
-            Array.Resize(array: ref state.PendingEdges, newSize: (state.PendingEdges.Length * 2));
+            Array.Resize(
+                array: ref state.PendingEdges,
+                newSize: (state.PendingEdges.Length * 2)
+            );
         }
 
         state.PendingEdges[state.PendingEdgeCount++] = edge;
@@ -424,14 +479,23 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     private SlotState StateFor(int slot) {
         var profile = m_profile;
 
-        if (m_slots.TryGetValue(
+        if (
+            m_slots.TryGetValue(
             key: slot,
             value: out var state
-        ) && ReferenceEquals(objA: state.Profile, objB: profile)) {
+        ) &&
+            ReferenceEquals(
+            objA: state.Profile,
+            objB: profile
+        )
+        ) {
             return state;
         }
 
-        var groupIndex = ResolveGroupIndex(profile: profile, slot: slot);
+        var groupIndex = ResolveGroupIndex(
+            profile: profile,
+            slot: slot
+        );
         var created = new SlotState {
             ActivatorTrackers = new RowActivatorTracker?[profile.ActivatorCount],
             ArmedRows = new bool[profile.RowCount],

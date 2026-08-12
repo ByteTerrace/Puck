@@ -53,7 +53,10 @@ public static class SealedCarriage {
         var key = ECDiffieHellman.Create();
 
         try {
-            key.ImportSubjectPublicKeyInfo(source: subjectPublicKeyInfo, bytesRead: out _);
+            key.ImportSubjectPublicKeyInfo(
+                source: subjectPublicKeyInfo,
+                bytesRead: out _
+            );
 
             if (!CarriageCurves.IsNistP256(curve: key.ExportParameters(includePrivateParameters: false).Curve)) {
                 throw new FormatException(message: $"The sealed carriage {what} is not on P-256, which is the only curve the sealing algorithm names.");
@@ -61,7 +64,10 @@ public static class SealedCarriage {
         } catch (CryptographicException exception) {
             key.Dispose();
 
-            throw new FormatException(message: $"The sealed carriage {what} does not import as an EC public key.", innerException: exception);
+            throw new FormatException(
+                message: $"The sealed carriage {what} does not import as an EC public key.",
+                innerException: exception
+            );
         } catch {
             key.Dispose();
 
@@ -78,18 +84,33 @@ public static class SealedCarriage {
     /// <returns>The ephemeral sender public key, nonce, tag, and ciphertext needed to unseal.</returns>
     /// <exception cref="FormatException"><paramref name="recipientPublicKeySubjectPublicKeyInfo"/> is not an importable P-256 public key.</exception>
     public static SealedPayload Seal(ReadOnlySpan<byte> recipientPublicKeySubjectPublicKeyInfo, ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> plaintext) {
-        using var recipientPublicKey = ImportAgreementKey(subjectPublicKeyInfo: recipientPublicKeySubjectPublicKeyInfo, what: "recipient key");
+        using var recipientPublicKey = ImportAgreementKey(
+            subjectPublicKeyInfo: recipientPublicKeySubjectPublicKeyInfo,
+            what: "recipient key"
+        );
         using var ephemeralKey = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
 
         var ephemeralSpki = ephemeralKey.ExportSubjectPublicKeyInfo();
-        var derivedKey = DeriveAeadKey(privateAgreementKey: ephemeralKey, otherPartyPublicKey: recipientPublicKey.PublicKey);
+        var derivedKey = DeriveAeadKey(
+            privateAgreementKey: ephemeralKey,
+            otherPartyPublicKey: recipientPublicKey.PublicKey
+        );
 
         var nonce = RandomNumberGenerator.GetBytes(count: NonceLength);
         var tag = new byte[TagLength];
         var ciphertext = new byte[plaintext.Length];
 
-        using (var gcm = new AesGcm(key: derivedKey, tagSizeInBytes: TagLength)) {
-            gcm.Encrypt(nonce: nonce, plaintext: plaintext, ciphertext: ciphertext, tag: tag, associatedData: associatedData);
+        using (var gcm = new AesGcm(
+            key: derivedKey,
+            tagSizeInBytes: TagLength
+        )) {
+            gcm.Encrypt(
+                nonce: nonce,
+                plaintext: plaintext,
+                ciphertext: ciphertext,
+                tag: tag,
+                associatedData: associatedData
+            );
         }
 
         CryptographicOperations.ZeroMemory(buffer: derivedKey);
@@ -125,15 +146,30 @@ public static class SealedCarriage {
             throw new FormatException(message: $"A sealed payload's tag must be {TagLength} bytes, but {payload.Tag.Length} arrived.");
         }
 
-        using var ephemeralPublicKey = ImportAgreementKey(subjectPublicKeyInfo: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span, what: "ephemeral sender key");
+        using var ephemeralPublicKey = ImportAgreementKey(
+            subjectPublicKeyInfo: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span,
+            what: "ephemeral sender key"
+        );
 
-        var derivedKey = DeriveAeadKey(privateAgreementKey: recipientPrivateKey, otherPartyPublicKey: ephemeralPublicKey.PublicKey);
+        var derivedKey = DeriveAeadKey(
+            privateAgreementKey: recipientPrivateKey,
+            otherPartyPublicKey: ephemeralPublicKey.PublicKey
+        );
         var plaintext = new byte[payload.Ciphertext.Length];
 
         try {
-            using var gcm = new AesGcm(key: derivedKey, tagSizeInBytes: TagLength);
+            using var gcm = new AesGcm(
+                key: derivedKey,
+                tagSizeInBytes: TagLength
+            );
 
-            gcm.Decrypt(nonce: payload.Nonce.Span, ciphertext: payload.Ciphertext.Span, tag: payload.Tag.Span, plaintext: plaintext, associatedData: associatedData);
+            gcm.Decrypt(
+                nonce: payload.Nonce.Span,
+                ciphertext: payload.Ciphertext.Span,
+                tag: payload.Tag.Span,
+                plaintext: plaintext,
+                associatedData: associatedData
+            );
         } finally {
             CryptographicOperations.ZeroMemory(buffer: derivedKey);
         }
@@ -142,7 +178,7 @@ public static class SealedCarriage {
     }
 
     /// <summary>The HKDF info label, ASCII, fixed by README.md §14. Two implementations that pick different labels derive different keys and fail with an AEAD tag mismatch — indistinguishable from tampering.</summary>
-    private static readonly byte[] s_hkdfInfoLabel = "puck.carriage.sealed.v1"u8.ToArray();
+    private static readonly byte[] HkdfInfoLabel = "puck.carriage.sealed.v1"u8.ToArray();
 
     /// <summary>
     /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
@@ -170,7 +206,7 @@ public static class SealedCarriage {
                 ikm: sharedSecret,
                 outputLength: DerivedKeyLength,
                 salt: null,
-                info: s_hkdfInfoLabel
+                info: HkdfInfoLabel
             );
         } finally {
             CryptographicOperations.ZeroMemory(buffer: sharedSecret);

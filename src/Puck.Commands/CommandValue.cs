@@ -35,8 +35,8 @@ public readonly record struct CommandValue(CommandValueKind Kind, Vector4 Raw) {
         Kind: CommandValueKind.Digital,
         Raw: new Vector4(
             x: (active
-                ? 1f
-                : 0f),
+        ? 1f
+        : 0f),
             y: 0f,
             z: 0f,
             w: 0f

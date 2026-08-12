@@ -18,8 +18,8 @@ namespace Puck.Carriage;
 /// <see cref="CarriageInterchange"/>.
 /// </remarks>
 internal static class Program {
-    private static int s_passed;
-    private static int s_failed;
+    private static int Passed;
+    private static int Failed;
 
     /// <summary>
     /// The harness entry point, and the two interchange verbs README.md §17 fixes.
@@ -33,11 +33,25 @@ internal static class Program {
     /// contract unconditional.
     /// </remarks>
     private static int Main(string[] args) {
-        if ((args.Length == 2) && string.Equals(a: args[0], b: "export", comparisonType: StringComparison.Ordinal)) {
+        if (
+            (args.Length == 2) &&
+            string.Equals(
+            a: args[0],
+            b: "export",
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             return CarriageInterchange.Export(directory: args[1]);
         }
 
-        if ((args.Length == 2) && string.Equals(a: args[0], b: "verify", comparisonType: StringComparison.Ordinal)) {
+        if (
+            (args.Length == 2) &&
+            string.Equals(
+            a: args[0],
+            b: "verify",
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             return CarriageInterchange.Verify(directory: args[1]);
         }
 
@@ -63,26 +77,37 @@ internal static class Program {
         RunSizeAndComplexityReport();
 
         Console.WriteLine();
-        Console.WriteLine(value: $"=== SUMMARY: {s_passed} passed, {s_failed} failed ===");
+        Console.WriteLine(value: $"=== SUMMARY: {Passed} passed, {Failed} failed ===");
 
-        return ((s_failed == 0) ? 0 : 1);
+        return ((Failed == 0)
+            ? 0
+            : 1);
     }
 
     // ---- Reporting -----------------------------------------------------------------------------------
 
     private static void Check(string scenario, bool ok, string detail) {
         if (ok) {
-            s_passed += 1;
+            Passed += 1;
             Console.WriteLine(value: $"[PASS] {scenario} — {detail}");
         } else {
-            s_failed += 1;
+            Failed += 1;
             Console.WriteLine(value: $"[FAIL] {scenario} — {detail}");
         }
     }
     private static void ExpectAccept(string scenario, CarriageVerifyResult result) =>
-        Check(scenario: scenario, ok: result.Verified, detail: (result.Verified ? "verified, as expected" : $"unexpectedly refused: {result.RefusalReason}"));
+        Check(
+        scenario: scenario,
+        ok: result.Verified,
+        detail: (result.Verified
+        ? "verified, as expected"
+        : $"unexpectedly refused: {result.RefusalReason}")
+    );
     private static void ExpectRefuse(string scenario, CarriageVerifyResult result, string reasonMustContain) {
-        var containsExpected = ((result.RefusalReason is not null) && result.RefusalReason.Contains(value: reasonMustContain, comparisonType: StringComparison.OrdinalIgnoreCase));
+        var containsExpected = ((result.RefusalReason is not null) && result.RefusalReason.Contains(
+            value: reasonMustContain,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ));
         var ok = (!result.Verified && containsExpected);
         var detail = (result.Verified
             ? "unexpectedly ACCEPTED"
@@ -90,7 +115,11 @@ internal static class Program {
                 ? $"refused as expected: {result.RefusalReason}"
                 : $"refused, but not for the expected reason (wanted a reason containing '{reasonMustContain}'): {result.RefusalReason}"));
 
-        Check(scenario: scenario, ok: ok, detail: detail);
+        Check(
+            scenario: scenario,
+            ok: ok,
+            detail: detail
+        );
     }
 
     /// <summary>Asserts that an operation throws <typeparamref name="TException"/> and that the message says why in the expected terms.</summary>
@@ -99,24 +128,35 @@ internal static class Program {
         try {
             action();
         } catch (TException exception) {
-            var containsExpected = exception.Message.Contains(value: messageMustContain, comparisonType: StringComparison.OrdinalIgnoreCase);
+            var containsExpected = exception.Message.Contains(
+                value: messageMustContain,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            );
 
             Check(
                 scenario: scenario,
                 ok: containsExpected,
                 detail: (containsExpected
-                    ? $"refused as expected: {exception.Message}"
-                    : $"threw {typeof(TException).Name}, but not for the expected reason (wanted '{messageMustContain}'): {exception.Message}")
+                ? $"refused as expected: {exception.Message}"
+                : $"threw {typeof(TException).Name}, but not for the expected reason (wanted '{messageMustContain}'): {exception.Message}")
             );
 
             return;
         } catch (Exception exception) {
-            Check(scenario: scenario, ok: false, detail: $"threw {exception.GetType().Name} rather than {typeof(TException).Name}: {exception.Message}");
+            Check(
+                scenario: scenario,
+                ok: false,
+                detail: $"threw {exception.GetType().Name} rather than {typeof(TException).Name}: {exception.Message}"
+            );
 
             return;
         }
 
-        Check(scenario: scenario, ok: false, detail: $"did NOT throw — {typeof(TException).Name} was expected");
+        Check(
+            scenario: scenario,
+            ok: false,
+            detail: $"did NOT throw — {typeof(TException).Name} was expected"
+        );
     }
 
     /// <summary>Asserts that an operation completes without throwing — the control every refusal case needs.</summary>
@@ -124,12 +164,20 @@ internal static class Program {
         try {
             action();
         } catch (Exception exception) {
-            Check(scenario: scenario, ok: false, detail: $"unexpectedly threw {exception.GetType().Name}: {exception.Message}");
+            Check(
+                scenario: scenario,
+                ok: false,
+                detail: $"unexpectedly threw {exception.GetType().Name}: {exception.Message}"
+            );
 
             return;
         }
 
-        Check(scenario: scenario, ok: true, detail: detail);
+        Check(
+            scenario: scenario,
+            ok: true,
+            detail: detail
+        );
     }
 
     // ---- Domain / key material -------------------------------------------------------------------------
@@ -161,19 +209,36 @@ internal static class Program {
     private static DomainKeys MintDomainKeys(string subject) {
         var rootKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var rootSpki = rootKey.ExportSubjectPublicKeyInfo();
-        var rootId = KeyId.ForRoot(subjectPublicKeyInfo: rootSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var rootId = KeyId.ForRoot(
+            subjectPublicKeyInfo: rootSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
 
         var issuingKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var issuingSpki = issuingKey.ExportSubjectPublicKeyInfo();
-        var issuingId = KeyId.ForIssuing(domain: rootId.Domain, subjectPublicKeyInfo: issuingSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var issuingId = KeyId.ForIssuing(
+            domain: rootId.Domain,
+            subjectPublicKeyInfo: issuingSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
 
         var subjectSigningKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var subjectSigningSpki = subjectSigningKey.ExportSubjectPublicKeyInfo();
-        var subjectSigningId = KeyId.ForSubject(domain: rootId.Domain, subject: subject, subjectPublicKeyInfo: subjectSigningSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var subjectSigningId = KeyId.ForSubject(
+            domain: rootId.Domain,
+            subject: subject,
+            subjectPublicKeyInfo: subjectSigningSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
 
         var subjectSealingKey = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
         var subjectSealingSpki = subjectSealingKey.ExportSubjectPublicKeyInfo();
-        var subjectSealingId = KeyId.ForSubject(domain: rootId.Domain, subject: subject, subjectPublicKeyInfo: subjectSealingSpki, algorithm: CarriageAlgorithms.EcdhP256HkdfSha256Aes256Gcm);
+        var subjectSealingId = KeyId.ForSubject(
+            domain: rootId.Domain,
+            subject: subject,
+            subjectPublicKeyInfo: subjectSealingSpki,
+            algorithm: CarriageAlgorithms.EcdhP256HkdfSha256Aes256Gcm
+        );
 
         return new DomainKeys(
             Domain: rootId.Domain,
@@ -221,18 +286,21 @@ internal static class Program {
     }
 
     /// <summary>The reach every ordinary harness trust list authors, so a scenario that does not care about scoping still carries a real one.</summary>
-    private static readonly IReadOnlySet<string> s_defaultReach = new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:wallet", "slot:title" };
+    private static readonly IReadOnlySet<string> DefaultReach = new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:wallet", "slot:title" };
 
     private static TrustList BuildTrustList(DomainKeys keys, TimeSpan? defaultMaximumAge, IReadOnlySet<string>? reach = null) {
         var entry = new TrustListEntry(
             PinnedId: keys.RootId,
             PublicKeySubjectPublicKeyInfo: keys.RootSpki,
             Mode: CarriageTrustMode.Vouches,
-            Reach: (reach ?? s_defaultReach),
+            Reach: (reach ?? DefaultReach),
             MaximumAge: null
         );
 
-        return new TrustList(entries: [entry], defaultMaximumAge: defaultMaximumAge);
+        return new TrustList(
+            entries: [entry],
+            defaultMaximumAge: defaultMaximumAge
+        );
     }
 
     // ---- Core scenario matrix, run once per codec -------------------------------------------------------
@@ -249,117 +317,487 @@ internal static class Program {
         var keysA = MintDomainKeys(subject: "user:alice");
         var keysB = MintDomainKeys(subject: "user:bob");
 
-        var (rootToIssuingA, issuingToSubjectA) = BuildChain(codec: codec, keys: keysA, notBefore: BindingNotBefore, notAfter: BindingNotAfter);
-        var (rootToIssuingB, issuingToSubjectB) = BuildChain(codec: codec, keys: keysB, notBefore: BindingNotBefore, notAfter: BindingNotAfter);
+        var (rootToIssuingA, issuingToSubjectA) = BuildChain(
+            codec: codec,
+            keys: keysA,
+            notBefore: BindingNotBefore,
+            notAfter: BindingNotAfter
+        );
+        var (rootToIssuingB, issuingToSubjectB) = BuildChain(
+            codec: codec,
+            keys: keysB,
+            notBefore: BindingNotBefore,
+            notAfter: BindingNotAfter
+        );
         var chainA = new[] { rootToIssuingA, issuingToSubjectA };
         var chainB = new[] { rootToIssuingB, issuingToSubjectB };
-        var trustA = BuildTrustList(keys: keysA, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
-        var trustB = BuildTrustList(keys: keysB, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
+        var trustA = BuildTrustList(
+            keys: keysA,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
+        var trustB = BuildTrustList(
+            keys: keysB,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
 
         // 1. Happy path.
-        var happyClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "hello from alice");
-        var happyResult = CarriageVerifier.VerifyChain(codec: codec, claim: happyClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var happyClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "hello from alice"
+        );
+        var happyResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: happyClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] happy path: claim + chain verifies", result: happyResult);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] happy path: claim + chain verifies",
+            result: happyResult
+        );
 
         // 2. Algorithm confusion: the header LIES about its algorithm; the real signature was produced
         // (and must be verified) under the algorithm the trust chain pins, never under what the header says.
-        var confusedClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "algorithm-confused claim", declaredAlgorithm: CarriageAlgorithms.EcdsaP256Sha384);
-        var confusedResult = CarriageVerifier.VerifyChain(codec: codec, claim: confusedClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var confusedClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "algorithm-confused claim",
+            declaredAlgorithm: CarriageAlgorithms.EcdsaP256Sha384
+        );
+        var confusedResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: confusedClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] algorithm confusion: header declares sha384, pinned subject key is sha256 (control: see happy path above)", result: confusedResult, reasonMustContain: "algorithm confusion");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] algorithm confusion: header declares sha384, pinned subject key is sha256 (control: see happy path above)",
+            result: confusedResult,
+            reasonMustContain: "algorithm confusion"
+        );
 
         // 3. Purpose replay: present a key-binding envelope AS a claim.
-        var purposeReplayResult = CarriageVerifier.VerifyChain(codec: codec, claim: issuingToSubjectA, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var purposeReplayResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: issuingToSubjectA,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] purpose replay: a key-binding envelope presented as a claim (control: see happy path above)", result: purposeReplayResult, reasonMustContain: "purpose");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] purpose replay: a key-binding envelope presented as a claim (control: see happy path above)",
+            result: purposeReplayResult,
+            reasonMustContain: "purpose"
+        );
 
         // 4. Cross-domain: domain B's own, fully self-consistent claim, verified against a trust list that only trusts domain A.
-        var domainBClaim = SignTestClaim(codec: codec, keys: keysB, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "hello from bob");
-        var crossDomainResult = CarriageVerifier.VerifyChain(codec: codec, claim: domainBClaim, chain: chainB, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var domainBClaim = SignTestClaim(
+            codec: codec,
+            keys: keysB,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "hello from bob"
+        );
+        var crossDomainResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: domainBClaim,
+            chain: chainB,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] cross-domain: domain B's claim against a trust list that only trusts domain A", result: crossDomainResult, reasonMustContain: "trusted vouching root");
-        var crossDomainControlResult = CarriageVerifier.VerifyChain(codec: codec, claim: domainBClaim, chain: chainB, trustList: trustB, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] cross-domain: domain B's claim against a trust list that only trusts domain A",
+            result: crossDomainResult,
+            reasonMustContain: "trusted vouching root"
+        );
+        var crossDomainControlResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: domainBClaim,
+            chain: chainB,
+            trustList: trustB,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] cross-domain control: domain B's claim against domain B's own trust list", result: crossDomainControlResult);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] cross-domain control: domain B's claim against domain B's own trust list",
+            result: crossDomainControlResult
+        );
 
         // 5. Expired window (issuer's own NotAfter has passed).
-        var expiredClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 7_200), notAfter: (Epoch - 100), audience: "world:home", sequence: null, text: "stale claim");
-        var expiredResult = CarriageVerifier.VerifyChain(codec: codec, claim: expiredClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var expiredClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 7_200),
+            notAfter: (Epoch - 100),
+            audience: "world:home",
+            sequence: null,
+            text: "stale claim"
+        );
+        var expiredResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: expiredClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] expired window: claim's own notAfter has passed", result: expiredResult, reasonMustContain: "expired");
-        var freshClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 100), notAfter: (Epoch + 100), audience: "world:home", sequence: null, text: "fresh claim");
-        var freshResult = CarriageVerifier.VerifyChain(codec: codec, claim: freshClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] expired window: claim's own notAfter has passed",
+            result: expiredResult,
+            reasonMustContain: "expired"
+        );
+        var freshClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 100),
+            notAfter: (Epoch + 100),
+            audience: "world:home",
+            sequence: null,
+            text: "fresh claim"
+        );
+        var freshResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: freshClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] expired window control: claim within its own window verifies", result: freshResult);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] expired window control: claim within its own window verifies",
+            result: freshResult
+        );
 
         // 6. Tighter-of-two, direction 1: the ISSUER's window is the tighter one and governs.
-        var trustGenerous = BuildTrustList(keys: keysA, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
-        var tightIssuerClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 30), notAfter: (Epoch + 60), audience: "world:home", sequence: null, text: "tight issuer window");
-        var tightIssuerOkResult = CarriageVerifier.VerifyChain(codec: codec, claim: tightIssuerClaim, chain: chainA, trustList: trustGenerous, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var trustGenerous = BuildTrustList(
+            keys: keysA,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
+        var tightIssuerClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + 60),
+            audience: "world:home",
+            sequence: null,
+            text: "tight issuer window"
+        );
+        var tightIssuerOkResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: tightIssuerClaim,
+            chain: chainA,
+            trustList: trustGenerous,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] tighter-of-two (issuer tighter) control: within the issuer's short window", result: tightIssuerOkResult);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] tighter-of-two (issuer tighter) control: within the issuer's short window",
+            result: tightIssuerOkResult
+        );
         var laterNow = DateTimeOffset.FromUnixTimeSeconds(seconds: (Epoch + 200));
-        var tightIssuerExpiredResult = CarriageVerifier.VerifyChain(codec: codec, claim: tightIssuerClaim, chain: chainA, trustList: trustGenerous, now: laterNow, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var tightIssuerExpiredResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: tightIssuerClaim,
+            chain: chainA,
+            trustList: trustGenerous,
+            now: laterNow,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] tighter-of-two: the issuer's 90-second window governs even though the verifier would allow 24h", result: tightIssuerExpiredResult, reasonMustContain: "issuer");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] tighter-of-two: the issuer's 90-second window governs even though the verifier would allow 24h",
+            result: tightIssuerExpiredResult,
+            reasonMustContain: "issuer"
+        );
 
         // 7. Tighter-of-two, direction 2: the VERIFIER's maximum age is the tighter one and governs.
         // The 1-hour ceiling applies to every hop (bindings included — a binding is "the longest a
         // compromised subject key stays honoured", so the verifier's ceiling has to reach it too), so the
         // refusal below may surface at a chain hop rather than at the claim itself; either way it is the
         // verifier's ceiling doing the refusing.
-        var trustTight = BuildTrustList(keys: keysA, defaultMaximumAge: TimeSpan.FromHours(hours: 1));
-        var tightVerifierClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 100), notAfter: (Epoch + (86_400L * 30)), audience: "world:home", sequence: null, text: "tight verifier ceiling");
-        var tightVerifierOkResult = CarriageVerifier.VerifyChain(codec: codec, claim: tightVerifierClaim, chain: chainA, trustList: trustTight, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var trustTight = BuildTrustList(
+            keys: keysA,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 1)
+        );
+        var tightVerifierClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 100),
+            notAfter: (Epoch + (86_400L * 30)),
+            audience: "world:home",
+            sequence: null,
+            text: "tight verifier ceiling"
+        );
+        var tightVerifierOkResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: tightVerifierClaim,
+            chain: chainA,
+            trustList: trustTight,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] tighter-of-two (verifier tighter) control: within the verifier's 1-hour ceiling", result: tightVerifierOkResult);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] tighter-of-two (verifier tighter) control: within the verifier's 1-hour ceiling",
+            result: tightVerifierOkResult
+        );
         var muchLaterNow = DateTimeOffset.FromUnixTimeSeconds(seconds: (Epoch + 7_200));
-        var tightVerifierExpiredResult = CarriageVerifier.VerifyChain(codec: codec, claim: tightVerifierClaim, chain: chainA, trustList: trustTight, now: muchLaterNow, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var tightVerifierExpiredResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: tightVerifierClaim,
+            chain: chainA,
+            trustList: trustTight,
+            now: muchLaterNow,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] tighter-of-two: the verifier's 1-hour ceiling governs even though the issuer allows 30 days", result: tightVerifierExpiredResult, reasonMustContain: "verifier");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] tighter-of-two: the verifier's 1-hour ceiling governs even though the issuer allows 30 days",
+            result: tightVerifierExpiredResult,
+            reasonMustContain: "verifier"
+        );
 
         // 8. Missing chain: a claim arrives with no bindings at all.
-        var missingChainResult = CarriageVerifier.VerifyChain(codec: codec, claim: happyClaim, chain: null, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var missingChainResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: happyClaim,
+            chain: null,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] missing chain: claim presented with no bindings (control: see happy path above)", result: missingChainResult, reasonMustContain: "missing chain");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] missing chain: claim presented with no bindings (control: see happy path above)",
+            result: missingChainResult,
+            reasonMustContain: "missing chain"
+        );
 
         // 9. Broken chain: the issuing-vouches-subject binding is absent.
         var brokenChain = new[] { rootToIssuingA };
-        var brokenChainResult = CarriageVerifier.VerifyChain(codec: codec, claim: happyClaim, chain: brokenChain, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var brokenChainResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: happyClaim,
+            chain: brokenChain,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] broken chain: issuing-vouches-subject binding absent (control: see happy path above)", result: brokenChainResult, reasonMustContain: "broken chain");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] broken chain: issuing-vouches-subject binding absent (control: see happy path above)",
+            result: brokenChainResult,
+            reasonMustContain: "broken chain"
+        );
 
         // 10. Audience mismatch.
-        var marketClaim = SignTestClaim(codec: codec, keys: keysA, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:market", sequence: null, text: "market claim");
-        var audienceOkResult = CarriageVerifier.VerifyChain(codec: codec, claim: marketClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:market", sequenceStore: null);
+        var marketClaim = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:market",
+            sequence: null,
+            text: "market claim"
+        );
+        var audienceOkResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: marketClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:market",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] audience mismatch control: expected audience matches", result: audienceOkResult);
-        var audienceMismatchResult = CarriageVerifier.VerifyChain(codec: codec, claim: marketClaim, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.claim", expectedAudience: "world:elsewhere", sequenceStore: null);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] audience mismatch control: expected audience matches",
+            result: audienceOkResult
+        );
+        var audienceMismatchResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: marketClaim,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:elsewhere",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] audience mismatch: claim bound to world:market, verifier is world:elsewhere", result: audienceMismatchResult, reasonMustContain: "audience mismatch");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] audience mismatch: claim bound to world:market, verifier is world:elsewhere",
+            result: audienceMismatchResult,
+            reasonMustContain: "audience mismatch"
+        );
 
         // 11. Bearer sequence replay: equal AND lower are both refused; a higher sequence still advances.
         var sequenceStore = new InMemorySequenceStore();
-        var bearer10 = SignTestClaim(codec: codec, keys: keysA, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 10UL, text: "bearer sequence 10");
-        var bearer10Result = CarriageVerifier.VerifyChain(codec: codec, claim: bearer10, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: sequenceStore);
+        var bearer10 = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 10UL,
+            text: "bearer sequence 10"
+        );
+        var bearer10Result = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: bearer10,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.bearer",
+            expectedAudience: null,
+            sequenceStore: sequenceStore
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] bearer sequence control: first use of sequence 10 accepted", result: bearer10Result);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] bearer sequence control: first use of sequence 10 accepted",
+            result: bearer10Result
+        );
 
-        var bearerEqual = SignTestClaim(codec: codec, keys: keysA, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 10UL, text: "bearer sequence 10 replay");
-        var bearerEqualResult = CarriageVerifier.VerifyChain(codec: codec, claim: bearerEqual, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: sequenceStore);
+        var bearerEqual = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 10UL,
+            text: "bearer sequence 10 replay"
+        );
+        var bearerEqualResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: bearerEqual,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.bearer",
+            expectedAudience: null,
+            sequenceStore: sequenceStore
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] bearer sequence replay: equal sequence (10 after 10) refused", result: bearerEqualResult, reasonMustContain: "replay");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] bearer sequence replay: equal sequence (10 after 10) refused",
+            result: bearerEqualResult,
+            reasonMustContain: "replay"
+        );
 
-        var bearerLower = SignTestClaim(codec: codec, keys: keysA, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 5UL, text: "bearer sequence 5 replay");
-        var bearerLowerResult = CarriageVerifier.VerifyChain(codec: codec, claim: bearerLower, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: sequenceStore);
+        var bearerLower = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 5UL,
+            text: "bearer sequence 5 replay"
+        );
+        var bearerLowerResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: bearerLower,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.bearer",
+            expectedAudience: null,
+            sequenceStore: sequenceStore
+        );
 
-        ExpectRefuse(scenario: $"[{codec.Name}] bearer sequence replay: lower sequence (5 after 10) refused", result: bearerLowerResult, reasonMustContain: "replay");
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] bearer sequence replay: lower sequence (5 after 10) refused",
+            result: bearerLowerResult,
+            reasonMustContain: "replay"
+        );
 
-        var bearer11 = SignTestClaim(codec: codec, keys: keysA, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 11UL, text: "bearer sequence 11");
-        var bearer11Result = CarriageVerifier.VerifyChain(codec: codec, claim: bearer11, chain: chainA, trustList: trustA, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: sequenceStore);
+        var bearer11 = SignTestClaim(
+            codec: codec,
+            keys: keysA,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 11UL,
+            text: "bearer sequence 11"
+        );
+        var bearer11Result = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: bearer11,
+            chain: chainA,
+            trustList: trustA,
+            now: now,
+            expectedPurpose: "test.bearer",
+            expectedAudience: null,
+            sequenceStore: sequenceStore
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] bearer sequence control: higher sequence (11 after 10) accepted, mark advances", result: bearer11Result);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] bearer sequence control: higher sequence (11 after 10) accepted, mark advances",
+            result: bearer11Result
+        );
     }
     private static SignedCarriageEnvelope SignTestClaim(
         ICarriageCodec codec,
@@ -373,19 +811,19 @@ internal static class Program {
         string? declaredAlgorithm = null
     ) =>
         CarriageSigner.SignClaim(
-            codec: codec,
-            domain: keys.Domain,
-            subject: keys.Subject,
-            signerKey: keys.SubjectSigningKey,
-            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
-            purpose: purpose,
-            notBefore: notBefore,
-            notAfter: notAfter,
-            audience: audience,
-            sequence: sequence,
-            claimBytes: Encoding.UTF8.GetBytes(s: text),
-            declaredAlgorithm: declaredAlgorithm
-        );
+        codec: codec,
+        domain: keys.Domain,
+        subject: keys.Subject,
+        signerKey: keys.SubjectSigningKey,
+        signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+        purpose: purpose,
+        notBefore: notBefore,
+        notAfter: notAfter,
+        audience: audience,
+        sequence: sequence,
+        claimBytes: Encoding.UTF8.GetBytes(s: text),
+        declaredAlgorithm: declaredAlgorithm
+    );
 
     // ---- Chain depth, trust shape, and slot reach --------------------------------------------------------
 
@@ -404,25 +842,62 @@ internal static class Program {
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
         var keys = MintDomainKeys(subject: "user:frank");
 
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (rootToIssuing, issuingToSubject) = BuildChain(
+            codec: codec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var chain = new[] { rootToIssuing, issuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
-        var claim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "frank's claim");
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
+        var claim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "frank's claim"
+        );
 
-        var twoHopResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var twoHopResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: "depth control: exactly two bindings under a vouching root", result: twoHopResult);
+        ExpectAccept(
+            scenario: "depth control: exactly two bindings under a vouching root",
+            result: twoHopResult
+        );
 
         // Reach is reported with the verdict, never enforced — the engine decides what a verified claim may
         // touch, and it can only do that if the verifier hands the authored scope back.
-        var reachReported = ((twoHopResult.Reach is not null) && twoHopResult.Reach.SetEquals(other: s_defaultReach));
+        var reachReported = ((twoHopResult.Reach is not null) && twoHopResult.Reach.SetEquals(other: DefaultReach));
 
         Check(
             scenario: "slot reach: a verified claim carries the admitting entry's authored reach",
             ok: reachReported,
             detail: (reachReported
-                ? $"reach reported as [{string.Join(separator: ", ", values: twoHopResult.Reach!)}] — the verifier states the authored scope and never enforces it; NO engine consumer exists yet, so nothing enforces it today either"
-                : $"reach was [{((twoHopResult.Reach is null) ? "(null)" : string.Join(separator: ", ", values: twoHopResult.Reach))}], expected the authored set")
+            ? $"reach reported as [{string.Join(
+                separator: ", ",
+                values: twoHopResult.Reach!
+            )}] — the verifier states the authored scope and never enforces it; NO engine consumer exists yet, so nothing enforces it today either"
+            : $"reach was [{((twoHopResult.Reach is null)
+                ? "(null)"
+                : string.Join(
+                separator: ", ",
+                values: twoHopResult.Reach
+            ))}], expected the authored set")
         );
 
         Check(
@@ -431,28 +906,63 @@ internal static class Program {
             detail: "Admits('slot:wallet')=true, Admits('slot:unlisted')=false — a verified claim reaches its entry's authored slots and no others"
         );
 
-        var narrowTrust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24), reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:title" });
-        var narrowResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: narrowTrust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var narrowTrust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24),
+            reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:title" }
+        );
+        var narrowResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: narrowTrust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
         var narrowReported = (narrowResult.Verified && narrowResult.Admits(slot: "slot:title") && !narrowResult.Admits(slot: "slot:wallet"));
 
         Check(
             scenario: "slot reach: a narrower entry yields a narrower reach for the SAME claim (control: the case above)",
             ok: narrowReported,
-            detail: (narrowReported ? "the identical claim now admits slot:title and not slot:wallet — reach is the verifier's authored scope, not a property of the claim" : $"unexpected: verified={narrowResult.Verified}, reach=[{((narrowResult.Reach is null) ? "(null)" : string.Join(separator: ", ", values: narrowResult.Reach))}]")
+            detail: (narrowReported
+            ? "the identical claim now admits slot:title and not slot:wallet — reach is the verifier's authored scope, not a property of the claim"
+            : $"unexpected: verified={narrowResult.Verified}, reach=[{((narrowResult.Reach is null)
+                ? "(null)"
+                : string.Join(
+                separator: ", ",
+                values: narrowResult.Reach
+            ))}]")
         );
 
         // Deny by default, and the trap that goes with it: this claim VERIFIES. Everything about it is
         // sound — signature, chain, window, audience — and it may still touch nothing, because the entry
         // that admitted it reaches nothing. A caller branching on the verdict alone would let it through,
         // which is why the field is `Verified` rather than `Accepted` and why `Admits` exists.
-        var emptyReachTrust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24), reach: new HashSet<string>(comparer: StringComparer.Ordinal));
-        var emptyReachResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: emptyReachTrust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var emptyReachTrust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24),
+            reach: new HashSet<string>(comparer: StringComparer.Ordinal)
+        );
+        var emptyReachResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: emptyReachTrust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
         var emptyReachReported = (emptyReachResult.Verified && (emptyReachResult.Reach is not null) && (emptyReachResult.Reach.Count == 0));
 
         Check(
             scenario: "slot reach: deny by default — an entry with no reach yields a verified claim that reaches nothing",
             ok: emptyReachReported,
-            detail: (emptyReachReported ? "verified with an empty reach — a signature that proves who said it and nothing about what it may touch" : $"unexpected: verified={emptyReachResult.Verified}, reach count={(emptyReachResult.Reach?.Count.ToString() ?? "(null)")}")
+            detail: (emptyReachReported
+            ? "verified with an empty reach — a signature that proves who said it and nothing about what it may touch"
+            : $"unexpected: verified={emptyReachResult.Verified}, reach count={(emptyReachResult.Reach?.Count.ToString() ?? "(null)")}")
         );
 
         Check(
@@ -461,7 +971,16 @@ internal static class Program {
             detail: "Verified=true and every Admits(...) is false — 'it verified' and 'it may act' are different questions, and only the second one is admission"
         );
 
-        var refusedResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: trust, now: now, expectedPurpose: "test.other", expectedAudience: "world:home", sequenceStore: null);
+        var refusedResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.other",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
         Check(
             scenario: "slot reach control: a REFUSED claim admits nothing either, and carries no reach to inspect",
@@ -472,34 +991,90 @@ internal static class Program {
         // Purpose is the ONLY thing separating one signature use from another, so a claim minted for one
         // purpose must not satisfy a caller expecting a different one — the key-binding case above is just
         // the reserved instance of this rule, not the whole of it.
-        var otherPurposeResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: trust, now: now, expectedPurpose: "test.other", expectedAudience: "world:home", sequenceStore: null);
+        var otherPurposeResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.other",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "purpose separation: a 'test.claim' envelope presented where 'test.other' is expected (control: depth control above)", result: otherPurposeResult, reasonMustContain: "purpose mismatch");
+        ExpectRefuse(
+            scenario: "purpose separation: a 'test.claim' envelope presented where 'test.other' is expected (control: depth control above)",
+            result: otherPurposeResult,
+            reasonMustContain: "purpose mismatch"
+        );
 
         // Payload-kind separation: the same envelope re-encoded with its payload kind rewritten — which is
         // what an attacker actually puts on the wire, bytes and model together. The signature will not
         // verify either way, payload kind being inside the signed portion, but the kind is checked FIRST,
         // so the engine never even reaches a decode that would read chain bytes as game data.
-        var kindConfused = SignedCarriageEnvelope.Reencode(codec: codec, header: claim.Header, payloadKind: CarriagePayloadKind.KeyBinding, payloadBytes: claim.PayloadBytes, signature: claim.Signature);
-        var kindConfusedResult = CarriageVerifier.VerifyChain(codec: codec, claim: kindConfused, chain: chain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var kindConfused = SignedCarriageEnvelope.Reencode(
+            codec: codec,
+            header: claim.Header,
+            payloadKind: CarriagePayloadKind.KeyBinding,
+            payloadBytes: claim.PayloadBytes,
+            signature: claim.Signature
+        );
+        var kindConfusedResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: kindConfused,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "payload-kind separation: a claim declaring a key-binding payload", result: kindConfusedResult, reasonMustContain: "payload kind must be opaque or sealed");
+        ExpectRefuse(
+            scenario: "payload-kind separation: a claim declaring a key-binding payload",
+            result: kindConfusedResult,
+            reasonMustContain: "payload kind must be opaque or sealed"
+        );
 
         // Deny by default at the VERIFIER, for a kind outside the closed set. Reaching this needs an
         // envelope built in memory, because the decoders now refuse such a kind outright (see the parser
         // laxity section) — which is the point: two independent refusals, and the wire never gets past the
         // first one.
-        var unknownKind = SignedCarriageEnvelope.Reencode(codec: codec, header: claim.Header, payloadKind: (CarriagePayloadKind)99, payloadBytes: claim.PayloadBytes, signature: claim.Signature);
-        var unknownKindResult = CarriageVerifier.VerifyChain(codec: codec, claim: unknownKind, chain: chain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var unknownKind = SignedCarriageEnvelope.Reencode(
+            codec: codec,
+            header: claim.Header,
+            payloadKind: (CarriagePayloadKind)99,
+            payloadBytes: claim.PayloadBytes,
+            signature: claim.Signature
+        );
+        var unknownKindResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: unknownKind,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "payload-kind separation: a claim declaring a payload kind outside the enum, deny by default", result: unknownKindResult, reasonMustContain: "payload kind must be opaque or sealed");
+        ExpectRefuse(
+            scenario: "payload-kind separation: a claim declaring a payload kind outside the enum, deny by default",
+            result: unknownKindResult,
+            reasonMustContain: "payload kind must be opaque or sealed"
+        );
 
         // Depth three: the SUBJECT key vouches for a further key, which then signs the claim. This is the
         // unbounded chain the doc refuses by name, presented in its most plausible form.
         using var delegateKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
 
         var delegateSpki = delegateKey.ExportSubjectPublicKeyInfo();
-        var delegateId = KeyId.ForSubject(domain: keys.Domain, subject: "user:frank", subjectPublicKeyInfo: delegateSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var delegateId = KeyId.ForSubject(
+            domain: keys.Domain,
+            subject: "user:frank",
+            subjectPublicKeyInfo: delegateSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
         var subjectToDelegate = CarriageSigner.SignKeyBinding(
             codec: codec,
             domain: keys.Domain,
@@ -523,13 +1098,30 @@ internal static class Program {
             sequence: null,
             claimBytes: Encoding.UTF8.GetBytes(s: "claim signed one hop too deep")
         );
-        var depthThreeResult = CarriageVerifier.VerifyChain(codec: codec, claim: delegateClaim, chain: [rootToIssuing, issuingToSubject, subjectToDelegate], trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var depthThreeResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: delegateClaim,
+            chain: [rootToIssuing, issuingToSubject, subjectToDelegate],
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "depth three: a subject key vouches for a further key that signs the claim (control: depth control above)", result: depthThreeResult, reasonMustContain: "broken chain");
+        ExpectRefuse(
+            scenario: "depth three: a subject key vouches for a further key that signs the claim (control: depth control above)",
+            result: depthThreeResult,
+            reasonMustContain: "broken chain"
+        );
 
         // Depth one in disguise: the root vouches for ITSELF as the issuing key, then signs the subject
         // binding. Structurally two hops, but the cold root is back to signing per subject.
-        var rootAsIssuingId = KeyId.ForIssuing(domain: keys.Domain, subjectPublicKeyInfo: keys.RootSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var rootAsIssuingId = KeyId.ForIssuing(
+            domain: keys.Domain,
+            subjectPublicKeyInfo: keys.RootSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
         var rootVouchesItself = CarriageSigner.SignKeyBinding(
             codec: codec,
             domain: keys.Domain,
@@ -550,31 +1142,69 @@ internal static class Program {
             notBefore: (Epoch - 30),
             notAfter: (Epoch + (86_400L * 30))
         );
-        var rootAsIssuingResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: [rootVouchesItself, rootVouchesSubject], trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var rootAsIssuingResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: [rootVouchesItself, rootVouchesSubject],
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "depth one in disguise: the root vouches for itself as the issuing key (control: depth control above)", result: rootAsIssuingResult, reasonMustContain: "depth one in disguise");
+        ExpectRefuse(
+            scenario: "depth one in disguise: the root vouches for itself as the issuing key (control: depth control above)",
+            result: rootAsIssuingResult,
+            reasonMustContain: "depth one in disguise"
+        );
 
         // A directly-pinned subject key: zero hops, because nothing is vouched for.
         var friendReach = new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:friend" };
         var directTrust = new TrustList(
             entries: [
                 new TrustListEntry(
-                    PinnedId: keys.SubjectSigningId,
-                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
-                    Mode: CarriageTrustMode.SignsDirectly,
-                    Reach: friendReach,
-                    MaximumAge: null
-                ),
+                PinnedId: keys.SubjectSigningId,
+                PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                Mode: CarriageTrustMode.SignsDirectly,
+                Reach: friendReach,
+                MaximumAge: null
+            ),
             ],
             defaultMaximumAge: TimeSpan.FromHours(hours: 24)
         );
-        var directResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: null, trustList: directTrust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var directResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: null,
+            trustList: directTrust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: "depth zero control: a directly-pinned subject key admits its own claim with no bindings", result: directResult);
+        ExpectAccept(
+            scenario: "depth zero control: a directly-pinned subject key admits its own claim with no bindings",
+            result: directResult
+        );
 
-        var directWithChainResult = CarriageVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: directTrust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var directWithChainResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: chain,
+            trustList: directTrust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "depth zero: bindings attached to a directly-pinned claim are refused, never ignored", result: directWithChainResult, reasonMustContain: "no bindings");
+        ExpectRefuse(
+            scenario: "depth zero: bindings attached to a directly-pinned claim are refused, never ignored",
+            result: directWithChainResult,
+            reasonMustContain: "no bindings"
+        );
 
         // The domain check compares the claim's domain against the pinned entry's domain, never against itself
         // (§11 step 3) — read as "the domain the claim expects", the check would be a tautology that always
@@ -596,43 +1226,104 @@ internal static class Program {
             sequence: null,
             claimBytes: Encoding.UTF8.GetBytes(s: "frank's key, somebody else's domain")
         );
-        var foreignDomainResult = CarriageVerifier.VerifyChain(codec: codec, claim: foreignDomainClaim, chain: chain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var foreignDomainResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: foreignDomainClaim,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "pinned domain: a claim whose header names a domain no entry pins, carried by the pinned domain's own chain and signed by its own subject key (control: depth control above)", result: foreignDomainResult, reasonMustContain: "not a trusted vouching root");
+        ExpectRefuse(
+            scenario: "pinned domain: a claim whose header names a domain no entry pins, carried by the pinned domain's own chain and signed by its own subject key (control: depth control above)",
+            result: foreignDomainResult,
+            reasonMustContain: "not a trusted vouching root"
+        );
 
         // Trust list shape. Every one of these would otherwise reach the verifier as a list whose pin is
         // decorative — the key bytes would do the verifying while the id sat beside them unenforced.
         ExpectNoThrow(
             scenario: "trust list control: a self-consistent vouching entry constructs",
-            action: () => _ = BuildTrustList(keys: keys, defaultMaximumAge: null),
+            action: () => _ = BuildTrustList(
+                keys: keys,
+                defaultMaximumAge: null
+            ),
             detail: "constructed, as expected"
         );
         ExpectThrows<ArgumentException>(
             scenario: "trust list: an entry whose key bytes do not hash to its pinned id",
-            action: () => _ = new TrustList(entries: [new TrustListEntry(PinnedId: keys.RootId, PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki, Mode: CarriageTrustMode.Vouches, Reach: friendReach, MaximumAge: null)], defaultMaximumAge: null),
+            action: () => _ = new TrustList(
+                entries: [new TrustListEntry(
+                    PinnedId: keys.RootId,
+                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                    Mode: CarriageTrustMode.Vouches,
+                    Reach: friendReach,
+                    MaximumAge: null
+                )],
+                defaultMaximumAge: null
+            ),
             messageMustContain: "not self-certifying"
         );
         ExpectThrows<ArgumentException>(
             scenario: "trust list: a vouching entry that pins an issuing key rather than a root",
-            action: () => _ = new TrustList(entries: [new TrustListEntry(PinnedId: keys.IssuingId, PublicKeySubjectPublicKeyInfo: keys.IssuingSpki, Mode: CarriageTrustMode.Vouches, Reach: friendReach, MaximumAge: null)], defaultMaximumAge: null),
+            action: () => _ = new TrustList(
+                entries: [new TrustListEntry(
+                    PinnedId: keys.IssuingId,
+                    PublicKeySubjectPublicKeyInfo: keys.IssuingSpki,
+                    Mode: CarriageTrustMode.Vouches,
+                    Reach: friendReach,
+                    MaximumAge: null
+                )],
+                defaultMaximumAge: null
+            ),
             messageMustContain: "must pin a root id"
         );
         ExpectThrows<ArgumentException>(
             scenario: "trust list: a directly-signing entry that pins a root rather than a subject key",
-            action: () => _ = new TrustList(entries: [new TrustListEntry(PinnedId: keys.RootId, PublicKeySubjectPublicKeyInfo: keys.RootSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null)], defaultMaximumAge: null),
+            action: () => _ = new TrustList(
+                entries: [new TrustListEntry(
+                    PinnedId: keys.RootId,
+                    PublicKeySubjectPublicKeyInfo: keys.RootSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                )],
+                defaultMaximumAge: null
+            ),
             messageMustContain: "must pin a SUBJECT key"
         );
         ExpectThrows<ArgumentException>(
             scenario: "trust list: an entry pinning a SEALING key, which can never admit a claim",
-            action: () => _ = new TrustList(entries: [new TrustListEntry(PinnedId: keys.SubjectSealingId, PublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null)], defaultMaximumAge: null),
+            action: () => _ = new TrustList(
+                entries: [new TrustListEntry(
+                    PinnedId: keys.SubjectSealingId,
+                    PublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                )],
+                defaultMaximumAge: null
+            ),
             messageMustContain: "not a carriage SIGNING algorithm"
         );
         ExpectThrows<ArgumentException>(
             scenario: "trust list: the same domain pinned twice in one mode, so which reach governs is undefined",
             action: () => {
-                var entry = new TrustListEntry(PinnedId: keys.RootId, PublicKeySubjectPublicKeyInfo: keys.RootSpki, Mode: CarriageTrustMode.Vouches, Reach: friendReach, MaximumAge: null);
+                var entry = new TrustListEntry(
+                    PinnedId: keys.RootId,
+                    PublicKeySubjectPublicKeyInfo: keys.RootSpki,
+                    Mode: CarriageTrustMode.Vouches,
+                    Reach: friendReach,
+                    MaximumAge: null
+                );
 
-                _ = new TrustList(entries: [entry, entry], defaultMaximumAge: null);
+                _ = new TrustList(
+                    entries: [entry, entry],
+                    defaultMaximumAge: null
+                );
             },
             messageMustContain: "twice in the same mode"
         );
@@ -644,14 +1335,31 @@ internal static class Program {
         using var rotatedKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
 
         var rotatedSpki = rotatedKey.ExportSubjectPublicKeyInfo();
-        var rotatedId = KeyId.ForSubject(domain: keys.Domain, subject: keys.Subject, subjectPublicKeyInfo: rotatedSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256);
+        var rotatedId = KeyId.ForSubject(
+            domain: keys.Domain,
+            subject: keys.Subject,
+            subjectPublicKeyInfo: rotatedSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
 
         ExpectThrows<ArgumentException>(
             scenario: "trust list: two DIFFERENT keys pinned for one subject in one mode (a rotation overlap) — the rule is slot identity, not key identity",
             action: () => _ = new TrustList(
                 entries: [
-                    new TrustListEntry(PinnedId: keys.SubjectSigningId, PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null),
-                    new TrustListEntry(PinnedId: rotatedId, PublicKeySubjectPublicKeyInfo: rotatedSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null),
+                    new TrustListEntry(
+                    PinnedId: keys.SubjectSigningId,
+                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                ),
+                    new TrustListEntry(
+                    PinnedId: rotatedId,
+                    PublicKeySubjectPublicKeyInfo: rotatedSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                ),
                 ],
                 defaultMaximumAge: null
             ),
@@ -661,8 +1369,25 @@ internal static class Program {
             scenario: "trust list control: the SAME two keys in DIFFERENT slots (two subjects) construct fine",
             action: () => _ = new TrustList(
                 entries: [
-                    new TrustListEntry(PinnedId: keys.SubjectSigningId, PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null),
-                    new TrustListEntry(PinnedId: KeyId.ForSubject(domain: keys.Domain, subject: "user:other", subjectPublicKeyInfo: rotatedSpki, algorithm: CarriageAlgorithms.EcdsaP256Sha256), PublicKeySubjectPublicKeyInfo: rotatedSpki, Mode: CarriageTrustMode.SignsDirectly, Reach: friendReach, MaximumAge: null),
+                    new TrustListEntry(
+                    PinnedId: keys.SubjectSigningId,
+                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                ),
+                    new TrustListEntry(
+                    PinnedId: KeyId.ForSubject(
+                        domain: keys.Domain,
+                        subject: "user:other",
+                        subjectPublicKeyInfo: rotatedSpki,
+                        algorithm: CarriageAlgorithms.EcdsaP256Sha256
+                    ),
+                    PublicKeySubjectPublicKeyInfo: rotatedSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: friendReach,
+                    MaximumAge: null
+                ),
                 ],
                 defaultMaximumAge: null
             ),
@@ -688,52 +1413,206 @@ internal static class Program {
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
         var keys = MintDomainKeys(subject: "user:gwen");
 
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (rootToIssuing, issuingToSubject) = BuildChain(
+            codec: codec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var chain = new[] { rootToIssuing, issuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
 
         CarriageVerifyResult VerifyAt(SignedCarriageEnvelope envelope, ISequenceStore? store) =>
-            CarriageVerifier.VerifyChain(codec: codec, claim: envelope, chain: chain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: store);
+            CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: envelope,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: store
+        );
 
         // There is no skew tolerance: notBefore is honoured to the second, in both directions.
-        var openingNowClaim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: Epoch, notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "opens exactly now");
+        var openingNowClaim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: Epoch,
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "opens exactly now"
+        );
 
-        ExpectAccept(scenario: "clock skew control: notBefore exactly equal to now is inside the window (the boundary is inclusive)", result: VerifyAt(envelope: openingNowClaim, store: null));
+        ExpectAccept(
+            scenario: "clock skew control: notBefore exactly equal to now is inside the window (the boundary is inclusive)",
+            result: VerifyAt(
+                envelope: openingNowClaim,
+                store: null
+            )
+        );
 
-        var oneSecondEarlyClaim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch + 1), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "one second early");
+        var oneSecondEarlyClaim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch + 1),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "one second early"
+        );
 
-        ExpectRefuse(scenario: "clock skew: notBefore one second in the future is refused — there is deliberately no grace window", result: VerifyAt(envelope: oneSecondEarlyClaim, store: null), reasonMustContain: "not yet valid");
+        ExpectRefuse(
+            scenario: "clock skew: notBefore one second in the future is refused — there is deliberately no grace window",
+            result: VerifyAt(
+                envelope: oneSecondEarlyClaim,
+                store: null
+            ),
+            reasonMustContain: "not yet valid"
+        );
 
-        var closingNowClaim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: Epoch, audience: "world:home", sequence: null, text: "closes exactly now");
+        var closingNowClaim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: Epoch,
+            audience: "world:home",
+            sequence: null,
+            text: "closes exactly now"
+        );
 
-        ExpectAccept(scenario: "clock skew control: notAfter exactly equal to now is inside the window (the boundary is inclusive)", result: VerifyAt(envelope: closingNowClaim, store: null));
+        ExpectAccept(
+            scenario: "clock skew control: notAfter exactly equal to now is inside the window (the boundary is inclusive)",
+            result: VerifyAt(
+                envelope: closingNowClaim,
+                store: null
+            )
+        );
 
-        var oneSecondLateClaim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch - 1), audience: "world:home", sequence: null, text: "one second late");
+        var oneSecondLateClaim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch - 1),
+            audience: "world:home",
+            sequence: null,
+            text: "one second late"
+        );
 
-        ExpectRefuse(scenario: "clock skew: notAfter one second in the past is refused", result: VerifyAt(envelope: oneSecondLateClaim, store: null), reasonMustContain: "expired");
+        ExpectRefuse(
+            scenario: "clock skew: notAfter one second in the past is refused",
+            result: VerifyAt(
+                envelope: oneSecondLateClaim,
+                store: null
+            ),
+            reasonMustContain: "expired"
+        );
 
-        var invertedWindowClaim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch + 3_600), notAfter: (Epoch - 3_600), audience: "world:home", sequence: null, text: "inverted window");
+        var invertedWindowClaim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch + 3_600),
+            notAfter: (Epoch - 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "inverted window"
+        );
 
-        ExpectRefuse(scenario: "malformed window: notAfter precedes notBefore", result: VerifyAt(envelope: invertedWindowClaim, store: null), reasonMustContain: "malformed window");
+        ExpectRefuse(
+            scenario: "malformed window: notAfter precedes notBefore",
+            result: VerifyAt(
+                envelope: invertedWindowClaim,
+                store: null
+            ),
+            reasonMustContain: "malformed window"
+        );
 
         // A directed claim WITHOUT a sequence replays freely at its own audience — that is the author's
         // trade, and it is the control that proves the next case is the sequence doing the work.
-        var directedNoSequence = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "directed, no sequence");
+        var directedNoSequence = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "directed, no sequence"
+        );
         var directedStore = new InMemorySequenceStore();
 
-        ExpectAccept(scenario: "directed claim control: no sequence, first presentation accepted", result: VerifyAt(envelope: directedNoSequence, store: directedStore));
-        ExpectAccept(scenario: "directed claim control: no sequence, SECOND presentation also accepted — an audience alone does not stop same-world replay", result: VerifyAt(envelope: directedNoSequence, store: directedStore));
+        ExpectAccept(
+            scenario: "directed claim control: no sequence, first presentation accepted",
+            result: VerifyAt(
+                envelope: directedNoSequence,
+                store: directedStore
+            )
+        );
+        ExpectAccept(
+            scenario: "directed claim control: no sequence, SECOND presentation also accepted — an audience alone does not stop same-world replay",
+            result: VerifyAt(
+                envelope: directedNoSequence,
+                store: directedStore
+            )
+        );
 
-        var directedWithSequence = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: 7UL, text: "directed, sequence 7");
+        var directedWithSequence = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: 7UL,
+            text: "directed, sequence 7"
+        );
 
-        ExpectAccept(scenario: "directed claim + sequence control: first presentation accepted and the mark advances", result: VerifyAt(envelope: directedWithSequence, store: directedStore));
-        ExpectRefuse(scenario: "directed claim + sequence: the SECOND presentation is refused — audience and sequence are independent, not exclusive", result: VerifyAt(envelope: directedWithSequence, store: directedStore), reasonMustContain: "sequence replay");
-        ExpectRefuse(scenario: "directed claim + sequence: no store supplied, so the declared replay defence cannot be honoured", result: VerifyAt(envelope: directedWithSequence, store: null), reasonMustContain: "no sequence store");
+        ExpectAccept(
+            scenario: "directed claim + sequence control: first presentation accepted and the mark advances",
+            result: VerifyAt(
+                envelope: directedWithSequence,
+                store: directedStore
+            )
+        );
+        ExpectRefuse(
+            scenario: "directed claim + sequence: the SECOND presentation is refused — audience and sequence are independent, not exclusive",
+            result: VerifyAt(
+                envelope: directedWithSequence,
+                store: directedStore
+            ),
+            reasonMustContain: "sequence replay"
+        );
+        ExpectRefuse(
+            scenario: "directed claim + sequence: no store supplied, so the declared replay defence cannot be honoured",
+            result: VerifyAt(
+                envelope: directedWithSequence,
+                store: null
+            ),
+            reasonMustContain: "no sequence store"
+        );
 
         // The sequence check is one atomic store call, so the same bearer claim presented concurrently is
         // accepted exactly once: a store that let every caller read before any caller wrote would turn the race
         // from intermittent into certain, accepting both presentations.
-        var bearerOnce = SignTestClaim(codec: codec, keys: keys, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 42UL, text: "one bearer claim, two receivers");
+        var bearerOnce = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 42UL,
+            text: "one bearer claim, two receivers"
+        );
         var contendedStore = new LockstepSequenceStore(participants: 4);
         var contendedResults = new CarriageVerifyResult[4];
 
@@ -758,32 +1637,68 @@ internal static class Program {
             scenario: "sequence atomicity (§15's concurrency demonstration): ONE bearer claim presented by four receivers at once, all reaching the store in lockstep",
             ok: (verifiedCount == 1),
             detail: ((verifiedCount == 1)
-                ? "accepted exactly once — compare-and-advance is indivisible, so the winner is arbitrary but unique"
-                : $"accepted {verifiedCount} times; a bearer claim is usable once, so anything but 1 is a replay the mark was supposed to refuse")
+            ? "accepted exactly once — compare-and-advance is indivisible, so the winner is arbitrary but unique"
+            : $"accepted {verifiedCount} times; a bearer claim is usable once, so anything but 1 is a replay the mark was supposed to refuse")
         );
 
         var uncontendedStore = new LockstepSequenceStore(participants: 1);
 
         ExpectAccept(
             scenario: "sequence atomicity control: the same claim against the same store shape, uncontended, is accepted",
-            result: CarriageVerifier.VerifyChain(codec: codec, claim: bearerOnce, chain: chain, trustList: trust, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: uncontendedStore)
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: bearerOnce,
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.bearer",
+                expectedAudience: null,
+                sequenceStore: uncontendedStore
+            )
         );
 
         // A store that cannot decide — unreachable, unreadable, or unable to record the advance durably —
         // refuses the claim (§8): accepting instead would invert the one check whose purpose is to make a claim
         // usable once. The failure must not propagate out of the verifier either, or a receiver whose database
         // blinked stops producing verdicts at all.
-        var unavailable = SignTestClaim(codec: codec, keys: keys, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 99UL, text: "presented while the store is down");
+        var unavailable = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 99UL,
+            text: "presented while the store is down"
+        );
 
         ExpectRefuse(
             scenario: "sequence store unavailable: a claim carrying a sequence, against a mark store that cannot decide, is REFUSED",
-            result: CarriageVerifier.VerifyChain(codec: codec, claim: unavailable, chain: chain, trustList: trust, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: new UnavailableSequenceStore()),
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: unavailable,
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.bearer",
+                expectedAudience: null,
+                sequenceStore: new UnavailableSequenceStore()
+            ),
             reasonMustContain: "could not decide"
         );
 
         ExpectAccept(
             scenario: "sequence store unavailable control: the identical claim against a working store is accepted",
-            result: CarriageVerifier.VerifyChain(codec: codec, claim: unavailable, chain: chain, trustList: trust, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: new InMemorySequenceStore())
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: unavailable,
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.bearer",
+                expectedAudience: null,
+                sequenceStore: new InMemorySequenceStore()
+            )
         );
 
         // The other half of deny-by-default: a store that decides "no" without raising — the shape a
@@ -791,7 +1706,16 @@ internal static class Program {
         // verifier makes on its own.
         ExpectRefuse(
             scenario: "sequence store indeterminate: a store that resolves nothing and returns false refuses the claim",
-            result: CarriageVerifier.VerifyChain(codec: codec, claim: unavailable, chain: chain, trustList: trust, now: now, expectedPurpose: "test.bearer", expectedAudience: null, sequenceStore: new UndecidedSequenceStore()),
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: unavailable,
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.bearer",
+                expectedAudience: null,
+                sequenceStore: new UndecidedSequenceStore()
+            ),
             reasonMustContain: "sequence replay"
         );
     }
@@ -823,7 +1747,13 @@ internal static class Program {
             m_barrier.SignalAndWait();
 
             lock (m_marks) {
-                if (m_marks.TryGetValue(key: (domain, subject), out var mark) && (sequence <= mark)) {
+                if (
+                    m_marks.TryGetValue(
+                    key: (domain, subject),
+                    out var mark
+                ) &&
+                    (sequence <= mark)
+                ) {
                     return false;
                 }
 
@@ -850,8 +1780,26 @@ internal static class Program {
         var fixedCodec = new FixedLayoutCarriageCodec();
         var cborCodec = new CborCarriageCodec();
         var keys = MintDomainKeys(subject: "user:hana");
-        var fixedWire = fixedCodec.EncodeEnvelope(envelope: SignTestClaim(codec: fixedCodec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "a well-formed claim"));
-        var cborWire = cborCodec.EncodeEnvelope(envelope: SignTestClaim(codec: cborCodec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "a well-formed claim"));
+        var fixedWire = fixedCodec.EncodeEnvelope(envelope: SignTestClaim(
+            codec: fixedCodec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "a well-formed claim"
+        ));
+        var cborWire = cborCodec.EncodeEnvelope(envelope: SignTestClaim(
+            codec: cborCodec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "a well-formed claim"
+        ));
 
         foreach (var (codec, wire) in new (ICarriageCodec Codec, byte[] Wire)[] { (fixedCodec, fixedWire), (cborCodec, cborWire) }) {
             ExpectNoThrow(
@@ -873,7 +1821,10 @@ internal static class Program {
 
             for (var length = 0; (length < wire.Length); length += 1) {
                 try {
-                    _ = codec.DecodeEnvelope(wire: wire.AsSpan(start: 0, length: length));
+                    _ = codec.DecodeEnvelope(wire: wire.AsSpan(
+                        start: 0,
+                        length: length
+                    ));
                     truncationFailures.Add(item: $"length {length} decoded instead of refusing");
                 } catch (FormatException) {
                     // Expected.
@@ -886,8 +1837,11 @@ internal static class Program {
                 scenario: $"[{codec.Name}] truncation sweep: every one of {wire.Length} proper prefixes refuses as a FormatException",
                 ok: (truncationFailures.Count == 0),
                 detail: ((truncationFailures.Count == 0)
-                    ? $"all {wire.Length} truncations refused in bounds"
-                    : $"{truncationFailures.Count} truncation(s) misbehaved: {string.Join(separator: "; ", values: truncationFailures.Take(count: 5))}")
+                ? $"all {wire.Length} truncations refused in bounds"
+                : $"{truncationFailures.Count} truncation(s) misbehaved: {string.Join(
+                    separator: "; ",
+                    values: truncationFailures.Take(count: 5)
+                )}")
             );
         }
 
@@ -955,7 +1909,11 @@ internal static class Program {
         foreach (var kind in new byte[] { 0x00, 0x04, 0x63, 0xFF }) {
             ExpectThrows<FormatException>(
                 scenario: $"[fixed-layout-v1] payload kind out of range: a wire value of {kind}, refused at the DECODER",
-                action: () => _ = fixedCodec.DecodeEnvelope(wire: BuildFixedLayoutEnvelopeWithPayloadKind(codec: fixedCodec, keys: keys, payloadKind: kind)),
+                action: () => _ = fixedCodec.DecodeEnvelope(wire: BuildFixedLayoutEnvelopeWithPayloadKind(
+                    codec: fixedCodec,
+                    keys: keys,
+                    payloadKind: kind
+                )),
                 messageMustContain: "outside the closed set"
             );
         }
@@ -963,7 +1921,11 @@ internal static class Program {
         foreach (var kind in new[] { CarriagePayloadKind.Opaque, CarriagePayloadKind.KeyBinding, CarriagePayloadKind.Sealed }) {
             ExpectNoThrow(
                 scenario: $"[fixed-layout-v1] payload kind control: {(int)kind} ({kind}) is inside the closed set and decodes",
-                action: () => _ = fixedCodec.DecodeEnvelope(wire: BuildFixedLayoutEnvelopeWithPayloadKind(codec: fixedCodec, keys: keys, payloadKind: (byte)kind)),
+                action: () => _ = fixedCodec.DecodeEnvelope(wire: BuildFixedLayoutEnvelopeWithPayloadKind(
+                    codec: fixedCodec,
+                    keys: keys,
+                    payloadKind: (byte)kind
+                )),
                 detail: "decoded — the field under test is the only thing the cases around it change"
             );
         }
@@ -983,7 +1945,10 @@ internal static class Program {
         foreach (var (label, value) in fuzzValues) {
             var fuzzed = (byte[])fixedWire.Clone();
 
-            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(destination: fuzzed.AsSpan(start: SubjectLengthPrefixOffset), value: value);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
+                destination: fuzzed.AsSpan(start: SubjectLengthPrefixOffset),
+                value: value
+            );
 
             // The property being proved is that a forged length is never an instruction to read or allocate
             // beyond what arrived. A refusal proves it directly; a decode that succeeds proves it too, so
@@ -994,8 +1959,13 @@ internal static class Program {
             try {
                 var decoded = fixedCodec.DecodeEnvelope(wire: fuzzed);
 
-                ok = !decoded.Header.Subject!.Equals(value: "user:hana", comparisonType: StringComparison.Ordinal);
-                outcome = (ok ? $"decoded in bounds to a DIFFERENT envelope (subject '{decoded.Header.Subject}'), which cannot carry the original signature" : "decoded to the ORIGINAL envelope — the length prefix was not load-bearing");
+                ok = !decoded.Header.Subject!.Equals(
+                    value: "user:hana",
+                    comparisonType: StringComparison.Ordinal
+                );
+                outcome = (ok
+                    ? $"decoded in bounds to a DIFFERENT envelope (subject '{decoded.Header.Subject}'), which cannot carry the original signature"
+                    : "decoded to the ORIGINAL envelope — the length prefix was not load-bearing");
             } catch (FormatException exception) {
                 ok = true;
                 outcome = $"refused: {exception.Message}";
@@ -1003,7 +1973,11 @@ internal static class Program {
                 outcome = $"threw {exception.GetType().Name} — a forged length escaped the bounds check: {exception.Message}";
             }
 
-            Check(scenario: $"[fixed-layout-v1] length-prefix fuzz ({label}) at the subject field", ok: ok, detail: outcome);
+            Check(
+                scenario: $"[fixed-layout-v1] length-prefix fuzz ({label}) at the subject field",
+                ok: ok,
+                detail: outcome
+            );
         }
     }
 
@@ -1061,22 +2035,36 @@ internal static class Program {
 
         // Encode under a legal kind, then overwrite the one byte — the layout's kind field is the single
         // byte immediately before the payload's 4-byte length prefix.
-        var signedPortion = codec.EncodeSignedPortion(header: header, payloadKind: CarriagePayloadKind.Opaque, payloadBytes: "payload"u8);
+        var signedPortion = codec.EncodeSignedPortion(
+            header: header,
+            payloadKind: CarriagePayloadKind.Opaque,
+            payloadBytes: "payload"u8
+        );
         var payloadLength = "payload"u8.Length;
 
         signedPortion[(signedPortion.Length - ((payloadLength + sizeof(uint)) + 1))] = payloadKind;
 
-        var signature = keys.SubjectSigningKey.SignData(data: signedPortion, hashAlgorithm: HashAlgorithmName.SHA256, signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        var signature = keys.SubjectSigningKey.SignData(
+            data: signedPortion,
+            hashAlgorithm: HashAlgorithmName.SHA256,
+            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
+        );
         var lengthPrefix = new byte[sizeof(uint)];
 
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(destination: lengthPrefix, value: (uint)signature.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
+            destination: lengthPrefix,
+            value: (uint)signature.Length
+        );
 
         return [.. signedPortion, .. lengthPrefix, .. signature];
     }
 
     /// <summary>Re-frames a valid 2-element CBOR envelope as an indefinite-length array carrying the same two items.</summary>
     private static byte[] BuildIndefiniteLengthEnvelope(byte[] wire) {
-        var reader = new CborReader(data: wire, conformanceMode: CborConformanceMode.Strict);
+        var reader = new CborReader(
+            data: wire,
+            conformanceMode: CborConformanceMode.Strict
+        );
 
         _ = reader.ReadStartArray();
 
@@ -1112,24 +2100,44 @@ internal static class Program {
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
         var keys = MintDomainKeys(subject: "user:iris");
 
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (rootToIssuing, issuingToSubject) = BuildChain(
+            codec: codec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var chain = new[] { rootToIssuing, issuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
-        var claim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "iris's claim");
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
+        var claim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "iris's claim"
+        );
 
         CarriageVerifyResult VerifyWithSignature(ReadOnlyMemory<byte> signature) =>
             CarriageVerifier.VerifyChain(
-                codec: codec,
-                claim: (claim with { Signature = signature }),
-                chain: chain,
-                trustList: trust,
-                now: now,
-                expectedPurpose: "test.claim",
-                expectedAudience: "world:home",
-                sequenceStore: null
-            );
+            codec: codec,
+            claim: (claim with { Signature = signature }),
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: "signature control: the minted P1363 signature verifies", result: VerifyWithSignature(signature: claim.Signature));
+        ExpectAccept(
+            scenario: "signature control: the minted P1363 signature verifies",
+            result: VerifyWithSignature(signature: claim.Signature)
+        );
 
         // ECDSA malleability. (r, s) and (r, n-s) are both valid signatures over the same message, and no
         // low-s rule is imposed here: .NET's signer does not canonicalise s, so requiring it would refuse
@@ -1145,28 +2153,54 @@ internal static class Program {
             scenario: "ECDSA malleability (NEGATIVE RESULT, expected to verify): (r, n-s) is a second valid signature over the same claim",
             ok: (malleatedResult.Verified && malleatedIsDifferent),
             detail: ((malleatedResult.Verified && malleatedIsDifferent)
-                ? "verified, as ECDSA requires — signature bytes are therefore never a claim's identity, and nothing here may deduplicate on them"
-                : $"unexpected: verified={malleatedResult.Verified}, differs={malleatedIsDifferent}, reason={malleatedResult.RefusalReason}")
+            ? "verified, as ECDSA requires — signature bytes are therefore never a claim's identity, and nothing here may deduplicate on them"
+            : $"unexpected: verified={malleatedResult.Verified}, differs={malleatedIsDifferent}, reason={malleatedResult.RefusalReason}")
         );
 
         // Encoding malleability, by contrast, is closed: P1363 is a fixed 64 bytes for P-256, so a DER
         // SEQUENCE of the same (r, s) is not a candidate encoding, and neither is a padded one.
-        ExpectRefuse(scenario: "signature encoding: the same (r, s) re-encoded as DER", result: VerifyWithSignature(signature: EncodeSignatureAsDer(signature: claim.Signature.Span)), reasonMustContain: "signature does not verify");
-        ExpectRefuse(scenario: "signature encoding: a valid signature with one zero byte appended", result: VerifyWithSignature(signature: (byte[])[.. claim.Signature.Span, 0x00]), reasonMustContain: "signature does not verify");
-        ExpectRefuse(scenario: "signature encoding: a valid signature with its last byte removed", result: VerifyWithSignature(signature: claim.Signature[..^1]), reasonMustContain: "signature does not verify");
-        ExpectRefuse(scenario: "signature encoding: an all-zero signature of the right length", result: VerifyWithSignature(signature: new byte[claim.Signature.Length]), reasonMustContain: "signature does not verify");
+        ExpectRefuse(
+            scenario: "signature encoding: the same (r, s) re-encoded as DER",
+            result: VerifyWithSignature(signature: EncodeSignatureAsDer(signature: claim.Signature.Span)),
+            reasonMustContain: "signature does not verify"
+        );
+        ExpectRefuse(
+            scenario: "signature encoding: a valid signature with one zero byte appended",
+            result: VerifyWithSignature(signature: (byte[])[.. claim.Signature.Span, 0x00]),
+            reasonMustContain: "signature does not verify"
+        );
+        ExpectRefuse(
+            scenario: "signature encoding: a valid signature with its last byte removed",
+            result: VerifyWithSignature(signature: claim.Signature[..^1]),
+            reasonMustContain: "signature does not verify"
+        );
+        ExpectRefuse(
+            scenario: "signature encoding: an all-zero signature of the right length",
+            result: VerifyWithSignature(signature: new byte[claim.Signature.Length]),
+            reasonMustContain: "signature does not verify"
+        );
     }
 
     /// <summary>The P-256 group order, needed to build the (r, n-s) form of a signature.</summary>
-    private static readonly BigInteger s_nistP256Order = BigInteger.Parse(value: "0FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", style: System.Globalization.NumberStyles.HexNumber);
+    private static readonly BigInteger NistP256Order = BigInteger.Parse(
+        value: "0FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551",
+        style: System.Globalization.NumberStyles.HexNumber
+    );
 
     /// <summary>Rewrites a P1363 <c>r‖s</c> signature as the equally valid <c>r‖(n-s)</c>.</summary>
     private static byte[] MalleateSignature(ReadOnlySpan<byte> signature) {
         var half = (signature.Length / 2);
-        var s = new BigInteger(value: signature[half..], isUnsigned: true, isBigEndian: true);
-        var flipped = (s_nistP256Order - s);
+        var s = new BigInteger(
+            value: signature[half..],
+            isUnsigned: true,
+            isBigEndian: true
+        );
+        var flipped = (NistP256Order - s);
         var result = signature.ToArray();
-        var flippedBytes = flipped.ToByteArray(isUnsigned: true, isBigEndian: true);
+        var flippedBytes = flipped.ToByteArray(
+            isUnsigned: true,
+            isBigEndian: true
+        );
 
         var destinationStart = (signature.Length - flippedBytes.Length);
 
@@ -1185,8 +2219,16 @@ internal static class Program {
         var writer = new System.Formats.Asn1.AsnWriter(ruleSet: System.Formats.Asn1.AsnEncodingRules.DER);
 
         using (writer.PushSequence()) {
-            writer.WriteInteger(value: new BigInteger(value: signature[..half], isUnsigned: true, isBigEndian: true));
-            writer.WriteInteger(value: new BigInteger(value: signature[half..], isUnsigned: true, isBigEndian: true));
+            writer.WriteInteger(value: new BigInteger(
+                value: signature[..half],
+                isUnsigned: true,
+                isBigEndian: true
+            ));
+            writer.WriteInteger(value: new BigInteger(
+                value: signature[half..],
+                isUnsigned: true,
+                isBigEndian: true
+            ));
         }
 
         return writer.Encode();
@@ -1204,18 +2246,52 @@ internal static class Program {
         var cborCodec = new CborCarriageCodec();
         var keys = MintDomainKeys(subject: "user:carol");
 
-        var (fixedRootToIssuing, fixedIssuingToSubject) = BuildChain(codec: fixedCodec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
-        var (cborRootToIssuing, cborIssuingToSubject) = BuildChain(codec: cborCodec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (fixedRootToIssuing, fixedIssuingToSubject) = BuildChain(
+            codec: fixedCodec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
+        var (cborRootToIssuing, cborIssuingToSubject) = BuildChain(
+            codec: cborCodec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var fixedChain = new[] { fixedRootToIssuing, fixedIssuingToSubject };
         var cborChain = new[] { cborRootToIssuing, cborIssuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
 
-        var claim = SignTestClaim(codec: fixedCodec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "signed once, under the fixed layout");
+        var claim = SignTestClaim(
+            codec: fixedCodec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "signed once, under the fixed layout"
+        );
 
-        var controlResult = CarriageVerifier.VerifyChain(codec: fixedCodec, claim: claim, chain: fixedChain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var controlResult = CarriageVerifier.VerifyChain(
+            codec: fixedCodec,
+            claim: claim,
+            chain: fixedChain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: "serialisation cross-check control: fixed-layout-signed envelope verifies under the fixed codec", result: controlResult);
+        ExpectAccept(
+            scenario: "serialisation cross-check control: fixed-layout-signed envelope verifies under the fixed codec",
+            result: controlResult
+        );
 
         // Round-trip the SAME in-memory model (same header values, same payload bytes, the ORIGINAL
         // fixed-layout-derived signature bytes copied verbatim — never re-signed) through the CBOR codec's
@@ -1226,9 +2302,22 @@ internal static class Program {
         // two serialisations are not interchangeable at the byte level even though the field list matches.
         var reencodedAsCborWire = cborCodec.EncodeEnvelope(envelope: claim);
         var decodedFromCbor = cborCodec.DecodeEnvelope(wire: reencodedAsCborWire);
-        var crossCheckResult = CarriageVerifier.VerifyChain(codec: cborCodec, claim: decodedFromCbor, chain: cborChain, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+        var crossCheckResult = CarriageVerifier.VerifyChain(
+            codec: cborCodec,
+            claim: decodedFromCbor,
+            chain: cborChain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectRefuse(scenario: "serialisation cross-check: a fixed-layout-signed envelope re-encoded as CBOR does NOT verify", result: crossCheckResult, reasonMustContain: "signature");
+        ExpectRefuse(
+            scenario: "serialisation cross-check: a fixed-layout-signed envelope re-encoded as CBOR does NOT verify",
+            result: crossCheckResult,
+            reasonMustContain: "signature"
+        );
     }
 
     // ---- Sealed carriage -------------------------------------------------------------------------------
@@ -1254,10 +2343,22 @@ internal static class Program {
         var headerBytes = codec.EncodeHeader(header: header);
         var plaintext = Encoding.UTF8.GetBytes(s: "a secret only dana's sealing key can open");
 
-        var sealedPayload = SealedCarriage.Seal(recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki, associatedData: headerBytes, plaintext: plaintext);
-        var recovered = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: sealedPayload, associatedData: headerBytes);
+        var sealedPayload = SealedCarriage.Seal(
+            recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
+            associatedData: headerBytes,
+            plaintext: plaintext
+        );
+        var recovered = SealedCarriage.Unseal(
+            recipientPrivateKey: keys.SubjectSealingKey,
+            payload: sealedPayload,
+            associatedData: headerBytes
+        );
 
-        Check(scenario: "sealed round trip: plaintext recovered exactly", ok: plaintext.AsSpan().SequenceEqual(other: recovered), detail: $"{recovered.Length} byte(s) recovered, matches input");
+        Check(
+            scenario: "sealed round trip: plaintext recovered exactly",
+            ok: plaintext.AsSpan().SequenceEqual(other: recovered),
+            detail: $"{recovered.Length} byte(s) recovered, matches input"
+        );
 
         // The AAD must cover the WHOLE canonical header, not a prefix of it, so both ends are tampered:
         // byte 0 is the format version, and the last byte is inside the final header field.
@@ -1268,7 +2369,11 @@ internal static class Program {
 
             ExpectThrows<CryptographicException>(
                 scenario: $"sealed AAD tamper: flipping the {label} header byte breaks decryption",
-                action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: sealedPayload, associatedData: tamperedHeaderBytes),
+                action: () => _ = SealedCarriage.Unseal(
+                    recipientPrivateKey: keys.SubjectSealingKey,
+                    payload: sealedPayload,
+                    associatedData: tamperedHeaderBytes
+                ),
                 messageMustContain: "tag"
             );
         }
@@ -1280,7 +2385,11 @@ internal static class Program {
 
                 tamperedCiphertext[0] ^= 0xFF;
 
-                _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { Ciphertext = tamperedCiphertext }), associatedData: headerBytes);
+                _ = SealedCarriage.Unseal(
+                    recipientPrivateKey: keys.SubjectSealingKey,
+                    payload: (sealedPayload with { Ciphertext = tamperedCiphertext }),
+                    associatedData: headerBytes
+                );
             },
             messageMustContain: "tag"
         );
@@ -1292,7 +2401,11 @@ internal static class Program {
 
         ExpectThrows<CryptographicException>(
             scenario: "sealed wrong recipient: another identity's sealing key cannot open it",
-            action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: otherKeys.SubjectSealingKey, payload: sealedPayload, associatedData: headerBytes),
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: otherKeys.SubjectSealingKey,
+                payload: sealedPayload,
+                associatedData: headerBytes
+            ),
             messageMustContain: "tag"
         );
 
@@ -1303,7 +2416,11 @@ internal static class Program {
 
         ExpectThrows<FormatException>(
             scenario: "sealed invalid curve: a P-384 ephemeral key offered against a P-256 recipient",
-            action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = wrongCurveKey.ExportSubjectPublicKeyInfo() }), associatedData: headerBytes),
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: keys.SubjectSealingKey,
+                payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = wrongCurveKey.ExportSubjectPublicKeyInfo() }),
+                associatedData: headerBytes
+            ),
             messageMustContain: "not on P-256"
         );
 
@@ -1315,7 +2432,11 @@ internal static class Program {
 
         ExpectThrows<FormatException>(
             scenario: "sealed wrong key type: an RSA SPKI offered as the ephemeral key — refused on its algorithm OID, before any curve question",
-            action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = rsaKey.ExportSubjectPublicKeyInfo() }), associatedData: headerBytes),
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: keys.SubjectSealingKey,
+                payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = rsaKey.ExportSubjectPublicKeyInfo() }),
+                associatedData: headerBytes
+            ),
             messageMustContain: "does not import as an EC public key"
         );
 
@@ -1326,19 +2447,31 @@ internal static class Program {
         // refuse honest ephemeral keys on a platform whose APIs happen to be split.
         ExpectThrows<CryptographicException>(
             scenario: "sealed key type control: a P-256 SPKI exported from an ECDSA key imports as an agreement key and fails only at the TAG — an EC SPKI carries no signing-versus-agreement intent",
-            action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = keys.SubjectSigningSpki }), associatedData: headerBytes),
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: keys.SubjectSealingKey,
+                payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = keys.SubjectSigningSpki }),
+                associatedData: headerBytes
+            ),
             messageMustContain: "tag"
         );
 
         ExpectThrows<FormatException>(
             scenario: "sealed malformed nonce: an 11-byte nonce is refused as a format error, not as a crypto argument error",
-            action: () => _ = SealedCarriage.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { Nonce = sealedPayload.Nonce[..^1] }), associatedData: headerBytes),
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: keys.SubjectSealingKey,
+                payload: (sealedPayload with { Nonce = sealedPayload.Nonce[..^1] }),
+                associatedData: headerBytes
+            ),
             messageMustContain: "nonce must be"
         );
 
         // The nonce is random per seal AND the AEAD key is fresh per seal (ephemeral agreement), so two
         // seals of the same plaintext under the same header share neither.
-        var secondSeal = SealedCarriage.Seal(recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki, associatedData: headerBytes, plaintext: plaintext);
+        var secondSeal = SealedCarriage.Seal(
+            recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
+            associatedData: headerBytes,
+            plaintext: plaintext
+        );
         var nonceDiffers = !secondSeal.Nonce.Span.SequenceEqual(other: sealedPayload.Nonce.Span);
         var ephemeralDiffers = !secondSeal.EphemeralPublicKeySubjectPublicKeyInfo.Span.SequenceEqual(other: sealedPayload.EphemeralPublicKeySubjectPublicKeyInfo.Span);
 
@@ -1346,8 +2479,8 @@ internal static class Program {
             scenario: "sealed nonce uniqueness: two seals of the same plaintext share neither nonce nor ephemeral key",
             ok: (nonceDiffers && ephemeralDiffers),
             detail: ((nonceDiffers && ephemeralDiffers)
-                ? "both differ — a (key, nonce) repeat needs an ephemeral keypair collision AND a nonce collision"
-                : $"nonce differs: {nonceDiffers}, ephemeral key differs: {ephemeralDiffers}")
+            ? "both differ — a (key, nonce) repeat needs an ephemeral keypair collision AND a nonce collision"
+            : $"nonce differs: {nonceDiffers}, ephemeral key differs: {ephemeralDiffers}")
         );
 
         // The whole sealed envelope, under both codecs: a sealed payload riding inside an ordinary signed
@@ -1366,9 +2499,17 @@ internal static class Program {
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
         var keys = MintDomainKeys(subject: "user:mira");
 
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (rootToIssuing, issuingToSubject) = BuildChain(
+            codec: codec,
+            keys: keys,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var chain = new[] { rootToIssuing, issuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
         var plaintext = "a sealed claim riding inside a signed envelope"u8.ToArray();
 
         // The header is built first because its own encoding is the AEAD associated data, so the ciphertext
@@ -1399,9 +2540,21 @@ internal static class Program {
         );
 
         var decoded = codec.DecodeEnvelope(wire: codec.EncodeEnvelope(envelope: envelope));
-        var result = CarriageVerifier.VerifyChain(codec: codec, claim: decoded, chain: chain, trustList: trust, now: now, expectedPurpose: "test.sealed", expectedAudience: "world:vault", sequenceStore: null);
+        var result = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: decoded,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.sealed",
+            expectedAudience: "world:vault",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: $"[{codec.Name}] sealed envelope: a payload-kind-3 claim survives encode/decode and its chain verifies", result: result);
+        ExpectAccept(
+            scenario: $"[{codec.Name}] sealed envelope: a payload-kind-3 claim survives encode/decode and its chain verifies",
+            result: result
+        );
 
         var recovered = SealedCarriage.Unseal(
             recipientPrivateKey: keys.SubjectSealingKey,
@@ -1447,19 +2600,28 @@ internal static class Program {
         Console.WriteLine();
         Console.WriteLine(value: "=== Interchange fixture round trip ===");
 
-        var directory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-carriage-interchange-{Guid.NewGuid():N}");
+        var directory = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-carriage-interchange-{Guid.NewGuid():N}"
+        );
 
         try {
             var exported = CarriageInterchange.Export(directory: directory);
 
-            Check(scenario: "interchange: export writes a fixture", ok: (exported == 0), detail: $"exit {exported}, {Directory.GetFiles(path: directory).Length} file(s) written");
+            Check(
+                scenario: "interchange: export writes a fixture",
+                ok: (exported == 0),
+                detail: $"exit {exported}, {Directory.GetFiles(path: directory).Length} file(s) written"
+            );
 
             var verified = CarriageInterchange.Verify(directory: directory);
 
             Check(
                 scenario: "interchange: the exported fixture verifies — signed chain AND the sealed artifact §14 fixes",
                 ok: (verified == 0),
-                detail: ((verified == 0) ? "exit 0 — every check in the fixture held" : $"exit {verified} — the fixture handed to the other implementation does not verify against its own minting side")
+                detail: ((verified == 0)
+                ? "exit 0 — every check in the fixture held"
+                : $"exit {verified} — the fixture handed to the other implementation does not verify against its own minting side")
             );
 
             Console.WriteLine(value: "  (every block below re-runs verify against a DELIBERATELY broken fixture — the [FAIL] lines inside them are the expected result)");
@@ -1469,7 +2631,10 @@ internal static class Program {
             ExpectFixtureFailure(
                 scenario: "interchange control: one flipped byte in the SEALED envelope fails the fixture",
                 directory: directory,
-                break_: fixture => FlipLastByte(path: Path.Combine(path1: fixture, path2: "sealed.envelope"))
+                break_: fixture => FlipLastByte(path: Path.Combine(
+                    path1: fixture,
+                    path2: "sealed.envelope"
+                ))
             );
 
             // The Part 1 defect, as a case. Byte 0 of a CBOR envelope is the outer array head, so flipping
@@ -1478,7 +2643,13 @@ internal static class Program {
             ExpectFixtureFailure(
                 scenario: "interchange malformed input: a corrupt claim.envelope is a FAILED CHECK, never a crash",
                 directory: directory,
-                break_: fixture => FlipByte(path: Path.Combine(path1: fixture, path2: "claim.envelope"), offset: 0)
+                break_: fixture => FlipByte(
+                    path: Path.Combine(
+                        path1: fixture,
+                        path2: "claim.envelope"
+                    ),
+                    offset: 0
+                )
             );
 
             // The same obligation over every file in the fixture, so no one file is guarded by accident.
@@ -1486,7 +2657,13 @@ internal static class Program {
                 ExpectFixtureFailure(
                     scenario: $"interchange malformed input: a corrupt {fileName} is a FAILED CHECK, never a crash",
                     directory: directory,
-                    break_: fixture => FlipByte(path: Path.Combine(path1: fixture, path2: fileName), offset: 0)
+                    break_: fixture => FlipByte(
+                        path: Path.Combine(
+                            path1: fixture,
+                            path2: fileName
+                        ),
+                        offset: 0
+                    )
                 );
             }
 
@@ -1495,7 +2672,10 @@ internal static class Program {
                 ExpectFixtureFailure(
                     scenario: $"interchange missing input: an absent {fileName} is a FAILED CHECK, never a crash",
                     directory: directory,
-                    break_: fixture => File.Delete(path: Path.Combine(path1: fixture, path2: fileName))
+                    break_: fixture => File.Delete(path: Path.Combine(
+                        path1: fixture,
+                        path2: fileName
+                    ))
                 );
             }
 
@@ -1504,19 +2684,45 @@ internal static class Program {
             foreach (var (label, mutate) in new (string Label, Func<string, string> Mutate)[] {
                 ("a key with no '='", manifest => $"{manifest}this line has no separator\n"),
                 ("a duplicated key", manifest => $"{manifest}purpose=carriage.something-else\n"),
-                ("an escape the format does not define", manifest => manifest.Replace(oldValue: "sealed-plaintext=sealed", newValue: @"sealed-plaintext=\qsealed", comparisonType: StringComparison.Ordinal)),
-                ("a required key removed", manifest => manifest.Replace(oldValue: $"audience={CarriageInterchange.InterchangeAudience}\n", newValue: string.Empty, comparisonType: StringComparison.Ordinal)),
-                ("a required key emptied", manifest => manifest.Replace(oldValue: $"subject={CarriageInterchange.InterchangeSubject}", newValue: "subject=", comparisonType: StringComparison.Ordinal)),
-                ("an algorithm outside the §4 registry", manifest => manifest.Replace(oldValue: $"algorithm={CarriageAlgorithms.EcdsaP256Sha256}", newValue: "algorithm=ecdsa-p521-sha512", comparisonType: StringComparison.Ordinal)),
-                ("a sequence the claim does not carry", manifest => manifest.Replace(oldValue: "sequence=1", newValue: "sequence=2", comparisonType: StringComparison.Ordinal)),
+                ("an escape the format does not define", manifest => manifest.Replace(
+                oldValue: "sealed-plaintext=sealed",
+                newValue: @"sealed-plaintext=\qsealed",
+                comparisonType: StringComparison.Ordinal
+            )),
+                ("a required key removed", manifest => manifest.Replace(
+                oldValue: $"audience={CarriageInterchange.InterchangeAudience}\n",
+                newValue: string.Empty,
+                comparisonType: StringComparison.Ordinal
+            )),
+                ("a required key emptied", manifest => manifest.Replace(
+                oldValue: $"subject={CarriageInterchange.InterchangeSubject}",
+                newValue: "subject=",
+                comparisonType: StringComparison.Ordinal
+            )),
+                ("an algorithm outside the §4 registry", manifest => manifest.Replace(
+                oldValue: $"algorithm={CarriageAlgorithms.EcdsaP256Sha256}",
+                newValue: "algorithm=ecdsa-p521-sha512",
+                comparisonType: StringComparison.Ordinal
+            )),
+                ("a sequence the claim does not carry", manifest => manifest.Replace(
+                oldValue: "sequence=1",
+                newValue: "sequence=2",
+                comparisonType: StringComparison.Ordinal
+            )),
             }) {
                 ExpectFixtureFailure(
                     scenario: $"interchange manifest format: {label} fails the fixture",
                     directory: directory,
                     break_: fixture => {
-                        var path = Path.Combine(path1: fixture, path2: "manifest.txt");
+                        var path = Path.Combine(
+                            path1: fixture,
+                            path2: "manifest.txt"
+                        );
 
-                        File.WriteAllText(path: path, contents: mutate(File.ReadAllText(path: path)));
+                        File.WriteAllText(
+                            path: path,
+                            contents: mutate(File.ReadAllText(path: path))
+                        );
                     }
                 );
             }
@@ -1527,7 +2733,11 @@ internal static class Program {
             foreach (var (label, mutate) in new (string Label, Func<string, string> Mutate)[] {
                 ("an unknown key", manifest => $"{manifest}some-future-key=a value the reader has never heard of\n"),
                 ("an empty line", manifest => $"{manifest}\n\n"),
-                ("CRLF line endings", manifest => manifest.Replace(oldValue: "\n", newValue: "\r\n", comparisonType: StringComparison.Ordinal)),
+                ("CRLF line endings", manifest => manifest.Replace(
+                oldValue: "\n",
+                newValue: "\r\n",
+                comparisonType: StringComparison.Ordinal
+            )),
                 ("a value carrying '='", manifest => $"{manifest}some-future-key=a=b=c\n"),
                 ("no final newline", manifest => manifest.TrimEnd(trimChar: '\n')),
             }) {
@@ -1535,15 +2745,24 @@ internal static class Program {
                     scenario: $"interchange manifest format control: {label} is tolerated and the fixture still verifies",
                     directory: directory,
                     mutate: fixture => {
-                        var path = Path.Combine(path1: fixture, path2: "manifest.txt");
+                        var path = Path.Combine(
+                            path1: fixture,
+                            path2: "manifest.txt"
+                        );
 
-                        File.WriteAllText(path: path, contents: mutate(File.ReadAllText(path: path)));
+                        File.WriteAllText(
+                            path: path,
+                            contents: mutate(File.ReadAllText(path: path))
+                        );
                     }
                 );
             }
         } finally {
             if (Directory.Exists(path: directory)) {
-                Directory.Delete(path: directory, recursive: true);
+                Directory.Delete(
+                    path: directory,
+                    recursive: true
+                );
             }
         }
     }
@@ -1554,13 +2773,13 @@ internal static class Program {
     /// <param name="break_">What to do to the copy.</param>
     private static void ExpectFixtureFailure(string scenario, string directory, Action<string> break_) =>
         RunOnFixtureCopy(
-            scenario: scenario,
-            directory: directory,
-            mutate: break_,
-            wantExitZero: false,
-            wanted: "a non-zero exit, reported rather than thrown",
-            unwanted: "exit 0 — the broken fixture was accepted"
-        );
+        scenario: scenario,
+        directory: directory,
+        mutate: break_,
+        wantExitZero: false,
+        wanted: "a non-zero exit, reported rather than thrown",
+        unwanted: "exit 0 — the broken fixture was accepted"
+    );
 
     /// <summary>Copies a fixture, changes something the format tolerates, and requires it to still verify — the control every case above needs.</summary>
     /// <param name="scenario">The case's name.</param>
@@ -1568,21 +2787,30 @@ internal static class Program {
     /// <param name="mutate">What to do to the copy.</param>
     private static void ExpectFixtureSuccess(string scenario, string directory, Action<string> mutate) =>
         RunOnFixtureCopy(
-            scenario: scenario,
-            directory: directory,
-            mutate: mutate,
-            wantExitZero: true,
-            wanted: "exit 0 — the change is genuinely tolerated",
-            unwanted: "a non-zero exit — the reader refused something the format admits"
-        );
+        scenario: scenario,
+        directory: directory,
+        mutate: mutate,
+        wantExitZero: true,
+        wanted: "exit 0 — the change is genuinely tolerated",
+        unwanted: "a non-zero exit — the reader refused something the format admits"
+    );
     private static void RunOnFixtureCopy(string scenario, string directory, Action<string> mutate, bool wantExitZero, string wanted, string unwanted) {
-        var copy = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-carriage-interchange-{Guid.NewGuid():N}");
+        var copy = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-carriage-interchange-{Guid.NewGuid():N}"
+        );
 
         try {
             Directory.CreateDirectory(path: copy);
 
             foreach (var file in Directory.GetFiles(path: directory)) {
-                File.Copy(sourceFileName: file, destFileName: Path.Combine(path1: copy, path2: Path.GetFileName(path: file)));
+                File.Copy(
+                    sourceFileName: file,
+                    destFileName: Path.Combine(
+                        path1: copy,
+                        path2: Path.GetFileName(path: file)
+                    )
+                );
             }
 
             mutate(copy);
@@ -1592,12 +2820,25 @@ internal static class Program {
             var exit = CarriageInterchange.Verify(directory: copy);
             var ok = ((exit == 0) == wantExitZero);
 
-            Check(scenario: scenario, ok: ok, detail: (ok ? $"exit {exit} — {wanted}" : $"exit {exit} — {unwanted}"));
+            Check(
+                scenario: scenario,
+                ok: ok,
+                detail: (ok
+                ? $"exit {exit} — {wanted}"
+                : $"exit {exit} — {unwanted}")
+            );
         } catch (Exception exception) {
-            Check(scenario: scenario, ok: false, detail: $"verify THREW {exception.GetType().Name} instead of returning a verdict: {exception.Message}");
+            Check(
+                scenario: scenario,
+                ok: false,
+                detail: $"verify THREW {exception.GetType().Name} instead of returning a verdict: {exception.Message}"
+            );
         } finally {
             if (Directory.Exists(path: copy)) {
-                Directory.Delete(path: copy, recursive: true);
+                Directory.Delete(
+                    path: copy,
+                    recursive: true
+                );
             }
         }
     }
@@ -1606,14 +2847,20 @@ internal static class Program {
 
         bytes[offset] ^= 0xFF;
 
-        File.WriteAllBytes(path: path, bytes: bytes);
+        File.WriteAllBytes(
+            path: path,
+            bytes: bytes
+        );
     }
     private static void FlipLastByte(string path) {
         var bytes = File.ReadAllBytes(path: path);
 
         bytes[^1] ^= 0xFF;
 
-        File.WriteAllBytes(path: path, bytes: bytes);
+        File.WriteAllBytes(
+            path: path,
+            bytes: bytes
+        );
     }
 
     // ---- Bytes that arrived, versus bytes re-derived -----------------------------------------------------
@@ -1639,18 +2886,45 @@ internal static class Program {
         var codec = new FixedLayoutCarriageCodec();
         var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
         var keys = MintDomainKeys(subject: "user:jun");
-        var trust = BuildDirectTrustList(keys: keys, reach: s_defaultReach);
-        var claim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "jun's claim");
+        var trust = BuildDirectTrustList(
+            keys: keys,
+            reach: DefaultReach
+        );
+        var claim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "jun's claim"
+        );
         var wire = codec.EncodeEnvelope(envelope: claim);
 
         CarriageVerifyResult VerifyWire(byte[] bytes) =>
-            CarriageVerifier.VerifyChain(codec: codec, claim: codec.DecodeEnvelope(wire: bytes), chain: null, trustList: trust, now: now, expectedPurpose: "test.claim", expectedAudience: "world:home", sequenceStore: null);
+            CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: codec.DecodeEnvelope(wire: bytes),
+            chain: null,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home",
+            sequenceStore: null
+        );
 
-        ExpectAccept(scenario: "[fixed-layout-v1] arrived-bytes control: the honestly encoded envelope decodes and verifies", result: VerifyWire(bytes: wire));
+        ExpectAccept(
+            scenario: "[fixed-layout-v1] arrived-bytes control: the honestly encoded envelope decodes and verifies",
+            result: VerifyWire(bytes: wire)
+        );
 
         Check(
             scenario: "[fixed-layout-v1] arrived-bytes control: the decoded envelope carries the signed portion VERBATIM, not a re-encoding",
-            ok: codec.DecodeEnvelope(wire: wire).SignedPortion.Span.SequenceEqual(other: wire.AsSpan(start: 0, length: (wire.Length - (sizeof(uint) + claim.Signature.Length)))),
+            ok: codec.DecodeEnvelope(wire: wire).SignedPortion.Span.SequenceEqual(other: wire.AsSpan(
+                start: 0,
+                length: (wire.Length - (sizeof(uint) + claim.Signature.Length))
+            )),
             detail: "SignedPortion is the exact envelope prefix that arrived — what the signature is checked against"
         );
 
@@ -1668,7 +2942,16 @@ internal static class Program {
 
         // The sequence field's presence flag, reached by position rather than by a hard-coded offset: a
         // second optional field proves the rule is the reader's, not one patched offset.
-        var bearer = SignTestClaim(codec: codec, keys: keys, purpose: "test.bearer", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: null, sequence: 3UL, text: "jun's bearer claim");
+        var bearer = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.bearer",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: null,
+            sequence: 3UL,
+            text: "jun's bearer claim"
+        );
         var bearerWire = codec.EncodeEnvelope(envelope: bearer);
         var sequenceFlagOffset = FindSequencePresenceFlagOffset(wire: bearerWire);
         var mutatedBearer = (byte[])bearerWire.Clone();
@@ -1720,8 +3003,14 @@ internal static class Program {
             scenario: $"[fixed-layout-v1] single-byte mutation sweep: all {(wire.Length * 255):N0} single-byte mutations of a valid envelope",
             ok: ((accepted.Count == 0) && (crashed.Count == 0)),
             detail: (((accepted.Count == 0) && (crashed.Count == 0))
-                ? $"none accepted — {refusedAtDecode:N0} refused at decode, {refusedAtVerify:N0} refused at verify"
-                : $"{accepted.Count} ACCEPTED ({string.Join(separator: "; ", values: accepted.Take(count: 5))}), {crashed.Count} crashed ({string.Join(separator: "; ", values: crashed.Take(count: 3))})")
+            ? $"none accepted — {refusedAtDecode:N0} refused at decode, {refusedAtVerify:N0} refused at verify"
+            : $"{accepted.Count} ACCEPTED ({string.Join(
+                separator: "; ",
+                values: accepted.Take(count: 5)
+            )}), {crashed.Count} crashed ({string.Join(
+                separator: "; ",
+                values: crashed.Take(count: 3)
+            )})")
         );
     }
 
@@ -1733,7 +3022,9 @@ internal static class Program {
         // version(1) + domain(32), then subject, algorithm, purpose, notBefore(8), notAfter(8), audience.
         var offset = 33;
 
-        int SkipOptionalString(int at) => ((wire[at] == 0) ? (at + 1) : SkipString(at: (at + 1)));
+        int SkipOptionalString(int at) => ((wire[at] == 0)
+            ? (at + 1)
+            : SkipString(at: (at + 1)));
         int SkipString(int at) => ((at + sizeof(uint)) + (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(source: wire.AsSpan(start: at)));
 
         offset = SkipOptionalString(at: offset);
@@ -1747,17 +3038,17 @@ internal static class Program {
     /// <summary>Builds a trust list that pins one subject's own signing key directly — the zero-hop shape, so a scenario exercises one signature rather than three.</summary>
     private static TrustList BuildDirectTrustList(DomainKeys keys, IReadOnlySet<string> reach) =>
         new(
-            entries: [
+        entries: [
                 new TrustListEntry(
-                    PinnedId: keys.SubjectSigningId,
-                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
-                    Mode: CarriageTrustMode.SignsDirectly,
-                    Reach: reach,
-                    MaximumAge: null
-                ),
+            PinnedId: keys.SubjectSigningId,
+            PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+            Mode: CarriageTrustMode.SignsDirectly,
+            Reach: reach,
+            MaximumAge: null
+        ),
             ],
-            defaultMaximumAge: null
-        );
+        defaultMaximumAge: null
+    );
 
     // ---- Size and complexity report --------------------------------------------------------------------
 
@@ -1772,11 +3063,39 @@ internal static class Program {
         var keysFixed = MintDomainKeys(subject: "user:erin");
         var keysCbor = MintDomainKeys(subject: "user:erin");
 
-        var (rootToIssuingFixed, issuingToSubjectFixed) = BuildChain(codec: fixedCodec, keys: keysFixed, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
-        var (rootToIssuingCbor, issuingToSubjectCbor) = BuildChain(codec: cborCodec, keys: keysCbor, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+        var (rootToIssuingFixed, issuingToSubjectFixed) = BuildChain(
+            codec: fixedCodec,
+            keys: keysFixed,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
+        var (rootToIssuingCbor, issuingToSubjectCbor) = BuildChain(
+            codec: cborCodec,
+            keys: keysCbor,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
         var claimText = "a representative claim payload of modest size, e.g. an item grant or a chat line";
-        var claimFixed = SignTestClaim(codec: fixedCodec, keys: keysFixed, purpose: "chat.message", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: claimText);
-        var claimCbor = SignTestClaim(codec: cborCodec, keys: keysCbor, purpose: "chat.message", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: claimText);
+        var claimFixed = SignTestClaim(
+            codec: fixedCodec,
+            keys: keysFixed,
+            purpose: "chat.message",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: claimText
+        );
+        var claimCbor = SignTestClaim(
+            codec: cborCodec,
+            keys: keysCbor,
+            purpose: "chat.message",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: claimText
+        );
 
         var fixedRootBytes = fixedCodec.EncodeEnvelope(envelope: rootToIssuingFixed);
         var fixedIssuingBytes = fixedCodec.EncodeEnvelope(envelope: issuingToSubjectFixed);

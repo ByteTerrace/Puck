@@ -33,11 +33,22 @@ public static class CarriageSigner {
         var descriptor = CarriageAlgorithms.Resolve(algorithm: signingAlgorithm);
 
         if (descriptor.Role != CarriageKeyRole.Signing) {
-            throw new ArgumentException(message: $"'{signingAlgorithm}' is not a signing algorithm.", paramName: nameof(signingAlgorithm));
+            throw new ArgumentException(
+                message: $"'{signingAlgorithm}' is not a signing algorithm.",
+                paramName: nameof(signingAlgorithm)
+            );
         }
 
-        var signedPortion = codec.EncodeSignedPortion(header: header, payloadKind: payloadKind, payloadBytes: payloadBytes.Span);
-        var signature = signingKey.SignData(data: signedPortion, hashAlgorithm: descriptor.SignatureHash!.Value, signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        var signedPortion = codec.EncodeSignedPortion(
+            header: header,
+            payloadKind: payloadKind,
+            payloadBytes: payloadBytes.Span
+        );
+        var signature = signingKey.SignData(
+            data: signedPortion,
+            hashAlgorithm: descriptor.SignatureHash!.Value,
+            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
+        );
 
         // The envelope carries the bytes that were just signed rather than a promise that they could be
         // re-derived — the same bytes a verifier will check the signature against (see the remarks on
@@ -81,7 +92,10 @@ public static class CarriageSigner {
         long notAfter,
         string? declaredAlgorithm = null
     ) {
-        var payload = new KeyBindingPayload(TargetId: targetId, PublicKeySubjectPublicKeyInfo: targetSubjectPublicKeyInfo);
+        var payload = new KeyBindingPayload(
+            TargetId: targetId,
+            PublicKeySubjectPublicKeyInfo: targetSubjectPublicKeyInfo
+        );
         var payloadBytes = codec.EncodeKeyBindingPayload(payload: payload);
         var header = new CarriageEnvelopeHeader(
             Domain: domain,
@@ -94,7 +108,14 @@ public static class CarriageSigner {
             Sequence: null
         );
 
-        return Sign(codec: codec, header: header, payloadKind: CarriagePayloadKind.KeyBinding, payloadBytes: payloadBytes, signingKey: signerKey, signingAlgorithm: signerAlgorithm);
+        return Sign(
+            codec: codec,
+            header: header,
+            payloadKind: CarriagePayloadKind.KeyBinding,
+            payloadBytes: payloadBytes,
+            signingKey: signerKey,
+            signingAlgorithm: signerAlgorithm
+        );
     }
 
     /// <summary>Mints a claim: an envelope signed by a subject key, carrying caller-defined opaque bytes.</summary>
@@ -125,8 +146,15 @@ public static class CarriageSigner {
         ReadOnlyMemory<byte> claimBytes,
         string? declaredAlgorithm = null
     ) {
-        if (string.Equals(a: purpose, b: CarriagePurposes.KeyBinding, comparisonType: StringComparison.Ordinal)) {
-            throw new ArgumentException(message: $"A claim must not use the reserved purpose '{CarriagePurposes.KeyBinding}'.", paramName: nameof(purpose));
+        if (string.Equals(
+            a: purpose,
+            b: CarriagePurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ArgumentException(
+                message: $"A claim must not use the reserved purpose '{CarriagePurposes.KeyBinding}'.",
+                paramName: nameof(purpose)
+            );
         }
 
         var header = new CarriageEnvelopeHeader(
@@ -140,6 +168,13 @@ public static class CarriageSigner {
             Sequence: sequence
         );
 
-        return Sign(codec: codec, header: header, payloadKind: CarriagePayloadKind.Opaque, payloadBytes: claimBytes, signingKey: signerKey, signingAlgorithm: signerAlgorithm);
+        return Sign(
+            codec: codec,
+            header: header,
+            payloadKind: CarriagePayloadKind.Opaque,
+            payloadBytes: claimBytes,
+            signingKey: signerKey,
+            signingAlgorithm: signerAlgorithm
+        );
     }
 }

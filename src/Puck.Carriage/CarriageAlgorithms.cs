@@ -44,7 +44,7 @@ public static class CarriageAlgorithms {
     /// <summary>P-256 ECDH key agreement, HKDF-SHA256 key derivation, AES-256-GCM AEAD — the sealing algorithm.</summary>
     public const string EcdhP256HkdfSha256Aes256Gcm = "ecdh-p256-hkdf-sha256-aes256gcm";
 
-    private static readonly Dictionary<string, CarriageAlgorithmDescriptor> s_descriptors = BuildTable();
+    private static readonly Dictionary<string, CarriageAlgorithmDescriptor> Descriptors = BuildTable();
 
     private static Dictionary<string, CarriageAlgorithmDescriptor> BuildTable() {
         var table = new Dictionary<string, CarriageAlgorithmDescriptor>(comparer: StringComparer.Ordinal);
@@ -61,9 +61,21 @@ public static class CarriageAlgorithms {
             );
         }
 
-        Add(name: EcdsaP256Sha256, role: CarriageKeyRole.Signing, hash: HashAlgorithmName.SHA256);
-        Add(name: EcdsaP256Sha384, role: CarriageKeyRole.Signing, hash: HashAlgorithmName.SHA384);
-        Add(name: EcdhP256HkdfSha256Aes256Gcm, role: CarriageKeyRole.Sealing, hash: null);
+        Add(
+            name: EcdsaP256Sha256,
+            role: CarriageKeyRole.Signing,
+            hash: HashAlgorithmName.SHA256
+        );
+        Add(
+            name: EcdsaP256Sha384,
+            role: CarriageKeyRole.Signing,
+            hash: HashAlgorithmName.SHA384
+        );
+        Add(
+            name: EcdhP256HkdfSha256Aes256Gcm,
+            role: CarriageKeyRole.Sealing,
+            hash: null
+        );
 
         return table;
     }
@@ -73,7 +85,10 @@ public static class CarriageAlgorithms {
     /// <returns>The resolved descriptor.</returns>
     /// <exception cref="NotSupportedException"><paramref name="algorithm"/> is not a known carriage algorithm.</exception>
     public static CarriageAlgorithmDescriptor Resolve(string algorithm) {
-        if (s_descriptors.TryGetValue(key: algorithm, value: out var descriptor)) {
+        if (Descriptors.TryGetValue(
+            key: algorithm,
+            value: out var descriptor
+        )) {
             return descriptor;
         }
 
@@ -82,7 +97,7 @@ public static class CarriageAlgorithms {
 
     /// <summary>Determines whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
     /// <param name="algorithm">The candidate algorithm name.</param>
-    public static bool IsKnown(string algorithm) => s_descriptors.ContainsKey(key: algorithm);
+    public static bool IsKnown(string algorithm) => Descriptors.ContainsKey(key: algorithm);
 }
 
 /// <summary>
@@ -93,7 +108,7 @@ public static class CarriageAlgorithms {
 /// another — so identity is decided by an alias set rather than by <see cref="ECCurve"/> equality.
 /// </summary>
 public static class CarriageCurves {
-    private static readonly HashSet<string> s_nistP256Aliases = new(comparer: StringComparer.OrdinalIgnoreCase) {
+    private static readonly HashSet<string> NistP256Aliases = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "1.2.840.10045.3.1.7",
         "ECDH_P256",
         "ECDSA_P256",
@@ -107,13 +122,19 @@ public static class CarriageCurves {
     /// <param name="expected">The curve the pinned algorithm's descriptor names.</param>
     /// <returns><see langword="true"/> only when both are recognisably the same named curve.</returns>
     public static bool Matches(ECCurve key, ECCurve expected) {
-        if (!key.IsNamed || !expected.IsNamed) {
+        if (
+            !key.IsNamed ||
+            !expected.IsNamed
+        ) {
             return false;
         }
 
         var keyIsP256 = IsNistP256(curve: key);
 
-        return ((keyIsP256 == IsNistP256(curve: expected)) && keyIsP256);
+        return (
+            (keyIsP256 == IsNistP256(curve: expected)) &&
+            keyIsP256
+        );
     }
 
     /// <summary>Determines whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
@@ -121,7 +142,7 @@ public static class CarriageCurves {
     public static bool IsNistP256(ECCurve curve) =>
         (curve.IsNamed &&
         (
-            s_nistP256Aliases.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
-            s_nistP256Aliases.Contains(item: (curve.Oid.FriendlyName ?? string.Empty))
+            NistP256Aliases.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
+            NistP256Aliases.Contains(item: (curve.Oid.FriendlyName ?? string.Empty))
         ));
 }
