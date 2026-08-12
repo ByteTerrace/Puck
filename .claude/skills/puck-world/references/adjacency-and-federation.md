@@ -161,17 +161,30 @@ Refusals are named (`WorldFederationRefusal`) and every refusal frame's text
 opens with the name, so a peer and `WorldTcpHost.FederationRefusals` count the
 same vocabulary.
 
-`WorldRemoteAuthority` holds two persistent authenticated lanes per source
-authority namespace: `FederatedRequestLane` for reserve/commit/abort/
-acknowledge/status/route/submission, and `FederatedIntentPump` for the
-latest-value intent stream. Connect, hello, and challenge are paid once per
-lane, never once per operation. A lane that cannot reach its peer marks itself
-unavailable for a backoff window and answers every request in that window
-immediately with `LaneUnavailable`; that, not a socket timeout, is what keeps a
-closed edge from stalling the source's tick. Abort and acknowledge are posted
-and never waited on. A commit whose answer is `WorldTransferStep.Unreachable`
-is IN DOUBT, never a refusal — the source keeps its recovery state and
-reconciles against the destination's idempotent status.
+`WorldRemoteAuthority` holds persistent authenticated lanes per source authority
+namespace: a `FederatedIntentPump` for the latest-value intent stream, and a
+`FederatedRequestLane` per `WorldFederationLane` concern — `Transaction` for
+reserve/commit/abort/acknowledge/status, `Routed` for route lookups and
+forwarded submissions. Connect, hello, and challenge are paid once per lane.
+A lane is strictly ordered, so everything sharing one queues behind whatever is
+in flight; that is why the two concerns are separate, and why adding a request
+kind means deciding which lane it belongs on.
+
+Only a failure to CONNECT takes a lane out of service, and only after a retry.
+A break on an established connection reconnects and re-sends once without
+entering backoff — a live neighbour must not be marked unavailable over one
+recycled socket. Slowness never changes lane state: the worker has no read
+deadline. A lane inside its backoff window answers every request immediately
+with `LaneUnavailable` without touching a socket, which is what keeps a closed
+edge from stalling the source's tick.
+
+Every transfer step answers. A step that ran out of time is a named refusal,
+never "ask again": a caller told to retry would hold the transfer while the
+adjacency scan minted a second crossing for the same seat, landing the traveler
+at the destination twice. Abort and acknowledge are posted and never waited on.
+A commit answered `WorldTransferStep.Unreachable` is IN DOUBT, never a refusal —
+the source keeps its recovery state and reconciles against the destination's
+idempotent status.
 
 ## Verification
 

@@ -233,12 +233,16 @@ Whatever that gate protects is acquired and released under it.
 population state — is this transferred principal still live, then submit or
 describe on its behalf — is ONE gated operation, never two.
 
-The client half is `Puck.World.WorldRemoteAuthority`: one persistent request
-lane and one intent pump per source authority namespace, so connect, hello, and
-challenge are paid once per lane rather than once per operation. A lane that
-cannot reach its peer answers immediately with `LaneUnavailable` for a backoff
-window instead of waiting on a socket, which is what keeps a closed edge from
-stalling the source's tick.
+The client half is `Puck.World.WorldRemoteAuthority`: an intent pump plus one
+request lane per (source authority namespace, `WorldFederationLane` concern), so
+connect, hello, and challenge are paid once per lane rather than once per
+operation. A lane is strictly ordered, so transfer transactions and routed
+traffic are kept on separate lanes rather than queueing behind each other. Only
+a failure to connect takes a lane out of service; a break on an established
+connection reconnects and re-sends without entering backoff, and slowness never
+changes lane state. A lane inside its backoff window answers `LaneUnavailable`
+without touching a socket, which is what keeps a closed edge from stalling the
+source's tick.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`
 (`IsAdmittedPeer` reads it) so `world.population`'s census lever can never
