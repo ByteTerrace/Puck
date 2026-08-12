@@ -251,7 +251,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.admission",
-            description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can ever verify). The DOCUMENT half of the admission decision — world.peers echoes the RUNTIME half (which connections verified under which identity).",
+            description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can verify and no traveller can arrive). The document half of the admission decision — world.peers echoes the runtime half (which bodies were admitted under which identity).",
             handler: (_, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: $"[world.admission: unrecognized '{args[0]}' — expected no arguments]");
@@ -260,7 +260,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var rows = server.Definition.Admission;
 
                 if (rows is not { Count: > 0 }) {
-                    return new CommandResult(Output: "[world.admission: none — no remote peer can ever verify]");
+                    return new CommandResult(Output: "[world.admission: none — no remote peer can verify and no traveller can arrive]");
                 }
 
                 var formatted = string.Join(separator: " | ", values: rows.Select(selector: row => $"{row.Mode.ToString().ToLowerInvariant()} domain:{row.Domain} subject:{(row.Subject ?? "(none)")} alg:{row.Algorithm} grants:{row.Grants.Count}"));

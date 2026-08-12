@@ -2065,5 +2065,19 @@
       "durability": "persisted",
       "scope": "global"
     }
+  ],
+  "admission": [
+    {
+      "domain": "*",
+      "subject": null,
+      "mode": "FederatedAuthority",
+      "algorithm": "",
+      "publicKey": "",
+      "grants": [
+        { "capability": "Control", "subject": "all" },
+        { "capability": "Drive", "exclusive": true, "budget": 64 },
+        { "capability": "Observe", "budget": 64 }
+      ]
+    }
   ]
 }

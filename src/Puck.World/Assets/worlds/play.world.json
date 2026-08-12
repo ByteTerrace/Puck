@@ -1528,5 +1528,19 @@
   },
   "documentId": "play",
   "schema": "puck.world.def.v1",
-  "$schema": "./puck.world.def.v1.schema.json"
+  "$schema": "./puck.world.def.v1.schema.json",
+  "admission": [
+    {
+      "domain": "*",
+      "subject": null,
+      "mode": "FederatedAuthority",
+      "algorithm": "",
+      "publicKey": "",
+      "grants": [
+        { "capability": "Control", "subject": "all" },
+        { "capability": "Drive", "exclusive": true, "budget": 64 },
+        { "capability": "Observe", "budget": 64 }
+      ]
+    }
+  ]
 }

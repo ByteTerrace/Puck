@@ -12,7 +12,7 @@
     ],
     "properties": {
       "domain": {
-        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey\u0027s own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash.",
+        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey\u0027s own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake.",
         "type": "string"
       },
       "subject": {
@@ -26,7 +26,8 @@
         "description": "Whether this entry signs directly or vouches for a chain.",
         "enum": [
           "SignsDirectly",
-          "Vouches"
+          "Vouches",
+          "FederatedAuthority"
         ]
       },
       "algorithm": {
@@ -55,7 +56,7 @@
               ]
             },
             "subject": {
-              "description": "The subject it scopes to."
+              "description": "The subject it scopes to; null means the body this admission assigns, resolved by SubjectFor once that index is known. An authored template cannot name a body index \u2014 the door runs before the population picks one \u2014 so a row that must follow the admitted body omits its subject."
             },
             "exclusive": {
               "description": "Whether the mint is exclusive.",
