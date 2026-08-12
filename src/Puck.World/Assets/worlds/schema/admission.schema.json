@@ -82,6 +82,16 @@
           },
           "additionalProperties": false
         }
+      },
+      "disclosure": {
+        "description": "How much of this world\u0027s document a peer verified under this entry receives (see WorldDisclosureTier). Absent resolves to Presentation, so an entry authored before this field existed keeps a projection-only wire and nothing has to be edited to stay closed. Replica is reachable only by authoring it.",
+        "enum": [
+          "Frames",
+          "Presentation",
+          "Replica",
+          null
+        ],
+        "default": null
       }
     },
     "required": [

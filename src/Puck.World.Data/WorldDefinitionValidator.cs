@@ -2189,6 +2189,17 @@ public static class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.subject must be absent for mode 'federatedAuthority' — the row trusts an authority namespace, never one traveler it hands over.");
             }
 
+            if ((row.Disclosure is { } disclosure) && !Enum.IsDefined(value: disclosure)) {
+                errors.Add(item: $"{path}.disclosure '{disclosure}' is not defined.");
+            }
+
+            // Frames is a legitimate authored tier for an observer that only ever receives pixels, but a peer that
+            // is minted anything it must act through needs at least the presentation document to resolve what it is
+            // acting on — a grant with nothing to address is a grant that can only fail at use.
+            if ((row.Disclosure == WorldDisclosureTier.Frames) && ((row.Grants ?? []).Count > 0)) {
+                errors.Add(item: $"{path}.disclosure 'frames' mints {(row.Grants ?? []).Count} grant(s) — a frames-tier peer receives no document to address them against.");
+            }
+
             var grants = (row.Grants ?? []);
 
             for (var grantIndex = 0; (grantIndex < grants.Count); grantIndex++) {

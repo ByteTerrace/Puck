@@ -91,6 +91,38 @@ public static class WorldSchema {
     /// every site instead of sharing one copy, matching what the un-split generator actually produced.</param>
     public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common, IReadOnlyDictionary<string, string?> DefAnchors);
 
+    /// <summary>The projection schema's stable identity — the tag <see cref="WorldProjectionDocument.SchemaVersion"/>
+    /// carries.</summary>
+    public const string ProjectionSchemaId = WorldProjectionDocument.SchemaVersion;
+
+    /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
+    /// deliberately: the projection has no top-level section a person opens on its own, so the split
+    /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
+    /// <returns>The generated schema root.</returns>
+    public static JsonObject ExportProjection() {
+        var index = s_xmlDocIndex.Value;
+        var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => Transform(context: context, index: index, node: node, typesByNode: typesByNode),
+        };
+        var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(type: typeof(WorldProjectionDocument), exporterOptions: exporterOptions);
+        var root = schema.AsObject();
+        var generated = root.ToList();
+
+        root.Clear();
+        root.Add(propertyName: "$schema", value: DraftUri);
+        root.Add(propertyName: "$id", value: ProjectionSchemaId);
+        root.Add(propertyName: "title", value: "Puck world projection (puck.world.projection.v1)");
+
+        foreach (var (propertyName, value) in generated) {
+            root.Add(propertyName: propertyName, value: value);
+        }
+
+        RestoreSkippedPropertyAnnotations(node: root, index: index, typesByNode: typesByNode);
+
+        return root;
+    }
+
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
     public static SplitSchema Export() {
         var (merged, typesByNode) = ExportMergedWithTypes();

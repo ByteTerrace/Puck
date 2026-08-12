@@ -39,13 +39,16 @@ internal static class SchemaCommand {
         pulled from Puck.World.Data.xml beside the assembly; when that file is missing the
         schema still writes, with no descriptions, and this verb says so on stderr.
 
-        Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root) and
-        src/Puck.World/Assets/worlds/schema/*.schema.json (one file per document section,
-        plus common.schema.json for shapes more than one section references).
+        Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
+        src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress
+        document, one unsplit file), and src/Puck.World/Assets/worlds/schema/*.schema.json
+        (one file per document section, plus common.schema.json for shapes more than one
+        section references).
         Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing
         repository root.
         """;
     private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
+    private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
     private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
 
     private readonly record struct SchemaFile(string FullPath, string Text);
@@ -86,10 +89,13 @@ internal static class SchemaCommand {
         }
 
         var (root, sections, common, sectionsDirectory) = BuildFileSet(repositoryRoot: repositoryRoot, split: split);
+        var projection = new SchemaFile(
+            FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: ProjectionRelativePath)),
+            Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection()));
 
         return (scanner.Has(name: "check")
-            ? Check(root: root, sections: sections, common: common, sectionsDirectory: sectionsDirectory)
-            : Write(root: root, sections: sections, common: common, sectionsDirectory: sectionsDirectory));
+            ? Check(root: root, projection: projection, sections: sections, common: common, sectionsDirectory: sectionsDirectory)
+            : Write(root: root, projection: projection, sections: sections, common: common, sectionsDirectory: sectionsDirectory));
     }
 
     private static int Bundle(WorldSchema.SplitSchema split, string? path) {
@@ -125,8 +131,9 @@ internal static class SchemaCommand {
     }
     private static string ToNativePath(string relativePath) =>
         relativePath.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar);
-    private static int Write(SchemaFile root, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
+    private static int Write(SchemaFile root, SchemaFile projection, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         WriteFile(file: root);
+        WriteFile(file: projection);
 
         foreach (var section in sections) {
             WriteFile(file: section);
@@ -146,7 +153,7 @@ internal static class SchemaCommand {
             }
         }
 
-        Console.Out.WriteLine(value: $"schema: wrote {CliPaths.ToDisplay(fullPath: root.FullPath)} + {sections.Count} section file(s) + common.schema.json.");
+        Console.Out.WriteLine(value: $"schema: wrote {CliPaths.ToDisplay(fullPath: root.FullPath)} + {CliPaths.ToDisplay(fullPath: projection.FullPath)} + {sections.Count} section file(s) + common.schema.json.");
 
         if (removed.Count > 0) {
             Console.Out.WriteLine(value: $"schema: removed {removed.Count} stale section file(s) no longer produced: {string.Join(separator: ", ", values: removed)}");
@@ -163,10 +170,11 @@ internal static class SchemaCommand {
 
         File.WriteAllText(path: file.FullPath, contents: file.Text, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
-    private static int Check(SchemaFile root, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
+    private static int Check(SchemaFile root, SchemaFile projection, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         var problems = new List<string>();
 
         CheckFile(file: root, problems: problems);
+        CheckFile(file: projection, problems: problems);
 
         foreach (var section in sections) {
             CheckFile(file: section, problems: problems);
@@ -185,7 +193,7 @@ internal static class SchemaCommand {
         }
 
         if (problems.Count == 0) {
-            Console.Out.WriteLine(value: $"schema: {CliPaths.ToDisplay(fullPath: root.FullPath)} and {(sections.Count + 1)} schema/ file(s) match the generated schema.");
+            Console.Out.WriteLine(value: $"schema: {CliPaths.ToDisplay(fullPath: root.FullPath)}, {CliPaths.ToDisplay(fullPath: projection.FullPath)}, and {(sections.Count + 1)} schema/ file(s) match the generated schema.");
 
             return 0;
         }

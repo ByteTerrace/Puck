@@ -83,6 +83,10 @@ public static class WorldAdmissionDoor {
         /// <summary>Gets the admitting entry's own authored grant templates, when admitted.</summary>
         public IReadOnlyList<WorldAdmissionGrant>? Grants => Verdict?.Templates;
 
+        /// <summary>Gets how much of this world's document the admitted peer receives; on refusal,
+        /// <see cref="WorldDisclosureTier.Frames"/> — a refused peer receives no document at all.</summary>
+        public WorldDisclosureTier Tier => (Verdict?.Tier ?? WorldDisclosureTier.Frames);
+
         /// <summary>Builds a refusal outcome.</summary>
         public static AdmissionOutcome Refuse(WorldAdmissionRefusal refusal, string detail) => new(Admitted: false, Refusal: refusal, Detail: detail, Verdict: null);
 
@@ -182,7 +186,7 @@ public static class WorldAdmissionDoor {
             }
 
             if (string.Equals(a: entry.Domain, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: entry.Grants);
+                verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: entry.Grants, tier: entry.Tier);
 
                 return null;
             }
@@ -192,7 +196,7 @@ public static class WorldAdmissionDoor {
         }
 
         if (wildcard is { } any) {
-            verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: any.Grants);
+            verdict = new WorldAdmissionVerdict(identityDomain: sourceAuthority, identitySubject: string.Empty, templates: any.Grants, tier: any.Tier);
 
             return null;
         }
@@ -221,7 +225,7 @@ public static class WorldAdmissionDoor {
                 var matchesVouching = ((entry.Mode == WorldAdmissionTrustMode.Vouches) && string.Equals(a: entry.Domain, b: domain, comparisonType: StringComparison.Ordinal));
 
                 if (matchesDirect || matchesVouching) {
-                    verdict = new WorldAdmissionVerdict(identityDomain: (domain ?? string.Empty), identitySubject: (subject ?? string.Empty), templates: entry.Grants);
+                    verdict = new WorldAdmissionVerdict(identityDomain: (domain ?? string.Empty), identitySubject: (subject ?? string.Empty), templates: entry.Grants, tier: entry.Tier);
 
                     return true;
                 }
