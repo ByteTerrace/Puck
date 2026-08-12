@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// while <see cref="WorldPortalArrivalMath"/> is simulation math (fixed-point) computing where a traveler who
 /// actually crosses ends up — two independent implementations of the identical isometry, on two independent number
 /// systems, that must land on the same point. <see cref="WorldPortalArrivalMath"/> is read here, never edited (it is
-/// a different lane's file — see docs/world-model.md and this suite's sibling <c>WorldPortalArrivalMathLawTests</c>
+/// a different lane's file — see docs/vision.md and this suite's sibling <c>WorldPortalArrivalMathLawTests</c>
 /// for its own contract).
 /// </summary>
 /// <remarks>

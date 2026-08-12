@@ -1,7 +1,7 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// The outcome of walking a carriage chain (docs/world-model.md, "Signed carriage"). There is exactly one
+/// The outcome of walking a carriage chain (README.md, "Signed carriage"). There is exactly one
 /// verify path for everything — a key binding and a claim are both envelopes, verified by the same code —
 /// so this is the one result type both produce.
 /// </summary>
@@ -14,7 +14,7 @@ namespace Puck.Carriage;
 /// as a decision already made.</para>
 /// <para>Ask <see cref="Admits"/> instead whenever the question is "may this claim do X". The verifier
 /// REPORTS reach and never enforces it: "a trust entry pins an id and says whether that key signs directly
-/// or may vouch for others, plus which slots it reaches" (docs/world-model.md) is an authored scope, and
+/// or may vouch for others, plus which slots it reaches" (README.md) is an authored scope, and
 /// whether a claim <i>counts</i> for a given slot stays the receiving world's policy (invariant 5). No
 /// engine consumer exists yet — nothing in this repository calls the verifier from a world — so today
 /// this type is the only place the distinction is stated at all.</para>

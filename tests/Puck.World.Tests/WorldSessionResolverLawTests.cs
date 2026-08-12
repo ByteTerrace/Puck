@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// In-process laws for <see cref="WorldSessionResolver"/> (docs/world-model.md Campaign 1 item 3) — the idempotence
+/// In-process laws for <see cref="WorldSessionResolver"/> — the idempotence
 /// and generation-lifecycle rules the resolver's own remarks describe, plus the scope-refusal/cohort-coherence
 /// pairing every denial in this suite is proven with a control. The resolver carries no dependency on
 /// <c>Puck.World</c> (the composition root, out of scope for this project — see <c>Fixtures</c>'s own remarks), so
@@ -343,7 +343,7 @@ public sealed class WorldSessionResolverLawTests {
         Assert.Equal(expected: reused.GenerationId, actual: stillReused.GenerationId);
     }
 
-    // RETURN MEANS HOME (docs/world-model.md): TryAdopt/TryGetActive are the cache-install half of the seam
+    // RETURN MEANS HOME (docs/vision.md): TryAdopt/TryGetActive are the cache-install half of the seam
     // Puck.World.WorldInstanceHost's own origin scan drives — this resolver carries no notion of "running instances"
     // at all (see this file's own class remarks), so what a law here can prove is exactly TryAdopt's OWN documented
     // contract: a pair with no active generation adopts the named instance, and ordinary TryResolve afterward reuses

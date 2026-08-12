@@ -234,35 +234,10 @@ framed as unverified when no device run exists.
   the next thing that loads a fresh Debug binary, not because those scripts are
   reachable: they are quarantined under `experimental/` and never run.
 
-## Engineering doctrine
-
-1. The current user request outranks documentation, skills, tests, comments,
-   and precedent. Update stale artifacts in the same change.
-2. Gates assert observable contracts: pixels, hashes, parity, determinism,
-   exit codes, and measured budgets. They do not pin internal call sequences or
-   type shapes.
-3. Skills contain factual or procedural guidance, not immutable architecture.
-4. Stability levels determine the evidence required for a change, not whether
-   a change is allowed.
-5. Greenfield game behavior is verified by running the game. Shared engine
-   contracts are verified by the appropriate POST battery.
-6. Puck has zero external consumers, so backwards compatibility carries no
-   weight. Rename, reshape, and delete freely; update every internal caller in
-   the same change. Never add compatibility aliases, deprecation ceremonies,
-   migration shims, or read-side tolerance for retired data shapes — migrate
-   the data once and delete the old path. The only stability that matters is
-   observable behavior under the gates.
-7. Determinism pins the mapping, not the values. The contract is
-   reproducibility at a fixed code version — same document + same input →
-   bit-identical state across runs, machines, and backends — never output
-   stability across code versions. A deliberate correction to math or logic is
-   expected to change state hashes and is never blocked by that fact. The
-   ritual: make the correction, re-run the relevant POST tier (the determinism
-   and replay gates are self-referential — they capture and verify within the
-   same build and pin no historical constants), and re-record any persisted
-   replays or calibrated baselines the correction invalidates in the same
-   change. Preserving a wrong result to keep a hash stable, or adding a path
-   that reproduces old-wrong behavior, is the defect.
+Engineering doctrine — the current request outranking artifacts, gates
+asserting observable contracts only, supergreen, determinism pinning the
+mapping — lives in [CLAUDE.md](../CLAUDE.md)'s core rules and is not restated
+here.
 
 ## Verification doctrine
 
@@ -361,8 +336,6 @@ all verification work here. Each keeps one compressed instance as evidence.
   that defines them.
 - .NET 10 is the only target. Consult `dotnet10-performance` before preserving
   a hand optimization or making a runtime-performance claim.
-- Merges land on `main` as one squash commit with a hand-written summary, no
-  merge bubble, and no `Co-Authored-By` trailer.
 
 ## Documentation policy
 
@@ -371,9 +344,12 @@ material, research with a live decision index, measured baselines, and active
 roadmaps are acceptable. Completed rollout logs, audits, migration diaries,
 commit archaeology, and superseded plans belong in version control history.
 
-When retiring a document, move any still-live contract, limitation, or
-procedure into its canonical reference before deleting it. Update
-[README.md](README.md) whenever the document set changes.
+A document owned by a single project lives with that project — its README or a
+sibling file beside the code — never under `docs/`, which holds only
+cross-project material. When retiring a document, move any still-live contract,
+limitation, or procedure into its canonical reference before deleting it. The
+root [README](../README.md) routes to the document set; update its routing
+whenever the set changes.
 
 ## Coordinating parallel work
 

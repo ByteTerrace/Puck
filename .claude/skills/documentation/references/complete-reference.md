@@ -395,17 +395,17 @@ The sweep surface for a **skill** rename is the directory name, the frontmatter
 `name`, sibling `SKILL.md` routing tables, `CLAUDE.md`'s skill list, and any
 document under `docs/` that names the skill.
 
-### Index and scope rules
+### Placement and scope rules
 
-- **`docs/README.md` carries a row for every top-level document under `docs/`,
-  and one row for each subdirectory's entry point** rather than a row per file
-  inside it — `reviews/` is the exception, indexed document by document. Its own
-  *Maintenance* section states the top-level half: "Add new top-level documents
-  to this index." Adding a top-level document without a row breaks that written
-  rule; removing one removes its row.
-- **Documentation describes the current product.** The `docs/README.md`
-  maintenance list and [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
-  *Documentation policy* agree: design history, completed rollout logs, migration
+- **A single-owner document lives with its owner.** A project's design
+  rationale and specifications fold into that project's README (or the README
+  itself); `docs/` holds only cross-project material (vision, campaign, agent
+  guide, world model, project map, research corpora, verification runners,
+  reviews). There is no `docs/` index: the root `README.md` routes to the
+  document set, and its routing updates whenever the set changes.
+- **Documentation describes the current product.**
+  [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
+  *Documentation policy*: design history, completed rollout logs, migration
   diaries, commit archaeology, and superseded plans belong in version control
   history. Measurements survive only while they still explain a current
   threshold, limitation, or decision.
@@ -420,7 +420,7 @@ document under `docs/` that names the skill.
   output of `dotnet docfx docs/api/docfx.json`. Editing any of them closes
   nothing. Everything else committed under `docs/api/` — `docfx.json`,
   `index.md`, `toc.yml`, and that folder's `.gitignore` — is hand-maintained,
-  and `docs/api/index.md` is an ordinary document that `docs/README.md` indexes.
+  and `docs/api/index.md` is an ordinary document the root `README.md` routes to.
 - **A stale document is evidence, not law.** `CLAUDE.md` rule 2: documents,
   skills, gates, comments, and precedent are evidence. A stale one discovered
   mid-task is corrected in that same change — never obeyed, and never used to
@@ -440,8 +440,8 @@ document under `docs/` that names the skill.
    `puck declarations` / `puck references`, not text search.
 4. **The orphan audit ran** (§2) if anything was deleted or moved, and its
    ledger is in the change description.
-5. **Index rows are current** — `docs/README.md` updated if the set of top-level
-   documents changed.
+5. **Routing is current** — the root `README.md` updated if the set of
+   top-level documents changed.
 6. **A voice pass preserved every fact and every heading.** The house method is a
    token audit against the pre-edit copy: keep a copy in the scratchpad, then
    diff the claim inventory. A voice edit that drops a fact has changed the

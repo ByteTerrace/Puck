@@ -24,10 +24,11 @@ Vulkan and Direct3D 12.
 - **Determinism as a feature.** Fixed-point math, per-tick command snapshots,
   and record/replay are engine primitives; capture runs produce identical
   per-frame pixel hashes.
-- **Self-validating.** `Puck.Post` is a fail-isolated power-on self-test (CPU
-  pre-flight → GPU smoke → cross-backend parity → live subsystems; run it to
-  see the current stage count in its own summary line); the experimental
-  emulator cores carry their own mirrored batteries.
+- **Verified by running.** The game is verified by running it; the two
+  emulator cores carry their own conformance/determinism batteries. The
+  engine's former power-on self-test is quarantined under `experimental/` and
+  nothing gates the shared engine contract today — that gap is named rather
+  than papered over.
 
 There is deliberately no capability catalog: the one that existed asserted a
 per-capability verification status that stopped being true when the engine's
@@ -50,13 +51,29 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 10
 ## Layout
 
 - [src](src) — the engine and the game, split into focused `Puck.*` projects;
-  see the [project map](docs/project-map.md)
+  see the [project map](docs/project-map.md). Each project describes itself in
+  its own README: a project's design rationale and specifications live beside
+  its code, never under `docs/`.
 - [experimental](experimental) — the bare-metal runtime, and the quarantined
   trees (`Puck.Demo`, `Puck.Post`, `tools`, `scripts`): out of the build, read
   as prior art and never built or run, see
   [experimental/README.md](experimental/README.md)
-- [docs](docs/README.md) — project map,
-  [guide for contributors and agents](docs/agent-guide.md), and the handbooks
+- [docs](docs) — cross-project material only. Read in order:
+  [vision](docs/vision.md) (what Puck is and why),
+  [the campaign](docs/campaign.md) (what we are collectively building, where it
+  stands, and what is next — read before picking up work), then the
+  [guide for contributors and agents](docs/agent-guide.md). Reference beside
+  them: the [SDF handbook](docs/sdf-handbook/README.md), the
+  [SDF](docs/sdf-wiki/README.md) and [AGB](docs/agb-wiki/README.md) research
+  wikis, the [docfx API reference](docs/api/index.md) (git-ignored build output
+  of `dotnet docfx docs/api/docfx.json`),
+  [document examples](docs/examples) (read by hand; nothing loads them),
+  and [verification runners](docs/verification) (committed batteries, one
+  directory per contract, each `run.ps1` exiting nonzero on a miss).
+  The maths research corpus (the polynomial-tail /
+  Beatty / metallic-mean / parity-irreducibility program) lives outside this
+  repository and is deliberately unlinked; its production primitives are in
+  [src/Puck.Maths](src/Puck.Maths).
 
 Standing on many shoulders — see [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
 

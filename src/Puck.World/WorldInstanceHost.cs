@@ -11,7 +11,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The process's running world instances, keyed by console-chosen name — the <i>host</i> of docs/world-model.md's
+/// The process's running world instances, keyed by console-chosen name — the <i>host</i> of docs/vision.md's
 /// "The words": the machine or process running instances. The world this process booted with is one entry
 /// (<see cref="BootInstanceName"/>) beside every instance started later, so nothing here treats one world as a
 /// different kind of thing from another. Owns starting, stepping, reading back and retiring them.
@@ -41,7 +41,7 @@ namespace Puck.World;
 /// grant-gated start (starting one is ungated today); no machines — an instance's <see cref="Server.WorldMachineHost"/>
 /// is constructed empty, so a document declaring machine-sourced screens starts with every one of them dark (the
 /// start echo counts them, so the absence is read back rather than discovered).</para>
-/// <para><b>Per-instance scheduling (docs/world-model.md).</b> Each instance advances on its own
+/// <para><b>Per-instance scheduling (docs/vision.md).</b> Each instance advances on its own
 /// authored <c>simulation.rateHz</c>, never a shared build-wide rate: <see cref="StepInstancesBesideBoot"/> holds a
 /// per-instance accumulator (<see cref="WorldInstance.ScheduleAccumulatorTicks"/>) of engine ticks banked against
 /// the host's master timeline — the boot instance's own rate-derived cadence the fixed-step pump already drives
@@ -967,7 +967,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         /// <see cref="WorldDestinationDurability.Persisted"/> (see <see cref="TransferDestination.Retain"/>) — an
         /// Ephemeral-durability resolution reaps normally through the ordinary <see cref="ReapIfEmpty"/> rule the
         /// moment its occupancy hits zero, which is what lets <see cref="WorldSessionResolver.NotifyInstanceRetired"/>
-        /// observe the generation actually ending (docs/world-model.md "Durability, scope and generation").</summary>
+        /// observe the generation actually ending (docs/vision.md "Durability, scope and generation").</summary>
         Resolved,
     }
 
@@ -1075,7 +1075,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     /// re-verified (the scope-key re-derivation above is what proves the resolution still holds).
     /// <see langword="null"/> for a non-resolver transfer.</param>
     /// <param name="TransferId">The transfer id this particular queued crossing carries — minted deterministically at
-    /// enqueue time (docs/world-model.md) unless a caller supplied one explicitly (console
+    /// enqueue time (docs/vision.md) unless a caller supplied one explicitly (console
     /// <c>world.transfer</c>'s <c>transfer:&lt;id&gt;</c> token, the retry/idempotence verification seam). Threaded
     /// through every echo this transfer produces and checked against <see cref="m_appliedTransferIds"/> before
     /// anything else at drain time.</param>

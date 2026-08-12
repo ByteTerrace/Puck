@@ -34,7 +34,7 @@ These are kept current — read them before deep work.
 |---|---|
 | [docs/project-map.md](docs/project-map.md) | What each `Puck.*` project is for, how they layer, the dependency rules. Its layering block is GENERATED from per-project declarations (`puck architecture --map`) — do not hand-edit it. |
 | [docs/agent-guide.md](docs/agent-guide.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
-| [docs/README.md](docs/README.md) | Index of what remains. |
+| [docs/vision.md](docs/vision.md) then [docs/campaign.md](docs/campaign.md) | What Puck is and refuses to be; what we are collectively building, where it stands, and what is next. Read before picking up work. |
 
 **There is no capability catalog or register any more, deliberately.** Both
 claimed per-capability *verification status*, and with `Puck.Post` quarantined
@@ -48,7 +48,8 @@ its source — a generator nobody runs is a hand-maintained file with extra step
 The same test governs every document here: if acting on it would produce the
 wrong behavior today it is not stale, it is hostile — delete it. Keep what
 records a DECISION and the reasoning that cannot be re-derived. Generate what
-the code already knows.
+the code already knows. A deleted plan is never reconstructed from git history
+and presented as current.
 
 For an area's settled contract facts, load its skill: `sdf-world`,
 `gaming-bricks`, `rom-forge`, `symbol-analysis`, `maths-usage`,
@@ -106,8 +107,7 @@ correct them where they live.
    comments, and precedent are evidence, not law — if one argues against a
    change you've been asked to make, it is stale; update it in the same change
    rather than watering the change down. Gates prove *observable* behavior
-   (pixels, hashes, parity, determinism), never internal structure. Full
-   doctrine: [agent-guide.md](docs/agent-guide.md#engineering-doctrine).
+   (pixels, hashes, parity, determinism), never internal structure.
 3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
    overworld and everything under `src/Puck.World/` — is the playground: expected
    to churn, never settled precedent. (`Puck.Demo` is **quarantined at
@@ -195,75 +195,18 @@ correct them where they live.
    here is a defect, not a feature; a skill that proves wrong about its own
    area is stale, and gets corrected in the same change (rule 2).
 
-## The overworld — product intent
+## The game — where intent lives
 
-> **STATUS: INTENT, NOT A DESCRIPTION OF ANYTHING THAT RUNS.** Nothing in this
-> section describes shipped behavior. It records the experience `Puck.World` is
-> meant to become, so the target is not lost. **No plan of record sequences it.**
-> The document that used to — the Demo → World port plan — was deleted when
-> `Puck.Demo` was quarantined, and nothing replaced it; there is no arc list, no
-> ordering, and no owner for the gap between this intent and the code. For what
-> actually exists today, read [src/Puck.World/README.md](src/Puck.World/README.md)
-> and the code, and verify by running `Puck.World`. Never cite this section as
-> evidence that a capability is built.
-
-**The four-world charter (owner-ratified, superseding the bootable-cabinet
-arcade room this section described before 2026-08-06 — read that design as
-history, not destination).** Puck's first official game is FOUR worlds, no
-others: **Play**, the overworld hub — it IS the MMO, the game's first main
-city, local multiplayer (four seats) in a plaza sized for up to
-`WorldPopulationLimits.CapacityCeiling` occupants — and three instanced
-"dungeons" reached from it: **Dive** (underwater), **Kart** (racing),
-**Jump** (platformer).
-Each dungeon is reached through a wall-mounted picture-frame portal standing
-in Play, never a loading menu or a `--flag` mode swap — walk to a frame, and
-the world underneath changes with no restart. Play's own `references` section
-names the three dungeons by document path; a portal placement resolves its
-frame against the matching row (the `puck-world` skill's documents reference
-carries the section's exact shape). Design is feel-first: a
-dungeon earns its place by how it feels to move through — before any scoring,
-unlock, or progression system is layered on top — and Play's own feel is
-gentler than any dungeon's, a promenading pace fit for a shared plaza.
-Reveals are a core world mechanic — attunement-like achievement facts
-carried on the identity, general enough for cross-game unlocks between
-trusted servers. Every world is a starting point; all starting points
-converge on the hub. The dmg↔cgb↔agb device swap, forged cartridges (SDF
-art, camera, hand-authored SM83 games), and creator mode await their places
-in that reveal graph — an arcade cabinet already stands dark in Play's
-plaza as the first of them; no plan of record sequences the rest.
-
-The charter bounds the GAME worlds, not the `Assets/worlds/` directory.
-`studio` ships beside them as a non-game DEV CANVAS for character and
-creation work — a neutral floor, no scenery, no crowd, and four anchored
-camera eyes with a `sheet` layout that composes front/three-quarter/side/back
-at once. It is reached with `--world`, and — owner amendment, 2026-08-09 —
-it is also Puck's FIRST FORMAL BORDER CROSSING: play and studio meet at a
-mapped border (the zone-stitching proof), so studio is additionally
-reachable by walking out of the plaza. It remains a dev canvas, not a game
-world, and not a destination in the reveal graph. A doc counting "the four
-shipped worlds" is counting the charter's roster; the directory holds five
-documents.
-
-**The unification contract (the north star).** The overworld is ONE cohesive
-experience, not a menu of `--flag` modes: every capability is reachable from
-inside a single running session — a diegetic act, a pad chord, or a **console
-verb** — with no restart. The **console is the control plane**, driven by the
-on-screen panel AND process **stdin** with results echoed to **stdout**, so an
-agent (or a deterministic test) scripts the whole engine over a pipe. Durable
-configuration lives in the world document (`puck.world.def.v1`) — which world
-a boot resolves to, and each portal's dungeon target (the `references`
-section). There is no `PUCK_*` configuration surface: durable values are
-document fields, live operations are console verbs, and a headless flag is
-only ever a developer reflection of an in-session capability, never a separate
-product.
-
-Boot loads directly into Play, standing in the plaza; later, a diegetic
-reveal unlocks the editor (which stays always-on for devs/agents). No gating
-code for this reveal exists.
-
-The in-engine game studio roadmap and the machine-fleet workload/performance
-briefing were deleted with the rest of the plan documents; neither the studio
-nor the fleet has a plan of record today.
+The four-world charter (Play plus the Dive/Kart/Jump dungeons, `studio` as a
+non-game dev canvas beside them), the reveal mechanic, and what is next are
+[docs/campaign.md](docs/campaign.md)'s to state — read it before game work,
+and never cite intent as evidence that a capability is built. The unification
+contract — one session, no `--flag` modes, the console as the control plane
+over stdin/stdout, durable configuration as document fields, no `PUCK_*`
+configuration surface — is stated in [docs/vision.md](docs/vision.md) ("What
+Puck is not"). For what exists today, read
+[src/Puck.World/README.md](src/Puck.World/README.md) and verify by running
+`Puck.World`.
 
 ## Controller input
 

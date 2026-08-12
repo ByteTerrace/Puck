@@ -4,7 +4,7 @@ using System.Text;
 namespace Puck.Carriage;
 
 /// <summary>
-/// The cross-implementation check (docs/signed-carriage-wire.md §17): mint a chain to files, or pin a chain
+/// The cross-implementation check (README.md §17): mint a chain to files, or pin a chain
 /// minted by the other implementation and verify it. The envelope is a specification each side implements
 /// independently, and the only thing that proves the specification was written well enough is bytes minted
 /// by one side verifying in the other — so this is a file-in/file-out mode of the harness rather than
@@ -29,7 +29,7 @@ namespace Puck.Carriage;
 /// escapes, unknown keys ignored.</item>
 /// </list>
 /// <para><b>Why the sealed artifact has to exist.</b> Sealed carriage's key derivation
-/// (docs/signed-carriage-wire.md §14) fixes five construction inputs — raw agreement as HKDF input, absent
+/// (README.md §14) fixes five construction inputs — raw agreement as HKDF input, absent
 /// salt, the <c>puck.carriage.sealed.v1</c> info label, 32-byte output, 16-byte AEAD tag — and none of them
 /// is observable from a signed envelope. Two implementations disagreeing about any one of them fail with an
 /// AEAD tag mismatch, which is the same failure a tampered payload produces. Without ciphertext one side
@@ -317,7 +317,7 @@ public static class CarriageInterchange {
 
         // Reading the clock here is legitimate where it would not be in the engine: this is a file-in
         // file-out developer tool whose admission boundary IS the process invocation, so there is no tape
-        // to replay and no tick to be inside (docs/signed-carriage-wire.md §9). The mark store is fresh per
+        // to replay and no tick to be inside (README.md §9). The mark store is fresh per
         // run for the same reason §17 gives: a store carried between runs would refuse the second
         // verification of the same fixture as a replay, and be right to.
         CarriageVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>

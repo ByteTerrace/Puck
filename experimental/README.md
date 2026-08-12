@@ -25,6 +25,13 @@ with a door in it. That is what makes the quarantine structural rather than a
 path filter someone has to maintain: a filter that happens to exclude the right
 directories reads identically to one that excludes the wrong ones.
 
+Do not trust a green restore in `Puck.Demo`: its `ProjectReference`s are
+relative paths written when it lived under `src/`, and they all dangle here.
+`dotnet restore` exits 0 while silently discarding every one of them
+(warning-level "Skipping project ... because it was not found"), and a build
+then fails as a flood of `CS0234` errors pointing at source files rather than
+at the dangling edges.
+
 ## Nothing here is deleted, and nothing here is alive
 
 This is removal from the build, not from history. Read it the way you read

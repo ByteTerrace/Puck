@@ -6,7 +6,7 @@ namespace Puck.SdfVm.Views;
 
 /// <summary>
 /// A session-observed world's independent render — the successor <see cref="NestedWorldView"/>'s own remarks name
-/// ("reuse only after those gaps close; a successor is acceptable"), built for docs/world-model.md's "Observation
+/// ("reuse only after those gaps close; a successor is acceptable"), built for docs/vision.md's "Observation
 /// and display" section. Wraps an independent <see cref="ISdfFrameSource"/> (a
 /// <see cref="SdfCompositionFrameSource"/> composing a destination's own static geometry) through its own offscreen
 /// <see cref="SdfWorldEngine"/>, exactly like <see cref="NestedWorldView"/> — the difference that matters is how it
@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Views;
 /// <remarks>
 /// <para><b>Timing, contrasted with <see cref="NestedWorldView"/>.</b> That type's own remarks name its gap
 /// plainly: it "uses the host presentation clock" — <c>context.Host.FrameDeltaSeconds</c>/<c>InterpolationAlpha</c>
-/// — which docs/world-model.md's "Ruled out" table rejects outright ("Host interpolation for destination views":
+/// — which docs/vision.md's "Ruled out" table rejects outright ("Host interpolation for destination views":
 /// independently scheduled or remote worlds do not share a presentation coordinate). This type instead measures
 /// its own produced-frame interval — real wall time between this view's own <see cref="Resolve"/> calls, zero on
 /// the first — and hands that to <see cref="ISdfFrameSource.CaptureFrame"/>'s <c>deltaSeconds</c>: never the

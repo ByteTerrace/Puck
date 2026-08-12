@@ -16,7 +16,7 @@ namespace Puck.Carriage;
 /// algorithm, target key-hash, public key SPKI); a sealed payload is a 4-element array (ephemeral SPKI,
 /// nonce, tag, ciphertext). Domain and key-hash fields are CBOR byte strings of exactly 32 raw bytes, not
 /// hex text: the wire carries the fingerprint value rather than a rendering of it, and pinning the width
-/// is what stops one domain having several encodings (docs/signed-carriage-wire.md, §2 and §15 row 3).
+/// is what stops one domain having several encodings (README.md, §2 and §15 row 3).
 /// </summary>
 public sealed class CborCarriageCodec : ICarriageCodec {
     /// <summary>The only format version this codec currently emits or accepts.</summary>
@@ -90,7 +90,7 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
                 // The signed portion arrived as an opaque byte string, so the bytes that were signed are
                 // carried verbatim into the envelope — never re-derived from what was parsed out of them
-                // (docs/signed-carriage-wire.md §2).
+                // (README.md §2).
                 var envelope = SignedCarriageEnvelope.FromSignedPortion(
                     header: header,
                     payloadKind: payloadKind,

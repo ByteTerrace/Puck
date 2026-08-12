@@ -242,7 +242,7 @@ public static class WorldDefinitionValidator {
         ValidateMarket(market: definition.Market, stateRows: stateRows, errors: errors);
 
         // Groups validates HERE — ahead of its original position ahead of Grants below — because a destination row's
-        // scope=group selector (docs/world-model.md Campaign 1 item 3) resolves against the SAME declared group-id set
+        // scope=group selector resolves against the SAME declared group-id set
         // Grants already needed: both are threaded from this ONE call rather than validating groups twice. Only
         // stateRows (already built above) is a dependency, so the move changes no other ordering.
         var groupIds = ValidateGroups(groups: definition.Groups, stateRows: stateRows, errors: errors);
@@ -255,7 +255,7 @@ public static class WorldDefinitionValidator {
 
         // A portal facet's destination resolves against THIS set (below, inside ValidatePlacements), never against
         // referenceNames directly — the destinations section is the layer a portal facet now names, exactly the
-        // model docs/world-model.md "Reference, destination and session are different facts" describes. A scope=group
+        // model docs/vision.md "Reference, destination and session are different facts" describes. A scope=group
         // row's selector resolves against groupIds (see the move above).
         var destinationNames = ValidateDestinations(destinations: definition.Destinations, references: definition.References, referenceNames: referenceNames, groupIds: groupIds, errors: errors);
 
@@ -4949,7 +4949,7 @@ public static class WorldDefinitionValidator {
     }
 
     // A scope=group destination's selector: a `named` arm must resolve to a declared groups.groups[].id (the
-    // named/tagged split docs/world-model.md "Durability, scope and generation" describes); a `tagged` arm names no
+    // named/tagged split docs/vision.md "Durability, scope and generation" describes); a `tagged` arm names no
     // particular group up front — resolution walks the ACTING traveler's own memberships at transfer time (a later
     // lane's job), so this pass only holds the tag itself to the same non-empty discipline WorldGroup.Tags entries
     // already carry.
@@ -5550,7 +5550,7 @@ public static class WorldDefinitionValidator {
     // The session-source gate, shared by a declared/magazine-entry source (which carries the current document's
     // destinationNames) and a placement face override (ValidateFaceSources, which already threads destinationNames
     // for the PORTAL facet on the same row). Destination must name a declared destinations row — the row's own
-    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/world-model.md).
+    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/vision.md).
     // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
     // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
     private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {

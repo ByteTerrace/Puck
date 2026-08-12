@@ -98,7 +98,7 @@ public sealed record WorldAdmissionVerdict {
 /// <param name="Algorithm">One of <c>Puck.Carriage.CarriageAlgorithms</c>'s SIGNING names (e.g.
 /// <c>ecdsa-p256-sha256</c>) — never a sealing algorithm; a sealing key can never admit a claim.</param>
 /// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
-/// alongside the id because offline verification needs the real bytes, never a fetch (docs/world-model.md, "Signed
+/// alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed
 /// carriage": consulting the issuer at verification time is a ruled-out design).</param>
 /// <param name="Grants">What a peer verified under this entry is minted, INSTEAD OF the blanket
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate

@@ -1,8 +1,228 @@
-# Signed carriage — wire specification v1
+# Puck.Carriage
 
-**Normative.** This document is the contract between independent implementations
+The signed-carriage envelope: how a claim — "this identity says X" — travels
+between worlds and is verified offline by whoever receives it. This project is
+both the reference implementation (a library referenced by `Puck.World`,
+`Puck.World.Data`, and `Puck.World.Server`, whose admission door verifies a
+connecting peer's signed claim against the world document's trust list) and its
+own proof: the same csproj builds a console harness whose run is the
+verification story.
+
+This README is the home of everything signed-carriage: what the mechanism is
+and why it is shaped this way ([Signed carriage](#signed-carriage)), and the
+normative wire specification — byte layout, canonicality rule, refusal set,
+and verify algorithm — as its closing section. The sources' XML docs carry the
+per-member contracts.
+
+## Running the harness
+
+```text
+dotnet run --project src/Puck.Carriage -c Release
+```
+
+Every scenario prints `PASS` or `FAIL`; the process exits `0` only when all
+passed. The matrix covers both codecs and pairs every refusal with an accepting
+control: algorithm confusion, purpose replay, cross-domain claims, chain-depth
+attacks, window boundaries, sequence-mark atomicity under contention, parser
+laxity, and sealed-carriage AAD tampering.
+
+Two more verbs drive the cross-implementation check (wire spec §17):
+
+```text
+dotnet run --project src/Puck.Carriage -c Release -- export <directory>
+dotnet run --project src/Puck.Carriage -c Release -- verify <directory>
+```
+
+`export` mints a chain, a claim, and a sealed claim to files; `verify` pins the
+exported root and verifies a fixture the other implementation minted. Exit
+codes are normative: `0` all checks passed, `1` at least one failed, `2` the
+command line was not understood — a crash is never a permitted way to report a
+failed check.
+
+## Signed carriage
+
+*Issuer-signed slots* and *an authored trust list* both rest on this, and it is
+one mechanism rather than several. It is also where
+[world-model invariant 5](../../docs/vision.md#the-invariants) becomes
+concrete: the engine carries proof and enforces capabilities, while whether a
+claim *counts* stays the receiving world's policy.
+
+**An id is domain, subject, algorithm, key** — and the domain *is* its root
+key's fingerprint, so identity needs no registry and cannot be squatted: taking
+another's requires its private half. The platform is not a tier under this,
+only a domain with many users, while a self-hoster is a domain with one. The id
+names the algorithm rather than the role because the algorithm implies the role
+while the reverse does not, and because two signing algorithms would otherwise
+collide at one path. Verification needs no fetch: a claim travels with the
+bindings leading to it, so a verifier walks from a pinned id down to the key
+that signed using only what arrived. Every id contains its key's hash, so each
+hop is self-certifying against the one above it. A claim that arrives without
+its chain is refused rather than resolved — going to look for the rest is the
+online dependency this whole design exists to remove, re-entering by a side
+door.
+
+A root is the base case of that shape: no domain above it and no subject, only
+its own fingerprint. It is provisioned once per domain and **never escrowed** —
+the property that makes identity-by-fingerprint survivable is that a root stays
+cold, which a key held online cannot be.
+
+**Everything signed uses one envelope.** A canonical context header is always
+part of the signing input — domain, subject, algorithm, purpose, validity
+window, and optionally an audience and a sequence — and only the payload
+differs. This is the associated-data half of AEAD applied to signatures: bind
+the context, not just the content, so a signature cannot be lifted into a
+situation it was never minted for. The purpose field stops a binding signature
+being replayed as a claim; the algorithm field stops a sealing key being
+accepted where a signing key belongs; the domain field stops one trusted root
+signing for another's subjects. A key binding is not a separate artifact under
+this — it is the envelope with `purpose: key-binding` and a key id as its
+payload. **One envelope means one verify path**, which is the whole reason to
+do it this way rather than adding a field per problem as each appears.
+
+**The algorithm is always taken from the pinned key, never from the envelope.**
+A verifier that lets the message choose is how JOSE deployments died —
+`alg: none`, and RS256 verified as HS256 against the public key. The field is
+there to be *checked against* the pin, never to select behaviour.
+
+The envelope is a **specification, implemented on each side** rather than a
+shared library. The byte layout is all that must agree, and disagreement fails
+loudly because signatures stop verifying. Trust evaluation is deliberately not
+shared: each side trusts different things. The serialisation is CBOR, committed
+to by both independent implementations. Reach is what decided it: CBOR lets a
+third party reach for a library instead of a spec, at the price of a package
+reference (`System.Formats.Cbor` is Microsoft-authored but arrives inbox only
+through the ASP.NET Core shared framework) and of closing by hand every degree
+of freedom it offers, because a signature is over bytes and one model must have
+exactly one encoding. The fixed layout — which keeps parsing away from
+unauthenticated bytes and gets canonicality for free, since every field is
+fixed-width or minimally length-prefixed — stays shelved but alive in the
+specification's closing section, implemented and harness-covered. The field
+list is identical either way. Claims are ephemeral and constrain nothing.
+The wire specification below is the normative text both independent
+implementations are written against and conform to.
+
+Sealed carriage is the same envelope with the payload encrypted and the header
+as associated data — literal AEAD, and the reason two keypairs are provisioned
+rather than one. The agreement is *ephemeral to static*, so sealing proves
+nothing about who sealed: anyone holding the recipient's public sealing key can
+produce a payload that opens cleanly. Sealed carriage is confidentiality only,
+and where the recipient needs to know who sent it, the sealed payload rides
+inside an ordinary signed envelope and the signature is what names the sender.
+
+**Audience is the authored trade.** Binding one determines whether replay costs
+anything:
+
+| | Audience | Replay *elsewhere* | Replay *at the audience* |
+|---|---|---|---|
+| **Directed** — valid at one world | bound | free; the signature simply fails anywhere else | a sequence, or accepted |
+| **Bearer** — travels anywhere | absent | a durable sequence high-water mark | the same mark |
+
+Portability and statelessness are exclusive, so the author picks. Same-world
+replay needs the sequence either way; binding an audience shrinks the problem
+rather than deleting it. **Audience and sequence are therefore independent
+fields, not alternatives:** only a bearer claim *requires* a sequence, but a
+directed claim may carry one, and a verifier checks and advances the mark
+whenever a claim carries one at all. A directed claim without a sequence is
+replayable at its own audience, which is an authored choice — correct for a
+claim whose effect is idempotent, wrong for one that is not.
+
+The mark is durable keyed state — one sequence per issuer-and-subject pair — so
+bearer claims are gated on the same keyed-table primitive threat tables want,
+slots being scalars today. It is written at admission through the ordered
+submission domain like any other durable write, which is what keeps it
+tick-stamped and taped rather than a mid-tick read of storage. **Retention is
+coupled to the window, and the coupling is load-bearing:** a mark must outlive
+the receiver's acceptance window for its pair, or evicting it reopens replay
+for a claim that is still valid. That coupling is also what bounds the table,
+since a mark whose claims can no longer be accepted can be dropped.
+
+**A trust entry pins an id** and says whether that key signs directly or may
+*vouch* for others, plus which slots it reaches. A vouching entry is a domain,
+so trusting a domain and pinning a key are one act.
+
+**A chain is at most two hops, because one cannot hold.** A root vouching for
+every subject directly would sign once per signup forever, and a key that signs
+continuously is warm — so depth one costs the cold root at exactly the domain
+with the most to lose. Instead a root vouches for an *issuing* key and the
+issuing key vouches for subjects: the root signs approximately never, while the
+warm key is replaceable without touching anything anyone pinned. A domain with
+one user still mints both hops — and a root that vouches for *itself* as the
+issuing key is refused, being depth one in a two-hop costume, back to signing
+per subject. A chain therefore has exactly two admissible lengths: **two**
+bindings under a trusted domain root, and **zero** when the trust entry pins
+one subject's own key directly, which vouches for nothing and so has nothing to
+walk. One is a broken chain; three is an unbounded one. What stays refused is
+the *unbounded* chain — path discovery, cross-certification, a verifier that
+follows wherever a claim points. Two is a number a verifier hard-codes, not an
+engine it runs.
+
+An empty list honours no foreign claim, deny by default like every other
+capability. **The engine compiles in no root.** A shipped game ships its
+publisher's; a blank template ships none. Every world verifies against its own
+list, so admission negotiates nothing.
+
+**Validity is authored at both ends.** The issuer sets a window when it mints;
+a verifying world sets the maximum age it will accept, and the tighter of the
+two governs. Neither can loosen the other — an author cannot reach past what
+was signed, and an issuer cannot force a world to honour something stale. The
+window is not the only lever, and conflating them oversizes it: removing an
+issuer from the trust list revokes its standing at once and for everything it
+ever signed, while the window governs only how long a claim from a
+*still-trusted* issuer stays good. The list revokes an issuer, the window
+expires a claim — so neither should be sized to do the other's job. Within its
+own scope the window is the whole story, which makes it the longest a
+compromised subject key stays honoured. The cost of shortening it is easy to
+miss: verifying is offline but re-attesting is online, so a tight window
+quietly makes long offline play impossible. A world wanting that sets a
+permissive ceiling; a high-stakes world sets a tight one; both read the same
+signed binding.
+
+A short window is only affordable because **re-attestation is routine**: the
+issuer re-signs the same binding with a fresh window, and its natural trigger
+is every authenticated session start — the one moment the subject is provably
+online anyway — so the window need only cover the longest stretch *between*
+logins, not the life of a key. Re-attestation cannot shorten retroactively: an
+earlier binding stays good until its own window ends, which is what keeps
+replaying one pointless and is exactly why the window bounds a compromise. It
+is the issuer's operation, not the engine's, and today it does not exist — the
+platform mints pairs and signs nothing — so it is the piece of the window model
+most likely to be discovered late.
+
+**What remains ours.** Issuance is not. Where a domain issues for its users the
+private half is escrowed: it is sealed under a per-key random password, and the
+wrapped password travels *with* the ciphertext, so what the domain actually
+holds is the ring that unwraps it rather than any password. An identity cannot
+sign without the domain, and the secret that must never leak is that ring. That
+splits the halves in the direction this design needs: **issuing a claim is
+online, verifying one is local**, and the issuer is by definition the party who
+is online. It also bounds what a signature proves — that a domain issued this
+for an identity, which is the trust already assumed, and not that a person
+personally did. Nothing here should be built on the stronger reading. The
+engine consumes a PKI rather than operating one. Signing is randomised, so
+minting happens outside the tick and a claim enters taped like any foreign
+value; verifying is deterministic but far too slow for 240 Hz, so it happens at
+admission and on a schedule with the verdict held. Beyond that:
+re-verification across a session, since checking once at join honours a claim
+past its expiry — and expiry is a wall-clock event, so by
+[world-model invariant 2](../../docs/vision.md#the-invariants) it enters
+at the boundary tick-stamped and taped, never as a mid-tick read of a clock. A
+verdict is state like any other. Beyond that again, a decision about what a
+world *does* on revocation rather than only detecting it.
+
+## Ruled out
+
+| Rejected | Why |
+|---|---|
+| **Consulting the issuer at verification time** | whether to ask if a claim still holds or to fetch the key that checks it, both restore the online dependency the signature exists to remove: a world must verify while the issuer is unreachable, asleep or gone. Offline decoupling is the requirement, and it is what makes a signature load-bearing rather than an optimisation. A public key is not anonymously readable as provisioned either, so carrying it inline against a pinned id needs no fetch and no exposure |
+| **Trusting a domain's label** | a friendly name is display only. Two domains can carry the same label and only the fingerprint separates them; a label that decides anything is a name pretending to be a key |
+| **Peer-minted claims** | a claim minted by its own subject attests only that they said so. Where a domain issues for its users the private half never leaves it, so a peer cannot mint one and gains nothing by wanting to |
+| **Carrying mutable balances signed** | a signature pins a value at a moment; balances stay owned by their issuer and change by write-back |
+
+## Signed carriage — wire specification v1
+
+**Normative.** This section is the contract between independent implementations
 of the signed carriage envelope described in
-[the world model](world-model.md#signed-carriage). The envelope is a
+[Signed carriage](#signed-carriage) above. The envelope is a
 specification implemented on each side, never a shared library, so this text —
 not any one codebase — is what the two sides agree on. It is written to be
 implementable from prose alone, in any language, with only a CBOR encoder, an
@@ -15,7 +235,7 @@ Keywords: **MUST**, **MUST NOT**, **MAY**, **REFUSE**. *Refuse* means: produce a
 negative verdict without side effects. It never means throw-or-return — that is
 a language choice.
 
-## 0. What is fixed and what is not
+### 0. What is fixed and what is not
 
 Fixed by this document: the byte layout, the canonicality rule, the signature
 encoding, the set of conditions that MUST refuse, and the order in which
@@ -29,7 +249,7 @@ implementations always agree on accept-versus-refuse and MAY disagree on the
 reason.** A cross-check that compares reasons is testing something this
 specification does not promise.
 
-## 1. Roles and identities
+### 1. Roles and identities
 
 An **id** is `(domain, subject, algorithm, keyHash)`.
 
@@ -51,7 +271,7 @@ subject. A **subject** id shares its root's domain and carries the user id.
 Ids are rendered as lowercase hex in human-facing surfaces and as raw bytes on
 the wire (§2). The two are the same value; nothing on the wire carries hex.
 
-## 2. Encoding
+### 2. Encoding
 
 CBOR (RFC 8949), deterministically encoded (§3). Three data items are defined:
 the **envelope**, the **signed portion**, and the **payload**.
@@ -126,7 +346,7 @@ their own implementation and refuse everywhere else, because §11 step 4 checks
 its fixed element count. An absent-by-omission field would give one model two
 encodings, which §3 forbids.
 
-## 3. The canonicality rule
+### 3. The canonicality rule
 
 **One model, exactly one encoding. A decoder MUST REFUSE any other.**
 
@@ -155,7 +375,7 @@ Without one encoding per model, an honest claim has many wire forms, a receiver
 deduplicating on bytes sees one claim as many, and a verifier that re-derives
 the signing input from a parsed model refuses honest bytes for the wrong reason.
 
-## 4. Algorithm registry
+### 4. Algorithm registry
 
 | Name | Role | Curve | Signature hash |
 |---|---|---|---|
@@ -174,7 +394,7 @@ only `ecdsa-p256-sha256`); it MUST NOT accept a name that is not in it.
 **A sealing algorithm can never admit a claim.** A trust entry pinning one MUST
 be REFUSED at construction.
 
-## 5. Signature encoding
+### 5. Signature encoding
 
 ECDSA, IEEE P1363 fixed-field concatenation: `r || s`, each padded to the
 curve's field width. For P-256 that is exactly 64 bytes. Any other length MUST
@@ -191,7 +411,7 @@ claim. No low-`s` rule is imposed, because platform signers do not canonicalize
 defence therefore rests on the sequence mark and the audience (§8) and MUST NOT
 rest on having-seen-these-bytes.
 
-## 6. The algorithm-from-pin rule
+### 6. The algorithm-from-pin rule
 
 **The algorithm used to verify always comes from the PINNED key — from the trust
 list, or from the binding one hop up — never from the envelope being verified.**
@@ -201,7 +421,7 @@ inequality MUST REFUSE. It is never read to select behavior. A verifier that
 lets the message choose is how JOSE deployments died (`alg: none`; RS256
 verified as HS256 against the public key).
 
-## 7. Trust entries
+### 7. Trust entries
 
 A trust entry pins an id **and** the actual key bytes it names — offline
 verification cannot resolve a hash into a key. An entry declares one of two
@@ -225,7 +445,7 @@ default.
 A direct pin is strictly more specific than a domain root, so a verifier MUST
 consult direct pins first.
 
-## 8. Purpose, audience, and sequence
+### 8. Purpose, audience, and sequence
 
 **Purpose** separates signature *uses*. `key-binding` is reserved: an envelope
 declaring it MUST be REFUSED wherever a claim is expected, and a caller MUST NOT
@@ -289,7 +509,7 @@ purpose. A claim's kind MUST be 1 or 3; a binding's MUST be 2. A kind outside
 Retention of the mark is coupled to the acceptance window: a mark MUST outlive
 the window for its pair, or evicting it reopens replay for a claim still valid.
 
-## 9. The validity window
+### 9. The validity window
 
 `notBefore` and `notAfter` are Unix seconds authored by the issuer. A verifier
 MAY additionally impose a maximum age. The tighter of the two governs; neither
@@ -335,7 +555,7 @@ The verifier's maximum age applies to **every hop**, bindings included: a
 binding is the longest a compromised subject key stays honoured, so a ceiling
 that did not reach it would not be a ceiling.
 
-### The issuer re-attestation profile
+#### The issuer re-attestation profile
 
 Re-attestation is the issuer re-signing a binding it already vouches for with a
 fresh window. Its ordinary case is a session resuming after an absence, so the
@@ -348,7 +568,7 @@ still runs in full**. It MUST be a distinct, explicitly named mode requested by
 the caller — never a defaulted flag, never inferred. A verifier admitting a
 foreign claim MUST NOT offer it.
 
-## 10. Chain depth
+### 10. Chain depth
 
 A chain has exactly two admissible lengths and no others:
 
@@ -372,7 +592,7 @@ A claim arriving without its chain MUST REFUSE and MUST NOT be resolved by
 fetching. Going to look for the rest is the online dependency the design exists
 to remove, re-entering by a side door.
 
-## 11. Verifying one envelope
+### 11. Verifying one envelope
 
 Given an envelope's wire bytes, a pinned id, that key's SPKI bytes, and the
 caller's expectations:
@@ -412,7 +632,7 @@ and the only thing that makes it safe to read is that the pinned signer
 committed to it. Steps 2–7 are cheap rejections that may run in any order; step
 8 MUST precede step 10.
 
-## 12. Verifying a key-binding hop
+### 12. Verifying a key-binding hop
 
 A binding hop is §11 with `purpose = "key-binding"`, `payloadKind = 2`, and the
 pinned key of the hop above. After step 10 yields a key-binding payload:
@@ -426,7 +646,7 @@ pinned key of the hop above. After step 10 yields a key-binding payload:
 
 The hop yields `(targetId, targetKey)` for the hop below.
 
-## 13. Verifying a claim and its chain
+### 13. Verifying a claim and its chain
 
 Inputs: the claim envelope, its chain (0 or 2 bindings), a trust list, `now`,
 the expected purpose, the verifier's own audience identity, and a sequence mark
@@ -473,7 +693,7 @@ field re-read — that step 3 compares against at every hop below. A verifier th
 re-read `domain` from the envelope at each hop would compare it with itself three
 times and establish nothing, while looking exactly like a verifier that checked.
 
-## 14. Sealed carriage
+### 14. Sealed carriage
 
 The same envelope with `payloadKind = 3`: the payload is AEAD ciphertext.
 Key agreement is ECDH P-256, **ephemeral to static**, feeding HKDF-SHA256 to an
@@ -569,7 +789,7 @@ confidentiality only; where the recipient must know who sent it, the sealed
 payload rides inside an ordinary signed envelope and the signature names the
 sender.
 
-## 15. Conformance summary
+### 15. Conformance summary
 
 An implementation conforms when, for every input, it produces the same
 accept-or-refuse verdict as this document requires. The conditions that MUST
@@ -615,7 +835,7 @@ any single-input test, which is exactly why they are called out here:
   implementation is correct on every sequential input and admits a bearer claim
   twice under concurrency.
 
-### Demonstrating the two
+#### Demonstrating the two
 
 Calling them out is not enough. Conformance to precisely the two rules this
 section names as most important would otherwise be unfalsifiable, since neither
@@ -648,7 +868,7 @@ and the other needs bytes minted against a specific implementation's own honest
 output — so both live with the implementation rather than in the interchange
 directory.
 
-## 16. Shelved alternative — the fixed layout
+### 16. Shelved alternative — the fixed layout
 
 CBOR is the format above. A fixed field-by-field layout was implemented and
 measured against it, and it stays on the shelf for a context that cannot carry a
@@ -721,7 +941,7 @@ library in any language, while the fixed layout obliges them to hand-write a
 parser from this prose — and, as the line count now shows, to hand-write the
 canonicality rules the library would have made cheap.
 
-## 17. The interchange fixture
+### 17. The interchange fixture
 
 Cross-verification runs on bytes, not on agreement about prose. The reference
 fixture is a directory of seven files, minted by one implementation and verified
@@ -748,7 +968,7 @@ A verifying implementation MUST also check that a deliberately broken fixture
 FAILS. A verifier that skipped the sealed artifact entirely would otherwise pass
 every check in this section.
 
-### What the two envelopes carry
+#### What the two envelopes carry
 
 The manifest names the values a verifier must *expect* (§11 steps 3–5), and the
 fields it does not name are fixed here rather than left to be discovered from
@@ -784,7 +1004,7 @@ would be refused as a replay, and be right to. This is why the sealed envelope
 carries no sequence at all: one artifact demonstrating the mark is enough, and a
 second would double the chance of a fixture that verifies exactly once.
 
-### `manifest.txt`
+#### `manifest.txt`
 
 The manifest is a text file, and its format is fixed here in full. An
 under-specified manifest is the cheapest possible way to lose a day: it parses
@@ -833,7 +1053,7 @@ Optional keys carry no obligation on either side. `minted-by` names the
 implementation that exported the fixture and is worth writing, because the first
 question about a failing cross-check is whose bytes these are.
 
-### The tool protocol
+#### The tool protocol
 
 Two implementations can agree on every byte in the table above and still never
 cross-check, because nothing so far says how one of them is *run*. Two verbs,

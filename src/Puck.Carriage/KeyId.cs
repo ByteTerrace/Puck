@@ -4,7 +4,7 @@ namespace Puck.Carriage;
 
 /// <summary>
 /// A key's self-certifying identity: <c>(domain, subject, algorithm, key-hash)</c>
-/// (docs/world-model.md, "Signed carriage"). <see cref="Domain"/> is never a name — it IS the fingerprint
+/// (README.md, "Signed carriage"). <see cref="Domain"/> is never a name — it IS the fingerprint
 /// of the root key at the top of this id's chain, constant across every key that chain vouches for, so a
 /// verifier needs no registry to resolve it and it cannot be squatted (taking one requires the root's
 /// private half). <see cref="KeyHash"/> is always derived from actual key bytes via

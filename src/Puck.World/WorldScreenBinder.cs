@@ -1809,7 +1809,7 @@ internal sealed class WorldScreenBinder : IDisposable {
 
     // Releases one session's GPU registration (ViewStack.Release disposes the WorldSessionView and its offscreen
     // engine) and its observation lease (WorldServer.AttachSink's disposable — the destination instance itself is
-    // NEVER touched here, per docs/world-model.md: "releasing an observation lease alone never advances the
+    // NEVER touched here, per docs/vision.md: "releasing an observation lease alone never advances the
     // generation — the resolver owns lifecycle").
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
         m_viewStack?.Release(name: feed.RegistrationName);
