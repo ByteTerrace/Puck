@@ -113,26 +113,38 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <param name="principal">The body's owning principal.</param>
     /// <returns>The route description.</returns>
     /// <exception cref="InvalidOperationException">The principal names no body.</exception>
-    public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, WorldPrincipal principal) {
+    public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, WorldPrincipal principal) =>
+        DescribeRoute(server: server, endpoint: endpoint, bodyIndex: principal.Index);
+
+    /// <summary>Describes one live body's complete observable authority epoch by index.</summary>
+    /// <remarks>Callers hold <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>. A presentation route seeds from
+    /// this before publishing the route, so no interval exists in which a consumer holds the route and no
+    /// anchor.</remarks>
+    /// <param name="server">The authority holding the body.</param>
+    /// <param name="endpoint">The endpoint text to report.</param>
+    /// <param name="bodyIndex">The body index.</param>
+    /// <returns>The route description.</returns>
+    /// <exception cref="InvalidOperationException">The index names no body.</exception>
+    public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, int bodyIndex) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
-        var body = server.Population.EntryBody(index: principal.Index) ??
-            throw new InvalidOperationException(message: $"live transferred {principal.Describe()} has no body");
+        var body = server.Population.EntryBody(index: bodyIndex) ??
+            throw new InvalidOperationException(message: $"body:{bodyIndex} at '{server.AuthorityIdentity}' has no body to describe");
 
         return new WorldAuthorityRouteDescription(
             Endpoint: endpoint,
             Entity: new WorldEntityAddress(
                 Authority: server.AuthorityIdentity,
-                Index: principal.Index,
-                Generation: server.Population.Generation(index: principal.Index)),
+                Index: bodyIndex,
+                Generation: server.Population.Generation(index: bodyIndex)),
             Tick: (server.NextInputTick - 1UL),
             Position: body.FixedPosition,
             Orientation: body.FixedOrientation,
-            BodyColor: server.Population.BodyColor(index: principal.Index),
-            Kit: server.Population.KitIndex(index: principal.Index),
-            Look: server.Population.LookIndex(index: principal.Index),
-            CatalogRig: server.Population.CatalogRig(index: principal.Index),
-            PlacementId: server.Population.InhabitantPlacementId(index: principal.Index),
+            BodyColor: server.Population.BodyColor(index: bodyIndex),
+            Kit: server.Population.KitIndex(index: bodyIndex),
+            Look: server.Population.LookIndex(index: bodyIndex),
+            CatalogRig: server.Population.CatalogRig(index: bodyIndex),
+            PlacementId: server.Population.InhabitantPlacementId(index: bodyIndex),
             Definition: server.Definition);
     }
 

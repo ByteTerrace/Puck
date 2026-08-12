@@ -140,11 +140,32 @@ internal sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRoute
                     Remember(seatSlot: seatSlot, position: position, projectionName: bestProjectionName);
                     return true;
                 }
+
+                // An authority no adjacency relates to the presented world is not a neighbour seen from here — it is
+                // what this seat is presented in, since the frame source frames the seat with that same endpoint's
+                // own views and document. There is no isometry to apply, and refusing the pose for lack of one
+                // leaves the seat with no anchor for as long as it stays there.
+                if (!ProjectionExists(projections: projections, authority: authority)) {
+                    position = routedPosition;
+                    orientation = routedOrientation;
+                    Remember(seatSlot: seatSlot, position: position, projectionName: null);
+                    return true;
+                }
             }
         }
 
         position = default;
         orientation = Quaternion.Identity;
+        return false;
+    }
+
+    private static bool ProjectionExists(IReadOnlyList<WorldAdjacencyProjection> projections, string authority) {
+        foreach (var projection in projections) {
+            if (string.Equals(a: projection.Neighbour.Authority, b: authority, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
         return false;
     }
 
