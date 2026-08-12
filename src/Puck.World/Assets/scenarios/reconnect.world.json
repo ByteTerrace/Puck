@@ -649,14 +649,15 @@
     },
     "seatRig": {
       "motion": {
-        "$type": "follow",
-        "offset": [
+        "$type": "orbit",
+        "distance": 5.4626,
+        "yaw": 0,
+        "pitch": 0.4145069,
+        "pivotOffset": [
           0,
-          2.2,
-          5
-        ],
-        "worldAxes": false,
-        "spreadPullback": 0
+          0,
+          0
+        ]
       },
       "aim": {
         "$type": "anchor",
