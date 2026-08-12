@@ -15,12 +15,27 @@ An invisible boundary needs three document rows:
 3. An `adjacencies` row names the destination, the neighbour's reciprocal row,
    and a rectangular boundary (`center`, outward yaw/pitch, width, height).
 
-`WorldAdjacencyUnavailable.Closed` is the only failure treatment today: an
-unreachable or refusing neighbour leaves the local authority in control and
-the edge behaves as closed terrain. `onUnavailable` may name a declared channel
-for authored sound, animation, state, or other feedback; safety never depends
-on the binding. Portals remain intentional authored travel and are not used to
-represent seamless topology.
+`WorldAdjacencyUnavailable.Closed` is the only failure treatment today, and it
+covers every terminal outcome, not just an unresolvable destination row: an
+unreachable neighbour, a full border, a refused admission, a refused leave, a
+commit abort, and a reservation the destination no longer has all clamp the body
+one raw fixed-point unit inside the boundary, clear its pending continuum, press
+`onUnavailable` once, and name the refusal on stderr. Clamping is what makes a
+refusal terminal — the sweep answers `Crossed` for a body already beyond the
+threshold, so a refusal that leaves the body outside is a refusal per tick. Only
+a capacity refusal under `full: retry` re-queues, bounded by a retry ceiling
+carried on the transfer. `onUnavailable` may name a declared channel for authored
+sound, animation, state, or other feedback; safety never depends on the binding.
+
+An adjacency row may author `capacity` — the same border policy portal furniture
+carries, echoed with the unavailable treatment by `world.adjacencies`. Portals
+remain intentional authored travel and are not used to represent seamless
+topology.
+
+One traversal mints one crossing. The adjacency scan skips a seat already named
+by a queued or in-flight transfer (announced once per transfer id on stderr),
+because the sweep keeps answering `Crossed` while the traveler waits for its own
+transfer to drain.
 
 `WorldDefinitionValidator.ValidateAdjacencies` proves the pair before boot. It
 requires stable destinations, reciprocal counterpart names and dimensions,
@@ -33,7 +48,11 @@ closes. Authors declare topology and physical envelopes, not safety margins.
 worlds' body reach, interaction/target reach, closing-speed ceilings, and two
 periods of the slower simulation rate, rounding outward in fixed point.
 `WorldFrameIsometry` is the one point/vector/orientation mapping used by
-crossing, contact, transfer, and presentation.
+crossing, contact, transfer, and presentation. `MapArrival` is the one arrival
+function portal furniture and invisible borders share: it anchors on the two
+frames' own origins, so an off-centre crossing lands at its counterpart point by
+the isometry rather than by a seam carried beside the traveler, and it adds one
+wrapped yaw delta to the traveler's own unbounded accumulator.
 
 The five quilt documents are the worked stress example: four coloured ground
 worlds meet at one corner and `quilt-island` is vertically adjacent to all
@@ -192,7 +211,7 @@ Run the focused laws after changing frames, handoff continuity, hysteresis, or
 contact sweeping:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~WorldFrameIsometryLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
 ```
 
 Run `puck canary seamless-adjacency` for the automatic crossing and stationary

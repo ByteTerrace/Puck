@@ -241,9 +241,10 @@ derives one symmetric overlap depth from both bodies' reach, interaction/targeti
 slower-side delivery periods of closing speed, rounding outward — so weapon reach reaches topology
 at author time rather than in production.
 
-Crossing anchors on the exact in-plane point the traveler's swept segment crossed, mapped through
-the pair's isometry to the counterpart's corresponding point — never the face's center — so an
-off-center crossing lands where it should and contiguous terrain reads as one continuous surface.
+Crossing maps a traveler through the pair's one isometry, which carries the exact in-plane point its
+swept segment crossed onto the counterpart's corresponding point — a property of the map, not of a
+seam plumbed beside the traveler — so an off-center crossing lands where it should and contiguous
+terrain reads as one continuous surface.
 The depth past the threshold carries through unchanged: a deliberate continuity property. Scanning
 is swept per actual step, so a high-speed body cannot tunnel through a face between samples, and a
 body crossing several faces in one step resolves to exactly one winner. The neighbour arrives over
