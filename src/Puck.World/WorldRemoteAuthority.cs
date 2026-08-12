@@ -13,12 +13,17 @@ namespace Puck.World;
 /// <summary>A committed body's immutable address on one remote authority hop.</summary>
 internal readonly record struct WorldRemoteRouteCredential(int BodyIndex, string SourceAuthority, WorldMobilityIdentity Mobility);
 
-/// <summary>How far one transfer step has got.</summary>
-internal enum WorldTransferStep : byte {
-    /// <summary>The request is in flight; the caller must leave its state untouched and re-ask at its next tick
-    /// boundary.</summary>
-    Pending,
+/// <summary>The concerns that get their own ordered connection to one peer authority.</summary>
+internal enum WorldFederationLane : byte {
+    /// <summary>Reserve, commit, abort, acknowledge, status.</summary>
+    Transaction,
 
+    /// <summary>Route lookups and forwarded submissions for an already-committed traveler.</summary>
+    Routed,
+}
+
+/// <summary>What a transfer step's answer is evidence of.</summary>
+internal enum WorldTransferStep : byte {
     /// <summary>The destination answered; the step's verdict is the destination's own.</summary>
     Answered,
 
@@ -43,19 +48,21 @@ internal readonly record struct WorldFederationAnswer(WorldFederationResponse Ki
 
 /// <summary>The remote implementation of the authority contract used by transfer and continuous projection.</summary>
 /// <remarks>
-/// <para>Every request rides a persistent authenticated lane per source authority namespace
-/// (<see cref="FederatedRequestLane"/>): connect, hello, and challenge are paid once for the lane's lifetime, never
-/// once per operation.</para>
-/// <para><b>No caller ever waits on a connection handshake, and no caller waits on a peer it already knows is
-/// gone.</b> Each request is issued once, keyed so a repeat ask claims the same answer, and bounded by
-/// <see cref="RoutedRequestDeadline"/>; a lane inside its unreachable backoff answers immediately with a named
-/// refusal instead of waiting at all. That is what keeps a dead neighbour from stalling the tick, and what turns a
-/// closed edge into a refusal the transfer path can act on.</para>
+/// <para>Every request rides a persistent authenticated lane (<see cref="FederatedRequestLane"/>) keyed by source
+/// authority namespace and concern: connect, hello, and challenge are paid once for the lane's lifetime, never once
+/// per operation.</para>
+/// <para>Every request answers. It is issued once, keyed so a repeat ask claims the same answer, and bounded by
+/// <see cref="RoutedRequestDeadline"/>; a lane inside its unreachable backoff answers without waiting at all, which
+/// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
+/// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
 internal sealed class WorldRemoteAuthority : IDisposable {
     /// <summary>The ceiling on how long a routed submission or route lookup waits for its answer. This bounds
     /// transport lifecycle, never simulation state.</summary>
-    private static readonly TimeSpan RoutedRequestDeadline = TimeSpan.FromSeconds(value: 2);
+    private static readonly TimeSpan RoutedRequestDeadline = TimeSpan.FromSeconds(value: 10);
+
+    /// <summary>How long a lane waits before retrying a connect that failed, before it calls the peer down.</summary>
+    private static readonly TimeSpan ConnectRetryDelay = TimeSpan.FromMilliseconds(value: 50);
 
     /// <summary>How long a lane that failed to reach its peer answers immediately with
     /// <see cref="WorldWireRefusal.LaneUnavailable"/> before trying to connect again.</summary>
@@ -67,7 +74,10 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     // submission, so the table itself must be concurrent even though every write comes from the commit path.
     private readonly ConcurrentDictionary<int, WorldRemoteRouteCredential> m_credentials = new();
     private readonly ConcurrentDictionary<string, FederatedIntentPump> m_intentPumps = new(comparer: StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, FederatedRequestLane> m_requestLanes = new(comparer: StringComparer.Ordinal);
+    // Keyed by (source namespace, concern). A lane is strictly ordered request-then-response, so everything sharing
+    // one blocks behind whatever is in flight on it. Transfer transactions and routed traffic therefore get separate
+    // lanes: a routed submission the destination answers slowly must not delay a reserve or a commit.
+    private readonly ConcurrentDictionary<(string SourceAuthority, WorldFederationLane Lane), FederatedRequestLane> m_requestLanes = new();
     private readonly ConcurrentDictionary<TransferStepKey, Task<WorldFederationAnswer>> m_transferSteps = new();
     private readonly WorldFederatedServerLink m_link;
     private readonly WorldFederationSecurity m_security;
@@ -116,34 +126,25 @@ internal sealed class WorldRemoteAuthority : IDisposable {
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(ref m_lastObservedTickBits)) + 1UL);
     public string Authority => Volatile.Read(ref m_authority);
 
-    /// <summary>Resolves this transfer's reservation step. Returns <see langword="false"/> while the request is still
-    /// in flight; the caller re-asks at its next tick boundary.</summary>
-    public bool TryReserve(WorldTransferReservationRequest request, out WorldTransferReservationReply reply) {
-        reply = WorldTransferReservationReply.Refused(reason: string.Empty);
-
-        if (!TryResolveTransferStep(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, kind: WorldFederationRequest.Reserve, body: () => WorldFederationCodec.EncodeReservation(request: request), answer: out var answer)) {
-            return false;
-        }
+    /// <summary>Resolves this transfer's reservation step.</summary>
+    /// <param name="request">The reservation request.</param>
+    /// <returns>The destination's verdict, or a named refusal when the lane could not deliver the step.</returns>
+    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
+        _ = TryResolveTransferStep(sourceAuthority: request.SourceAuthority, transferId: request.TransferId, kind: WorldFederationRequest.Reserve, body: () => WorldFederationCodec.EncodeReservation(request: request), answer: out var answer);
 
         if (answer.Kind != WorldFederationResponse.Reservation) {
-            reply = WorldTransferReservationReply.Refused(reason: answer.Describe());
-
-            return true;
+            return WorldTransferReservationReply.Refused(reason: answer.Describe());
         }
 
         if (!WorldFederationCodec.TryDecodeReservationReply(body: answer.Body, reply: out var decoded, failure: out var failure) || (decoded is null)) {
-            reply = WorldTransferReservationReply.Refused(reason: $"remote authority returned an undecodable reservation verdict — {failure}");
-
-            return true;
+            return WorldTransferReservationReply.Refused(reason: $"remote authority returned an undecodable reservation verdict — {failure}");
         }
 
         if (decoded.Accepted) {
             AdoptReservationCredentials(request: request, reply: decoded);
         }
 
-        reply = decoded;
-
-        return true;
+        return decoded;
     }
 
     /// <summary>Resolves this transfer's commit step.</summary>
@@ -151,9 +152,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         accepted = false;
         reason = string.Empty;
 
-        if (!TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: WorldFederationRequest.Commit, body: () => WorldFederationCodec.EncodeCommit(sourceAuthority: sourceAuthority, transferId: transferId, members: members), answer: out var answer)) {
-            return WorldTransferStep.Pending;
-        }
+        _ = TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: WorldFederationRequest.Commit, body: () => WorldFederationCodec.EncodeCommit(sourceAuthority: sourceAuthority, transferId: transferId, members: members), answer: out var answer);
 
         if (!answer.Ok) {
             reason = answer.Describe();
@@ -170,14 +169,15 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         return WorldTransferStep.Answered;
     }
 
-    /// <summary>Resolves this transfer's idempotent status. Returns <see langword="false"/> while the request is
-    /// still in flight, or when the peer's answer was not a status byte at all.</summary>
+    /// <summary>Resolves this transfer's idempotent status.</summary>
+    /// <param name="sourceAuthority">The authenticated source namespace.</param>
+    /// <param name="transferId">The transfer id.</param>
+    /// <param name="status">The destination's verdict on success.</param>
+    /// <returns><see langword="false"/> when the peer returned no usable status; the caller reconciles again later.</returns>
     public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
         status = WorldTransferStatus.Missing;
 
-        if (!TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: WorldFederationRequest.Status, body: () => WorldFederationCodec.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId), answer: out var answer)) {
-            return false;
-        }
+        _ = TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: WorldFederationRequest.Status, body: () => WorldFederationCodec.EncodeTransferKey(sourceAuthority: sourceAuthority, transferId: transferId), answer: out var answer);
 
         if ((answer.Kind != WorldFederationResponse.Status) || (answer.Body.Length != 1) || !Enum.IsDefined(value: (WorldTransferStatus)answer.Body[0])) {
             return false;
@@ -345,7 +345,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return upstream.AwaitAnswer(sourceAuthority: sourceAuthority, kind: kind, body: body);
         }
 
-        var lane = LaneFor(sourceAuthority: sourceAuthority);
+        var lane = LaneFor(sourceAuthority: sourceAuthority, kind: kind);
 
         if (!lane.IsAvailable) {
             return WorldFederationAnswer.Refused(refusal: WorldWireRefusal.LaneUnavailable, detail: $"the federation lane to '{Endpoint}' is reconnecting");
@@ -432,7 +432,7 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return upstream.TryResolveTransferStep(sourceAuthority: sourceAuthority, transferId: transferId, kind: kind, body: body, answer: out answer);
         }
 
-        var lane = LaneFor(sourceAuthority: sourceAuthority);
+        var lane = LaneFor(sourceAuthority: sourceAuthority, kind: kind);
 
         if (!lane.IsAvailable) {
             // Already known unreachable. Answering here — without a socket attempt and without waiting — is what
@@ -445,20 +445,17 @@ internal sealed class WorldRemoteAuthority : IDisposable {
         var key = new TransferStepKey(SourceAuthority: sourceAuthority, TransferId: transferId, Kind: kind);
         var task = m_transferSteps.GetOrAdd(key: key, valueFactory: _ => lane.Enqueue(kind: kind, body: body()));
 
-        // A transfer step is a transaction the caller cannot split: the adjacency scan that produced this crossing
-        // re-fires every tick the traveler is still at the seam, so answering "not yet" here mints a second crossing
-        // rather than resuming this one. Wait on the lane instead — bounded, and short-circuited to an immediate
-        // named refusal whenever the lane already knows it cannot reach its peer, which is what keeps a dead
-        // neighbour from stalling the tick. The step key survives an unclaimed answer, so a caller that does stop
-        // early (a source that shut down mid-transaction) still finds it rather than re-sending.
-        if (!task.IsCompleted && !task.Wait(timeout: RoutedRequestDeadline)) {
-            return false;
-        }
+        // A transfer step MUST always answer. The adjacency scan that produced this crossing re-fires on every tick
+        // the traveler is still at the seam, so a caller told "not yet" leaves its transfer queued while the scan
+        // mints a second crossing for the same seat — the traveler then arrives at the destination twice. A step
+        // that ran out of time is an answered refusal, which the caller resolves once: terminal for a reservation,
+        // in doubt for a commit.
+        var answered = (task.IsCompleted || task.Wait(timeout: RoutedRequestDeadline));
 
         _ = m_transferSteps.TryRemove(key: key, value: out _);
-        answer = (task.IsCompletedSuccessfully
+        answer = ((answered && task.IsCompletedSuccessfully)
             ? task.Result
-            : WorldFederationAnswer.Refused(refusal: WorldWireRefusal.LaneUnavailable, detail: $"the federation lane to '{Endpoint}' dropped the {kind} step"));
+            : WorldFederationAnswer.Refused(refusal: WorldWireRefusal.LaneUnavailable, detail: $"'{Endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"));
 
         return true;
     }
@@ -476,15 +473,18 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             return;
         }
 
-        var lane = LaneFor(sourceAuthority: sourceAuthority);
+        var lane = LaneFor(sourceAuthority: sourceAuthority, kind: kind);
 
         if (lane.IsAvailable) {
             _ = lane.Enqueue(kind: kind, body: body);
         }
     }
 
-    private FederatedRequestLane LaneFor(string sourceAuthority) =>
-        m_requestLanes.GetOrAdd(key: sourceAuthority, valueFactory: authority => new FederatedRequestLane(owner: this, sourceAuthority: authority));
+    private static WorldFederationLane LaneOf(WorldFederationRequest kind) =>
+        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission) ? WorldFederationLane.Routed : WorldFederationLane.Transaction);
+
+    private FederatedRequestLane LaneFor(string sourceAuthority, WorldFederationRequest kind) =>
+        m_requestLanes.GetOrAdd(key: (sourceAuthority, LaneOf(kind: kind)), valueFactory: key => new FederatedRequestLane(owner: this, sourceAuthority: key.SourceAuthority));
 
     // Authority processes may start in any order. An adjacency is durable topology, so its observation channel
     // cannot become permanently CLOSED merely because the neighbour had not bound its socket on the first tick.
@@ -638,11 +638,11 @@ internal sealed class WorldRemoteAuthority : IDisposable {
 
     private readonly record struct PendingRequest(WorldFederationRequest Kind, byte[] Body, TaskCompletionSource<WorldFederationAnswer> Completion);
 
-    // One authenticated, persistent request lane per source namespace. The connection, the federation hello and the
-    // challenge/proof exchange are paid once for the lane's lifetime; requests then ride it strictly in order,
-    // request-then-response, which is what lets the peer answer without a correlation id on the wire. A lane that
-    // cannot reach its peer answers every queued and future request with LaneUnavailable for LaneBackoff, so no
-    // caller ever waits on a socket that is not there.
+    // One authenticated, persistent connection. Its hello and challenge/proof exchange are paid once for the lane's
+    // lifetime; requests then ride it strictly in order, request-then-response, which is what lets the peer answer
+    // without a correlation id on the wire — and is also why callers of one lane queue behind each other, so which
+    // concerns share a lane is a latency decision (see m_requestLanes). A lane that could not reach its peer answers
+    // every request for LaneBackoff without touching a socket.
     private sealed class FederatedRequestLane : IDisposable {
         private readonly WorldRemoteAuthority m_owner;
         private readonly string m_sourceAuthority;
@@ -709,20 +709,41 @@ internal sealed class WorldRemoteAuthority : IDisposable {
             }
         }
 
-        // Two attempts, but only while a connection was already open: a lane idle long enough for the peer to have
-        // recycled its socket must not turn one healthy reconnect into a caller-visible refusal. A lane with no
-        // connection at all gets exactly one attempt, so an absent peer costs one connect, never two.
+        // Only a failure to CONNECT may take the lane out of service, and only after a retry — a listener whose
+        // backlog was momentarily full is not an absent peer. A break on an ESTABLISHED connection reconnects and
+        // re-sends once without entering backoff; it is evidence about one socket, never about the peer. Slowness
+        // reaches nothing here: the worker has no read deadline, so a slow peer is a waiting caller, not a lane
+        // state change. Backoff refuses every request in its window without touching a socket, so widening what
+        // enters it withholds traffic a live neighbour would have answered.
         private async Task<WorldFederationAnswer> ServeAsync(PendingRequest request, CancellationToken ct) {
-            for (var attempt = 0; attempt < 2; attempt++) {
-                if (ct.IsCancellationRequested) {
-                    break;
-                }
+            var connectFailures = 0;
 
-                var reconnecting = (m_stream is null);
+            for (var attempt = 0; (attempt < 3) && !ct.IsCancellationRequested; attempt++) {
+                var hadConnection = (m_stream is not null);
 
                 try {
                     await EnsureConnectedAsync(ct: ct).ConfigureAwait(false);
+                } catch (Exception exception) when (exception is IOException or SocketException or ObjectDisposedException or OperationCanceledException) {
+                    Drop();
 
+                    if (ct.IsCancellationRequested) {
+                        break;
+                    }
+
+                    if (++connectFailures >= 2) {
+                        return Unreachable(exception: exception);
+                    }
+
+                    try {
+                        await Task.Delay(delay: ConnectRetryDelay, cancellationToken: ct).ConfigureAwait(false);
+                    } catch (OperationCanceledException) {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                try {
                     var stream = m_stream!;
 
                     await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: request.Kind, body: request.Body, ct: ct).ConfigureAwait(false);
@@ -732,7 +753,13 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                     if (!response.Ok) {
                         Drop();
 
-                        continue;
+                        if (hadConnection) {
+                            continue;
+                        }
+
+                        // A connection this lane opened itself answered with something that is not a frame. That is
+                        // the peer's answer, not a transport outage, so it is reported without taking the lane down.
+                        return WorldFederationAnswer.Refused(refusal: response.Failure.Refusal, detail: $"'{m_owner.Endpoint}' answered {request.Kind} with {response.Failure}");
                     }
 
                     _ = Interlocked.Exchange(location1: ref m_unavailableNoted, value: 0);
@@ -745,8 +772,10 @@ internal sealed class WorldRemoteAuthority : IDisposable {
                         break;
                     }
 
-                    if (reconnecting || (attempt == 1)) {
-                        return Unreachable(exception: exception);
+                    if (!hadConnection) {
+                        // The break happened on a connection this lane had just opened, so the peer is reachable but
+                        // is not completing the exchange. Report it; do not take the lane out of service for it.
+                        return WorldFederationAnswer.Refused(refusal: WorldWireRefusal.ConnectionClosed, detail: $"'{m_owner.Endpoint}' broke the {request.Kind} exchange — {exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
                     }
                 }
             }

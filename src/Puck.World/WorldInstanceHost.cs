@@ -1300,11 +1300,6 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     } else {
                         var step = pending.TargetAuthority.Commit(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, members: pending.CommitMembers, accepted: out var committed, reason: out _);
 
-                        if (step == WorldTransferStep.Pending) {
-                            index++;
-                            continue;
-                        }
-
                         if ((step == WorldTransferStep.Answered) && committed) {
                             status = WorldTransferStatus.Committed;
                         } else if (!pending.TargetAuthority.TryStatus(sourceAuthority: pending.SourceAuthority, transferId: pending.Transfer.TransferId, status: out status)) {
@@ -2136,18 +2131,14 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         public bool IsRemote => (Remote is not null);
         public WorldDefinition Definition => (Local?.Server.Definition ?? Remote!.Definition);
 
-        // A colocated row answers inline; a remote row answers when its persistent lane does. Returning false means
-        // "not yet" — the caller leaves its own state exactly where it was and asks again at its next tick boundary,
-        // so no transfer step ever waits on a socket from the simulation thread.
-        public bool TryReserve(WorldTransferReservationRequest request, out WorldTransferReservationReply reply) {
-            if (Local is not null) {
-                reply = Local.Server.ReserveTransfer(request: request);
-
-                return true;
-            }
-
-            return Remote!.TryReserve(request: request with { PeerAdmission = true }, reply: out reply);
-        }
+        // A colocated row answers inline; a remote row answers over its persistent lane, and a lane that could not
+        // deliver the step answers a named refusal rather than nothing. Every step here always answers: a caller
+        // told "not yet" would leave this transfer queued while the adjacency scan minted a second crossing for the
+        // same seat.
+        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) =>
+            ((Local is not null)
+                ? Local.Server.ReserveTransfer(request: request)
+                : Remote!.Reserve(request: request with { PeerAdmission = true }));
 
         public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
             if (Local is not null) {
@@ -2505,22 +2496,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             PeerAdmission: reservationMembers.Any(predicate: static member => !member.Source.IsLive) || members.Any(predicate: static slot => slot >= WorldPopulation.LocalSeatCount),
             Members: reservationMembers
         );
-        if (!targetAuthority.TryReserve(request: reservationRequest, reply: out var reservation)) {
-            // The destination has not answered yet. Nothing has left the source, so roll this attempt's bookkeeping
-            // back to exactly where it started and re-ask at the next drain; the request is issued once and its
-            // answer is claimed by the same transfer id.
-            _ = m_appliedTransferIds.Remove(item: appliedKey);
-
-            if (hadAppliedHighWater) {
-                m_appliedTransferHighWater[transfer.SourceInstance] = previousAppliedHighWater;
-            } else {
-                _ = m_appliedTransferHighWater.Remove(key: transfer.SourceInstance);
-            }
-
-            m_pendingTransfers.Enqueue(item: transfer);
-
-            return;
-        }
+        var reservation = targetAuthority.Reserve(request: reservationRequest);
 
         if (!reservation.Accepted) {
             var capacityRefusal = reservation.Reason.Contains(value: " is full ", comparisonType: StringComparison.Ordinal)
@@ -2789,7 +2765,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit is {(step == WorldTransferStep.Pending ? "still in flight" : $"unreachable: {commitReason}")}) — recovery state retained for status reconciliation]");
+                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]");
                 return;
             }
 
