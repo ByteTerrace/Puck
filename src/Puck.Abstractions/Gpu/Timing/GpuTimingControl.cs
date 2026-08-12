@@ -36,16 +36,27 @@ public sealed class GpuTimingControl {
     /// version bump) when the value is unchanged.</summary>
     /// <param name="armed">Whether to arm GPU timing.</param>
     public void SetArmed(bool armed) {
-        Volatile.Write(location: ref m_seeded, value: 1U);
+        Volatile.Write(
+            location: ref m_seeded,
+            value: 1U
+        );
 
-        var desired = (armed ? 1U : 0U);
+        var desired = (armed
+            ? 1U
+            : 0U);
 
         if (Volatile.Read(location: ref m_armed) == desired) {
             return;
         }
 
-        Volatile.Write(location: ref m_armed, value: desired);
-        Volatile.Write(location: ref m_version, value: (Volatile.Read(location: ref m_version) + 1U));
+        Volatile.Write(
+            location: ref m_armed,
+            value: desired
+        );
+        Volatile.Write(
+            location: ref m_version,
+            value: (Volatile.Read(location: ref m_version) + 1U)
+        );
     }
 
     /// <summary>Seeds the armed state from a lower-precedence source (the world document's <c>host</c> section, then the engine
@@ -56,13 +67,23 @@ public sealed class GpuTimingControl {
     /// <returns><see langword="true"/> when this call claimed the control; <see langword="false"/> when a
     /// higher-or-equal-precedence source already spoke.</returns>
     public bool TrySeed(bool armed) {
-        if (Interlocked.CompareExchange(location1: ref m_seeded, value: 1U, comparand: 0U) != 0U) {
+        if (Interlocked.CompareExchange(
+            location1: ref m_seeded,
+            value: 1U,
+            comparand: 0U
+        ) != 0U) {
             return false;
         }
 
         if (armed) {
-            Volatile.Write(location: ref m_armed, value: 1U);
-            Volatile.Write(location: ref m_version, value: (Volatile.Read(location: ref m_version) + 1U));
+            Volatile.Write(
+                location: ref m_armed,
+                value: 1U
+            );
+            Volatile.Write(
+                location: ref m_version,
+                value: (Volatile.Read(location: ref m_version) + 1U)
+            );
         }
 
         return true;

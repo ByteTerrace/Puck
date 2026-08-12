@@ -23,7 +23,7 @@
              references below (Puck.Hosting sits on Shared substrate, beside Puck.Commands/Puck.Input, not upstream
              of any of them). -->
         <!-- The TCP socket door's admission handshake (WorldTcpHost/WorldTcpWireFormat) frames the challenge/identity
-             exchange over FixedLayoutCarriageCodec bytes; verification itself lives in Puck.World.Data's
+             exchange over mandatory-base CBOR carriage bytes; verification itself lives in Puck.World.Data's
              WorldAdmissionDoor, which this project already reaches transitively, but the wire framing here
              constructs Puck.Carriage envelope types directly. -->
         <ProjectReference Include="..\Puck.Carriage\Puck.Carriage.csproj" />

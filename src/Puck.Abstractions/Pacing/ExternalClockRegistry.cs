@@ -28,7 +28,9 @@ public sealed class ExternalClockRegistry {
     /// <param name="electionPolicy"><see cref="PolicyOff"/>, a source id to elect, or <see langword="null"/> for auto
     /// (elect only while exactly one source is registered).</param>
     public ExternalClockRegistry(string? electionPolicy = null) {
-        m_policy = (string.IsNullOrWhiteSpace(value: electionPolicy) ? null : electionPolicy.Trim());
+        m_policy = (string.IsNullOrWhiteSpace(value: electionPolicy)
+            ? null
+            : electionPolicy.Trim());
     }
 
     /// <summary>Gets a counter that advances every time the election is re-evaluated (a new source registered), so a
@@ -62,8 +64,14 @@ public sealed class ExternalClockRegistry {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceId);
 
         lock (m_gate) {
-            if (!m_sources.TryGetValue(key: sourceId, value: out var source)) {
-                source = new ExternalClockSource(registry: this, sourceId: sourceId);
+            if (!m_sources.TryGetValue(
+                key: sourceId,
+                value: out var source
+            )) {
+                source = new ExternalClockSource(
+                    registry: this,
+                    sourceId: sourceId
+                );
                 m_sources[sourceId] = source;
 
                 ReevaluateElection();
@@ -75,7 +83,10 @@ public sealed class ExternalClockRegistry {
 
     // Whether this source's publishes are forwarded to the pacer; read lock-free on every publish.
     internal bool IsElected(ExternalClockSource source) =>
-        ReferenceEquals(objA: m_elected, objB: source);
+        ReferenceEquals(
+        objA: m_elected,
+        objB: source
+    );
 
     // Applies the policy over the current registrations. Named: elect the named source when present. Auto: elect the
     // sole source, and un-elect when plurality appears (no arbitrary winner, ever). Off: never elect. The structural
@@ -84,7 +95,11 @@ public sealed class ExternalClockRegistry {
     private void ReevaluateElection() {
         ++m_electionGeneration;
 
-        if (string.Equals(m_policy, PolicyOff, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(
+            m_policy,
+            PolicyOff,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
             m_elected = null;
             m_isContended = false;
 
@@ -92,13 +107,20 @@ public sealed class ExternalClockRegistry {
         }
 
         if (m_policy is not null) {
-            m_elected = (m_sources.TryGetValue(key: m_policy, value: out var named) ? named : null);
+            m_elected = (m_sources.TryGetValue(
+                key: m_policy,
+                value: out var named
+            )
+                ? named
+                : null);
             m_isContended = false;
 
             return;
         }
 
-        m_elected = ((1 == m_sources.Count) ? m_sources.Values.First() : null);
+        m_elected = ((1 == m_sources.Count)
+            ? m_sources.Values.First()
+            : null);
         m_isContended = (m_sources.Count > 1);
     }
 }
@@ -126,10 +148,16 @@ public sealed class ExternalClockSource {
     /// <param name="arrivalTimestamp">The arrival time in <see cref="System.Diagnostics.Stopwatch"/> ticks (local receipt time for a network source).</param>
     /// <param name="frameVersion">The producer's monotonically increasing frame counter at this arrival.</param>
     public void Publish(long arrivalTimestamp, long frameVersion) {
-        m_channel.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
+        m_channel.Publish(
+            arrivalTimestamp: arrivalTimestamp,
+            frameVersion: frameVersion
+        );
 
         if (m_registry.IsElected(source: this)) {
-            m_registry.PacerClock.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
+            m_registry.PacerClock.Publish(
+                arrivalTimestamp: arrivalTimestamp,
+                frameVersion: frameVersion
+            );
         }
     }
 }

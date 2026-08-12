@@ -20,7 +20,7 @@ internal sealed class SolarReplayStage : IPostStage {
     // several RESET/threshold transitions inside the run.
     private const int FramesPerLevel = 30;
 
-    private static readonly byte[] s_script = [255, 200, 128, 64, 1, 0, 128, 255];
+    private static readonly byte[] Script = [255, 200, 128, 64, 1, 0, 128, 255];
 
     /// <inheritdoc/>
     public string Name =>
@@ -36,7 +36,10 @@ internal sealed class SolarReplayStage : IPostStage {
 
         var romPath = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
 
-        if (string.IsNullOrEmpty(value: romPath) || !File.Exists(path: romPath)) {
+        if (
+            string.IsNullOrEmpty(value: romPath) ||
+            !File.Exists(path: romPath)
+        ) {
             return PostStageOutcome.Skip(detail: $"no solar-sensor ROM (set {RomEnvironmentVariable} to a commercial solar-sensor dump; the core protocol is proven ROM-free by solar-device)");
         }
 
@@ -46,26 +49,40 @@ internal sealed class SolarReplayStage : IPostStage {
 
         var rom = File.ReadAllBytes(path: romPath);
 
-        var first = RunScripted(bios: context.BiosImage, rom: rom, cartridge: out var firstCartridge);
+        var first = RunScripted(
+            bios: context.BiosImage,
+            rom: rom,
+            cartridge: out var firstCartridge
+        );
 
         if (!firstCartridge.HasSolar) {
             return PostStageOutcome.Skip(detail: $"{Path.GetFileName(path: romPath)} did not key HasSolar in AgbGameOverrides — not recognized as a solar-sensor title");
         }
 
-        var second = RunScripted(bios: context.BiosImage, rom: rom, cartridge: out _);
+        var second = RunScripted(
+            bios: context.BiosImage,
+            rom: rom,
+            cartridge: out _
+        );
 
         if (!first.ContentEquals(other: second)) {
-            return PostStageOutcome.Fail(detail: $"the varying-light script replayed differently across two identical runs — {HashDivergenceProbe.DescribeDivergence(a: first, b: second)}");
+            return PostStageOutcome.Fail(detail: $"the varying-light script replayed differently across two identical runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first,
+                b: second
+            )}");
         }
 
-        return PostStageOutcome.Pass(detail: $"{Path.GetFileName(path: romPath)}: an {s_script.Length}-step varying-light script ({FramesPerLevel} frames/step) replayed byte-identically over {Frames} frames ({first.Size} state bytes)");
+        return PostStageOutcome.Pass(detail: $"{Path.GetFileName(path: romPath)}: an {Script.Length}-step varying-light script ({FramesPerLevel} frames/step) replayed byte-identically over {Frames} frames ({first.Size} state bytes)");
     }
 
     // One complete scripted run from a freshly built, full-booted console: the light level is set once per
     // FramesPerLevel-frame segment (mirroring a queued host's per-segment ApplyInput), never mid-segment, so the
     // recorded input stays a pure function of frame count.
     private static AgbMachineSnapshot RunScripted(ReadOnlyMemory<byte> bios, byte[] rom, out AgbCartridge cartridge) {
-        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: (byte[])rom.Clone()));
+        var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: (byte[])rom.Clone()
+        ));
 
         instance.Machine.Cpu.Reset();
         cartridge = instance.GetRequiredService<AgbCartridge>();
@@ -74,7 +91,7 @@ internal sealed class SolarReplayStage : IPostStage {
 
         for (var frame = 0; (frame < Frames); ++frame) {
             if ((frame % FramesPerLevel) == 0) {
-                cartridge.SetLightLevel(level: s_script[(scriptIndex % s_script.Length)]);
+                cartridge.SetLightLevel(level: Script[(scriptIndex % Script.Length)]);
                 ++scriptIndex;
             }
 

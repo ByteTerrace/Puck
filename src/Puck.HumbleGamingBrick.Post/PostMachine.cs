@@ -20,9 +20,13 @@ internal static class PostMachine {
     /// <returns>The assembled machine instance. The caller owns it and must dispose it.</returns>
     public static MachineInstance Build(ConsoleModel model, byte[] rom, byte[]? bootRom = null) =>
         MachineFactory.Create(
-            configuration: new MachineConfiguration(model: model, cartridgeRom: rom, bootRom: bootRom),
-            compose: static services => services.AddHumbleGamingBrickComponents()
-        );
+        configuration: new MachineConfiguration(
+            model: model,
+            cartridgeRom: rom,
+            bootRom: bootRom
+        ),
+        compose: static services => services.AddHumbleGamingBrickComponents()
+    );
 
     /// <summary>Advances a machine by a whole number of frames.</summary>
     /// <param name="instance">The machine to advance.</param>

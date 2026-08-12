@@ -39,27 +39,40 @@ internal sealed class LinkReplayStage : IPostStage {
         var second = RunLinkedScenario(bios: context.BiosImage);
 
         if (!first.ParentState.ContentEquals(other: second.ParentState)) {
-            return PostStageOutcome.Fail(detail: $"the parent console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.ParentState, b: second.ParentState)}");
+            return PostStageOutcome.Fail(detail: $"the parent console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.ParentState,
+                b: second.ParentState
+            )}");
         }
 
         if (!first.ChildState.ContentEquals(other: second.ChildState)) {
-            return PostStageOutcome.Fail(detail: $"the child console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.ChildState, b: second.ChildState)}");
+            return PostStageOutcome.Fail(detail: $"the child console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.ChildState,
+                b: second.ChildState
+            )}");
         }
 
         var lastParentWord = (ushort)((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 1);
         var lastChildWord = (ushort)(((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 2) ^ MicroRoms.LinkChildTransformMask);
 
-        return PostStageOutcome.Pass(
-            detail: $"{MicroRoms.LinkRounds} multiplayer rounds exchanged both ways (parent 0x{MicroRoms.LinkParentSendBase:X4}..0x{lastParentWord:X4} ↔ child 0x{MicroRoms.LinkChildSeedWord:X4},transforms..0x{lastChildWord:X4}), {MicroRoms.LinkRounds} serial IRQs per side, ids 0/1, replay-identical across two runs ({first.ParentState.Size}+{first.ChildState.Size} state bytes)"
-        );
+        return PostStageOutcome.Pass(detail: $"{MicroRoms.LinkRounds} multiplayer rounds exchanged both ways (parent 0x{MicroRoms.LinkParentSendBase:X4}..0x{lastParentWord:X4} ↔ child 0x{MicroRoms.LinkChildSeedWord:X4},transforms..0x{lastChildWord:X4}), {MicroRoms.LinkRounds} serial IRQs per side, ids 0/1, replay-identical across two runs ({first.ParentState.Size}+{first.ChildState.Size} state bytes)");
     }
 
     // One complete linked scenario from freshly built consoles: connect, run the per-frame budget schedule, read both
     // sides' IWRAM verdicts, snapshot. Fully self-contained so the determinism leg can repeat it identically.
     private static LinkScenarioResult RunLinkedScenario(ReadOnlyMemory<byte> bios) {
-        using var parent = CreateConsole(bios: bios, kind: "link-parent");
-        using var child = CreateConsole(bios: bios, kind: "link-child");
-        using var session = new AgbLinkSession(parent, child);
+        using var parent = CreateConsole(
+            bios: bios,
+            kind: "link-parent"
+        );
+        using var child = CreateConsole(
+            bios: bios,
+            kind: "link-child"
+        );
+        using var session = new AgbLinkSession(
+            parent,
+            child
+        );
 
         for (var frame = 0; (frame < Frames); ++frame) {
             session.Run(cycles: PostMachine.CyclesPerFrame);
@@ -73,7 +86,10 @@ internal sealed class LinkReplayStage : IPostStage {
         );
     }
     private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, string kind) {
-        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: MicroRoms.GenerateBytes(kind: kind)));
+        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: MicroRoms.GenerateBytes(kind: kind)
+        ));
 
         console.Machine.DirectBoot();
 
@@ -82,8 +98,16 @@ internal sealed class LinkReplayStage : IPostStage {
 
     // Judges the first run's protocol outcomes; null means every expectation held.
     private static string? Verify(LinkScenarioResult result) =>
-        (LinkStageProtocol.VerifySide(verdict: result.ParentVerdict, side: "parent", expectedControl: ExpectedParentControl)
-            ?? LinkStageProtocol.VerifySide(verdict: result.ChildVerdict, side: "child", expectedControl: ExpectedChildControl));
+        (LinkStageProtocol.VerifySide(
+        verdict: result.ParentVerdict,
+        side: "parent",
+        expectedControl: ExpectedParentControl
+    )
+            ?? LinkStageProtocol.VerifySide(
+        verdict: result.ChildVerdict,
+        side: "child",
+        expectedControl: ExpectedChildControl
+    ));
 
     private readonly record struct LinkScenarioResult(
         LinkSideVerdict ParentVerdict,

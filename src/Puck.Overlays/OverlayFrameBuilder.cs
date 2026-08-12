@@ -65,13 +65,13 @@ public sealed class OverlayFrameBuilder {
     // sum). An over-subscribed table makes one of these NEGATIVE, and a negative constant cannot convert to uint —
     // the BUILD fails here, at the resource whose reservations over-ran, before any frame is composed.
     /// <summary>The element records no channel has reserved.</summary>
-    public const uint ElementHeadroom = (uint)(MaxElements - OverlayChannelLeases.TotalElements);
+    public const uint ElementHeadroom = ((uint)(MaxElements - OverlayChannelLeases.TotalElements));
     /// <summary>The glyph-code words no channel has reserved.</summary>
-    public const uint TextWordHeadroom = (uint)(TextWordCapacity - OverlayChannelLeases.TotalTextWords);
+    public const uint TextWordHeadroom = ((uint)(TextWordCapacity - OverlayChannelLeases.TotalTextWords));
     /// <summary>The panel records no channel has reserved.</summary>
-    public const uint PanelHeadroom = (uint)(MaxPanels - OverlayChannelLeases.TotalPanels);
+    public const uint PanelHeadroom = ((uint)(MaxPanels - OverlayChannelLeases.TotalPanels));
     /// <summary>The clip-table rects no channel has reserved.</summary>
-    public const uint ClipHeadroom = (uint)(MaxClips - OverlayChannelLeases.TotalClips);
+    public const uint ClipHeadroom = ((uint)(MaxClips - OverlayChannelLeases.TotalClips));
 
     private readonly OverlayGlyphSdfPack m_glyphs;
     private readonly uint[] m_scratch;
@@ -122,7 +122,7 @@ public sealed class OverlayFrameBuilder {
         Height = height;
 
         for (var index = 0; (index < OverlayChannelLeases.Count); index++) {
-            m_reservations[index] = OverlayChannelLeases.ReservationOf(channel: (OverlayChannel)index);
+            m_reservations[index] = OverlayChannelLeases.ReservationOf(channel: ((OverlayChannel)index));
         }
 
         m_inverseWidth = (1f / width);
@@ -136,7 +136,7 @@ public sealed class OverlayFrameBuilder {
         // allocator's stride-16 SRV), so its element count must divide exactly.
         var total = (ClipBaseWords + (MaxClips * ClipWords));
 
-        WordCount = ((total + 3) & ~3);
+        WordCount = (total + 3) & ~3;
         m_scratch = new uint[WordCount];
 
         OverlayTokenBlock.Write(destination: m_scratch);
@@ -222,10 +222,26 @@ public sealed class OverlayFrameBuilder {
     /// spends against <see cref="MaxElements"/>/<see cref="TextWordCapacity"/>/<see cref="MaxPanels"/>/
     /// <see cref="MaxClips"/>.</remarks>
     public void BeginFrame() {
-        Array.Clear(array: m_scratch, index: PanelBaseWords, length: (m_panelCount * PanelWords));
-        Array.Clear(array: m_scratch, index: ElementBaseWords, length: (m_elementCount * ElementWords));
-        Array.Clear(array: m_scratch, index: TextBaseWords, length: m_textWordCount);
-        Array.Clear(array: m_scratch, index: ClipBaseWords, length: (m_clipCount * ClipWords));
+        Array.Clear(
+            array: m_scratch,
+            index: PanelBaseWords,
+            length: (m_panelCount * PanelWords)
+        );
+        Array.Clear(
+            array: m_scratch,
+            index: ElementBaseWords,
+            length: (m_elementCount * ElementWords)
+        );
+        Array.Clear(
+            array: m_scratch,
+            index: TextBaseWords,
+            length: m_textWordCount
+        );
+        Array.Clear(
+            array: m_scratch,
+            index: ClipBaseWords,
+            length: (m_clipCount * ClipWords)
+        );
 
         m_panelCount = 0;
         m_elementCount = 0;
@@ -249,7 +265,7 @@ public sealed class OverlayFrameBuilder {
         var index = IndexOf(channel: channel);
 
         if (m_channel >= 0) {
-            throw new InvalidOperationException(message: $"The overlay channel \"{OverlayChannelLeases.NameOf(channel: (OverlayChannel)m_channel)}\" is still open.");
+            throw new InvalidOperationException(message: $"The overlay channel \"{OverlayChannelLeases.NameOf(channel: ((OverlayChannel)m_channel))}\" is still open.");
         }
 
         m_channel = index;
@@ -278,7 +294,11 @@ public sealed class OverlayFrameBuilder {
     /// <param name="elements">The element records refused.</param>
     /// <param name="textWords">The glyph-code words refused.</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void NoteRefused(int elements, int textWords) => RefuseOwnCap(index: ActiveChannel(), elements: elements, textWords: textWords);
+    public void NoteRefused(int elements, int textWords) => RefuseOwnCap(
+        index: ActiveChannel(),
+        elements: elements,
+        textWords: textWords
+    );
 
     /// <summary>Opens a clip scope: records written before <see cref="EndClip"/> are discarded by the shader outside
     /// this rect — the per-seat viewport invariant every split-screen writer rides. Scopes do not nest: a
@@ -303,7 +323,10 @@ public sealed class OverlayFrameBuilder {
 
         ref var written = ref m_written[index];
 
-        if ((written.Clips >= m_reservations[index].Clips) || (m_clipCount >= MaxClips)) {
+        if (
+            (written.Clips >= m_reservations[index].Clips) ||
+            (m_clipCount >= MaxClips)
+        ) {
             m_dropped[index].Clips++;
             m_activeClip = -1;
             HasOverflow = true;
@@ -329,7 +352,11 @@ public sealed class OverlayFrameBuilder {
     public void EndClip() {
         var index = ActiveChannel();
 
-        if ((m_activeClipRecords == 0) && (m_activeClip == m_clipCount) && (m_activeClip > 0)) {
+        if (
+            (m_activeClipRecords == 0) &&
+            (m_activeClip == m_clipCount) &&
+            (m_activeClip > 0)
+        ) {
             m_written[index].Clips--;
             m_clipCount--;
         }
@@ -363,12 +390,18 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
         m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
-        m_scratch[(offset + 4)] = (titleBand ? 1u : 0u);
-        m_scratch[(offset + 5)] = (uint)style;
-        m_scratch[(offset + 6)] = ((ringRole is { } ring) ? (uint)ring : 0u);
+        m_scratch[(offset + 4)] = (titleBand
+            ? 1u
+            : 0u
+        );
+        m_scratch[(offset + 5)] = ((uint)style);
+        m_scratch[(offset + 6)] = ((ringRole is { } ring)
+            ? (uint)ring
+            : 0u
+        );
         m_scratch[(offset + 7)] = Pack(value: (bandHeight * m_inverseHeight));
         m_scratch[(offset + 8)] = Pack(value: alpha);
-        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_panelCount++;
     }
 
@@ -394,10 +427,10 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
         m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
-        m_scratch[(offset + 4)] = (1u | ((uint)role << 4));
+        m_scratch[(offset + 4)] = 1u | (((uint)role) << 4);
         m_scratch[(offset + 6)] = Pack(value: radius);
         m_scratch[(offset + 7)] = Pack(value: alpha);
-        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
 
@@ -419,9 +452,9 @@ public sealed class OverlayFrameBuilder {
         m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
         m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: radius);
-        m_scratch[(offset + 4)] = (3u | ((uint)role << 4));
+        m_scratch[(offset + 4)] = 3u | (((uint)role) << 4);
         m_scratch[(offset + 7)] = Pack(value: alpha);
-        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
 
@@ -440,13 +473,21 @@ public sealed class OverlayFrameBuilder {
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
     public void WriteText(float x, float y, ReadOnlySpan<char> text, int cellHeight, OverlayColorRole role, float alpha, int maxChars = int.MaxValue) {
         var channelIndex = ActiveChannel();
-        var count = Math.Clamp(value: maxChars, min: 0, max: text.Length);
+        var count = Math.Clamp(
+            value: maxChars,
+            min: 0,
+            max: text.Length
+        );
 
         // The CALLER'S OWN maxChars clamp, not a reservation limit — report the truncated tail on the same
         // writer's-own-cap path as NoteRefused so a silent per-character drop cannot hide behind a record-level
         // narration. Covers the whole-run-refused edge case too (maxChars <= 0) that used to vanish silently.
         if (count < text.Length) {
-            RefuseOwnCap(index: channelIndex, elements: 0, textWords: (text.Length - count));
+            RefuseOwnCap(
+                index: channelIndex,
+                elements: 0,
+                textWords: (text.Length - count)
+            );
         }
 
         if (count <= 0) {
@@ -462,7 +503,10 @@ public sealed class OverlayFrameBuilder {
 
         // The run's glyph words and its element record are ONE indivisible take: a run whose words do not fit is
         // dropped whole (both resources attributed) rather than rendered truncated behind the writer's back.
-        if (((m_written[channelIndex].TextWords + count) > m_reservations[channelIndex].TextWords) || ((m_textWordCount + count) > TextWordCapacity)) {
+        if (
+            ((m_written[channelIndex].TextWords + count) > m_reservations[channelIndex].TextWords) ||
+            ((m_textWordCount + count) > TextWordCapacity)
+        ) {
             m_dropped[channelIndex].Elements++;
             m_dropped[channelIndex].TextWords += count;
             HasOverflow = true;
@@ -478,7 +522,10 @@ public sealed class OverlayFrameBuilder {
         for (var index = 0; (index < count); index++) {
             var glyph = OverlayGlyphSdfPack.GlyphIndex(codePoint: text[index]);
 
-            m_scratch[(TextBaseWords + m_textWordCount++)] = (uint)Math.Max(val1: 0, val2: glyph);
+            m_scratch[(TextBaseWords + m_textWordCount++)] = ((uint)Math.Max(
+                val1: 0,
+                val2: glyph
+            ));
         }
 
         var offset = (ElementBaseWords + (m_elementCount * ElementWords));
@@ -487,11 +534,11 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: (CellWidth(cellHeight: cellHeight) * m_inverseWidth));
         m_scratch[(offset + 3)] = Pack(value: (cellHeight * m_inverseHeight));
-        m_scratch[(offset + 4)] = ((uint)role << 4);
-        m_scratch[(offset + 5)] = (uint)start;
-        m_scratch[(offset + 6)] = (uint)count;
+        m_scratch[(offset + 4)] = (((uint)role) << 4);
+        m_scratch[(offset + 5)] = ((uint)start);
+        m_scratch[(offset + 6)] = ((uint)count);
         m_scratch[(offset + 7)] = Pack(value: alpha);
-        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
 
@@ -526,15 +573,26 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 2)] = Pack(value: plateHalf);
         m_scratch[(offset + 3)] = Pack(value: glyphHalf);
         m_scratch[(offset + 4)] = 2u;
-        m_scratch[(offset + 5)] = (((uint)glyph << 16) | (uint)icon);
-        m_scratch[(offset + 6)] = ((uint)(Math.Clamp(value: alpha, max: 1f, min: 0f) * 255f)
-            | (pressed ? (1u << 8) : 0u)
+        m_scratch[(offset + 5)] = (((uint)glyph) << 16) | ((uint)icon);
+        m_scratch[(offset + 6)] = ((uint)(Math.Clamp(
+            value: alpha,
+            max: 1f,
+            min: 0f
+        ) * 255f))
+            | (pressed
+            ? (1u << 8)
+            : 0u)
             | PackBadgeLabel(glyph: glyph)
-            | (accent ? (1u << 23) : 0u)
-            | (bound ? (1u << 24) : 0u));
+            | (accent
+            ? (1u << 23)
+            : 0u)
+            | (bound
+            ? (1u << 24)
+            : 0u
+        );
         m_scratch[(offset + 7)] = Pack(value: glyphOffsetX);
         m_scratch[(offset + 8)] = Pack(value: glyphOffsetY);
-        m_scratch[(offset + 9)] = (uint)m_activeClip;
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
 
@@ -543,13 +601,19 @@ public sealed class OverlayFrameBuilder {
     /// <param name="sizePx">The token type size, px.</param>
     /// <returns>The cell height, px.</returns>
     public static int CellHeight(float sizePx) =>
-        Math.Max(val1: 1, val2: (int)MathF.Round(x: (sizePx * (DesignTokens.Type.TypeMonoLine / DesignTokens.Type.TypeMonoSize))));
+        Math.Max(
+            val1: 1,
+            val2: ((int)MathF.Round(x: (sizePx * (DesignTokens.Type.TypeMonoLine / DesignTokens.Type.TypeMonoSize))))
+        );
 
     /// <summary>The on-screen glyph cell width for a cell height, preserving the atlas' cell aspect.</summary>
     /// <param name="cellHeight">The cell height, px.</param>
     /// <returns>The cell width, px.</returns>
     public float CellWidth(int cellHeight) =>
-        MathF.Max(x: 1f, y: MathF.Round(x: ((cellHeight * (float)m_glyphs.AtlasCellWidth) / m_glyphs.AtlasCellHeight)));
+        MathF.Max(
+            x: 1f,
+            y: MathF.Round(x: ((cellHeight * ((float)m_glyphs.AtlasCellWidth)) / m_glyphs.AtlasCellHeight))
+        );
 
     /// <summary>The on-screen width of a run of characters at a cell height.</summary>
     /// <param name="chars">The character count.</param>
@@ -568,22 +632,40 @@ public sealed class OverlayFrameBuilder {
     }
     private static int IndexOf(OverlayChannel channel) {
         if (((uint)channel) >= OverlayChannelLeases.Count) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(channel), actualValue: channel, message: "Not a declared overlay channel.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(channel),
+                actualValue: channel,
+                message: "Not a declared overlay channel."
+            );
         }
 
-        return (int)channel;
+        return ((int)channel);
     }
     private static OverlayChannelUsage Usage(in Counters counters) =>
-        new(Clips: counters.Clips, Elements: counters.Elements, Panels: counters.Panels, TextWords: counters.TextWords);
+        new(
+            Clips: counters.Clips,
+            Elements: counters.Elements,
+            Panels: counters.Panels,
+            TextWords: counters.TextWords
+        );
     // The one place both NoteRefused and WriteText's own maxChars truncation land: content the WRITER declared it
     // would never offer, kept in its own bucket (m_refused) so it can never be reported as a reservation overflow.
     private void RefuseOwnCap(int index, int elements, int textWords) {
-        if ((elements <= 0) && (textWords <= 0)) {
+        if (
+            (elements <= 0) &&
+            (textWords <= 0)
+        ) {
             return;
         }
 
-        m_refused[index].Elements += Math.Max(val1: 0, val2: elements);
-        m_refused[index].TextWords += Math.Max(val1: 0, val2: textWords);
+        m_refused[index].Elements += Math.Max(
+            val1: 0,
+            val2: elements
+        );
+        m_refused[index].TextWords += Math.Max(
+            val1: 0,
+            val2: textWords
+        );
         HasOverflow = true;
     }
     // Whether one more element record fits: the channel's own reservation and the ceiling above it, plus the
@@ -611,7 +693,10 @@ public sealed class OverlayFrameBuilder {
     private bool TryTakePanel() {
         var index = ActiveChannel();
 
-        if ((m_activeClip < 0) || ((m_written[index].Panels >= m_reservations[index].Panels) || (m_panelCount >= MaxPanels))) {
+        if (
+            (m_activeClip < 0) ||
+            ((m_written[index].Panels >= m_reservations[index].Panels) || (m_panelCount >= MaxPanels))
+        ) {
             m_dropped[index].Panels++;
             HasOverflow = true;
 
@@ -637,13 +722,13 @@ public sealed class OverlayFrameBuilder {
             return 0u;
         }
 
-        var bits = ((uint)(first + 1) << 9);
+        var bits = (((uint)(first + 1)) << 9);
 
         if (label.Length > 1) {
             var second = OverlayGlyphSdfPack.GlyphIndex(codePoint: label[1]);
 
             if (second >= 0) {
-                bits |= ((uint)(second + 1) << 16);
+                bits |= (((uint)(second + 1)) << 16);
             }
         }
 

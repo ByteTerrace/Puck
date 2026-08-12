@@ -116,7 +116,11 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
         m_lastDivBit = bit;
 
         // Only an internal-clock transfer in progress self-advances; one falling edge of the DIV bit shifts one bit.
-        if (!falling || ((m_control & (TransferActive | ClockSelect)) != (TransferActive | ClockSelect)) || (m_bitsRemaining == 0)) {
+        if (
+            !falling ||
+            ((m_control & (TransferActive | ClockSelect)) != (TransferActive | ClockSelect)) ||
+            (m_bitsRemaining == 0)
+        ) {
             return;
         }
 
@@ -125,7 +129,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
         var outgoing = ((m_data & 0x80) != 0);
         var incoming = (m_peer?.ShiftBit(incoming: outgoing) ?? true);
 
-        m_data = (byte)((m_data << 1) | (incoming ? 0x01 : 0x00));
+        m_data = (byte)((m_data << 1) | (incoming
+            ? 0x01
+            : 0x00));
 
         if (--m_bitsRemaining == 0) {
             m_control &= unchecked((byte)~TransferActive);
@@ -136,7 +142,11 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     }
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) =>
-        ((address == MemoryMap.SerialData) ? m_data : (byte)(m_control | UnusedBits | (m_supportsColor ? (byte)0x00 : FastClock)));
+        ((address == MemoryMap.SerialData)
+        ? m_data
+        : (byte)(m_control | UnusedBits | (m_supportsColor
+            ? (byte)0x00
+            : FastClock)));
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
         if (address == MemoryMap.SerialData) {
@@ -149,7 +159,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
         // The fast-clock bit does not exist on DMG silicon: a write to it is simply dropped, so it can never surface
         // through DivBit() or a later read.
-        m_control = (byte)(value & (m_supportsColor ? MeaningfulMask : (byte)(MeaningfulMask & ~FastClock)));
+        m_control = (byte)(value & (m_supportsColor
+            ? MeaningfulMask
+            : (byte)(MeaningfulMask & ~FastClock)));
 
         // A write that starts a transfer arms the eight-bit counter. On the internal clock this port then drives the
         // exchange, shifting on the free-running DIV bit's falling edges (the write does not re-phase the counter — the
@@ -187,11 +199,20 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     // Wires two ports as link peers. Internal (not public) on purpose: SerialLinkSession is the one blessed connect
     // seam, because a connected pair must also be STEPPED as a pair — the session owns both halves.
     internal static void Connect(SerialComponent first, SerialComponent second) {
-        if (ReferenceEquals(objA: first, objB: second)) {
-            throw new ArgumentException(message: "A serial port cannot be linked to itself.", paramName: nameof(second));
+        if (ReferenceEquals(
+            objA: first,
+            objB: second
+        )) {
+            throw new ArgumentException(
+                message: "A serial port cannot be linked to itself.",
+                paramName: nameof(second)
+            );
         }
 
-        if ((first.m_peer is not null) || (second.m_peer is not null)) {
+        if (
+            (first.m_peer is not null) ||
+            (second.m_peer is not null)
+        ) {
             throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
         }
 
@@ -243,9 +264,15 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
         var outgoing = ((m_data & 0x80) != 0);
 
-        m_data = (byte)((m_data << 1) | (incoming ? 0x01 : 0x00));
+        m_data = (byte)((m_data << 1) | (incoming
+            ? 0x01
+            : 0x00));
 
-        if (((m_control & TransferActive) == TransferActive) && (m_bitsRemaining > 0) && (--m_bitsRemaining == 0)) {
+        if (
+            ((m_control & TransferActive) == TransferActive) &&
+            (m_bitsRemaining > 0) &&
+            (--m_bitsRemaining == 0)
+        ) {
             m_control &= unchecked((byte)~TransferActive);
 
             m_interrupts.Request(kind: InterruptKind.Serial);
@@ -257,7 +284,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
     // The DIV bit driving the shifter: the Color fast clock (SC bit 1) selects a bit 32x faster than the normal rate.
     private bool DivBit() {
-        var bit = (((m_control & FastClock) != 0) ? FastDivBit : NormalDivBit);
+        var bit = (((m_control & FastClock) != 0)
+            ? FastDivBit
+            : NormalDivBit);
 
         return ((m_timer.DivCounter & (1 << bit)) != 0);
     }

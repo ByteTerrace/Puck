@@ -58,7 +58,11 @@ public static class AgbBiosProfile {
 
         var sha1 = Convert.ToHexStringLower(inArray: SHA1.HashData(source: image));
 
-        if (string.Equals(a: sha1, b: RetailBiosSha1, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: sha1,
+            b: RetailBiosSha1,
+            comparisonType: StringComparison.Ordinal
+        )) {
             return new AgbBiosIdentity {
                 Description = "real retail BIOS (verified)",
                 Kind = AgbBiosKind.RealVerified,

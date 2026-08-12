@@ -80,16 +80,27 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         // The reference run records a per-frame idle/phase probe so the churn boundary is picked deterministically from a
         // genuine mid-trade transfer-idle instant.
         var probes = new List<TradeProbe>();
-        var reference = ScriptedTradeDriver.Run(rom: rom, probes: probes);
+        var reference = ScriptedTradeDriver.Run(
+            rom: rom,
+            probes: probes
+        );
 
-        if (Judge(result: reference, craftedLeadA: craftedLeadA, craftedLeadB: craftedLeadB) is { } failure) {
+        if (Judge(
+            result: reference,
+            craftedLeadA: craftedLeadA,
+            craftedLeadB: craftedLeadB
+        ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
 
         // Determinism: a second fresh run on the same schedule reproduces roles, traffic, snapshots, and SRAMs.
         var replay = ScriptedTradeDriver.Run(rom: rom);
 
-        if (Difference(expected: reference, actual: replay, leg: "replay") is { } replayFailure) {
+        if (Difference(
+            expected: reference,
+            actual: replay,
+            leg: "replay"
+        ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
         }
 
@@ -100,18 +111,23 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
             return PostStageOutcome.Fail(detail: "no mid-trade transfer-idle budget boundary appeared to churn at (the phase probe found no severable instant)");
         }
 
-        var churned = ScriptedTradeDriver.Run(rom: rom, churnAtStep: churnStep);
+        var churned = ScriptedTradeDriver.Run(
+            rom: rom,
+            churnAtStep: churnStep
+        );
 
-        if (Difference(expected: reference, actual: churned, leg: "churn") is { } churnFailure) {
+        if (Difference(
+            expected: reference,
+            actual: churned,
+            leg: "churn"
+        ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(
-            detail: ((($"{CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, "
+        return PostStageOutcome.Pass(detail: ((($"{CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, "
                 + $"leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
                 + $"A sent {reference.TrafficA.MasterSends}/completed {reference.TrafficA.Completions} B sent {reference.TrafficB.MasterSends}/completed {reference.TrafficB.Completions} transfers (traffic 0x{reference.TrafficA.TrafficHash:X16}/0x{reference.TrafficB.TrafficHash:X16}), ")
-                + $"replay- and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes).")
-        );
+                + $"replay- and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes)."));
     }
 
     // The full-trade conditions: the drive completed (through the post-trade CANCEL), the pair reached TRADE_CENTER with
@@ -130,19 +146,31 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
             return "the trade drive did not run to completion (seat walk, console, mon selection, swap, or the CANCEL exit blew its frame ceiling — see ScriptedTradeDriver)";
         }
 
-        if ((result.LeadA != craftedLeadB) || (result.LeadB != craftedLeadA)) {
+        if (
+            (result.LeadA != craftedLeadB) ||
+            (result.LeadB != craftedLeadA)
+        ) {
             return $"the species swap did not commit: exported leads A=0x{result.LeadA:X2} B=0x{result.LeadB:X2}, expected the crafted originals crossed (A=0x{craftedLeadB:X2} B=0x{craftedLeadA:X2})";
         }
 
-        if (!result.ChecksumOkA || !result.ChecksumOkB) {
+        if (
+            !result.ChecksumOkA ||
+            !result.ChecksumOkB
+        ) {
             return $"a post-trade auto-save's primary checksum/check bytes are inconsistent (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
         }
 
-        if ((result.TrafficA.Completions == 0) || (result.TrafficB.Completions == 0)) {
+        if (
+            (result.TrafficA.Completions == 0) ||
+            (result.TrafficB.Completions == 0)
+        ) {
             return $"a side saw no completed serial transfers (A {result.TrafficA.Completions}, B {result.TrafficB.Completions}) — no real link traffic crossed the cable";
         }
 
-        if (IsIdle(traffic: result.TrafficA) || IsIdle(traffic: result.TrafficB)) {
+        if (
+            IsIdle(traffic: result.TrafficA) ||
+            IsIdle(traffic: result.TrafficB)
+        ) {
             return $"the link exchanged only idle 0xFF bytes — no real block data crossed (A 0x{result.TrafficA.TrafficHash:X16}, B 0x{result.TrafficB.TrafficHash:X16})";
         }
 
@@ -152,7 +180,10 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     // Compares a later run against the reference: roles, both traffic fingerprints, both final snapshots, and both
     // exported SRAMs must match. Snapshot equality also checks Identity (free rigor: refuses a model/ROM mismatch).
     private static string? Difference(TradeResult expected, TradeResult actual, string leg) {
-        if ((expected.RoleA != actual.RoleA) || (expected.RoleB != actual.RoleB)) {
+        if (
+            (expected.RoleA != actual.RoleA) ||
+            (expected.RoleB != actual.RoleB)
+        ) {
             return $"the {leg} rendezvous roles diverged (expected A=0x{expected.RoleA:X2} B=0x{expected.RoleB:X2}, got A=0x{actual.RoleA:X2} B=0x{actual.RoleB:X2})";
         }
 
@@ -169,11 +200,17 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         }
 
         if (!expected.StateA.ContentEquals(other: actual.StateA)) {
-            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.StateA, b: actual.StateA)}";
+            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateA,
+                b: actual.StateA
+            )}";
         }
 
         if (!expected.StateB.ContentEquals(other: actual.StateB)) {
-            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.StateB, b: actual.StateB)}";
+            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateB,
+                b: actual.StateB
+            )}";
         }
 
         if (!expected.SramA.AsSpan().SequenceEqual(other: actual.SramA)) {
@@ -193,8 +230,16 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     // offered none.
     private static int PickChurnStep(List<TradeProbe> probes) {
         foreach (var phase in (ReadOnlySpan<string>)["TradeMenu", "Receptionist"]) {
-            var first = probes.FindIndex(match: p => string.Equals(a: p.Phase.ToString(), b: phase, comparisonType: StringComparison.Ordinal));
-            var last = probes.FindLastIndex(match: p => string.Equals(a: p.Phase.ToString(), b: phase, comparisonType: StringComparison.Ordinal));
+            var first = probes.FindIndex(match: p => string.Equals(
+                a: p.Phase.ToString(),
+                b: phase,
+                comparisonType: StringComparison.Ordinal
+            ));
+            var last = probes.FindLastIndex(match: p => string.Equals(
+                a: p.Phase.ToString(),
+                b: phase,
+                comparisonType: StringComparison.Ordinal
+            ));
 
             if (first < 0) {
                 continue;
@@ -203,7 +248,10 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
             for (var step = (first + (((last - first) * 3) / 5)); (step <= last); ++step) {
                 var probe = probes[index: step];
 
-                if (probe.Idle && (probe.Completed >= 1)) {
+                if (
+                    probe.Idle &&
+                    (probe.Completed >= 1)
+                ) {
                     return step;
                 }
             }
@@ -226,11 +274,17 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     private static string? ResolveRomPath() {
         var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
 
-        if (!string.IsNullOrEmpty(value: fromEnvironment) && File.Exists(path: fromEnvironment)) {
+        if (
+            !string.IsNullOrEmpty(value: fromEnvironment) &&
+            File.Exists(path: fromEnvironment)
+        ) {
             return fromEnvironment;
         }
 
-        return Array.Find(array: RomFallbackPaths, match: File.Exists);
+        return Array.Find(
+            array: RomFallbackPaths,
+            match: File.Exists
+        );
     }
     private static string CartridgeTitle(byte[] rom) {
         var builder = new System.Text.StringBuilder(capacity: 11);
@@ -238,7 +292,10 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         for (var offset = 0x0134; (offset < 0x013F); ++offset) {
             var character = rom[offset];
 
-            if ((character == 0) || (character >= 0x80)) {
+            if (
+                (character == 0) ||
+                (character >= 0x80)
+            ) {
                 break;
             }
 

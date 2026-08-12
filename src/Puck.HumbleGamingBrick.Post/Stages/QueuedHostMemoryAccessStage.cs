@@ -22,12 +22,17 @@ internal sealed class QueuedHostMemoryAccessStage : IPostStage {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyConcurrentMemoryAccess(
-            withContent: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create()),
+            withContent: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create()
+            ),
             scratchAddress: 0xC200,
             regionStart: 0xC000,
             regionLength: 0x0100
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

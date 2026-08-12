@@ -107,7 +107,10 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
             --m_interruptBlockCountdown;
 
             // A line already pending near the end of the window releases it early.
-            if ((m_interruptBlockCountdown <= InterruptBlockEarlyReleaseTCycles) && (m_interrupts.Pending != InterruptKind.None)) {
+            if (
+                (m_interruptBlockCountdown <= InterruptBlockEarlyReleaseTCycles) &&
+                (m_interrupts.Pending != InterruptKind.None)
+            ) {
                 m_interruptBlockCountdown = 0;
             }
 
@@ -124,7 +127,11 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
     }
     /// <inheritdoc/>
     public byte ReadRegister() =>
-        (byte)(0x7E | (m_armed ? 0x01 : 0x00) | (m_isDoubleSpeed ? 0x80 : 0x00));
+        (byte)(0x7E | (m_armed
+        ? 0x01
+        : 0x00) | (m_isDoubleSpeed
+        ? 0x80
+        : 0x00));
     /// <inheritdoc/>
     public void WriteRegister(byte value) =>
         m_armed = ((value & 0x01) != 0);
@@ -133,7 +140,9 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
         var toDouble = !m_isDoubleSpeed;
 
         m_switchEnterCountdown = SwitchEnterTCycles;
-        m_switchStallCountdown = (toDouble ? StallToDoubleTCycles : StallToNormalTCycles);
+        m_switchStallCountdown = (toDouble
+            ? StallToDoubleTCycles
+            : StallToNormalTCycles);
         m_timersBlocked = true;
 
         if (toDouble) {

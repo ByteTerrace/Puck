@@ -20,10 +20,13 @@ internal sealed class QueuedHostBackpressureStage : IPostStage {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var bios = context.BiosImage.ToArray();
-        var result = QueuedHostContractProbe.VerifyBackpressure(
-            withContent: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios)
-        );
+        var result = QueuedHostContractProbe.VerifyBackpressure(withContent: () => new AdvancedMachineHost(
+            cartridgeRom: SyntheticRom.Create(),
+            biosImage: bios
+        ));
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

@@ -12,10 +12,19 @@ namespace Puck.Overlays;
 /// <param name="A">The alpha channel, 0-1.</param>
 public readonly record struct RgbaColor(float R, float G, float B, float A) {
     /// <summary>Gets the color as an opaque <see cref="Vector3"/> (<see cref="A"/> dropped).</summary>
-    public Vector3 Rgb => new(x: R, y: G, z: B);
+    public Vector3 Rgb => new(
+        x: R,
+        y: G,
+        z: B
+    );
 
     /// <summary>Gets the color as a <see cref="Vector4"/>.</summary>
-    public Vector4 Rgba => new(x: R, y: G, z: B, w: A);
+    public Vector4 Rgba => new(
+        x: R,
+        y: G,
+        z: B,
+        w: A
+    );
 
     /// <summary>Builds an opaque color from a 24-bit hex literal, spec notation <c>#RRGGBB</c> (e.g. <c>0x0E1013</c>).</summary>
     /// <param name="hexRgb">The 24-bit <c>0xRRGGBB</c> value.</param>
@@ -147,17 +156,52 @@ public static class DesignTokens {
 
         // Scrims — the opacity floats paint over the lit world. ScrimMinAlpha is the section-7 contract floor:
         // below 0.84 under text, the guaranteed-AA contrast story (over both a dark corner AND a lit CRT) breaks.
-        public static readonly RgbaColor ScrimPanel = RgbaColor.FromRgba(r: 18, g: 21, b: 25, alpha: 0.90f);
-        public static readonly RgbaColor ScrimStrip = RgbaColor.FromRgba(r: 18, g: 21, b: 25, alpha: 0.86f);
-        public static readonly RgbaColor ScrimChip = RgbaColor.FromRgba(r: 23, g: 27, b: 31, alpha: 0.94f);
+        public static readonly RgbaColor ScrimPanel = RgbaColor.FromRgba(
+            r: 18,
+            g: 21,
+            b: 25,
+            alpha: 0.90f
+        );
+        public static readonly RgbaColor ScrimStrip = RgbaColor.FromRgba(
+            r: 18,
+            g: 21,
+            b: 25,
+            alpha: 0.86f
+        );
+        public static readonly RgbaColor ScrimChip = RgbaColor.FromRgba(
+            r: 23,
+            g: 27,
+            b: 31,
+            alpha: 0.94f
+        );
 
         public const float ScrimMinAlpha = 0.84f;
 
         // Outlines — hairline-first edge language (the primary edge language of the whole system).
-        public static readonly RgbaColor LineHair = RgbaColor.FromRgba(r: 255, g: 255, b: 255, alpha: 0.09f);
-        public static readonly RgbaColor LineSoft = RgbaColor.FromRgba(r: 255, g: 255, b: 255, alpha: 0.06f);
-        public static readonly RgbaColor LineStrong = RgbaColor.FromRgba(r: 255, g: 255, b: 255, alpha: 0.16f);
-        public static readonly RgbaColor LineInset = RgbaColor.FromRgba(r: 0, g: 0, b: 0, alpha: 0.55f);
+        public static readonly RgbaColor LineHair = RgbaColor.FromRgba(
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 0.09f
+        );
+        public static readonly RgbaColor LineSoft = RgbaColor.FromRgba(
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 0.06f
+        );
+        public static readonly RgbaColor LineStrong = RgbaColor.FromRgba(
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 0.16f
+        );
+        public static readonly RgbaColor LineInset = RgbaColor.FromRgba(
+            r: 0,
+            g: 0,
+            b: 0,
+            alpha: 0.55f
+        );
 
         // Text.
         public static readonly RgbaColor TextPrimary = RgbaColor.FromHex(hexRgb: 0xEDEFF2);
@@ -167,8 +211,18 @@ public static class DesignTokens {
         // Accent — ONE signal (electric amber-orange). Budget: one primary control per surface; never a border
         // run, never a background field.
         public static readonly RgbaColor Accent = RgbaColor.FromHex(hexRgb: 0xFF6A2B);
-        public static readonly RgbaColor AccentQuiet = RgbaColor.FromRgba(r: 255, g: 106, b: 43, alpha: 0.14f);
-        public static readonly RgbaColor AccentLine = RgbaColor.FromRgba(r: 255, g: 106, b: 43, alpha: 0.45f);
+        public static readonly RgbaColor AccentQuiet = RgbaColor.FromRgba(
+            r: 255,
+            g: 106,
+            b: 43,
+            alpha: 0.14f
+        );
+        public static readonly RgbaColor AccentLine = RgbaColor.FromRgba(
+            r: 255,
+            g: 106,
+            b: 43,
+            alpha: 0.45f
+        );
         public static readonly RgbaColor AccentInk = RgbaColor.FromHex(hexRgb: 0x160A04);
 
         // State semantics.
@@ -180,13 +234,28 @@ public static class DesignTokens {
         // label, or accent: only (a) behind glass in the diegetic material, (b) the console's ECHOED INPUT LINE,
         // (c) the console status dot.
         public static readonly RgbaColor Phosphor = RgbaColor.FromHex(hexRgb: 0x5CFAA0);
-        public static readonly RgbaColor PhosphorDim = RgbaColor.FromRgba(r: 92, g: 250, b: 160, alpha: 0.42f);
+        public static readonly RgbaColor PhosphorDim = RgbaColor.FromRgba(
+            r: 92,
+            g: 250,
+            b: 160,
+            alpha: 0.42f
+        );
         public static readonly RgbaColor PhosphorCyan = RgbaColor.FromHex(hexRgb: 0x5EEBE0);
 
         // Badge ink pair — the gamepad-glyph badge's dark backing disc and light glyph (the binding-bar graft's two
         // non-role chip colors, promoted to named tokens so the icon element kind reads them from the token block).
-        public static readonly RgbaColor BadgeDark = new(R: 0.05f, G: 0.05f, B: 0.07f, A: 1f);
-        public static readonly RgbaColor BadgeLight = new(R: 0.96f, G: 0.96f, B: 0.98f, A: 1f);
+        public static readonly RgbaColor BadgeDark = new(
+            R: 0.05f,
+            G: 0.05f,
+            B: 0.07f,
+            A: 1f
+        );
+        public static readonly RgbaColor BadgeLight = new(
+            R: 0.96f,
+            G: 0.96f,
+            B: 0.98f,
+            A: 1f
+        );
     }
 
     /// <summary>
@@ -215,36 +284,96 @@ public static class DesignTokens {
 
         // Bloom hue table (derived from the roles — no new hues).
         public static readonly BloomHue BloomAccent = new(
-            Halo: RgbaColor.FromRgba(r: 255, g: 106, b: 43, alpha: 0.42f),
-            Ring: RgbaColor.FromRgba(r: 255, g: 106, b: 43, alpha: 0.55f)
+            Halo: RgbaColor.FromRgba(
+                r: 255,
+                g: 106,
+                b: 43,
+                alpha: 0.42f
+            ),
+            Ring: RgbaColor.FromRgba(
+                r: 255,
+                g: 106,
+                b: 43,
+                alpha: 0.55f
+            )
         );
         public static readonly BloomHue BloomPositive = new(
-            Halo: RgbaColor.FromRgba(r: 91, g: 201, b: 140, alpha: 0.42f),
-            Ring: RgbaColor.FromRgba(r: 91, g: 201, b: 140, alpha: 0.55f)
+            Halo: RgbaColor.FromRgba(
+                r: 91,
+                g: 201,
+                b: 140,
+                alpha: 0.42f
+            ),
+            Ring: RgbaColor.FromRgba(
+                r: 91,
+                g: 201,
+                b: 140,
+                alpha: 0.55f
+            )
         );
         public static readonly BloomHue BloomWarning = new(
-            Halo: RgbaColor.FromRgba(r: 232, g: 179, b: 65, alpha: 0.42f),
-            Ring: RgbaColor.FromRgba(r: 232, g: 179, b: 65, alpha: 0.55f)
+            Halo: RgbaColor.FromRgba(
+                r: 232,
+                g: 179,
+                b: 65,
+                alpha: 0.42f
+            ),
+            Ring: RgbaColor.FromRgba(
+                r: 232,
+                g: 179,
+                b: 65,
+                alpha: 0.55f
+            )
         );
         public static readonly BloomHue BloomDanger = new(
-            Halo: RgbaColor.FromRgba(r: 242, g: 86, b: 91, alpha: 0.42f),
-            Ring: RgbaColor.FromRgba(r: 242, g: 86, b: 91, alpha: 0.55f)
+            Halo: RgbaColor.FromRgba(
+                r: 242,
+                g: 86,
+                b: 91,
+                alpha: 0.42f
+            ),
+            Ring: RgbaColor.FromRgba(
+                r: 242,
+                g: 86,
+                b: 91,
+                alpha: 0.55f
+            )
         );
         public static readonly BloomHue BloomNeutral = new(
-            Halo: RgbaColor.FromRgba(r: 237, g: 239, b: 242, alpha: 0.22f),
-            Ring: RgbaColor.FromRgba(r: 237, g: 239, b: 242, alpha: 0.30f)
+            Halo: RgbaColor.FromRgba(
+                r: 237,
+                g: 239,
+                b: 242,
+                alpha: 0.22f
+            ),
+            Ring: RgbaColor.FromRgba(
+                r: 237,
+                g: 239,
+                b: 242,
+                alpha: 0.30f
+            )
         );
 
         // press.held: inset shadow + inset glow + a 1px translate, applied to a physically-held chip.
         public const float PressHeldShadowOffsetY = 2f;
         public const float PressHeldShadowBlur = 6f;
 
-        public static readonly RgbaColor PressHeldShadowColor = RgbaColor.FromRgba(r: 0, g: 0, b: 0, alpha: 0.60f);
+        public static readonly RgbaColor PressHeldShadowColor = RgbaColor.FromRgba(
+            r: 0,
+            g: 0,
+            b: 0,
+            alpha: 0.60f
+        );
 
         public const float PressHeldGlowBlur = 12f;
         public const float PressHeldGlowSpread = -3f;
 
-        public static readonly RgbaColor PressHeldGlowColor = RgbaColor.FromRgba(r: 237, g: 239, b: 242, alpha: 0.24f);
+        public static readonly RgbaColor PressHeldGlowColor = RgbaColor.FromRgba(
+            r: 237,
+            g: 239,
+            b: 242,
+            alpha: 0.24f
+        );
 
         public const float PressHeldTranslateY = 1f;
 
@@ -253,11 +382,21 @@ public static class DesignTokens {
         public const float ShadowSeatBlur = 44f;
         public const float ShadowSeatSpread = -18f;
 
-        public static readonly RgbaColor ShadowSeatColor = RgbaColor.FromRgba(r: 0, g: 0, b: 0, alpha: 0.72f);
+        public static readonly RgbaColor ShadowSeatColor = RgbaColor.FromRgba(
+            r: 0,
+            g: 0,
+            b: 0,
+            alpha: 0.72f
+        );
 
         public const float ShadowSeatStripSpread = -20f;
 
-        public static readonly RgbaColor ShadowSeatStripColor = RgbaColor.FromRgba(r: 0, g: 0, b: 0, alpha: 0.75f);
+        public static readonly RgbaColor ShadowSeatStripColor = RgbaColor.FromRgba(
+            r: 0,
+            g: 0,
+            b: 0,
+            alpha: 0.75f
+        );
 
         // ring.status — OPTIONAL second separation. When present it REPLACES the 1px bloom ring (never both);
         // dropping it only degrades separation redundancy, never legibility.
@@ -268,7 +407,12 @@ public static class DesignTokens {
         // strips only.
         public const float CatchlightOffsetY = 1f;
 
-        public static readonly RgbaColor CatchlightColor = RgbaColor.FromRgba(r: 255, g: 255, b: 255, alpha: 0.05f);
+        public static readonly RgbaColor CatchlightColor = RgbaColor.FromRgba(
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 0.05f
+        );
 
         /// <summary>
         /// The edge-width law: every edge is a 1px hairline by default. Exactly three 2px signals exist —
@@ -289,7 +433,12 @@ public static class DesignTokens {
         public static readonly RgbaColor PlateTop = RgbaColor.FromHex(hexRgb: 0x2C2F33);
         public static readonly RgbaColor PlateMid = RgbaColor.FromHex(hexRgb: 0x24272B);
         public static readonly RgbaColor PlateBottom = RgbaColor.FromHex(hexRgb: 0x1C1F22);
-        public static readonly RgbaColor PlateStripeColor = RgbaColor.FromRgba(r: 255, g: 255, b: 255, alpha: 0.018f);
+        public static readonly RgbaColor PlateStripeColor = RgbaColor.FromRgba(
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 0.018f
+        );
         public static readonly RgbaColor EmbossFill = RgbaColor.FromHex(hexRgb: 0xDFE6E1);
 
         public const float EmbossShadowDropAlpha = 0.80f;
@@ -340,7 +489,12 @@ public static class DesignTokens {
         /// <summary>The change shimmer's pulse tint — rows a delivery changed pulse toward this cool cyan
         /// (mutation feedback, and the undo spectacle of history flowing backward through the world). Distinct
         /// from the selection amber and the danger red.</summary>
-        public static readonly RgbaColor ChangeShimmerTint = new(A: 1f, B: 1f, G: 0.85f, R: 0.35f);
+        public static readonly RgbaColor ChangeShimmerTint = new(
+            A: 1f,
+            B: 1f,
+            G: 0.85f,
+            R: 0.35f
+        );
 
         /// <summary>The shimmer's peak albedo blend (the pulse eases from this toward zero).</summary>
         public const float ChangeShimmerBlendMax = 0.6f;
@@ -350,7 +504,12 @@ public static class DesignTokens {
 
         /// <summary>The selection tint — the selected row's albedo pulls toward this amber so a selection reads at
         /// a glance (and a proof can count its hue).</summary>
-        public static readonly RgbaColor SelectionTint = new(A: 1f, B: 0.15f, G: 0.72f, R: 1f);
+        public static readonly RgbaColor SelectionTint = new(
+            A: 1f,
+            B: 0.15f,
+            G: 0.72f,
+            R: 1f
+        );
 
         /// <summary>The selection tint's albedo blend.</summary>
         public const float SelectionTintBlend = 0.65f;
@@ -365,8 +524,18 @@ public static class DesignTokens {
         public const float DurMed = 180f;
         public const float DurPanel = 280f;
 
-        public static readonly CubicBezier EaseStd = new(X1: 0.2f, Y1: 0f, X2: 0f, Y2: 1f);
-        public static readonly CubicBezier EaseOut = new(X1: 0.4f, Y1: 0f, X2: 1f, Y2: 1f);
+        public static readonly CubicBezier EaseStd = new(
+            X1: 0.2f,
+            Y1: 0f,
+            X2: 0f,
+            Y2: 1f
+        );
+        public static readonly CubicBezier EaseOut = new(
+            X1: 0.4f,
+            Y1: 0f,
+            X2: 1f,
+            Y2: 1f
+        );
         /// <summary>The prompt caret's blink period, ms — <c>steps(1)</c>: a hard on/off toggle, never a fade.</summary>
         public const float CaretBlink = 1080f;
     }

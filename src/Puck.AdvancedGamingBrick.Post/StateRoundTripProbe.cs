@@ -28,12 +28,23 @@ internal static class StateRoundTripProbe {
     /// <param name="bios">The BIOS image to boot with.</param>
     /// <returns><see langword="true"/> when every check passed, paired with a one-line detail.</returns>
     public static (bool Pass, string Detail) Run(byte[] rom, string label, ReadOnlyMemory<byte> bios) {
-        var (frameOk, frameDetail, size) = FrameBoundaryCheck(rom: rom, bios: bios);
-        var (midOk, midDetail) = MidFrameCheck(rom: rom, bios: bios);
-        var (doubleOk, doubleDetail) = DoubleRestoreCheck(rom: rom, bios: bios);
+        var (frameOk, frameDetail, size) = FrameBoundaryCheck(
+            rom: rom,
+            bios: bios
+        );
+        var (midOk, midDetail) = MidFrameCheck(
+            rom: rom,
+            bios: bios
+        );
+        var (doubleOk, doubleDetail) = DoubleRestoreCheck(
+            rom: rom,
+            bios: bios
+        );
 
         var pass = (frameOk && midOk && doubleOk);
-        var status = (pass ? "PASS" : "FAIL");
+        var status = (pass
+            ? "PASS"
+            : "FAIL");
 
         Console.WriteLine(value: $"  [{status}] {label}  (image {size} bytes)");
         Console.WriteLine(value: $"           frame-boundary: {frameDetail}");
@@ -45,29 +56,50 @@ internal static class StateRoundTripProbe {
 
     // Frame-boundary snapshot: record K frames, restore, re-run K frames, compare.
     private static (bool Ok, string Detail, int Size) FrameBoundaryCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
-        using var host = PostMachine.Build(bios: bios, rom: rom);
+        using var host = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
         var machine = host.Machine;
 
-        RunFrames(machine: machine, frames: WarmupFrames);
+        RunFrames(
+            machine: machine,
+            frames: WarmupFrames
+        );
 
         var snapshot = machine.Snapshot();
-        var baseline = RecordFramesInto(machine: machine, frames: RecordFrames);
+        var baseline = RecordFramesInto(
+            machine: machine,
+            frames: RecordFrames
+        );
 
         machine.Restore(snapshot: snapshot);
 
-        var replay = RecordFramesInto(machine: machine, frames: RecordFrames);
+        var replay = RecordFramesInto(
+            machine: machine,
+            frames: RecordFrames
+        );
 
-        var (ok, detail) = Compare(baseline: baseline, replay: replay);
+        var (ok, detail) = Compare(
+            baseline: baseline,
+            replay: replay
+        );
 
         return (ok, $"{detail} (snapshot at cycle {snapshot.TakenAt})", snapshot.Size);
     }
 
     // Mid-frame snapshot: advance to a mid-scanline point at an instruction boundary, then the same compare.
     private static (bool Ok, string Detail) MidFrameCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
-        using var host = PostMachine.Build(bios: bios, rom: rom);
+        using var host = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
         var machine = host.Machine;
 
-        RunFrames(machine: machine, frames: WarmupFrames);
+        RunFrames(
+            machine: machine,
+            frames: WarmupFrames
+        );
 
         // Step whole instructions until the master clock sits roughly half-way through a frame — a mid-scanline
         // instant, and (because Step is instruction-atomic) an instruction boundary. This is exactly the snapshot
@@ -81,27 +113,45 @@ internal static class StateRoundTripProbe {
         var atCycle = machine.Cycles;
         var intoFrame = (atCycle % AdvancedGamingBrickMachine.CyclesPerFrame);
         var snapshot = machine.Snapshot();
-        var baseline = RecordFramesInto(machine: machine, frames: RecordFrames);
+        var baseline = RecordFramesInto(
+            machine: machine,
+            frames: RecordFrames
+        );
 
         machine.Restore(snapshot: snapshot);
 
-        var replay = RecordFramesInto(machine: machine, frames: RecordFrames);
+        var replay = RecordFramesInto(
+            machine: machine,
+            frames: RecordFrames
+        );
 
-        var (ok, detail) = Compare(baseline: baseline, replay: replay);
+        var (ok, detail) = Compare(
+            baseline: baseline,
+            replay: replay
+        );
 
         return (ok, $"{detail} (snapshot {intoFrame} cycles into frame)");
     }
 
     // Double-restore invariant: snapshot∘restore reproduces the image, and is idempotent.
     private static (bool Ok, string Detail) DoubleRestoreCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
-        using var host = PostMachine.Build(bios: bios, rom: rom);
+        using var host = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
         var machine = host.Machine;
 
-        RunFrames(machine: machine, frames: WarmupFrames);
+        RunFrames(
+            machine: machine,
+            frames: WarmupFrames
+        );
 
         var original = machine.Snapshot();
 
-        RunFrames(machine: machine, frames: RecordFrames);
+        RunFrames(
+            machine: machine,
+            frames: RecordFrames
+        );
 
         machine.Restore(snapshot: original);
         var afterFirst = machine.Snapshot();

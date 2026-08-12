@@ -11,15 +11,15 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal static class PrinterRom {
     private const int EntryPoint = 0x0100;
-    private const int RomSize = 0x8000;
     private const int PacketStreamBase = 0x0150;
+    private const int RomSize = 0x8000;
     // A full DATA band is 0x280 (640) decompressed bytes = two 8-pixel tile rows.
     private const int BandByteCount = 0x280;
     // Printer command bytes.
     private const byte CommandInit = 0x01;
-    private const byte CommandPrint = 0x02;
     private const byte CommandData = 0x04;
     private const byte CommandNul = 0x0F;
+    private const byte CommandPrint = 0x02;
 
     /// <summary>The number of image pixel rows the print job produces (two 16-row DATA bands).</summary>
     public const int PrintedRowCount = 32;
@@ -100,17 +100,42 @@ internal static class PrinterRom {
         var stream = new List<byte>();
 
         // INIT clears the printer and image.
-        AppendPacket(stream: stream, command: CommandInit, compressed: false, payload: []);
+        AppendPacket(
+            stream: stream,
+            command: CommandInit,
+            compressed: false,
+            payload: []
+        );
         // Two DATA bands carrying the IDENTICAL image content — one raw, one RLE-compressed — so the emitted print's two
         // halves must match byte-for-byte, proving the decompressor against the raw path.
-        AppendPacket(stream: stream, command: CommandData, compressed: false, payload: band);
-        AppendPacket(stream: stream, command: CommandData, compressed: true, payload: RleEncode(data: band));
+        AppendPacket(
+            stream: stream,
+            command: CommandData,
+            compressed: false,
+            payload: band
+        );
+        AppendPacket(
+            stream: stream,
+            command: CommandData,
+            compressed: true,
+            payload: RleEncode(data: band)
+        );
         // PRINT: one sheet, no margins, identity palette (0xE4 maps each 2-bit dot to itself), mid exposure.
-        AppendPacket(stream: stream, command: CommandPrint, compressed: false, payload: [0x01, 0x00, 0xE4, 0x40]);
+        AppendPacket(
+            stream: stream,
+            command: CommandPrint,
+            compressed: false,
+            payload: [0x01, 0x00, 0xE4, 0x40]
+        );
 
         // STATUS polls (NUL command) so the driver keeps the link live across the busy → ready transition.
         for (var poll = 0; (poll < StatusPollCount); ++poll) {
-            AppendPacket(stream: stream, command: CommandNul, compressed: false, payload: []);
+            AppendPacket(
+                stream: stream,
+                command: CommandNul,
+                compressed: false,
+                payload: []
+            );
         }
 
         // The zero terminator the driver stops on.
@@ -121,8 +146,14 @@ internal static class PrinterRom {
         // the header fields and the packet stream begins past the header (0x0150), so neither disturbs the parsed header.
         var rom = new byte[RomSize];
 
-        Driver.CopyTo(array: rom, index: EntryPoint);
-        stream.CopyTo(array: rom, arrayIndex: PacketStreamBase);
+        Driver.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        stream.CopyTo(
+            array: rom,
+            arrayIndex: PacketStreamBase
+        );
 
         return rom;
     }
@@ -135,7 +166,9 @@ internal static class PrinterRom {
         var band = new byte[BandByteCount];
 
         for (var index = 0; (index < band.Length); ++index) {
-            band[index] = ((index < (BandByteCount / 2)) ? (byte)(index >> 3) : (byte)index);
+            band[index] = ((index < (BandByteCount / 2))
+                ? (byte)(index >> 3)
+                : (byte)index);
         }
 
         return band;
@@ -152,16 +185,36 @@ internal static class PrinterRom {
         var band = BuildOverflowBand();
         var stream = new List<byte>();
 
-        AppendPacket(stream: stream, command: CommandInit, compressed: false, payload: []);
+        AppendPacket(
+            stream: stream,
+            command: CommandInit,
+            compressed: false,
+            payload: []
+        );
 
         for (var index = 0; (index < bandCount); ++index) {
-            AppendPacket(stream: stream, command: CommandData, compressed: false, payload: band);
+            AppendPacket(
+                stream: stream,
+                command: CommandData,
+                compressed: false,
+                payload: band
+            );
         }
 
-        AppendPacket(stream: stream, command: CommandPrint, compressed: false, payload: [0x01, 0x00, 0xE4, 0x40]);
+        AppendPacket(
+            stream: stream,
+            command: CommandPrint,
+            compressed: false,
+            payload: [0x01, 0x00, 0xE4, 0x40]
+        );
 
         for (var poll = 0; (poll < StatusPollCount); ++poll) {
-            AppendPacket(stream: stream, command: CommandNul, compressed: false, payload: []);
+            AppendPacket(
+                stream: stream,
+                command: CommandNul,
+                compressed: false,
+                payload: []
+            );
         }
 
         stream.Add(item: 0x00);
@@ -169,8 +222,14 @@ internal static class PrinterRom {
 
         var rom = new byte[RomSize];
 
-        Driver.CopyTo(array: rom, index: EntryPoint);
-        stream.CopyTo(array: rom, arrayIndex: PacketStreamBase);
+        Driver.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        stream.CopyTo(
+            array: rom,
+            arrayIndex: PacketStreamBase
+        );
 
         return rom;
     }
@@ -187,12 +246,12 @@ internal static class PrinterRom {
 
         for (var index = 0; (index < (BandByteCount / 2)); index += 2) {
             band[index] = 0xFF;
-            band[index + 1] = 0x00;
+            band[(index + 1)] = 0x00;
         }
 
         for (var index = (BandByteCount / 2); (index < BandByteCount); index += 2) {
             band[index] = 0x00;
-            band[index + 1] = 0xFF;
+            band[(index + 1)] = 0xFF;
         }
 
         return band;
@@ -203,7 +262,9 @@ internal static class PrinterRom {
     // additive checksum, and two trailing 0x00 bytes the machine shifts to read the printer's alive+status reply.
     private static void AppendPacket(List<byte> stream, byte command, bool compressed, ReadOnlySpan<byte> payload) {
         var length = payload.Length;
-        var checksum = (command + (compressed ? 1 : 0) + (length & 0xFF) + ((length >> 8) & 0xFF));
+        var checksum = (((command + (compressed
+            ? 1
+            : 0)) + (length & 0xFF)) + ((length >> 8) & 0xFF));
 
         foreach (var value in payload) {
             checksum += value;
@@ -215,7 +276,9 @@ internal static class PrinterRom {
             0x88,
             0x33,
             command,
-            (byte)(compressed ? 1 : 0),
+            (byte)(compressed
+            ? 1
+            : 0),
             (byte)(length & 0xFF),
             (byte)((length >> 8) & 0xFF),
         };
@@ -244,7 +307,11 @@ internal static class PrinterRom {
         while (index < data.Length) {
             var run = 1;
 
-            while (((index + run) < data.Length) && (data[index + run] == data[index]) && (run < 129)) {
+            while (
+                ((index + run) < data.Length) &&
+                (data[(index + run)] == data[index]) &&
+                (run < 129)
+            ) {
                 ++run;
             }
 
@@ -257,7 +324,11 @@ internal static class PrinterRom {
 
                 ++index;
 
-                while ((index < data.Length) && ((index - start) < 128) && !(((index + 1) < data.Length) && (data[index + 1] == data[index]))) {
+                while (
+                    (index < data.Length) &&
+                    ((index - start) < 128) &&
+                    !(((index + 1) < data.Length) && (data[(index + 1)] == data[index]))
+                ) {
                     ++index;
                 }
 
@@ -266,7 +337,7 @@ internal static class PrinterRom {
                 output.Add(item: (byte)((count - 1) & 0x7F));
 
                 for (var offset = 0; (offset < count); ++offset) {
-                    output.Add(item: data[start + offset]);
+                    output.Add(item: data[(start + offset)]);
                 }
             }
         }

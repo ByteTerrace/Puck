@@ -59,8 +59,14 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public HuC3Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
-        m_ramBankWrapMask = ComputeBankWrapMask(byteCount: header.RamByteCount, bankSize: RamBankSize);
+        : base(
+        rom: rom,
+        header: header
+    ) {
+        m_ramBankWrapMask = ComputeBankWrapMask(
+            byteCount: header.RamByteCount,
+            bankSize: RamBankSize
+        );
         m_romBank = 1;
     }
 
@@ -86,9 +92,18 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
         var footer = new byte[PersistentClockFooterByteCount];
         var span = footer.AsSpan();
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[0..], value: (uint)m_minutes);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: span[4..], value: (uint)m_days);
-        BinaryPrimitives.WriteInt64LittleEndian(destination: span[8..], value: unixTimestampSeconds);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[0..],
+            value: (uint)m_minutes
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: span[4..],
+            value: (uint)m_days
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: span[8..],
+            value: unixTimestampSeconds
+        );
 
         return footer;
     }
@@ -130,7 +145,9 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
 
                 break;
             case 1: // 0x2000-0x3FFF: full-byte ROM bank, zero reads as one
-                m_romBank = ((value == 0) ? 1 : value);
+                m_romBank = ((value == 0)
+                    ? 1
+                    : value);
 
                 break;
             case 2: // 0x4000-0x5FFF: RAM bank
@@ -149,9 +166,13 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     public override byte ReadRam(ushort address) =>
         m_mode switch {
             ModeRam => base.ReadRam(address: address),
-            ModeRtcRead => ((m_accessFlags == 0x02) ? (byte)0x01 : (byte)m_readValue),
+            ModeRtcRead => ((m_accessFlags == 0x02)
+        ? (byte)0x01
+        : (byte)m_readValue),
             ModeStatus => 0x01,
-            ModeInfrared => (byte)((m_infrared?.ReceivedLight ?? false) ? 0x01 : 0x00),
+            ModeInfrared => (byte)((m_infrared?.ReceivedLight ?? false)
+        ? 0x01
+        : 0x00),
             _ => 0x01,
         };
     /// <summary>Writes to the external window according to the selected mode: banked RAM, an RTC command, or nothing —
@@ -161,7 +182,10 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     public override void WriteRam(ushort address, byte value) {
         switch (m_mode) {
             case ModeRam:
-                base.WriteRam(address: address, value: value);
+                base.WriteRam(
+                    address: address,
+                    value: value
+                );
 
                 break;
             case ModeRtcCommand:
@@ -192,8 +216,8 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
@@ -232,11 +256,17 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
 
                 break;
             case 0x2: // store a nibble at the access index
-                WriteRtcNibble(index: m_accessIndex, nibble: nibble);
+                WriteRtcNibble(
+                    index: m_accessIndex,
+                    nibble: nibble
+                );
 
                 break;
             case 0x3: // store a nibble, post-increment
-                WriteRtcNibble(index: m_accessIndex, nibble: nibble);
+                WriteRtcNibble(
+                    index: m_accessIndex,
+                    nibble: nibble
+                );
                 ++m_accessIndex;
 
                 break;

@@ -16,54 +16,105 @@ internal static class BessExporter {
     /// <param name="model">The emulated model.</param>
     /// <returns>The file bytes and the scope this export captured (for a self-consistency check).</returns>
     public static (byte[] File, BessScopeCapture Scope) Export(MachineInstance instance, ConsoleModel model) {
-        var capture = BessScope.Capture(instance: instance, model: model);
+        var capture = BessScope.Capture(
+            instance: instance,
+            model: model
+        );
         var cartridge = instance.GetRequiredService<ICartridge>();
         var rom = (instance.Configuration.CartridgeRom ?? throw new InvalidOperationException(message: "The machine has no cartridge ROM to describe."));
         var file = new List<byte>(capacity: 16_384);
 
         var ramOffset = file.Count;
+
         file.AddRange(collection: capture.Ram);
         var vramOffset = file.Count;
+
         file.AddRange(collection: capture.Vram);
         var mbcRamOffset = file.Count;
+
         file.AddRange(collection: capture.MbcRam);
         var oamOffset = file.Count;
+
         file.AddRange(collection: capture.Oam);
         var hramOffset = file.Count;
+
         file.AddRange(collection: capture.Hram);
         var backgroundPaletteOffset = file.Count;
+
         file.AddRange(collection: capture.BackgroundPalette);
         var objectPaletteOffset = file.Count;
+
         file.AddRange(collection: capture.ObjectPalette);
 
         var firstBlockOffset = file.Count;
 
-        Bess.WriteBlock(destination: file, tag: "NAME", payload: "Puck.HumbleGamingBrick 1.0"u8);
-        Bess.WriteBlock(destination: file, tag: "INFO", payload: BuildInfoBlock(rom: rom));
-        Bess.WriteBlock(destination: file, tag: "CORE", payload: BuildCoreBlock(
-            capture: capture, model: model,
-            ramOffset: ramOffset, vramOffset: vramOffset, mbcRamOffset: mbcRamOffset,
-            oamOffset: oamOffset, hramOffset: hramOffset,
-            backgroundPaletteOffset: backgroundPaletteOffset, objectPaletteOffset: objectPaletteOffset
-        ));
+        Bess.WriteBlock(
+            destination: file,
+            tag: "NAME",
+            payload: "Puck.HumbleGamingBrick 1.0"u8
+        );
+        Bess.WriteBlock(
+            destination: file,
+            tag: "INFO",
+            payload: BuildInfoBlock(rom: rom)
+        );
+        Bess.WriteBlock(
+            destination: file,
+            tag: "CORE",
+            payload: BuildCoreBlock(
+                capture: capture,
+                model: model,
+                ramOffset: ramOffset,
+                vramOffset: vramOffset,
+                mbcRamOffset: mbcRamOffset,
+                oamOffset: oamOffset,
+                hramOffset: hramOffset,
+                backgroundPaletteOffset: backgroundPaletteOffset,
+                objectPaletteOffset: objectPaletteOffset
+            )
+        );
 
         if (cartridge.Header.Mapper != MapperKind.RomOnly) {
-            Bess.WriteBlock(destination: file, tag: "MBC ", payload: BuildMbcBlock(cartridge: cartridge));
+            Bess.WriteBlock(
+                destination: file,
+                tag: "MBC ",
+                payload: BuildMbcBlock(cartridge: cartridge)
+            );
         }
 
-        Bess.WriteBlock(destination: file, tag: "END ", payload: []);
-        Bess.WriteFooter(destination: file, firstBlockOffset: (uint)firstBlockOffset);
+        Bess.WriteBlock(
+            destination: file,
+            tag: "END ",
+            payload: []
+        );
+        Bess.WriteFooter(
+            destination: file,
+            firstBlockOffset: (uint)firstBlockOffset
+        );
 
         return (file.ToArray(), capture);
     }
+
     private static byte[] BuildInfoBlock(byte[] rom) {
         var block = new byte[0x12];
 
         if (rom.Length >= 0x144) {
-            rom.AsSpan(start: 0x134, length: 16).CopyTo(destination: block.AsSpan(start: 0x00, length: 16));
+            rom.AsSpan(
+                start: 0x134,
+                length: 16
+            ).CopyTo(destination: block.AsSpan(
+                start: 0x00,
+                length: 16
+            ));
         }
         if (rom.Length >= 0x150) {
-            rom.AsSpan(start: 0x14E, length: 2).CopyTo(destination: block.AsSpan(start: 0x10, length: 2));
+            rom.AsSpan(
+                start: 0x14E,
+                length: 2
+            ).CopyTo(destination: block.AsSpan(
+                start: 0x10,
+                length: 2
+            ));
         }
 
         return block;
@@ -71,28 +122,95 @@ internal static class BessExporter {
     private static byte[] BuildCoreBlock(BessScopeCapture capture, ConsoleModel model, int ramOffset, int vramOffset, int mbcRamOffset, int oamOffset, int hramOffset, int backgroundPaletteOffset, int objectPaletteOffset) {
         var block = new byte[Bess.CoreBlockLength];
 
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x00), value: 1); // BESS major
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x02), value: 1); // BESS minor
-        Bess.ModelTag(model: model).CopyTo(destination: block.AsSpan(start: 0x04, length: 4));
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x08), value: capture.Pc);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x0A), value: capture.Af);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x0C), value: capture.Bc);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x0E), value: capture.De);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x10), value: capture.Hl);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: block.AsSpan(start: 0x12), value: capture.Sp);
-        block[0x14] = (byte)(capture.Ime ? 1 : 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x00),
+            value: 1
+        ); // BESS major
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x02),
+            value: 1
+        ); // BESS minor
+        Bess.ModelTag(model: model).CopyTo(destination: block.AsSpan(
+            start: 0x04,
+            length: 4
+        ));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x08),
+            value: capture.Pc
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x0A),
+            value: capture.Af
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x0C),
+            value: capture.Bc
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x0E),
+            value: capture.De
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x10),
+            value: capture.Hl
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: block.AsSpan(start: 0x12),
+            value: capture.Sp
+        );
+        block[0x14] = (byte)(capture.Ime
+            ? 1
+            : 0);
         block[0x15] = capture.Ie;
         block[0x16] = capture.ExecutionState;
         // 0x17 reserved, already zero.
-        capture.RegisterPage.CopyTo(destination: block.AsSpan(start: Bess.RegisterPageOffset, length: Bess.RegisterPageLength));
+        capture.RegisterPage.CopyTo(destination: block.AsSpan(
+            start: Bess.RegisterPageOffset,
+            length: Bess.RegisterPageLength
+        ));
 
-        WriteBufferEntry(block: block, tableOffset: 0x00, size: capture.Ram.Length, fileOffset: ramOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x08, size: capture.Vram.Length, fileOffset: vramOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x10, size: capture.MbcRam.Length, fileOffset: mbcRamOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x18, size: capture.Oam.Length, fileOffset: oamOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x20, size: capture.Hram.Length, fileOffset: hramOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x28, size: capture.BackgroundPalette.Length, fileOffset: backgroundPaletteOffset);
-        WriteBufferEntry(block: block, tableOffset: 0x30, size: capture.ObjectPalette.Length, fileOffset: objectPaletteOffset);
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x00,
+            size: capture.Ram.Length,
+            fileOffset: ramOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x08,
+            size: capture.Vram.Length,
+            fileOffset: vramOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x10,
+            size: capture.MbcRam.Length,
+            fileOffset: mbcRamOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x18,
+            size: capture.Oam.Length,
+            fileOffset: oamOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x20,
+            size: capture.Hram.Length,
+            fileOffset: hramOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x28,
+            size: capture.BackgroundPalette.Length,
+            fileOffset: backgroundPaletteOffset
+        );
+        WriteBufferEntry(
+            block: block,
+            tableOffset: 0x30,
+            size: capture.ObjectPalette.Length,
+            fileOffset: objectPaletteOffset
+        );
 
         return block;
     }
@@ -100,8 +218,14 @@ internal static class BessExporter {
     private static void WriteBufferEntry(byte[] block, int tableOffset, int size, int fileOffset) {
         var absolute = (Bess.BufferTableOffset + tableOffset);
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block.AsSpan(start: absolute), value: (uint)size);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: block.AsSpan(start: (absolute + 4)), value: (uint)fileOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block.AsSpan(start: absolute),
+            value: (uint)size
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block.AsSpan(start: (absolute + 4)),
+            value: (uint)fileOffset
+        );
     }
     // A mapper-neutral, best-effort register-write reconstruction: the ROM/RAM bank numbers this cartridge's own
     // ComputeRomWindows/TryComputeRamWindow already derive, replayed as writes through the mapper's OWN WriteControl —
@@ -119,23 +243,44 @@ internal static class BessExporter {
         }
 
         if (cartridge.ExternalRamByteCount > 0) {
-            Write(0x0000, 0x0A); // RAM enable.
+            Write(
+                address: 0x0000,
+                value: 0x0A
+            ); // RAM enable.
         }
 
-        cartridge.ComputeRomWindows(bank0Offset: out _, bankNOffset: out var bankNOffset);
+        cartridge.ComputeRomWindows(
+            bank0Offset: out _,
+            bankNOffset: out var bankNOffset
+        );
 
         if (bankNOffset >= 0) {
             var romBank = (bankNOffset / 0x4000);
 
-            Write(0x2000, (byte)(romBank & 0xFF));
+            Write(
+                address: 0x2000,
+                value: (byte)(romBank & 0xFF)
+            );
 
             if (romBank > 0xFF) {
-                Write(0x3000, (byte)((romBank >> 8) & 0x01)); // MBC5's 9th ROM-bank bit.
+                Write(
+                    address: 0x3000,
+                    value: (byte)((romBank >> 8) & 0x01)
+                ); // MBC5's 9th ROM-bank bit.
             }
         }
 
-        if (cartridge.TryComputeRamWindow(offset: out var ramOffset, length: out var ramLength) && (ramLength > 0)) {
-            Write(0x4000, (byte)(ramOffset / 0x2000));
+        if (
+            cartridge.TryComputeRamWindow(
+            offset: out var ramOffset,
+            length: out var ramLength
+        ) &&
+            (ramLength > 0)
+        ) {
+            Write(
+                address: 0x4000,
+                value: (byte)(ramOffset / 0x2000)
+            );
         }
 
         return entries.ToArray();

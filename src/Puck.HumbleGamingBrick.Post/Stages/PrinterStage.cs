@@ -22,13 +22,13 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class PrinterStage : IPostStage {
     private const ulong BudgetStep = 2_048;
-    private const int StepCount = 3_000;
     private const ulong OverflowBudgetStep = 2_048;
     private const int OverflowStepCount = 40_000;
-    private const byte StatusChecksumError = 0x01;
-    private const byte StatusPrinting = 0x06;
-    private const byte StatusDone = 0x04;
     private const ushort SerialControlAddress = 0xFF02;
+    private const byte StatusChecksumError = 0x01;
+    private const byte StatusDone = 0x04;
+    private const byte StatusPrinting = 0x06;
+    private const int StepCount = 3_000;
     // The image buffer holds MaxImageHeight/8 = 25 independent 8-row write slots (8*ImageWidth bytes each); a band
     // contributes two consecutive slot writes (row 0 then row 1), so the overflow probe's reference model only needs
     // the total write count modulo that ring size — see ComputeExpectedOverflowImage.
@@ -60,7 +60,11 @@ internal sealed class PrinterStage : IPostStage {
         // (a) Determinism: a second fresh run on the same schedule reproduces the print, statuses, and final states.
         var replay = RunScenario(churnAtStep: -1);
 
-        if (Difference(expected: reference, actual: replay, leg: "replay") is { } replayFailure) {
+        if (Difference(
+            expected: reference,
+            actual: replay,
+            leg: "replay"
+        ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
         }
 
@@ -68,7 +72,11 @@ internal sealed class PrinterStage : IPostStage {
         // then continue — the identical outcome proves the printer's parsing/image/countdown state all serializes.
         var churned = RunScenario(churnAtStep: churnStep);
 
-        if (Difference(expected: reference, actual: churned, leg: "churn") is { } churnFailure) {
+        if (Difference(
+            expected: reference,
+            actual: churned,
+            leg: "churn"
+        ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
@@ -77,20 +85,25 @@ internal sealed class PrinterStage : IPostStage {
         foreach (var bandCount in OverflowBandCounts) {
             var overflowReference = RunOverflowScenario(bandCount: bandCount);
 
-            if (JudgeOverflow(result: overflowReference, bandCount: bandCount) is { } overflowFailure) {
+            if (JudgeOverflow(
+                result: overflowReference,
+                bandCount: bandCount
+            ) is { } overflowFailure) {
                 return PostStageOutcome.Fail(detail: overflowFailure);
             }
 
             var overflowReplay = RunOverflowScenario(bandCount: bandCount);
 
-            if (Difference(expected: overflowReference, actual: overflowReplay, leg: $"{bandCount}-band overflow replay") is { } overflowReplayFailure) {
+            if (Difference(
+                expected: overflowReference,
+                actual: overflowReplay,
+                leg: $"{bandCount}-band overflow replay"
+            ) is { } overflowReplayFailure) {
                 return PostStageOutcome.Fail(detail: overflowReplayFailure);
             }
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"printed a {reference.Printout!.Width}x{reference.Printout.Height} image through INIT/DATA(raw+RLE)/PRINT/STATUS, busy→ready off the tick clock, replay- and churn-identical (severed transfer-idle at budget step {churnStep}, print fingerprint 0x{reference.Printout.Fingerprint():X16}); 13- and 14-band buffer-overflow scenarios wrapped the image cursor without fault, replay-identical"
-        );
+        return PostStageOutcome.Pass(detail: $"printed a {reference.Printout!.Width}x{reference.Printout.Height} image through INIT/DATA(raw+RLE)/PRINT/STATUS, busy→ready off the tick clock, replay- and churn-identical (severed transfer-idle at budget step {churnStep}, print fingerprint 0x{reference.Printout.Fingerprint():X16}); 13- and 14-band buffer-overflow scenarios wrapped the image cursor without fault, replay-identical");
     }
 
     // One complete print scenario on the fixed budget schedule. With churnAtStep >= 0 the session is severed at that
@@ -99,7 +112,10 @@ internal sealed class PrinterStage : IPostStage {
     // and survives the swap by being re-attached to the fresh printer.
     private static PrinterScenarioResult RunScenario(int churnAtStep) {
         var rom = PrinterRom.Create();
-        var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
         var printer = new GamePrinterDevice();
         var sink = new PrintSink();
         var statuses = new List<byte>(capacity: StepCount);
@@ -108,14 +124,27 @@ internal sealed class PrinterStage : IPostStage {
 
         printer.PrintEmitted = sink.OnPrint;
 
-        var session = new GamePrinterLinkSession(machine: machine, printer: printer);
+        var session = new GamePrinterLinkSession(
+            machine: machine,
+            printer: printer
+        );
 
         try {
             for (var step = 0; (step < StepCount); ++step) {
-                probes.Add(item: new BoundaryProbe(Idle: IsTransferIdle(machine: machine, printer: printer), ImageOffset: printer.ImageOffset, PrintCount: sink.Count));
+                probes.Add(item: new BoundaryProbe(
+                    Idle: IsTransferIdle(
+                        machine: machine,
+                        printer: printer
+                    ),
+                    ImageOffset: printer.ImageOffset,
+                    PrintCount: sink.Count
+                ));
 
                 if (step == churnAtStep) {
-                    if (!IsTransferIdle(machine: machine, printer: printer)) {
+                    if (!IsTransferIdle(
+                        machine: machine,
+                        printer: printer
+                    )) {
                         throw new InvalidOperationException(message: $"the churn boundary at budget step {step} is not transfer-idle.");
                     }
 
@@ -123,18 +152,27 @@ internal sealed class PrinterStage : IPostStage {
 
                     var machineState = machine.Machine.Snapshot();
                     var printerState = CapturePrinter(printer: printer);
-                    var freshMachine = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+                    var freshMachine = PostMachine.Build(
+                        model: ConsoleModel.Dmg,
+                        rom: rom
+                    );
                     var freshPrinter = new GamePrinterDevice();
 
                     freshMachine.Machine.Restore(snapshot: machineState);
-                    RestorePrinter(printer: freshPrinter, state: printerState);
+                    RestorePrinter(
+                        printer: freshPrinter,
+                        state: printerState
+                    );
                     freshPrinter.PrintEmitted = sink.OnPrint;
 
                     machine.Dispose();
 
                     machine = freshMachine;
                     printer = freshPrinter;
-                    session = new GamePrinterLinkSession(machine: machine, printer: printer);
+                    session = new GamePrinterLinkSession(
+                        machine: machine,
+                        printer: printer
+                    );
                 }
 
                 session.Run(tCycles: BudgetStep);
@@ -170,7 +208,10 @@ internal sealed class PrinterStage : IPostStage {
     // must clock out over the printer's internal serial rate before the completion marker is reachable.
     private static PrinterScenarioResult RunOverflowScenario(int bandCount) {
         var rom = PrinterRom.CreateOverflow(bandCount: bandCount);
-        var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: rom);
+        var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: rom
+        );
         var printer = new GamePrinterDevice();
         var sink = new PrintSink();
         var statuses = new List<byte>(capacity: OverflowStepCount);
@@ -178,7 +219,10 @@ internal sealed class PrinterStage : IPostStage {
 
         printer.PrintEmitted = sink.OnPrint;
 
-        var session = new GamePrinterLinkSession(machine: machine, printer: printer);
+        var session = new GamePrinterLinkSession(
+            machine: machine,
+            printer: printer
+        );
 
         try {
             for (var step = 0; (step < OverflowStepCount); ++step) {
@@ -224,7 +268,10 @@ internal sealed class PrinterStage : IPostStage {
         var expectedPixels = ComputeExpectedOverflowImage(bandCount: bandCount);
         var expectedHeight = (expectedPixels.Length / GamePrinterDevice.ImageWidth);
 
-        if ((printout.Width != GamePrinterDevice.ImageWidth) || (printout.Height != expectedHeight)) {
+        if (
+            (printout.Width != GamePrinterDevice.ImageWidth) ||
+            (printout.Height != expectedHeight)
+        ) {
             return $"the {bandCount}-band overflow print is {printout.Width}x{printout.Height}; the wrap-policy reference model expects {GamePrinterDevice.ImageWidth}x{expectedHeight}";
         }
 
@@ -238,7 +285,10 @@ internal sealed class PrinterStage : IPostStage {
             return $"the {bandCount}-band overflow scenario never reported printing-in-progress (busy) after PRINT";
         }
 
-        if (result.Statuses.IndexOf(item: StatusDone, index: firstPrinting) < 0) {
+        if (result.Statuses.IndexOf(
+            item: StatusDone,
+            index: firstPrinting
+        ) < 0) {
             return $"the {bandCount}-band overflow scenario reported busy but never transitioned to ready";
         }
 
@@ -257,13 +307,20 @@ internal sealed class PrinterStage : IPostStage {
     private static byte[] ComputeExpectedOverflowImage(int bandCount) {
         var totalWrites = (bandCount * 2);
         var segmentCount = (totalWrites % SegmentsPerBuffer);
-        var expected = new byte[segmentCount * SegmentBytes];
+        var expected = new byte[(segmentCount * SegmentBytes)];
 
         for (var segment = 0; (segment < segmentCount); ++segment) {
             var writeIndex = ((totalWrites - segmentCount) + segment);
-            var shade = (byte)(((writeIndex % 2) == 0) ? 1 : 2);
+            var shade = (byte)(((writeIndex % 2) == 0)
+                ? 1
+                : 2);
 
-            Array.Fill(array: expected, value: shade, startIndex: (segment * SegmentBytes), count: SegmentBytes);
+            Array.Fill(
+                array: expected,
+                value: shade,
+                startIndex: (segment * SegmentBytes),
+                count: SegmentBytes
+            );
         }
 
         return expected;
@@ -281,7 +338,10 @@ internal sealed class PrinterStage : IPostStage {
             return "no print was emitted";
         }
 
-        if ((printout.Width != GamePrinterDevice.ImageWidth) || (printout.Height != PrinterRom.PrintedRowCount)) {
+        if (
+            (printout.Width != GamePrinterDevice.ImageWidth) ||
+            (printout.Height != PrinterRom.PrintedRowCount)
+        ) {
             return $"the print is {printout.Width}x{printout.Height}; expected {GamePrinterDevice.ImageWidth}x{PrinterRom.PrintedRowCount}";
         }
 
@@ -295,7 +355,10 @@ internal sealed class PrinterStage : IPostStage {
             return "the printer never reported printing-in-progress (busy) after PRINT";
         }
 
-        var firstDone = result.Statuses.IndexOf(item: StatusDone, index: firstPrinting);
+        var firstDone = result.Statuses.IndexOf(
+            item: StatusDone,
+            index: firstPrinting
+        );
 
         if (firstDone < 0) {
             return "the printer reported busy but never transitioned to ready (the print countdown never elapsed)";
@@ -320,7 +383,9 @@ internal sealed class PrinterStage : IPostStage {
             }
         }
 
-        return (uniform ? "the printed image is uniform; no varied image data reached the printer" : null);
+        return (uniform
+            ? "the printed image is uniform; no varied image data reached the printer"
+            : null);
     }
 
     // Compares a later run against the reference: the print fingerprint, the emitted-print count, the sampled status
@@ -330,7 +395,11 @@ internal sealed class PrinterStage : IPostStage {
             return $"the {leg} emitted {actual.PrintCount} prints; expected {expected.PrintCount}";
         }
 
-        if ((expected.Printout is null) || (actual.Printout is null) || (actual.Printout.Fingerprint() != expected.Printout.Fingerprint())) {
+        if (
+            (expected.Printout is null) ||
+            (actual.Printout is null) ||
+            (actual.Printout.Fingerprint() != expected.Printout.Fingerprint())
+        ) {
             return $"the {leg} print fingerprint diverged";
         }
 
@@ -339,7 +408,10 @@ internal sealed class PrinterStage : IPostStage {
         }
 
         if (!expected.MachineState.ContentEquals(other: actual.MachineState)) {
-            return $"the {leg} final machine state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.MachineState, b: actual.MachineState)}";
+            return $"the {leg} final machine state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.MachineState,
+                b: actual.MachineState
+            )}";
         }
 
         if (!expected.PrinterState.AsSpan().SequenceEqual(other: actual.PrinterState)) {
@@ -355,7 +427,11 @@ internal sealed class PrinterStage : IPostStage {
         for (var step = 0; (step < probes.Count); ++step) {
             var probe = probes[index: step];
 
-            if (probe.Idle && (probe.ImageOffset > 0) && (probe.PrintCount == 0)) {
+            if (
+                probe.Idle &&
+                (probe.ImageOffset > 0) &&
+                (probe.PrintCount == 0)
+            ) {
                 return step;
             }
         }
@@ -367,7 +443,6 @@ internal sealed class PrinterStage : IPostStage {
     // clocked into the printer, so its shift register sits byte-aligned (nothing mid-flight to lose across a snapshot).
     private static bool IsTransferIdle(MachineInstance machine, GamePrinterDevice printer) =>
         ((machine.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0);
-
     private static byte[] CapturePrinter(GamePrinterDevice printer) {
         var writer = new StateWriter();
 
@@ -376,7 +451,11 @@ internal sealed class PrinterStage : IPostStage {
         return writer.ToArray();
     }
     private static void RestorePrinter(GamePrinterDevice printer, byte[] state) =>
-        ((ISnapshotable)printer).LoadState(reader: new StateReader(buffer: state, start: 0, length: state.Length));
+        ((ISnapshotable)printer).LoadState(reader: new StateReader(
+        buffer: state,
+        start: 0,
+        length: state.Length
+    ));
 
     // A host-side, never-serialized sink for the machine-to-host print event.
     private sealed class PrintSink {

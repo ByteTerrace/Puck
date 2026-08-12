@@ -32,7 +32,10 @@ public static class AddonChannelNameTableReader {
         errorIndex = -1;
         error = "";
 
-        if ((count < 0) || (count > destination.Length)) {
+        if (
+            (count < 0) ||
+            (count > destination.Length)
+        ) {
             errorIndex = 0;
             error = "channel name table count out of range";
             return false;
@@ -49,7 +52,10 @@ public static class AddonChannelNameTableReader {
 
             var length = source[position];
 
-            if ((length < 1) || (length > AddonAbi.MaxChannelNameBytes)) {
+            if (
+                (length < 1) ||
+                (length > AddonAbi.MaxChannelNameBytes)
+            ) {
                 errorIndex = index;
                 error = $"entry {index}: name length {length} out of range [1, {AddonAbi.MaxChannelNameBytes}]";
                 return false;
@@ -83,20 +89,32 @@ public static class AddonChannelNameTableReader {
             }
 
             for (var priorIndex = 0; (priorIndex < index); ++priorIndex) {
-                if (string.Equals(a: destination[priorIndex].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                if (string.Equals(
+                    a: destination[priorIndex].Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     errorIndex = index;
                     error = $"entry {index}: duplicate channel name '{name}' (also entry {priorIndex})";
                     return false;
                 }
             }
 
-            var resolved = resolver.TryResolve(name: name, ordinal: out var ordinal, shape: out var shape);
+            var resolved = resolver.TryResolve(
+                name: name,
+                ordinal: out var ordinal,
+                shape: out var shape
+            );
 
             destination[index] = new AddonChannelBinding(
                 Name: name,
-                Ordinal: (resolved ? ordinal : -1),
+                Ordinal: (resolved
+                ? ordinal
+                : -1),
                 Resolved: resolved,
-                Shape: (resolved ? shape : default)
+                Shape: (resolved
+                ? shape
+                : default)
             );
 
             position = nameEnd;

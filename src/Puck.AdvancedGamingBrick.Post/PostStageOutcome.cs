@@ -9,20 +9,32 @@ internal readonly record struct PostStageOutcome(PostVerdict Verdict, string Det
     /// <param name="detail">The success summary.</param>
     /// <returns>The outcome.</returns>
     public static PostStageOutcome Pass(string detail) =>
-        new(Verdict: PostVerdict.Pass, Detail: detail);
+        new(
+        Verdict: PostVerdict.Pass,
+        Detail: detail
+    );
     /// <summary>Creates a skipped outcome (neutral to the aggregate verdict).</summary>
     /// <param name="detail">The reason the stage was skipped.</param>
     /// <returns>The outcome.</returns>
     public static PostStageOutcome Skip(string detail) =>
-        new(Verdict: PostVerdict.Skip, Detail: detail);
+        new(
+        Verdict: PostVerdict.Skip,
+        Detail: detail
+    );
     /// <summary>Creates a failing outcome (a correctness divergence; exit code 1).</summary>
     /// <param name="detail">The failure reason.</param>
     /// <returns>The outcome.</returns>
     public static PostStageOutcome Fail(string detail) =>
-        new(Verdict: PostVerdict.Fail, Detail: detail);
+        new(
+        Verdict: PostVerdict.Fail,
+        Detail: detail
+    );
     /// <summary>Creates an infrastructure-failure outcome (the stage could not complete; exit code 2).</summary>
     /// <param name="detail">The failure reason.</param>
     /// <returns>The outcome.</returns>
     public static PostStageOutcome Infra(string detail) =>
-        new(Verdict: PostVerdict.Infra, Detail: detail);
+        new(
+        Verdict: PostVerdict.Infra,
+        Detail: detail
+    );
 }

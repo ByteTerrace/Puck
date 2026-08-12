@@ -22,21 +22,28 @@ internal sealed class ThroughputStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: SyntheticRom.Create()
+        );
 
-        PostMachine.RunFrames(instance: machine, frames: WarmFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: WarmFrames
+        );
 
         var stopwatch = Stopwatch.StartNew();
 
-        PostMachine.RunFrames(instance: machine, frames: BenchFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: BenchFrames
+        );
         stopwatch.Stop();
 
         var fps = (BenchFrames / stopwatch.Elapsed.TotalSeconds);
         var realtimeMultiple = (fps / PostMachine.HardwareFps);
         var megaTCyclesPerSecond = ((fps * PostMachine.TCyclesPerFrame) / 1e6);
 
-        return PostStageOutcome.Pass(
-            detail: $"{fps:F0} fps ({realtimeMultiple:F1}x realtime, {megaTCyclesPerSecond:F1} MT/s) over {BenchFrames} frames"
-        );
+        return PostStageOutcome.Pass(detail: $"{fps:F0} fps ({realtimeMultiple:F1}x realtime, {megaTCyclesPerSecond:F1} MT/s) over {BenchFrames} frames");
     }
 }

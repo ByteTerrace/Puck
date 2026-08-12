@@ -35,19 +35,24 @@ public enum CarriageTrustMode {
 /// The slot names claims admitted by this entry may reach (README.md: a trust entry says "which
 /// slots it reaches"). Deny by default — an empty set admits a claim that reaches nothing, and there is
 /// deliberately no wildcard, because a wildcard is how a scope silently widens when a game adds a slot.
-/// The verifier returns this set with an accepted claim (<see cref="CarriageVerifyResult.Reach"/>); it
-/// never enforces it, because enforcing reach is the receiving world's policy (invariant 5).
+/// The verification result keeps this set encapsulated and answers only slot-scoped
+/// <see cref="CarriageVerifyResult.Admits"/> or <see cref="CarriageVerifyResult.TryGetReplayCommit"/>
+/// queries; choosing the affected slot remains the receiving world's policy (invariant 5).
 /// </param>
 /// <param name="MaximumAge">
 /// This entry's own verifier-authored maximum claim age, overriding <see cref="TrustList.DefaultMaximumAge"/>
 /// when set. The tighter of this (or the default) and the issuer's own window always governs.
 /// </param>
+/// <param name="RootBindingMaximumAge">This entry's maximum age for the cold-root-to-issuing binding, independent of claim cadence. Only valid for a vouching entry.</param>
+/// <param name="SubjectBindingMaximumAge">This entry's maximum age for issuing-to-subject bindings, independent of both the root binding and claims. Only valid for a vouching entry.</param>
 public sealed record TrustListEntry(
     KeyId PinnedId,
     ReadOnlyMemory<byte> PublicKeySubjectPublicKeyInfo,
     CarriageTrustMode Mode,
     IReadOnlySet<string> Reach,
-    TimeSpan? MaximumAge
+    TimeSpan? MaximumAge,
+    TimeSpan? RootBindingMaximumAge = null,
+    TimeSpan? SubjectBindingMaximumAge = null
 ) {
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
@@ -59,6 +64,10 @@ public sealed record TrustListEntry(
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void Validate() {
+        ValidateOptionalDuration(value: MaximumAge, name: nameof(MaximumAge));
+        ValidateOptionalDuration(value: RootBindingMaximumAge, name: nameof(RootBindingMaximumAge));
+        ValidateOptionalDuration(value: SubjectBindingMaximumAge, name: nameof(SubjectBindingMaximumAge));
+
         if (!string.Equals(
             a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
             b: PinnedId.KeyHash,
@@ -118,6 +127,25 @@ public sealed record TrustListEntry(
         ) {
             throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
         }
+
+        if (
+            (Mode == CarriageTrustMode.SignsDirectly) &&
+            ((RootBindingMaximumAge is not null) || (SubjectBindingMaximumAge is not null))
+        ) {
+            throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
+        }
+    }
+
+    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
+        if (
+            (value is not null) &&
+            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: name,
+                message: "A carriage maximum age must be positive and expressible as whole wire seconds."
+            );
+        }
     }
 }
 
@@ -145,8 +173,22 @@ public sealed record TrustList {
     /// The verifier's default maximum claim age when an entry does not override it, or <see langword="null"/>
     /// for no verifier-side ceiling (the issuer's own window is then the whole story).
     /// </param>
+    /// <param name="defaultRootBindingMaximumAge">The default maximum age for cold-root-to-issuing bindings, independent of claim cadence. When omitted, <paramref name="defaultMaximumAge"/> is inherited so the existing safety ceiling cannot silently disappear.</param>
+    /// <param name="defaultSubjectBindingMaximumAge">The default maximum age for issuing-to-subject bindings. When omitted, <paramref name="defaultMaximumAge"/> is inherited so the existing safety ceiling cannot silently disappear.</param>
+    /// <param name="replayAcceptanceHorizon">The positive, whole-second verifier-wide replay horizon. When null, sequenced claims are refused because no safe finite retention bound exists.</param>
     /// <exception cref="ArgumentException">An entry is not self-consistent, or two entries collide.</exception>
-    public TrustList(IReadOnlyList<TrustListEntry> entries, TimeSpan? defaultMaximumAge) {
+    public TrustList(
+        IReadOnlyList<TrustListEntry> entries,
+        TimeSpan? defaultMaximumAge,
+        TimeSpan? defaultRootBindingMaximumAge = null,
+        TimeSpan? defaultSubjectBindingMaximumAge = null,
+        TimeSpan? replayAcceptanceHorizon = null
+    ) {
+        ValidateOptionalDuration(value: defaultMaximumAge, name: nameof(defaultMaximumAge));
+        ValidateOptionalDuration(value: defaultRootBindingMaximumAge, name: nameof(defaultRootBindingMaximumAge));
+        ValidateOptionalDuration(value: defaultSubjectBindingMaximumAge, name: nameof(defaultSubjectBindingMaximumAge));
+        ValidateOptionalDuration(value: replayAcceptanceHorizon, name: nameof(replayAcceptanceHorizon));
+
         var seen = new HashSet<(string Domain, string? Subject, CarriageTrustMode Mode)>();
 
         foreach (var entry in entries) {
@@ -158,6 +200,9 @@ public sealed record TrustList {
         }
 
         DefaultMaximumAge = defaultMaximumAge;
+        DefaultRootBindingMaximumAge = (defaultRootBindingMaximumAge ?? defaultMaximumAge);
+        DefaultSubjectBindingMaximumAge = (defaultSubjectBindingMaximumAge ?? defaultMaximumAge);
+        ReplayAcceptanceHorizon = replayAcceptanceHorizon;
         Entries = entries;
     }
 
@@ -166,6 +211,18 @@ public sealed record TrustList {
 
     /// <summary>The verifier's default maximum claim age when an entry does not override it, or <see langword="null"/> for no ceiling.</summary>
     public TimeSpan? DefaultMaximumAge { get; }
+
+    /// <summary>The default maximum age for a cold-root-to-issuing binding, or <see langword="null"/> for no verifier-side ceiling beyond the signed window.</summary>
+    public TimeSpan? DefaultRootBindingMaximumAge { get; }
+
+    /// <summary>The default maximum age for an issuing-to-subject binding, or <see langword="null"/> for no verifier-side ceiling beyond the signed window.</summary>
+    public TimeSpan? DefaultSubjectBindingMaximumAge { get; }
+
+    /// <summary>
+    /// The verifier-wide finite horizon for every sequenced claim. It defines signed replay epochs and the
+    /// earliest safe mark-retention deadline. <see langword="null"/> means sequenced claims are refused.
+    /// </summary>
+    public TimeSpan? ReplayAcceptanceHorizon { get; }
 
     /// <summary>Finds the <see cref="CarriageTrustMode.Vouches"/> entry for a domain, or <see langword="null"/> if that domain is not trusted to vouch.</summary>
     /// <param name="domain">The root fingerprint to look up.</param>
@@ -221,4 +278,22 @@ public sealed record TrustList {
 
     /// <summary>The maximum age a claim from <paramref name="entry"/> may be accepted at, or <see langword="null"/> for no ceiling.</summary>
     public TimeSpan? MaximumAgeFor(TrustListEntry entry) => (entry.MaximumAge ?? DefaultMaximumAge);
+
+    /// <summary>The maximum age for a root-to-issuing binding admitted by <paramref name="entry"/>.</summary>
+    public TimeSpan? RootBindingMaximumAgeFor(TrustListEntry entry) => (entry.RootBindingMaximumAge ?? DefaultRootBindingMaximumAge);
+
+    /// <summary>The maximum age for an issuing-to-subject binding admitted by <paramref name="entry"/>.</summary>
+    public TimeSpan? SubjectBindingMaximumAgeFor(TrustListEntry entry) => (entry.SubjectBindingMaximumAge ?? DefaultSubjectBindingMaximumAge);
+
+    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
+        if (
+            (value is not null) &&
+            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: name,
+                message: "A carriage maximum age or replay horizon must be positive and expressible as whole wire seconds."
+            );
+        }
+    }
 }

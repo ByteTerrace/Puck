@@ -51,11 +51,17 @@ public sealed partial class ApuWaveChannel {
 
             // In single-bank mode the 32-sample position indexes the selected bank; in double-bank mode the
             // 64-sample position spans both banks starting at the selected one.
-            var pos = (m_twoBank ? m_samplePosition : ((m_bank * 32) + m_samplePosition));
+            var pos = (m_twoBank
+                ? m_samplePosition
+                : ((m_bank * 32) + m_samplePosition));
             var packed = m_waveRam[(pos >> 1) & 0x1F];
-            var nibble = (((pos & 1) == 0) ? (packed >> 4) : packed & 0xF);
+            var nibble = (((pos & 1) == 0)
+                ? (packed >> 4)
+                : packed & 0xF);
 
-            return (m_forceVolume75 ? ((nibble * 3) >> 2) : (nibble >> m_volumeShift));
+            return (m_forceVolume75
+                ? ((nibble * 3) >> 2)
+                : (nibble >> m_volumeShift));
         }
     }
 
@@ -67,7 +73,9 @@ public sealed partial class ApuWaveChannel {
         while (m_frequencyTimer <= 0) {
             m_frequencyTimer += ((2048 - m_frequency) * 8);
 
-            var limit = (m_twoBank ? 64 : 32);
+            var limit = (m_twoBank
+                ? 64
+                : 32);
 
             if (++m_samplePosition >= limit) {
                 m_samplePosition = 0;
@@ -92,7 +100,11 @@ public sealed partial class ApuWaveChannel {
     }
 
     /// <summary>Reads back NR30 (DAC/bank mode/bank number).</summary>
-    public byte ReadEnable() => (byte)((m_twoBank ? 0x20 : 0) | (m_bank << 6) | (m_dacEnabled ? 0x80 : 0));
+    public byte ReadEnable() => (byte)((m_twoBank
+        ? 0x20
+        : 0) | (m_bank << 6) | (m_dacEnabled
+        ? 0x80
+        : 0));
 
     /// <summary>Reloads the length counter (NR31).</summary>
     public void WriteLength(byte value) {
@@ -114,7 +126,9 @@ public sealed partial class ApuWaveChannel {
     public byte ReadVolume() {
         var field = m_volumeShift switch { 0 => 1, 1 => 2, 2 => 3, _ => 0 };
 
-        return (byte)((field << 5) | (m_forceVolume75 ? 0x80 : 0));
+        return (byte)((field << 5) | (m_forceVolume75
+            ? 0x80
+            : 0));
     }
 
     /// <summary>Sets the low byte of the frequency (NR33).</summary>
@@ -139,11 +153,17 @@ public sealed partial class ApuWaveChannel {
     }
 
     /// <summary>Reads back NR34's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled ? 0x40 : 0);
+    public byte ReadControl() => (byte)(m_lengthEnabled
+        ? 0x40
+        : 0);
 
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
-        if (m_lengthEnabled && (m_lengthCounter > 0) && (--m_lengthCounter == 0)) {
+        if (
+            m_lengthEnabled &&
+            (m_lengthCounter > 0) &&
+            (--m_lengthCounter == 0)
+        ) {
             m_enabled = false;
         }
     }

@@ -67,7 +67,13 @@ internal static class VerifiedCodeManifest {
             return Unusable(message: $"VerifiedCode.json could not be read: {exception.Message}");
         }
 
-        if (!root.TryGetValue(key: "format", value: out var rawFormat) || (rawFormat is not double format)) {
+        if (
+            !root.TryGetValue(
+            key: "format",
+            value: out var rawFormat
+        ) ||
+            (rawFormat is not double format)
+        ) {
             return Unusable(message: "VerifiedCode.json has no numeric 'format' member, so the schema its entries are written in is unknown.");
         }
 
@@ -75,7 +81,13 @@ internal static class VerifiedCodeManifest {
             return Unusable(message: $"VerifiedCode.json declares format '{Describe(value: rawFormat)}', which this analyzer does not implement; it reads format {SupportedFormat} only.");
         }
 
-        if (!root.TryGetValue(key: "entries", value: out var rawEntries) || (rawEntries is not Dictionary<string, object?> entriesObject)) {
+        if (
+            !root.TryGetValue(
+            key: "entries",
+            value: out var rawEntries
+        ) ||
+            (rawEntries is not Dictionary<string, object?> entriesObject)
+        ) {
             return Unusable(message: "VerifiedCode.json has no object-valued 'entries' member.");
         }
 
@@ -85,37 +97,84 @@ internal static class VerifiedCodeManifest {
 
         foreach (var pair in entriesObject) {
             try {
-                entries[pair.Key] = ReadEntry(id: pair.Key, value: pair.Value);
+                entries[pair.Key] = ReadEntry(
+                    id: pair.Key,
+                    value: pair.Value
+                );
             } catch (FormatException exception) {
                 faultedIds.Add(item: pair.Key);
-                faults.Add(item: new VerifiedCodeManifestFault(EntryId: pair.Key, Message: exception.Message));
+                faults.Add(item: new VerifiedCodeManifestFault(
+                    EntryId: pair.Key,
+                    Message: exception.Message
+                ));
             }
         }
 
-        return new VerifiedCodeManifestReading(Usable: true, Entries: entries, FaultedIds: faultedIds, Faults: faults);
+        return new VerifiedCodeManifestReading(
+            Usable: true,
+            Entries: entries,
+            FaultedIds: faultedIds,
+            Faults: faults
+        );
     }
 
     /// <summary>A reading of a manifest that is not there at all, or whose text could not be obtained.</summary>
     public static VerifiedCodeManifestReading Unusable(string message) =>
         new(
-            Usable: false,
-            Entries: new Dictionary<string, VerifiedCodeManifestEntry>(comparer: StringComparer.Ordinal),
-            FaultedIds: new HashSet<string>(comparer: StringComparer.Ordinal),
-            Faults: [new VerifiedCodeManifestFault(EntryId: null, Message: message)]);
+        Usable: false,
+        Entries: new Dictionary<string, VerifiedCodeManifestEntry>(comparer: StringComparer.Ordinal),
+        FaultedIds: new HashSet<string>(comparer: StringComparer.Ordinal),
+        Faults: [new VerifiedCodeManifestFault(
+            EntryId: null,
+            Message: message
+        )]
+    );
 
     private static VerifiedCodeManifestEntry ReadEntry(string id, object? value) {
         var entryObject = ((value as Dictionary<string, object?>)
             ?? throw new FormatException(message: $"VerifiedCode.json entry '{id}' is not a JSON object."));
 
-        var assembly = RequireString(entryObject: entryObject, id: id, field: "assembly");
-        var symbol = RequireString(entryObject: entryObject, id: id, field: "symbol");
-        var algorithm = RequireString(entryObject: entryObject, id: id, field: "algorithm");
-        var sha256 = RequireString(entryObject: entryObject, id: id, field: "sha256");
-        var basis = ReadStringArray(entryObject: entryObject, id: id, field: "basis");
-        var dependencies = ReadStringArray(entryObject: entryObject, id: id, field: "dependencies");
-        var laws = ReadStringArray(entryObject: entryObject, id: id, field: "laws");
+        var assembly = RequireString(
+            entryObject: entryObject,
+            id: id,
+            field: "assembly"
+        );
+        var symbol = RequireString(
+            entryObject: entryObject,
+            id: id,
+            field: "symbol"
+        );
+        var algorithm = RequireString(
+            entryObject: entryObject,
+            id: id,
+            field: "algorithm"
+        );
+        var sha256 = RequireString(
+            entryObject: entryObject,
+            id: id,
+            field: "sha256"
+        );
+        var basis = ReadStringArray(
+            entryObject: entryObject,
+            id: id,
+            field: "basis"
+        );
+        var dependencies = ReadStringArray(
+            entryObject: entryObject,
+            id: id,
+            field: "dependencies"
+        );
+        var laws = ReadStringArray(
+            entryObject: entryObject,
+            id: id,
+            field: "laws"
+        );
 
-        if (!string.Equals(a: algorithm, b: TokenAlgorithm, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: algorithm,
+            b: TokenAlgorithm,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new FormatException(message: $"VerifiedCode.json entry '{id}' records algorithm '{algorithm}', which nothing here implements; the only fingerprint this analyzer can recompute is '{TokenAlgorithm}'.");
         }
 
@@ -133,13 +192,29 @@ internal static class VerifiedCodeManifest {
             throw new FormatException(message: $"VerifiedCode.json entry '{id}' records symbol '{symbol}', which is not a documentation-comment id, so the entry names no declaration.");
         }
 
-        if (!qualifiedName.StartsWith(value: $"{assembly}.", comparisonType: StringComparison.Ordinal)) {
+        if (!qualifiedName.StartsWith(
+            value: $"{assembly}.",
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new FormatException(message: $"VerifiedCode.json entry '{id}' records symbol '{symbol}' against assembly '{assembly}', but that symbol does not name a member of '{assembly}'; an entry whose recorded owner and recorded symbol disagree is swept by no compilation.");
         }
 
-        CheckDependencies(id: id, assembly: assembly, dependencies: dependencies);
+        CheckDependencies(
+            id: id,
+            assembly: assembly,
+            dependencies: dependencies
+        );
 
-        return new VerifiedCodeManifestEntry(Id: id, Assembly: assembly, Symbol: symbol, Algorithm: algorithm, Sha256: sha256, Basis: basis, Dependencies: dependencies, Laws: laws);
+        return new VerifiedCodeManifestEntry(
+            Id: id,
+            Assembly: assembly,
+            Symbol: symbol,
+            Algorithm: algorithm,
+            Sha256: sha256,
+            Basis: basis,
+            Dependencies: dependencies,
+            Laws: laws
+        );
     }
 
     /// <summary>
@@ -157,7 +232,10 @@ internal static class VerifiedCodeManifest {
                 throw new FormatException(message: $"VerifiedCode.json entry '{id}' records dependency '{dependency}', which is not a documentation-comment id, so the entry names no declaration to seal alongside its own.");
             }
 
-            if (!qualifiedName.StartsWith(value: $"{assembly}.", comparisonType: StringComparison.Ordinal)) {
+            if (!qualifiedName.StartsWith(
+                value: $"{assembly}.",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 throw new FormatException(message: $"VerifiedCode.json entry '{id}' records dependency '{dependency}' against assembly '{assembly}', but that symbol does not name a member of '{assembly}'; only the owning compilation walks this entry, and it can only walk its own source.");
             }
 
@@ -169,7 +247,11 @@ internal static class VerifiedCodeManifest {
 
     /// <summary>Strips a documentation-comment id's <c>M:</c>/<c>T:</c>/<c>P:</c> kind prefix, or refuses text that carries none.</summary>
     private static string? QualifiedName(string symbol) {
-        if ((symbol.Length < 3) || (symbol[1] != ':') || ("NTFMPE!".IndexOf(value: symbol[0]) < 0)) {
+        if (
+            (symbol.Length < 3) ||
+            (symbol[1] != ':') ||
+            ("NTFMPE!".IndexOf(value: symbol[0]) < 0)
+        ) {
             return null;
         }
 
@@ -201,11 +283,20 @@ internal static class VerifiedCodeManifest {
             _ => value.ToString(),
         } ?? "null");
     private static string RequireString(Dictionary<string, object?> entryObject, string id, string field) =>
-        ((entryObject.TryGetValue(key: field, value: out var raw) && (raw is string text))
-            ? text
-            : throw new FormatException(message: $"VerifiedCode.json entry '{id}' is missing a string '{field}' member."));
+        ((entryObject.TryGetValue(
+        key: field,
+        value: out var raw
+    ) && (raw is string text))
+        ? text
+        : throw new FormatException(message: $"VerifiedCode.json entry '{id}' is missing a string '{field}' member."));
     private static IReadOnlyList<string> ReadStringArray(Dictionary<string, object?> entryObject, string id, string field) {
-        if (!entryObject.TryGetValue(key: field, value: out var raw) || (raw is not List<object?> items)) {
+        if (
+            !entryObject.TryGetValue(
+            key: field,
+            value: out var raw
+        ) ||
+            (raw is not List<object?> items)
+        ) {
             throw new FormatException(message: $"VerifiedCode.json entry '{id}' is missing an array '{field}' member.");
         }
 

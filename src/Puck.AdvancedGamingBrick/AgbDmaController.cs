@@ -48,7 +48,12 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             return;
         }
 
-        if (!m_active[0] && !m_active[1] && !m_active[2] && !m_active[3]) {
+        if (
+            !m_active[0] &&
+            !m_active[1] &&
+            !m_active[2] &&
+            !m_active[3]
+        ) {
             return;
         }
 
@@ -66,7 +71,9 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             8u => 0,
             // The control halfword (CNT_H) masks its unused low bits to zero; the game-pak DRQ bit (11) exists
             // only on channel 3.
-            10u => (ushort)(m_control[channel] & ((channel == 3) ? 0xFFE0u : 0xF7E0u)),
+            10u => (ushort)(m_control[channel] & ((channel == 3)
+            ? 0xFFE0u
+            : 0xF7E0u)),
             _ => 0,
         };
     }
@@ -98,28 +105,44 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
                 break;
             default: // 10: control
-                WriteControl(channel: channel, value: value, bus: bus);
+                WriteControl(
+                    channel: channel,
+                    value: value,
+                    bus: bus
+                );
 
                 break;
         }
     }
 
     /// <inheritdoc/>
-    public void OnVBlank(IAgbBus bus) => ActivateTimed(timing: TimingVBlank, bus: bus);
+    public void OnVBlank(IAgbBus bus) => ActivateTimed(
+        timing: TimingVBlank,
+        bus: bus
+    );
 
     /// <inheritdoc/>
-    public void OnHBlank(IAgbBus bus) => ActivateTimed(timing: TimingHBlank, bus: bus);
+    public void OnHBlank(IAgbBus bus) => ActivateTimed(
+        timing: TimingHBlank,
+        bus: bus
+    );
 
     /// <inheritdoc/>
     public void OnFifo(int fifo, IAgbBus bus) {
-        var fifoDestination = ((fifo == 0) ? 0x040000A0u : 0x040000A4u);
+        var fifoDestination = ((fifo == 0)
+            ? 0x040000A0u
+            : 0x040000A4u);
 
         var stall = bus.BeginDmaStall();
 
         for (var channel = 1; (channel <= 2); ++channel) {
             var control = m_control[channel];
 
-            if (((control & 0x8000) == 0) || (((control >> 12) & 0x3) != 3) || (m_destinationLatch[channel] != (fifoDestination & DestinationMask(channel: channel)))) {
+            if (
+                ((control & 0x8000) == 0) ||
+                (((control >> 12) & 0x3) != 3) ||
+                (m_destinationLatch[channel] != (fifoDestination & DestinationMask(channel: channel)))
+            ) {
                 continue;
             }
 
@@ -127,8 +150,19 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
             for (var i = 0; (i < 4); ++i) {
                 // Word transfers force-align the internal source address, like the main transfer loop.
-                bus.Write32(address: fifoDestination, value: bus.Read32(address: m_sourceLatch[channel] & ~3u, access: BusAccessType.Sequential), access: BusAccessType.Sequential);
-                m_sourceLatch[channel] = Step(address: m_sourceLatch[channel], control: sourceControl, unit: 4u);
+                bus.Write32(
+                    address: fifoDestination,
+                    value: bus.Read32(
+                        address: m_sourceLatch[channel] & ~3u,
+                        access: BusAccessType.Sequential
+                    ),
+                    access: BusAccessType.Sequential
+                );
+                m_sourceLatch[channel] = Step(
+                    address: m_sourceLatch[channel],
+                    control: sourceControl,
+                    unit: 4u
+                );
             }
 
             if ((control & 0x4000) != 0) {
@@ -143,7 +177,10 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     public void OnVideoCapture(IAgbBus bus) {
         _ = bus;
 
-        if (((m_control[3] & 0x8000) != 0) && (((m_control[3] >> 12) & 0x3) == 3)) {
+        if (
+            ((m_control[3] & 0x8000) != 0) &&
+            (((m_control[3] >> 12) & 0x3) == 3)
+        ) {
             // Mark DMA3 pending for this video-capture scanline; the bus runs it at the CPU's next access. The word
             // count is not re-latched here — it was captured at enable and is reloaded per scanline by the repeat
             // path in CompleteChannel.
@@ -153,7 +190,10 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
     /// <inheritdoc/>
     public void OnVideoCaptureEnd() {
-        if (((m_control[3] & 0x8000) != 0) && (((m_control[3] >> 12) & 0x3) == 3)) {
+        if (
+            ((m_control[3] & 0x8000) != 0) &&
+            (((m_control[3] >> 12) & 0x3) == 3)
+        ) {
             m_control[3] &= unchecked((ushort)~0x8000);
             m_active[3] = false;
         }
@@ -164,7 +204,10 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
         m_control[channel] = value;
 
-        if (wasEnabled || ((value & 0x8000) == 0)) {
+        if (
+            wasEnabled ||
+            ((value & 0x8000) == 0)
+        ) {
             return;
         }
 
@@ -188,15 +231,22 @@ public sealed partial class AgbDmaController : IAgbDmaController {
         _ = bus;
 
         for (var ch = 0; (ch < 4); ++ch) {
-            if (((m_control[ch] & 0x8000) != 0) && (((m_control[ch] >> 12) & 0x3) == timing)) {
+            if (
+                ((m_control[ch] & 0x8000) != 0) &&
+                (((m_control[ch] >> 12) & 0x3) == timing)
+            ) {
                 m_active[ch] = true;
             }
         }
     }
     private void ActivateChannel(int channel) {
-        var maximum = ((channel == 3) ? 0x10000u : 0x4000u);
+        var maximum = ((channel == 3)
+            ? 0x10000u
+            : 0x4000u);
 
-        m_remaining[channel] = ((m_count[channel] == 0u) ? maximum : m_count[channel]);
+        m_remaining[channel] = ((m_count[channel] == 0u)
+            ? maximum
+            : m_count[channel]);
     }
     private void RunDmaLoop(IAgbBus bus) {
         if (m_running) {
@@ -226,10 +276,14 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
             var control = m_control[ch];
             var word = ((control & 0x400) != 0);
-            var unit = (word ? 4u : 2u);
+            var unit = (word
+                ? 4u
+                : 2u);
             var sourceControl = (control >> 7) & 0x3;
             var destinationControl = (control >> 5) & 0x3;
-            var access = ((ch != m_activeChannel) ? BusAccessType.NonSequential : BusAccessType.Sequential);
+            var access = ((ch != m_activeChannel)
+                ? BusAccessType.NonSequential
+                : BusAccessType.Sequential);
 
             m_activeChannel = ch;
 
@@ -243,9 +297,15 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             // previous latch in place (open bus). A halfword read mirrors into both halves of the latch.
             if (source >= 0x02000000u) {
                 if (word) {
-                    m_dataLatch[ch] = bus.Read32(address: source, access: access);
+                    m_dataLatch[ch] = bus.Read32(
+                        address: source,
+                        access: access
+                    );
                 } else {
-                    var half = bus.Read16(address: source, access: access) & 0xFFFFu;
+                    var half = bus.Read16(
+                        address: source,
+                        access: access
+                    ) & 0xFFFFu;
 
                     m_dataLatch[ch] = half | (half << 16);
                 }
@@ -254,16 +314,32 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             bus.ProcessEvents();
 
             if (word) {
-                bus.Write32(address: destination, value: m_dataLatch[ch], access: access);
+                bus.Write32(
+                    address: destination,
+                    value: m_dataLatch[ch],
+                    access: access
+                );
             } else {
                 // 16-bit transfer: the destination's bit 1 selects which mirrored half of the latch drives the bus.
                 var half = (m_dataLatch[ch] >> (int)((destination & 2u) * 8u));
 
-                bus.Write16(address: destination, value: (ushort)half, access: access);
+                bus.Write16(
+                    address: destination,
+                    value: (ushort)half,
+                    access: access
+                );
             }
 
-            m_sourceLatch[ch] = Step(address: m_sourceLatch[ch], control: sourceControl, unit: unit);
-            m_destinationLatch[ch] = Step(address: m_destinationLatch[ch], control: destinationControl, unit: unit);
+            m_sourceLatch[ch] = Step(
+                address: m_sourceLatch[ch],
+                control: sourceControl,
+                unit: unit
+            );
+            m_destinationLatch[ch] = Step(
+                address: m_destinationLatch[ch],
+                control: destinationControl,
+                unit: unit
+            );
 
             --m_remaining[ch];
 

@@ -21,7 +21,12 @@ public static class AddonChannelTableReader {
 
         error = "";
 
-        if ((count < 1) || (count > AddonAbi.MaxChannels) || (count > destination.Length) || ((count * AddonAbi.ChannelDescriptorBytes) > source.Length)) {
+        if (
+            (count < 1) ||
+            (count > AddonAbi.MaxChannels) ||
+            (count > destination.Length) ||
+            ((count * AddonAbi.ChannelDescriptorBytes) > source.Length)
+        ) {
             error = $"channel count {count} out of range [1, {AddonAbi.MaxChannels}] or table truncated";
             return false;
         }
@@ -32,7 +37,10 @@ public static class AddonChannelTableReader {
         var responseDeclared = false;
 
         for (var index = 0; (index < count); ++index) {
-            var entry = source.Slice(start: (index * AddonAbi.ChannelDescriptorBytes), length: AddonAbi.ChannelDescriptorBytes);
+            var entry = source.Slice(
+                start: (index * AddonAbi.ChannelDescriptorBytes),
+                length: AddonAbi.ChannelDescriptorBytes
+            );
             var kindByte = entry[AddonAbi.ChannelDescriptorOffsets.Kind];
             var kind = (AddonChannelKind)kindByte;
 
@@ -61,7 +69,10 @@ public static class AddonChannelTableReader {
 
             switch (kind) {
                 case AddonChannelKind.Input:
-                    if ((verbCount < 1) || (verbCount > AddonAbi.MaxChannelNames)) {
+                    if (
+                        (verbCount < 1) ||
+                        (verbCount > AddonAbi.MaxChannelNames)
+                    ) {
                         error = $"descriptor {index}: input VerbCount {verbCount} out of range [1, {AddonAbi.MaxChannelNames}]";
                         return false;
                     }
@@ -73,7 +84,11 @@ public static class AddonChannelTableReader {
                     // A guest may speak a PREFIX of the pinned request vocabulary — growing the vocabulary later
                     // must not refuse a guest built against fewer verbs, or "growing verbs is data, not a break"
                     // would be false. The decode-side range check runs against the DECLARED count.
-                    if ((verbTablePtr != 0) || (verbCount < 1) || (verbCount > AddonAbi.RequestVerbs.Count)) {
+                    if (
+                        (verbTablePtr != 0) ||
+                        (verbCount < 1) ||
+                        (verbCount > AddonAbi.RequestVerbs.Count)
+                    ) {
                         error = $"descriptor {index}: request channel must declare VerbTablePtr = 0 and VerbCount in [1, {AddonAbi.RequestVerbs.Count}]";
                         return false;
                     }
@@ -82,7 +97,10 @@ public static class AddonChannelTableReader {
                     break;
 
                 case AddonChannelKind.Response:
-                    if ((verbCount != 0) || (verbTablePtr != 0)) {
+                    if (
+                        (verbCount != 0) ||
+                        (verbTablePtr != 0)
+                    ) {
                         error = $"descriptor {index}: response channel must declare VerbCount = 0 and VerbTablePtr = 0";
                         return false;
                     }
@@ -105,7 +123,10 @@ public static class AddonChannelTableReader {
 
         // Grant disclosures ride the response channel; an Input channel with no request/response pair could
         // never learn a handle to drive through and would be provably inert.
-        if (inputDeclared && !requestDeclared) {
+        if (
+            inputDeclared &&
+            !requestDeclared
+        ) {
             error = "an input channel requires the request/response pair — otherwise no handle can ever reach it";
             return false;
         }

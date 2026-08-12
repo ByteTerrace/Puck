@@ -125,14 +125,20 @@ public readonly record struct Tick(UFixedQ4816 Value)
     /// <returns>Whichever instant is earlier.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static Tick Min(Tick left, Tick right) =>
-        new(Value: UFixedQ4816.Min(x: left.Value, y: right.Value));
+        new(Value: UFixedQ4816.Min(
+        x: left.Value,
+        y: right.Value
+    ));
     /// <summary>Returns the later of two instants.</summary>
     /// <param name="left">The first instant.</param>
     /// <param name="right">The second instant.</param>
     /// <returns>Whichever instant is later.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static Tick Max(Tick left, Tick right) =>
-        new(Value: UFixedQ4816.Max(x: left.Value, y: right.Value));
+        new(Value: UFixedQ4816.Max(
+        x: left.Value,
+        y: right.Value
+    ));
 
     /// <summary>Counts how many whole fundamental ticks of <paramref name="resolution"/> have elapsed at this instant,
     /// flooring any finer sub-cycle remainder.</summary>
@@ -151,7 +157,10 @@ public readonly record struct Tick(UFixedQ4816 Value)
         if (obj is null) { return 1; }
         if (obj is Tick other) { return CompareTo(other: other); }
 
-        throw new ArgumentException(message: $"Object must be of type {nameof(Tick)}.", paramName: nameof(obj));
+        throw new ArgumentException(
+            message: $"Object must be of type {nameof(Tick)}.",
+            paramName: nameof(obj)
+        );
     }
     /// <summary>Compares this instant with another and indicates their relative order.</summary>
     /// <param name="other">The instant to compare with.</param>

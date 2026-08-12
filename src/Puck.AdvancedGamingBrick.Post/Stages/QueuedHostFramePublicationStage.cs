@@ -21,10 +21,15 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage {
     public PostStageOutcome Run(PostContext context) {
         var bios = context.BiosImage.ToArray();
         var result = QueuedHostContractProbe.VerifyFramePublication(
-            withContent: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios),
+            withContent: () => new AdvancedMachineHost(
+                cartridgeRom: SyntheticRom.Create(),
+                biosImage: bios
+            ),
             empty: () => new AdvancedMachineHost()
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

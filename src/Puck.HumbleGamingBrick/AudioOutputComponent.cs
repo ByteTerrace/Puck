@@ -84,19 +84,27 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     /// <inheritdoc/>
     public void Configure(int sampleRate) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: sampleRate);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: sampleRate, other: DotsPerSecond);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: sampleRate,
+            other: DotsPerSecond
+        );
 
         m_accumulator = 0;
         m_capacityFrames = sampleRate;
         m_frameCount = 0;
         m_readFrame = 0;
-        m_ring = ((sampleRate > 0) ? new short[(sampleRate * 2)] : []);
+        m_ring = ((sampleRate > 0)
+            ? new short[(sampleRate * 2)]
+            : []);
         m_sampleRate = sampleRate;
         m_writeFrame = 0;
     }
     /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) {
-        var frames = Math.Min(val1: (destination.Length / 2), val2: m_frameCount);
+        var frames = Math.Min(
+            val1: (destination.Length / 2),
+            val2: m_frameCount
+        );
 
         for (var frame = 0; (frame < frames); ++frame) {
             var index = (m_readFrame * 2);
@@ -119,7 +127,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         // One CPU T-cycle is a whole dot at normal speed and half a dot under double speed; weighting the addend by
         // the T-cycle's half-dot width keeps the accumulator an exact function of real emulated time, so the output
         // rate is speed-invariant and a mid-run speed switch carries no drift or discontinuity.
-        m_accumulator += (m_key1.IsDoubleSpeed ? m_sampleRate : (m_sampleRate << 1));
+        m_accumulator += (m_key1.IsDoubleSpeed
+            ? m_sampleRate
+            : (m_sampleRate << 1));
 
         while (m_accumulator >= HalfDotsPerSecond) {
             m_accumulator -= HalfDotsPerSecond;
@@ -157,7 +167,10 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         // Powered off, every DAC is off and the register file is cleared: the output is true silence, not the
         // recentered flat level a powered-but-silent mix produces.
         if ((m_apu.ReadRegister(address: MemoryMap.AudioMasterControl) & MasterPower) == 0) {
-            PushFrame(left: 0, right: 0);
+            PushFrame(
+                left: 0,
+                right: 0
+            );
 
             return;
         }
@@ -184,8 +197,14 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         if ((nr51 & 0x08) != 0) { right += channel4; }
 
         PushFrame(
-            left: MixSide(gatedSum: left, volume: (nr50 >> 4) & 0x07),
-            right: MixSide(gatedSum: right, volume: nr50 & 0x07)
+            left: MixSide(
+                gatedSum: left,
+                volume: (nr50 >> 4) & 0x07
+            ),
+            right: MixSide(
+                gatedSum: right,
+                volume: nr50 & 0x07
+            )
         );
     }
     // Append one frame to the ring; when full, the oldest frame is dropped so the buffer always holds the newest

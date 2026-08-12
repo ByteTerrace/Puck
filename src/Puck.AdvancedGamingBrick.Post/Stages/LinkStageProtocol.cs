@@ -51,7 +51,6 @@ internal static class LinkStageProtocol {
         return null;
     }
 }
-
 internal readonly record struct LinkSideVerdict(
     uint IrqCount,
     uint Marker,

@@ -60,46 +60,80 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         var first = RunLinkedGame(rom: rom);
 
-        if (Verify(result: first, title: title) is { } failure) {
+        if (Verify(
+            result: first,
+            title: title
+        ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
 
         var second = RunLinkedGame(rom: rom);
 
         if (!first.FirstState.ContentEquals(other: second.FirstState)) {
-            return PostStageOutcome.Fail(detail: $"the Cgb console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.FirstState, b: second.FirstState)}");
+            return PostStageOutcome.Fail(detail: $"the Cgb console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.FirstState,
+                b: second.FirstState
+            )}");
         }
 
         if (!first.SecondState.ContentEquals(other: second.SecondState)) {
-            return PostStageOutcome.Fail(detail: $"the Agb console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(a: first.SecondState, b: second.SecondState)}");
+            return PostStageOutcome.Fail(detail: $"the Agb console's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.SecondState,
+                b: second.SecondState
+            )}");
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"{title} cgb↔agb over {Frames} frames: cgb sent {first.First.MasterSends}/completed {first.First.Completions}, agb sent {first.Second.MasterSends}/completed {first.Second.Completions} serial transfers (traffic 0x{first.First.TrafficHash:X16}/0x{first.Second.TrafficHash:X16}), replay-identical across two runs ({first.FirstState.Size}+{first.SecondState.Size} state bytes)"
-        );
+        return PostStageOutcome.Pass(detail: $"{title} cgb↔agb over {Frames} frames: cgb sent {first.First.MasterSends}/completed {first.First.Completions}, agb sent {first.Second.MasterSends}/completed {first.Second.Completions} serial transfers (traffic 0x{first.First.TrafficHash:X16}/0x{first.Second.TrafficHash:X16}), replay-identical across two runs ({first.FirstState.Size}+{first.SecondState.Size} state bytes)");
     }
 
     // One complete linked session from fresh machines: a Cgb console and an Agb console booting the same cartridge,
     // both walking the frozen menu script to the handshake. Self-contained so the determinism leg repeats it exactly.
     private static LinkReplayResult RunLinkedGame(byte[] rom) {
-        using var cgb = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
-        using var agb = PostMachine.Build(model: ConsoleModel.Agb, rom: rom);
+        using var cgb = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
+        using var agb = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
 
-        return LinkReplay.Run(first: cgb, firstScript: Script(), second: agb, secondScript: Script(), frames: Frames);
+        return LinkReplay.Run(
+            first: cgb,
+            firstScript: Script(),
+            second: agb,
+            secondScript: Script(),
+            frames: Frames
+        );
     }
 
     // Judges the traffic evidence of the first run; null means the handshake produced real, non-idle serial traffic on
     // both sides.
     private static string? Verify(LinkReplayResult result, string title) {
-        if ((result.First.Completions == 0) || (result.Second.Completions == 0)) {
+        if (
+            (result.First.Completions == 0) ||
+            (result.Second.Completions == 0)
+        ) {
             return $"{title} never reached a two-way link handshake — cgb completed {result.First.Completions} transfers, agb {result.Second.Completions} (expected both > 0)";
         }
 
-        if (IsIdle(hash: result.First.TrafficHash, completions: result.First.Completions) || IsIdle(hash: result.Second.TrafficHash, completions: result.Second.Completions)) {
+        if (
+            IsIdle(
+            hash: result.First.TrafficHash,
+            completions: result.First.Completions
+        ) ||
+            IsIdle(
+            hash: result.Second.TrafficHash,
+            completions: result.Second.Completions
+        )
+        ) {
             return $"{title}'s link exchanged only idle 0xFF bytes — no real traffic crossed the cable (cgb 0x{result.First.TrafficHash:X16}, agb 0x{result.Second.TrafficHash:X16})";
         }
 
-        if ((result.First.TrafficHash != ExpectedCgbTrafficHash) || (result.Second.TrafficHash != ExpectedAgbTrafficHash)) {
+        if (
+            (result.First.TrafficHash != ExpectedCgbTrafficHash) ||
+            (result.Second.TrafficHash != ExpectedAgbTrafficHash)
+        ) {
             return $"{title}'s link traffic drifted from the pinned floor — cgb 0x{result.First.TrafficHash:X16} (expected 0x{ExpectedCgbTrafficHash:X16}), agb 0x{result.Second.TrafficHash:X16} (expected 0x{ExpectedAgbTrafficHash:X16}); if a core change legitimately moved this, re-capture the floor";
         }
 
@@ -125,23 +159,36 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // exchanging serial bytes continuously. Each keyframe presses (tap) then releases six frames later.
     private static LinkInputScript Script() =>
         new(
-            (100, JoypadButtons.Start), (106, JoypadButtons.None),
-            (170, JoypadButtons.Start), (176, JoypadButtons.None),
-            (240, JoypadButtons.Start), (246, JoypadButtons.None),
-            (310, JoypadButtons.Start), (316, JoypadButtons.None),
-            (380, JoypadButtons.Start), (386, JoypadButtons.None),
-            (480, JoypadButtons.Right), (486, JoypadButtons.None),
-            (540, JoypadButtons.Right), (546, JoypadButtons.None),
-            (600, JoypadButtons.A), (606, JoypadButtons.None)
-        );
+        (100, JoypadButtons.Start),
+        (106, JoypadButtons.None),
+        (170, JoypadButtons.Start),
+        (176, JoypadButtons.None),
+        (240, JoypadButtons.Start),
+        (246, JoypadButtons.None),
+        (310, JoypadButtons.Start),
+        (316, JoypadButtons.None),
+        (380, JoypadButtons.Start),
+        (386, JoypadButtons.None),
+        (480, JoypadButtons.Right),
+        (486, JoypadButtons.None),
+        (540, JoypadButtons.Right),
+        (546, JoypadButtons.None),
+        (600, JoypadButtons.A),
+        (606, JoypadButtons.None)
+    );
     private static string? ResolveRomPath() {
         var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
 
-        if (!string.IsNullOrEmpty(value: fromEnvironment) && File.Exists(path: fromEnvironment)) {
+        if (
+            !string.IsNullOrEmpty(value: fromEnvironment) &&
+            File.Exists(path: fromEnvironment)
+        ) {
             return fromEnvironment;
         }
 
-        return (File.Exists(path: RomFallbackPath) ? RomFallbackPath : null);
+        return (File.Exists(path: RomFallbackPath)
+            ? RomFallbackPath
+            : null);
     }
     private static string CartridgeTitle(byte[] rom) {
         var builder = new System.Text.StringBuilder(capacity: 11);
@@ -149,7 +196,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
         for (var offset = 0x0134; (offset < 0x013F); ++offset) {
             var character = rom[offset];
 
-            if ((character == 0) || (character >= 0x80)) {
+            if (
+                (character == 0) ||
+                (character >= 0x80)
+            ) {
                 break;
             }
 

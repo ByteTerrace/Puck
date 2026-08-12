@@ -37,12 +37,21 @@ public sealed class OverlayGlyphAtlasSet {
     /// <exception cref="ArgumentException"><paramref name="fontsDirectory"/> is <see langword="null"/>, empty, or whitespace.</exception>
     public OverlayGlyphAtlasSet(string fontsDirectory, Func<FontAtlas?>? monoFallback = null) {
         if (string.IsNullOrWhiteSpace(value: fontsDirectory)) {
-            throw new ArgumentException(message: "A fonts directory must be provided.", paramName: nameof(fontsDirectory));
+            throw new ArgumentException(
+                message: "A fonts directory must be provided.",
+                paramName: nameof(fontsDirectory)
+            );
         }
 
         m_fontsDirectory = fontsDirectory;
-        m_combinedImage = new Lazy<FontAtlasImageData?>(valueFactory: TryDecodeCombinedImage, isThreadSafe: true);
-        m_monoFont = new Lazy<FontAtlas?>(valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)), isThreadSafe: true);
+        m_combinedImage = new Lazy<FontAtlasImageData?>(
+            valueFactory: TryDecodeCombinedImage,
+            isThreadSafe: true
+        );
+        m_monoFont = new Lazy<FontAtlas?>(
+            valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)),
+            isThreadSafe: true
+        );
     }
 
     /// <summary>Gets a value indicating whether the mono atlas resolved, from either the pre-baked file or the
@@ -65,10 +74,19 @@ public sealed class OverlayGlyphAtlasSet {
     /// <remarks>A cold SDF bake is dramatically slower and far heavier than loading the prepacked artifact; warm
     /// startup uses the committed pack, and the loaded pack is bit-identical to the built one.</remarks>
     public OverlayGlyphSdfPack? LoadOverlayPack() {
-        var imagePath = Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName);
-        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: $"{MonoFontName}.json");
+        var imagePath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: CombinedImageName
+        );
+        var jsonPath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: $"{MonoFontName}.json"
+        );
 
-        if (!File.Exists(path: imagePath) || !File.Exists(path: jsonPath)) {
+        if (
+            !File.Exists(path: imagePath) ||
+            !File.Exists(path: jsonPath)
+        ) {
             // No committed atlas: the ordinary path (which may resolve a caller-supplied fallback) decides loudly.
             return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
         }
@@ -78,25 +96,42 @@ public sealed class OverlayGlyphAtlasSet {
 
         try {
             using (var image = File.OpenRead(path: imagePath)) {
-                _ = SHA256.HashData(source: image, destination: pngHash);
+                _ = SHA256.HashData(
+                    source: image,
+                    destination: pngHash
+                );
             }
 
-            _ = SHA256.HashData(source: File.ReadAllBytes(path: jsonPath), destination: jsonHash);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            _ = SHA256.HashData(
+                source: File.ReadAllBytes(path: jsonPath),
+                destination: jsonHash
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] could not key the overlay glyph pack ({exception.Message}); building it from the atlas.");
 
             return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
         }
 
-        var packPath = Path.Combine(path1: m_fontsDirectory, path2: OverlayPackName);
+        var packPath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: OverlayPackName
+        );
 
-        if (OverlayGlyphSdfPack.TryReadPack(path: packPath, pngHash: pngHash, jsonHash: jsonHash) is { } cached) {
+        if (OverlayGlyphSdfPack.TryReadPack(
+            path: packPath,
+            pngHash: pngHash,
+            jsonHash: jsonHash
+        ) is { } cached) {
             return cached;
         }
 
         var built = OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
 
-        built?.WritePack(path: packPath, pngHash: pngHash, jsonHash: jsonHash);
+        built?.WritePack(
+            path: packPath,
+            pngHash: pngHash,
+            jsonHash: jsonHash
+        );
 
         return built;
     }
@@ -116,9 +151,15 @@ public sealed class OverlayGlyphAtlasSet {
     // FontAtlasImageData instance: every consumer (the overlay cell pack, a future decal bake) reads the pixels, and
     // one image means one upload.
     private FontAtlas? TryLoadPrebaked(string name) {
-        var jsonPath = Path.Combine(path1: m_fontsDirectory, path2: $"{name}.json");
+        var jsonPath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: $"{name}.json"
+        );
 
-        if ((!File.Exists(path: jsonPath)) || (m_combinedImage.Value is not { } imageData)) {
+        if (
+            (!File.Exists(path: jsonPath)) ||
+            (m_combinedImage.Value is not { } imageData)
+        ) {
             return null;
         }
 
@@ -126,7 +167,10 @@ public sealed class OverlayGlyphAtlasSet {
             return new FontAtlasLoader().Load(
                 atlasIdentifier: jsonPath,
                 imageData: imageData,
-                imageIdentifier: Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName),
+                imageIdentifier: Path.Combine(
+                    path1: m_fontsDirectory,
+                    path2: CombinedImageName
+                ),
                 jsonContent: File.ReadAllBytes(path: jsonPath)
             );
         } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
@@ -136,14 +180,20 @@ public sealed class OverlayGlyphAtlasSet {
         }
     }
     private FontAtlasImageData? TryDecodeCombinedImage() {
-        var imagePath = Path.Combine(path1: m_fontsDirectory, path2: CombinedImageName);
+        var imagePath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: CombinedImageName
+        );
 
         if (!File.Exists(path: imagePath)) {
             return null;
         }
 
         try {
-            return new FontAtlasImageDataLoader().Load(imageIdentifier: imagePath, pngBytes: File.ReadAllBytes(path: imagePath));
+            return new FontAtlasImageDataLoader().Load(
+                imageIdentifier: imagePath,
+                pngBytes: File.ReadAllBytes(path: imagePath)
+            );
         } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] combined font image '{imagePath}' failed to decode ({exception.Message}).");
 

@@ -25,8 +25,15 @@ public readonly record struct DisplaySignalTiming {
     /// <summary>Creates a known active presentation cadence.</summary>
     /// <param name="hertz">The active physical vertical scan frequency, in Hz.</param>
     public DisplaySignalTiming(double hertz) {
-        if (!double.IsFinite(d: hertz) || (hertz <= 0.0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(hertz), actualValue: hertz, message: "A display signal frequency must be positive and finite.");
+        if (
+            !double.IsFinite(d: hertz) ||
+            (hertz <= 0.0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(hertz),
+                actualValue: hertz,
+                message: "A display signal frequency must be positive and finite."
+            );
         }
 
         Hertz = hertz;
@@ -76,15 +83,26 @@ public readonly record struct VariableRefreshRange {
     /// video mode's signal rate as the maximum.
     /// </param>
     public VariableRefreshRange(double minimumHertz, double? maximumHertz) {
-        if (!double.IsFinite(d: minimumHertz) || (minimumHertz <= 0.0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(minimumHertz), actualValue: minimumHertz, message: "A VRR minimum must be positive and finite.");
+        if (
+            !double.IsFinite(d: minimumHertz) ||
+            (minimumHertz <= 0.0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(minimumHertz),
+                actualValue: minimumHertz,
+                message: "A VRR minimum must be positive and finite."
+            );
         }
 
         if (
             (maximumHertz is { } maximum) &&
             (!double.IsFinite(d: maximum) || (maximum <= minimumHertz))
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(maximumHertz), actualValue: maximumHertz, message: "A VRR maximum must be finite and greater than its minimum.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(maximumHertz),
+                actualValue: maximumHertz,
+                message: "A VRR maximum must be finite and greater than its minimum."
+            );
         }
 
         MinimumHertz = minimumHertz;
@@ -121,12 +139,19 @@ public readonly record struct VariableRefreshCapabilities {
     /// <param name="source">The recognized declaration or declarations that supplied the interval.</param>
     /// <returns>Validated supported capabilities.</returns>
     public static VariableRefreshCapabilities CreateSupported(VariableRefreshRange range, VariableRefreshSource source) {
-        const VariableRefreshSource knownSources = VariableRefreshSource.DisplayIdAdaptiveSync |
+        const VariableRefreshSource KnownSources = VariableRefreshSource.DisplayIdAdaptiveSync |
             VariableRefreshSource.HdmiForum |
             VariableRefreshSource.AmdFreeSync;
 
-        if ((source == VariableRefreshSource.None) || ((source & ~knownSources) != 0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(source), actualValue: source, message: "Supported VRR capabilities require an explicit source.");
+        if (
+            (source == VariableRefreshSource.None) ||
+            ((source & ~KnownSources) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(source),
+                actualValue: source,
+                message: "Supported VRR capabilities require an explicit source."
+            );
         }
 
         if (
@@ -134,7 +159,11 @@ public readonly record struct VariableRefreshCapabilities {
             (range.MinimumHertz <= 0.0) ||
             ((range.MaximumHertz is { } maximum) && (!double.IsFinite(d: maximum) || (maximum <= range.MinimumHertz)))
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(range), actualValue: range, message: "Supported VRR capabilities require a valid, positive-width interval.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(range),
+                actualValue: range,
+                message: "Supported VRR capabilities require a valid, positive-width interval."
+            );
         }
 
         return new VariableRefreshCapabilities(

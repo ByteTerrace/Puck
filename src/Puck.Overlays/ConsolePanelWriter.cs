@@ -22,7 +22,10 @@ public sealed class ConsolePanelWriter {
     private const string Title = "CONSOLE";
 
     static ConsolePanelWriter() {
-        System.Diagnostics.Debug.Assert(condition: (Title.Length == TitleChars), message: "ConsolePanelWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' ConsoleTextWords, which reads it) to match.");
+        System.Diagnostics.Debug.Assert(
+            condition: (Title.Length == TitleChars),
+            message: "ConsolePanelWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' ConsoleTextWords, which reads it) to match."
+        );
     }
 
     private readonly IConsolePanelSource m_source;
@@ -41,7 +44,10 @@ public sealed class ConsolePanelWriter {
     public void Emit(OverlayFrameBuilder builder) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        if (!m_source.TrySnapshot(frame: out var frame) || !frame.Visible) {
+        if (
+            !m_source.TrySnapshot(frame: out var frame) ||
+            !frame.Visible
+        ) {
             return;
         }
 
@@ -56,12 +62,30 @@ public sealed class ConsolePanelWriter {
         // panel's outer rect wraps the padded grid + title band.
         var availableWidth = ((builder.Width - (2f * margin)) - (2f * pad));
         var availableHeight = (((builder.Height * 0.55f) - bandHeight) - (2f * pad));
-        var cols = Math.Clamp(value: (int)(availableWidth / cellWidth), min: 8, max: MaxColumns);
-        var rows = Math.Clamp(value: (int)(availableHeight / cellHeight), min: 4, max: MaxRows);
+        var cols = Math.Clamp(
+            value: ((int)(availableWidth / cellWidth)),
+            min: 8,
+            max: MaxColumns
+        );
+        var rows = Math.Clamp(
+            value: ((int)(availableHeight / cellHeight)),
+            min: 4,
+            max: MaxRows
+        );
         var panelWidth = ((cols * cellWidth) + (2f * pad));
         var panelHeight = ((bandHeight + (2f * pad)) + (rows * cellHeight));
 
-        builder.WritePanel(alpha: 1f, bandHeight: bandHeight, h: panelHeight, ringRole: null, style: OverlayPanelStyle.Panel, titleBand: true, w: panelWidth, x: margin, y: margin);
+        builder.WritePanel(
+            alpha: 1f,
+            bandHeight: bandHeight,
+            h: panelHeight,
+            ringRole: null,
+            style: OverlayPanelStyle.Panel,
+            titleBand: true,
+            w: panelWidth,
+            x: margin,
+            y: margin
+        );
         builder.WriteText(
             alpha: 1f,
             cellHeight: microCell,
@@ -75,13 +99,19 @@ public sealed class ConsolePanelWriter {
         // Trailing history above the prompt row; the echoed input lines ("> ...") keep the sanctioned phosphor voice.
         var lines = frame.Lines;
         var historyRows = (rows - 1);
-        var firstShown = Math.Max(val1: 0, val2: (lines.Count - historyRows));
+        var firstShown = Math.Max(
+            val1: 0,
+            val2: (lines.Count - historyRows)
+        );
         var contentX = (margin + pad);
         var contentY = ((margin + bandHeight) + pad);
 
         for (var row = 0; ((row < historyRows) && ((firstShown + row) < lines.Count)); row++) {
             var line = lines[(firstShown + row)];
-            var isEcho = line.Text.StartsWith(value: PromptPrefix, comparisonType: StringComparison.Ordinal);
+            var isEcho = line.Text.StartsWith(
+                value: PromptPrefix,
+                comparisonType: StringComparison.Ordinal
+            );
 
             // A refused row takes the same danger hue the toast channel uses for a rejection, so the panel and the toast
             // agree on what a refusal looks like.
@@ -89,7 +119,11 @@ public sealed class ConsolePanelWriter {
                 alpha: 1f,
                 cellHeight: cellHeight,
                 maxChars: cols,
-                role: (line.Refused ? OverlayColorRole.Danger : (isEcho ? OverlayColorRole.Phosphor : OverlayColorRole.TextPrimary)),
+                role: (line.Refused
+                ? OverlayColorRole.Danger
+                : (isEcho
+                    ? OverlayColorRole.Phosphor
+                    : OverlayColorRole.TextPrimary)),
                 text: line.Text,
                 x: contentX,
                 y: (contentY + (row * cellHeight))
@@ -99,19 +133,41 @@ public sealed class ConsolePanelWriter {
         // The live prompt on the bottom row: the fixed prefix then the in-progress input.
         var promptY = (contentY + ((rows - 1) * cellHeight));
 
-        builder.WriteText(alpha: 1f, cellHeight: cellHeight, maxChars: cols, role: OverlayColorRole.Phosphor, text: PromptPrefix, x: contentX, y: promptY);
+        builder.WriteText(
+            alpha: 1f,
+            cellHeight: cellHeight,
+            maxChars: cols,
+            role: OverlayColorRole.Phosphor,
+            text: PromptPrefix,
+            x: contentX,
+            y: promptY
+        );
 
-        var inputX = (contentX + builder.TextWidth(chars: PromptPrefix.Length, cellHeight: cellHeight));
+        var inputX = (contentX + builder.TextWidth(
+            chars: PromptPrefix.Length,
+            cellHeight: cellHeight
+        ));
 
         if (frame.Selected) {
             // A subtle highlight behind the whole input line stands in for the caret glyph while Ctrl+A's
             // all-or-nothing selection is active — clamped to the remaining row width like the text run below.
             var highlightWidth = Math.Min(
-                val1: builder.TextWidth(chars: frame.Input.Length, cellHeight: cellHeight),
+                val1: builder.TextWidth(
+                    chars: frame.Input.Length,
+                    cellHeight: cellHeight
+                ),
                 val2: ((contentX + (cols * cellWidth)) - inputX)
             );
 
-            builder.WriteRect(alpha: 0.35f, h: cellHeight, radius: 0f, role: OverlayColorRole.TextDim, w: highlightWidth, x: inputX, y: promptY);
+            builder.WriteRect(
+                alpha: 0.35f,
+                h: cellHeight,
+                radius: 0f,
+                role: OverlayColorRole.TextDim,
+                w: highlightWidth,
+                x: inputX,
+                y: promptY
+            );
         }
 
         builder.WriteText(

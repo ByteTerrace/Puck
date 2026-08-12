@@ -34,7 +34,12 @@ internal sealed class AcceptanceRomStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var cases = RomCatalog.AcceptanceRoms(root: context.TestRomRoot, group: m_group, relativeDirectory: m_relativeDirectory, recurse: m_recurse);
+        var cases = RomCatalog.AcceptanceRoms(
+            root: context.TestRomRoot,
+            group: m_group,
+            relativeDirectory: m_relativeDirectory,
+            recurse: m_recurse
+        );
 
         if (cases.Count == 0) {
             return PostStageOutcome.Skip(detail: $"no ROMs under the on-disk acceptance/{m_relativeDirectory} (set PUCK_GB_TESTROMS)");
@@ -59,6 +64,9 @@ internal sealed class AcceptanceRomStage : IPostStage {
 
         return ((failures.Count == 0)
             ? PostStageOutcome.Pass(detail: $"{passed}/{cases.Count} passed")
-            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(separator: ", ", values: failures)}"));
+            : PostStageOutcome.Fail(detail: $"{passed}/{cases.Count} passed; failed: {string.Join(
+            separator: ", ",
+            values: failures
+        )}"));
     }
 }

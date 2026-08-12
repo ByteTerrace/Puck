@@ -13,8 +13,9 @@ namespace Puck.Carriage;
 /// same field order as <see cref="FixedLayoutCarriageCodec"/>:
 /// format version, domain, subject, algorithm, purpose, not-before, not-after, audience, sequence, payload
 /// kind, payload. A key binding payload is a 5-element array (target domain, target subject, target
-/// algorithm, target key-hash, public key SPKI); a sealed payload is a 4-element array (ephemeral SPKI,
-/// nonce, tag, ciphertext). Domain and key-hash fields are CBOR byte strings of exactly 32 raw bytes, not
+/// algorithm, target key-hash, public key SPKI); a sealed payload is an 8-element array (recipient domain,
+/// recipient subject, recipient sealing algorithm, recipient key-hash, ephemeral SPKI, nonce, tag,
+/// ciphertext). Domain and key-hash fields are CBOR byte strings of exactly 32 raw bytes, not
 /// hex text: the wire carries the fingerprint value rather than a rendering of it, and pinning the width
 /// is what stops one domain having several encodings (README.md, §2 and §15 row 3).
 /// </summary>
@@ -75,13 +76,13 @@ public sealed class CborCarriageCodec : ICarriageCodec {
         var signedPortion = EncodeSignedPortion(
             header: envelope.Header,
             payloadKind: envelope.PayloadKind,
-            payloadBytes: envelope.PayloadBytes.Span
+            payloadBytes: envelope.PayloadSpan
         );
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
         writer.WriteStartArray(definiteLength: 2);
         writer.WriteByteString(value: signedPortion);
-        writer.WriteByteString(value: envelope.Signature.Span);
+        writer.WriteByteString(value: envelope.SignatureSpan);
         writer.WriteEndArray();
 
         return writer.Encode();
@@ -89,6 +90,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
     /// <inheritdoc/>
     public SignedCarriageEnvelope DecodeEnvelope(ReadOnlySpan<byte> wire) {
+        if (wire.Length > CarriageResourceLimits.EnvelopeBytes) {
+            throw new FormatException(message: $"The carriage envelope is {wire.Length} bytes; v1 permits at most {CarriageResourceLimits.EnvelopeBytes} before parsing.");
+        }
+
         var source = wire.ToArray();
 
         return Decode(
@@ -215,9 +220,18 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
     /// <inheritdoc/>
     public byte[] EncodeSealedPayload(SealedPayload payload) {
+        SealedCarriage.ValidatePayloadStructure(payload: payload);
+
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-        writer.WriteStartArray(definiteLength: 4);
+        writer.WriteStartArray(definiteLength: 8);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.Domain));
+        WriteOptionalText(
+            writer: writer,
+            value: payload.RecipientId.Subject
+        );
+        writer.WriteTextString(value: payload.RecipientId.Algorithm);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.KeyHash));
         writer.WriteByteString(value: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span);
         writer.WriteByteString(value: payload.Nonce.Span);
         writer.WriteByteString(value: payload.Tag.Span);
@@ -241,9 +255,21 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
                 ExpectArrayLength(
                     reader: reader,
-                    expected: 4
+                    expected: 8
                 );
 
+                var recipientId = new KeyId {
+                    Domain = ReadFingerprint(
+                        reader: reader,
+                        what: "sealed payload's recipient domain"
+                    ),
+                    Subject = ReadOptionalText(reader: reader),
+                    Algorithm = reader.ReadTextString(),
+                    KeyHash = ReadFingerprint(
+                        reader: reader,
+                        what: "sealed payload's recipient key hash"
+                    ),
+                };
                 var ephemeralSpki = reader.ReadByteString();
                 var nonce = reader.ReadByteString();
                 var tag = reader.ReadByteString();
@@ -259,8 +285,11 @@ public sealed class CborCarriageCodec : ICarriageCodec {
                     Ciphertext: ciphertext,
                     EphemeralPublicKeySubjectPublicKeyInfo: ephemeralSpki,
                     Nonce: nonce,
+                    RecipientId: recipientId,
                     Tag: tag
                 );
+
+                SealedCarriage.ValidatePayloadStructure(payload: payload);
 
                 RequireCanonical(
                     received: source,

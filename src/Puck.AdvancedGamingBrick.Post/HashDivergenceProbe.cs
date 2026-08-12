@@ -70,14 +70,31 @@ internal static class HashDivergenceProbe {
             return 2;
         }
 
-        return Run(romA: romA, romALabel: Path.GetFileName(path: romAPath), romB: romB, romBLabel: ((romBPath is null) ? null : Path.GetFileName(path: romBPath)), bios: bios, frames: frames, fine: fine, perturbAtFrame: perturbAtFrame);
+        return Run(
+            romA: romA,
+            romALabel: Path.GetFileName(path: romAPath),
+            romB: romB,
+            romBLabel: ((romBPath is null)
+            ? null
+            : Path.GetFileName(path: romBPath)),
+            bios: bios,
+            frames: frames,
+            fine: fine,
+            perturbAtFrame: perturbAtFrame
+        );
     }
 
     /// <summary>The in-memory counterpart of <see cref="Run(string, string?, ReadOnlyMemory{byte}, int, bool, int?)"/>,
     /// for callers (and the self-check-over-a-micro-ROM proof) that already hold ROM bytes rather than a disk path.</summary>
     public static int Run(byte[] romA, string romALabel, byte[] romB, string? romBLabel, ReadOnlyMemory<byte> bios, int frames, bool fine, int? perturbAtFrame) {
-        using var hostA = PostMachine.Build(bios: bios, rom: romA);
-        using var hostB = PostMachine.Build(bios: bios, rom: romB);
+        using var hostA = PostMachine.Build(
+            bios: bios,
+            rom: romA
+        );
+        using var hostB = PostMachine.Build(
+            bios: bios,
+            rom: romB
+        );
         var machineA = hostA.Machine;
         var machineB = hostB.Machine;
 
@@ -87,19 +104,35 @@ internal static class HashDivergenceProbe {
                 ? $"rom={romALabel} (self-check + deliberate perturbation @frame {perturbAtFrame})"
                 : $"rom={romALabel} (self-check)"));
 
-        Console.WriteLine(value: $"== hash-divergence localizer: {mode}, {frames} frames{(fine ? ", --fine (per-scanline)" : "")} ==");
+        Console.WriteLine(value: $"== hash-divergence localizer: {mode}, {frames} frames{(fine
+            ? ", --fine (per-scanline)"
+            : "")} ==");
 
         for (var frame = 0; (frame < frames); ++frame) {
             if (fine) {
                 for (var scanline = 0; (scanline < ScanlinesPerFrame); ++scanline) {
-                    if ((perturbAtFrame == frame) && (scanline == 0)) {
+                    if (
+                        (perturbAtFrame == frame) &&
+                        (scanline == 0)
+                    ) {
                         Perturb(machine: machineB);
                     }
 
-                    RunUntilCycle(machine: machineA, target: (machineA.Cycles + ScanlineCycles));
-                    RunUntilCycle(machine: machineB, target: (machineB.Cycles + ScanlineCycles));
+                    RunUntilCycle(
+                        machine: machineA,
+                        target: (machineA.Cycles + ScanlineCycles)
+                    );
+                    RunUntilCycle(
+                        machine: machineB,
+                        target: (machineB.Cycles + ScanlineCycles)
+                    );
 
-                    if (!TryCompare(machineA: machineA, machineB: machineB, frame: frame, scanline: scanline)) {
+                    if (!TryCompare(
+                        machineA: machineA,
+                        machineB: machineB,
+                        frame: frame,
+                        scanline: scanline
+                    )) {
                         return 1;
                     }
                 }
@@ -111,7 +144,12 @@ internal static class HashDivergenceProbe {
                 _ = machineA.RunFrame();
                 _ = machineB.RunFrame();
 
-                if (!TryCompare(machineA: machineA, machineB: machineB, frame: frame, scanline: null)) {
+                if (!TryCompare(
+                    machineA: machineA,
+                    machineB: machineB,
+                    frame: frame,
+                    scanline: null
+                )) {
                     return 1;
                 }
             }
@@ -134,10 +172,15 @@ internal static class HashDivergenceProbe {
             return true;
         }
 
-        var where = ((scanline is not null) ? $"frame {frame} scanline {scanline}" : $"frame {frame}");
+        var where = ((scanline is not null)
+            ? $"frame {frame} scanline {scanline}"
+            : $"frame {frame}");
 
         Console.WriteLine(value: $"== HASH DIVERGENCE at {where}: A=0x{hashA:X16}  B=0x{hashB:X16} ==");
-        PrintDivergenceReport(a: snapshotA, b: snapshotB);
+        PrintDivergenceReport(
+            a: snapshotA,
+            b: snapshotB
+        );
 
         return false;
     }
@@ -150,9 +193,16 @@ internal static class HashDivergenceProbe {
     /// <param name="a">The first snapshot.</param>
     /// <param name="b">The second snapshot.</param>
     public static void PrintDivergenceReport(AgbMachineSnapshot a, AgbMachineSnapshot b) {
-        Console.WriteLine(value: $"  {DescribeDivergence(a: a, b: b)}");
+        Console.WriteLine(value: $"  {DescribeDivergence(
+            a: a,
+            b: b
+        )}");
 
-        var diff = SnapshotDivergence.FindFirstDifference(a: a.Data, b: b.Data, sections: a.Sections);
+        var diff = SnapshotDivergence.FindFirstDifference(
+            a: a.Data,
+            b: b.Data,
+            sections: a.Sections
+        );
 
         if (diff is null) {
             return;
@@ -160,8 +210,16 @@ internal static class HashDivergenceProbe {
 
         var (_, _, absoluteOffset) = diff.Value;
 
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(label: "A", data: a.Data, offset: absoluteOffset));
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(label: "B", data: b.Data, offset: absoluteOffset));
+        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
+            label: "A",
+            data: a.Data,
+            offset: absoluteOffset
+        ));
+        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
+            label: "B",
+            data: b.Data,
+            offset: absoluteOffset
+        ));
     }
 
     /// <summary>
@@ -173,7 +231,11 @@ internal static class HashDivergenceProbe {
     /// <param name="b">The second snapshot.</param>
     /// <returns>The one-line localization detail.</returns>
     public static string DescribeDivergence(AgbMachineSnapshot a, AgbMachineSnapshot b) {
-        var diff = SnapshotDivergence.FindFirstDifference(a: a.Data, b: b.Data, sections: a.Sections);
+        var diff = SnapshotDivergence.FindFirstDifference(
+            a: a.Data,
+            b: b.Data,
+            sections: a.Sections
+        );
 
         if (diff is null) {
             return ((a.Identity != b.Identity)
@@ -182,7 +244,9 @@ internal static class HashDivergenceProbe {
         }
 
         var (section, offsetInSection, absoluteOffset) = diff.Value;
-        var annotation = ((section == "bus") ? $" ({DescribeBusSubRegion(offsetInSection: offsetInSection)})" : "");
+        var annotation = ((section == "bus")
+            ? $" ({DescribeBusSubRegion(offsetInSection: offsetInSection)})"
+            : "");
 
         return $"component '{section}'{annotation}, byte offset {offsetInSection} within component (absolute {absoluteOffset})";
     }
@@ -209,10 +273,16 @@ internal static class HashDivergenceProbe {
     // change is the one flipped byte — a surgical, deterministic divergence for testing the localizer itself.
     private static void Perturb(AdvancedGamingBrickMachine machine) {
         var snapshot = machine.Snapshot();
-        var busSection = FindSectionByName(sections: snapshot.Sections, name: "bus");
+        var busSection = FindSectionByName(
+            sections: snapshot.Sections,
+            name: "bus"
+        );
         var absoluteOffset = (busSection.Offset + PerturbEwramOffset);
         var current = snapshot.Data[absoluteOffset];
-        var poked = snapshot.WithPokedByte(offset: absoluteOffset, value: (byte)(current ^ 0xFF));
+        var poked = snapshot.WithPokedByte(
+            offset: absoluteOffset,
+            value: (byte)(current ^ 0xFF)
+        );
 
         machine.Restore(snapshot: poked);
     }

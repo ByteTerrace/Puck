@@ -56,7 +56,10 @@ public sealed class SerialLinkSession : IDisposable {
         var firstPort = first.GetRequiredService<SerialComponent>();
         var secondPort = second.GetRequiredService<SerialComponent>();
 
-        SerialComponent.Connect(first: firstPort, second: secondPort);
+        SerialComponent.Connect(
+            first: firstPort,
+            second: secondPort
+        );
 
         m_first = first.Machine;
         m_firstPort = firstPort;
@@ -77,7 +80,10 @@ public sealed class SerialLinkSession : IDisposable {
     /// <exception cref="ArgumentException">Both machines are the same instance.</exception>
     /// <exception cref="InvalidOperationException">Either machine's serial port is already linked.</exception>
     public SerialLinkSession(MachineInstance first, MachineInstance second, SerialLinkResumeToken resumeToken)
-        : this(first: first, second: second) {
+        : this(
+        first: first,
+        second: second
+    ) {
         m_firstTarget = (m_first.Clock.CycleCount - resumeToken.FirstCredit);
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
     }
@@ -87,16 +93,28 @@ public sealed class SerialLinkSession : IDisposable {
     /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>
     /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
     public void Run(ulong tCycles) {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         m_firstTarget += tCycles;
         m_secondTarget += tCycles;
 
         while (true) {
-            var firstRemaining = Remaining(machine: m_first, target: m_firstTarget);
-            var secondRemaining = Remaining(machine: m_second, target: m_secondTarget);
+            var firstRemaining = Remaining(
+                machine: m_first,
+                target: m_firstTarget
+            );
+            var secondRemaining = Remaining(
+                machine: m_second,
+                target: m_secondTarget
+            );
 
-            if ((firstRemaining == 0UL) && (secondRemaining == 0UL)) {
+            if (
+                (firstRemaining == 0UL) &&
+                (secondRemaining == 0UL)
+            ) {
                 return;
             }
 
@@ -119,7 +137,10 @@ public sealed class SerialLinkSession : IDisposable {
     /// <returns>The token carrying both machines' overshoot credits.</returns>
     /// <exception cref="ObjectDisposedException">The session has already been disposed.</exception>
     public SerialLinkResumeToken Suspend() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         var token = new SerialLinkResumeToken(
             FirstCredit: (m_first.Clock.CycleCount - m_firstTarget),
@@ -146,7 +167,9 @@ public sealed class SerialLinkSession : IDisposable {
     private static ulong Remaining(Machine machine, ulong target) {
         var elapsed = machine.Clock.CycleCount;
 
-        return ((elapsed < target) ? (target - elapsed) : 0UL);
+        return ((elapsed < target)
+            ? (target - elapsed)
+            : 0UL);
     }
     private static void StepOnce(Machine machine) {
         if (machine.HasBusMaster) {

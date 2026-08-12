@@ -22,14 +22,23 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
     public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
         var (model, dmgSpeed) = ParseOptions(options: options);
 
-        return new MachineHost(model: model, cartridgeRom: contentBytes, savePath: savePath, dmgSpeed: dmgSpeed, audioSampleRate: audioSampleRate);
+        return new MachineHost(
+            model: model,
+            cartridgeRom: contentBytes,
+            savePath: savePath,
+            dmgSpeed: dmgSpeed,
+            audioSampleRate: audioSampleRate
+        );
     }
 
     /// <inheritdoc/>
     public bool TryLink(IReadOnlyList<IScreenMachine> machines, out IMachineLink? link, out string reason) {
         link = null;
 
-        if (machines is null || (machines.Count < 2)) {
+        if (
+            (machines is null) ||
+            (machines.Count < 2)
+        ) {
             reason = "a cable link needs two or more machines";
 
             return false;
@@ -68,14 +77,29 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
             return (Model: model, DmgSpeed: dmgSpeed);
         }
 
-        foreach (var token in options.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
-            if (token.Equals(value: "dmg", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        foreach (var token in options.Split(
+            separator: (char[]?)null,
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        )) {
+            if (token.Equals(
+                value: "dmg",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 model = ConsoleModel.Dmg;
-            } else if (token.Equals(value: "cgb", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (token.Equals(
+                value: "cgb",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 model = ConsoleModel.Cgb;
-            } else if (token.Equals(value: "agb", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (token.Equals(
+                value: "agb",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 model = ConsoleModel.Agb;
-            } else if (token.Equals(value: DmgSpeedToken, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (token.Equals(
+                value: DmgSpeedToken,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 dmgSpeed = true;
             } else {
                 throw new ArgumentException(message: $"unknown gaming-brick option '{token}' — expected dmg|cgb|agb or {DmgSpeedToken}");
@@ -98,6 +122,8 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
             _ => "dmg",
         };
 
-        return (dmgSpeed ? $"{modelToken} {DmgSpeedToken}" : modelToken);
+        return (dmgSpeed
+            ? $"{modelToken} {DmgSpeedToken}"
+            : modelToken);
     }
 }

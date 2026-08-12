@@ -55,15 +55,22 @@ public sealed record OverlayServices {
     public static OverlayServices Build(IServiceProvider serviceProvider, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        T Resolve<T>() => (T)serviceProvider.GetService(serviceType: typeof(T))!;
+        T Resolve<T>() => ((T)serviceProvider.GetService(serviceType: typeof(T))!);
 
         var deviceContext = Resolve<IGpuDeviceContext>();
         var renderTargetFactory = Resolve<IGpuRenderTargetFactory>();
 
         return new OverlayServices {
-            BytecodeExtension = (hostsOnDirectX ? ".dxil" : ".spv"),
+            BytecodeExtension = (hostsOnDirectX
+            ? ".dxil"
+            : ".spv"),
             CommandRecorder = Resolve<IGpuCommandRecorder>(),
-            CreateRenderTarget = (width, height) => renderTargetFactory.Create(deviceContext: deviceContext, format: GpuPixelFormat.R8G8B8A8Unorm, height: height, width: width),
+            CreateRenderTarget = (width, height) => renderTargetFactory.Create(
+            deviceContext: deviceContext,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: height,
+            width: width
+        ),
             DescriptorAllocator = Resolve<IGpuDescriptorAllocator>(),
             DeviceContext = deviceContext,
             PipelineFactory = Resolve<IGpuPipelineFactory>(),

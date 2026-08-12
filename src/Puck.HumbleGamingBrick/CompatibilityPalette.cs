@@ -61,9 +61,18 @@ internal static class CompatibilityPalette {
     public static void Resolve(CartridgeHeader header, Span<ushort> background, Span<ushort> object0, Span<ushort> object1) {
         var combination = (CombinationIndex(header: header) * 3);
 
-        ReadPalette(byteOffset: PaletteCombinations[(combination + 2)], destination: background);
-        ReadPalette(byteOffset: PaletteCombinations[combination], destination: object0);
-        ReadPalette(byteOffset: PaletteCombinations[(combination + 1)], destination: object1);
+        ReadPalette(
+            byteOffset: PaletteCombinations[(combination + 2)],
+            destination: background
+        );
+        ReadPalette(
+            byteOffset: PaletteCombinations[combination],
+            destination: object0
+        );
+        ReadPalette(
+            byteOffset: PaletteCombinations[(combination + 1)],
+            destination: object1
+        );
     }
 
     // The palette-combination index the boot ROM picks: the title-checksum row for first-party titles (the duplicated
@@ -80,7 +89,10 @@ internal static class CompatibilityPalette {
                 continue;
             }
 
-            if ((i < FirstDuplicateIndex) || (header.FourthTitleLetter == DuplicateFourthLetters[(i - FirstDuplicateIndex)])) {
+            if (
+                (i < FirstDuplicateIndex) ||
+                (header.FourthTitleLetter == DuplicateFourthLetters[(i - FirstDuplicateIndex)])
+            ) {
                 return PalettePerChecksum[i] & 0x7F;
             }
         }

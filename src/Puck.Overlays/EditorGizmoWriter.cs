@@ -46,22 +46,36 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
 
         var seats = frame.Seats.Span;
 
-        OverlaySeatLoop.Emit(builder: builder, seats: seats, writerName: nameof(EditorGizmoWriter), writer: this);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: seats,
+            writerName: nameof(EditorGizmoWriter),
+            writer: this
+        );
     }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) {
         var chips = seat.Chips.Span;
         var region = seat.Viewport;
 
-        if ((chips.Length == 0) || ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent))) {
+        if (
+            (chips.Length == 0) ||
+            ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent))
+        ) {
             return;
         }
 
-        var chipCount = Math.Min(val1: chips.Length, val2: MaxChipsPerSeat);
+        var chipCount = Math.Min(
+            val1: chips.Length,
+            val2: MaxChipsPerSeat
+        );
 
         if (chipCount < chips.Length) {
             // Each chip writes its ring and its plate; a refused chip loses both.
-            builder.NoteRefused(elements: ((chips.Length - chipCount) * 2), textWords: 0);
+            builder.NoteRefused(
+                elements: ((chips.Length - chipCount) * 2),
+                textWords: 0
+            );
         }
 
         builder.BeginClip(
@@ -80,7 +94,9 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
                     centerX: chip.CenterX,
                     centerY: chip.CenterY,
                     radius: chip.RingRadiusPx,
-                    role: (chip.Selected ? OverlayColorRole.Accent : OverlayColorRole.TextDim)
+                    role: (chip.Selected
+                    ? OverlayColorRole.Accent
+                    : OverlayColorRole.TextDim)
                 );
             }
 
@@ -94,7 +110,9 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
                 glyphHalf: 0f,
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
-                icon: (chip.Bed ? OverlayIconId.AudioBed : OverlayIconId.AudioSpeaker),
+                icon: (chip.Bed
+                ? OverlayIconId.AudioBed
+                : OverlayIconId.AudioSpeaker),
                 plateHalf: PlateHalf,
                 pressed: chip.Pulse
             );
@@ -104,5 +122,8 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
     }
 
     void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
-        EmitSeat(builder: builder, seat: in seat);
+        EmitSeat(
+            builder: builder,
+            seat: in seat
+        );
 }

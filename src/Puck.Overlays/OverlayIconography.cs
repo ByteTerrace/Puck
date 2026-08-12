@@ -194,11 +194,17 @@ public static class OverlayGamepadGlyphs {
             "edit.speaker" => OverlayIconId.AudioSpeaker,
             "edit.bed" => OverlayIconId.AudioBed,
             _ => (((icon is not null) &&
-                icon.StartsWith(value: "action.", comparisonType: StringComparison.Ordinal) &&
-                int.TryParse(s: icon.AsSpan(start: "action.".Length), result: out var number) &&
+                icon.StartsWith(
+            value: "action.",
+            comparisonType: StringComparison.Ordinal
+        ) &&
+                int.TryParse(
+            s: icon.AsSpan(start: "action.".Length),
+            result: out var number
+        ) &&
                 (number is >= 1 and <= 12))
-                ? (OverlayIconId)(((int)OverlayIconId.Number1) + (number - 1))
-                : OverlayIconId.Generic),
+            ? (OverlayIconId)(((int)OverlayIconId.Number1) + (number - 1))
+            : OverlayIconId.Generic),
         };
     }
 

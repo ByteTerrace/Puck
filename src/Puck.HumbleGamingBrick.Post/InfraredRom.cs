@@ -21,8 +21,8 @@ internal static class InfraredRom {
     // Transmit at 0x0110, Receive at 0x012D (see the two subroutines' comments for the exact byte layout); the pattern
     // table starts right after Receive ends.
     private const int TransmitAddress = 0x0110;
-    private const int ReceiveAddress = 0x012D;
     private const int PatternBase = 0x0153;
+    private const int ReceiveAddress = 0x012D;
     private const int RomSize = 0x8000;
     // The inner settle count between driving a bit and the receiver's matching sample. 0x20 iterations (~7 cycles each)
     // dwarfs the ~1-instruction lock-step skew the furthest-behind interleave can leave, so the transmitted bit is
@@ -199,9 +199,18 @@ internal static class InfraredRom {
         // baked expected-count/pattern table differ.
         var rom = new byte[RomSize];
 
-        dispatcher.CopyTo(array: rom, index: EntryPoint);
-        Transmit.CopyTo(array: rom, index: TransmitAddress);
-        Receive.CopyTo(array: rom, index: ReceiveAddress);
+        dispatcher.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        Transmit.CopyTo(
+            array: rom,
+            index: TransmitAddress
+        );
+        Receive.CopyTo(
+            array: rom,
+            index: ReceiveAddress
+        );
 
         rom[(ReceiveAddress + ReceiveExpectedCountOffset)] = (byte)expectedReceiveCount;
 

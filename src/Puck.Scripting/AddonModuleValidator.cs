@@ -26,30 +26,76 @@ public static class AddonModuleValidator {
             return false;
         }
 
-        if (!RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.AbiVersion)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.OutPtr)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.OutCap)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.InPtr)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.InCap)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.ChannelsPtr)
-            || !RequireNullaryI32(error: out error, exports: exports, name: AddonAbi.Exports.ChannelsCount)) {
+        if (
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.AbiVersion
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.OutPtr
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.OutCap
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.InPtr
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.InCap
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.ChannelsPtr
+        ) ||
+            !RequireNullaryI32(
+            error: out error,
+            exports: exports,
+            name: AddonAbi.Exports.ChannelsCount
+        )
+        ) {
             return false;
         }
 
-        if (!RequireOnTick(error: out error, exports: exports)) {
+        if (!RequireOnTick(
+            error: out error,
+            exports: exports
+        )) {
             return false;
         }
 
-        if (!ValidateOptionalInit(error: out error, exports: exports)) {
+        if (!ValidateOptionalInit(
+            error: out error,
+            exports: exports
+        )) {
             return false;
         }
 
-        return ValidateImports(error: out error, imports: module.Imports);
+        return ValidateImports(
+            error: out error,
+            imports: module.Imports
+        );
     }
 
     private static FunctionExport? FindFunction(IReadOnlyList<Export> exports, string name) {
         foreach (var export in exports) {
-            if ((export is FunctionExport function) && string.Equals(a: export.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+            if (
+                (export is FunctionExport function) &&
+                string.Equals(
+                a: export.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return function;
             }
         }
@@ -58,7 +104,14 @@ public static class AddonModuleValidator {
     }
     private static bool HasMemory(IReadOnlyList<Export> exports) {
         foreach (var export in exports) {
-            if ((export is MemoryExport) && string.Equals(a: export.Name, b: AddonAbi.Exports.Memory, comparisonType: StringComparison.Ordinal)) {
+            if (
+                (export is MemoryExport) &&
+                string.Equals(
+                a: export.Name,
+                b: AddonAbi.Exports.Memory,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return true;
             }
         }
@@ -66,7 +119,11 @@ public static class AddonModuleValidator {
         return false;
     }
     private static bool IsNullaryI32(FunctionExport function) {
-        return ((function.Parameters.Count == 0) && (function.Results.Count == 1) && (function.Results[0] == ValueKind.Int32));
+        return (
+            (function.Parameters.Count == 0) &&
+            (function.Results.Count == 1) &&
+            (function.Results[0] == ValueKind.Int32)
+        );
     }
     private static bool RequireNullaryI32(IReadOnlyList<Export> exports, string name, out string error) {
         var function = FindFunction(
@@ -74,7 +131,10 @@ public static class AddonModuleValidator {
             name: name
         );
 
-        if ((function is null) || !IsNullaryI32(function: function)) {
+        if (
+            (function is null) ||
+            !IsNullaryI32(function: function)
+        ) {
             error = $"export '{name}' missing or not ()->i32";
             return false;
         }
@@ -88,7 +148,13 @@ public static class AddonModuleValidator {
             name: AddonAbi.Exports.OnTick
         );
 
-        if ((function is null) || (function.Parameters.Count != 1) || (function.Parameters[0] != ValueKind.Int32) || (function.Results.Count != 1) || (function.Results[0] != ValueKind.Int32)) {
+        if (
+            (function is null) ||
+            (function.Parameters.Count != 1) ||
+            (function.Parameters[0] != ValueKind.Int32) ||
+            (function.Results.Count != 1) ||
+            (function.Results[0] != ValueKind.Int32)
+        ) {
             error = $"export '{AddonAbi.Exports.OnTick}' missing or not (i32)->i32";
             return false;
         }
@@ -111,7 +177,10 @@ public static class AddonModuleValidator {
             name: AddonAbi.Exports.Init
         );
 
-        if ((function is not null) && ((function.Parameters.Count != 0) || (function.Results.Count != 0))) {
+        if (
+            (function is not null) &&
+            ((function.Parameters.Count != 0) || (function.Results.Count != 0))
+        ) {
             error = $"export '{AddonAbi.Exports.Init}' present but not ()->()";
             return false;
         }

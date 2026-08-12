@@ -30,7 +30,7 @@ public readonly record struct AgbGameOverride(CartridgeBackup? Backup, bool? Has
 /// </summary>
 public static class AgbGameOverrides {
     // Game-code strings are 4 ASCII chars (AXXY: title code + region). Packed big-endian into a uint key.
-    private static readonly FrozenDictionary<uint, AgbGameOverride> s_table = Build();
+    private static readonly FrozenDictionary<uint, AgbGameOverride> OverrideTable = Build();
 
     private static FrozenDictionary<uint, AgbGameOverride> Build() {
         var table = new Dictionary<uint, AgbGameOverride>();
@@ -38,44 +38,114 @@ public static class AgbGameOverrides {
         // Top Gun: Combat Zones — the one cart that embeds THREE conflicting save strings as an anti-piracy trap: it
         // writes a signature into whatever backup the emulator exposes, then detects it and locks the main menu. It
         // has no real save. Forcing "no backup" removes the decoy the anti-piracy routine probes for.
-        Add(table, "A2YE", new AgbGameOverride(Backup: CartridgeBackup.None, HasRtc: false));
+        Add(
+            table,
+            "A2YE",
+            new AgbGameOverride(
+                Backup: CartridgeBackup.None,
+                HasRtc: false
+            )
+        );
 
         // The RTC titles: they embed SIIRTC_V AND FLASH1M_V, so the string scan already gets these right — but keying
         // RTC/backup off the game code makes it authoritative rather than a lucky string hit, and documents the
         // known-RTC set. Pokémon Ruby / Sapphire / Emerald (USA · Europe · Japan), Flash 128K + RTC.
         foreach (var code in new[] { "AXVE", "AXVP", "AXVJ", "AXPE", "AXPP", "AXPJ", "BPEE", "BPEP", "BPEJ" }) {
-            Add(table, code, new AgbGameOverride(Backup: CartridgeBackup.Flash128, HasRtc: true));
+            Add(
+                table,
+                code,
+                new AgbGameOverride(
+                    Backup: CartridgeBackup.Flash128,
+                    HasRtc: true
+                )
+            );
         }
 
         // Boktai: The Sun Is in Your Hand (USA/Europe/Japan) and Boktai 2: Solar Boy Django (Japan/USA/Europe) — the
         // RTC + solar-sensor titles. The backup defers to the string scan (to avoid asserting a save size we cannot
         // document with confidence); RTC and the GPIO light sensor are both forced for all six codes.
         foreach (var code in new[] { "U3IE", "U3IP", "U3IJ", "U32J", "U32E", "U32P" }) {
-            Add(table, code, new AgbGameOverride(Backup: null, HasRtc: true, HasSolar: true));
+            Add(
+                table,
+                code,
+                new AgbGameOverride(
+                    Backup: null,
+                    HasRtc: true,
+                    HasSolar: true
+                )
+            );
         }
 
         // Shin Bokura no Taiyou: Gyakushuu no Sabata (Boktai 3, Japan-only) — same RTC + solar-sensor pairing.
-        Add(table, "U33J", new AgbGameOverride(Backup: null, HasRtc: true, HasSolar: true));
+        Add(
+            table,
+            "U33J",
+            new AgbGameOverride(
+                Backup: null,
+                HasRtc: true,
+                HasSolar: true
+            )
+        );
 
         // Drill Dozer (Japan/USA/Europe) — SRAM + a rumble motor on GPIO pin 3, no RTC.
         foreach (var code in new[] { "V49J", "V49E", "V49P" }) {
-            Add(table, code, new AgbGameOverride(Backup: CartridgeBackup.Sram, HasRtc: false, HasRumble: true));
+            Add(
+                table,
+                code,
+                new AgbGameOverride(
+                    Backup: CartridgeBackup.Sram,
+                    HasRtc: false,
+                    HasRumble: true
+                )
+            );
         }
 
         // Goodboy Galaxy (Europe) — SRAM + rumble.
-        Add(table, "2GBP", new AgbGameOverride(Backup: CartridgeBackup.Sram, HasRtc: false, HasRumble: true));
+        Add(
+            table,
+            "2GBP",
+            new AgbGameOverride(
+                Backup: CartridgeBackup.Sram,
+                HasRtc: false,
+                HasRumble: true
+            )
+        );
 
         // WarioWare: Twisted! (Japan/USA/Europe) — SRAM + rumble AND a gyro sensor sharing the same GPIO overlay.
         foreach (var code in new[] { "RZWJ", "RZWE", "RZWP" }) {
-            Add(table, code, new AgbGameOverride(Backup: CartridgeBackup.Sram, HasRtc: false, HasRumble: true));
+            Add(
+                table,
+                code,
+                new AgbGameOverride(
+                    Backup: CartridgeBackup.Sram,
+                    HasRtc: false,
+                    HasRumble: true
+                )
+            );
         }
 
         // Koro Koro Puzzle - Happy Panechu! (Japan-only) and Yoshi's Universal Gravitation / Yoshi Topsy-Turvy
         // (Japan/USA/Europe) — the address-mapped tilt sensor (ROM offsets 0x8000-0x8500), EEPROM-backed.
-        Add(table, "KHPJ", new AgbGameOverride(Backup: CartridgeBackup.Eeprom, HasRtc: false, HasTilt: true));
+        Add(
+            table,
+            "KHPJ",
+            new AgbGameOverride(
+                Backup: CartridgeBackup.Eeprom,
+                HasRtc: false,
+                HasTilt: true
+            )
+        );
 
         foreach (var code in new[] { "KYGJ", "KYGE", "KYGP" }) {
-            Add(table, code, new AgbGameOverride(Backup: CartridgeBackup.Eeprom, HasRtc: false, HasTilt: true));
+            Add(
+                table,
+                code,
+                new AgbGameOverride(
+                    Backup: CartridgeBackup.Eeprom,
+                    HasRtc: false,
+                    HasTilt: true
+                )
+            );
         }
 
         return table.ToFrozenDictionary();
@@ -98,7 +168,10 @@ public static class AgbGameOverrides {
 
         var code = ((uint)rom[0xAC] << 24) | ((uint)rom[0xAD] << 16) | ((uint)rom[0xAE] << 8) | rom[0xAF];
 
-        if (s_table.TryGetValue(key: code, value: out var entry)) {
+        if (OverrideTable.TryGetValue(
+            key: code,
+            value: out var entry
+        )) {
             return entry;
         }
 
@@ -106,7 +179,10 @@ public static class AgbGameOverrides {
         // and the carts bait save detection with an SRAM probe while actually being EEPROM-backed (a mis-detect throws
         // "Game Pak Error"). Force EEPROM for the family. This is documented behaviour, not a per-title guess.
         if (rom[0xAC] == (byte)'F') {
-            return new AgbGameOverride(Backup: CartridgeBackup.Eeprom, HasRtc: false);
+            return new AgbGameOverride(
+                Backup: CartridgeBackup.Eeprom,
+                HasRtc: false
+            );
         }
 
         return null;

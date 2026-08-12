@@ -28,7 +28,10 @@ public sealed partial class AgbScheduler {
     public long NextWhen => (m_root?.When ?? long.MaxValue);
 
     /// <summary>Schedules <paramref name="e"/> to fire <paramref name="cyclesFromNow"/> cycles from now.</summary>
-    public void Schedule(Event e, int cyclesFromNow) => ScheduleAbsolute(e: e, when: (Now + cyclesFromNow));
+    public void Schedule(Event e, int cyclesFromNow) => ScheduleAbsolute(
+        e: e,
+        when: (Now + cyclesFromNow)
+    );
 
     /// <summary>Schedules <paramref name="e"/> to fire at the absolute time <paramref name="when"/>.</summary>
     public void ScheduleAbsolute(Event e, long when) {
@@ -38,13 +41,19 @@ public sealed partial class AgbScheduler {
         e.Scheduled = true;
 
         // Insert into the singly-linked list, kept sorted ascending by When.
-        if ((m_root is null) || (when < m_root.When)) {
+        if (
+            (m_root is null) ||
+            (when < m_root.When)
+        ) {
             e.Next = m_root;
             m_root = e;
         } else {
             var node = m_root;
 
-            while ((node.Next is not null) && (node.Next.When <= when)) {
+            while (
+                (node.Next is not null) &&
+                (node.Next.When <= when)
+            ) {
                 node = node.Next;
             }
 
@@ -59,12 +68,21 @@ public sealed partial class AgbScheduler {
             return;
         }
 
-        if (ReferenceEquals(objA: m_root, objB: e)) {
+        if (ReferenceEquals(
+            objA: m_root,
+            objB: e
+        )) {
             m_root = e.Next;
         } else {
             var node = m_root;
 
-            while ((node is not null) && !ReferenceEquals(objA: node.Next, objB: e)) {
+            while (
+                (node is not null) &&
+                !ReferenceEquals(
+                objA: node.Next,
+                objB: e
+            )
+            ) {
                 node = node.Next;
             }
 
@@ -95,7 +113,10 @@ public sealed partial class AgbScheduler {
     /// with how many cycles late it fired. Called from the bus's per-cycle loop the instant the clock reaches the
     /// event, so events take effect at their exact cycle.</summary>
     public void FireDue() {
-        while ((m_root is not null) && (m_root.When <= Now)) {
+        while (
+            (m_root is not null) &&
+            (m_root.When <= Now)
+        ) {
             var e = m_root;
 
             m_root = e.Next;

@@ -5,5 +5,8 @@ namespace Puck.Scripting;
 /// <param name="Detail">The formatted diagnostic (e.g. <c>"addon ghost: OutOfFuel at tick 3140 — disabled; 'addon enable ghost' to retry"</c>).</param>
 public readonly record struct AddonFault(AddonFaultKind Kind, string Detail) {
     /// <summary>Gets the healthy, no-fault value.</summary>
-    public static AddonFault None => new(Detail: "", Kind: AddonFaultKind.None);
+    public static AddonFault None => new(
+        Detail: "",
+        Kind: AddonFaultKind.None
+    );
 }

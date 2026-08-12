@@ -21,8 +21,9 @@ namespace Puck.Carriage;
 /// followed, for a full envelope only, by the signature (length-prefixed bytes). A key binding payload
 /// encodes target domain (32 bytes), target subject (optional string), target algorithm (string), target
 /// key-hash (32 bytes), and public key SPKI (length-prefixed bytes), in that order. A sealed payload
-/// encodes ephemeral SPKI (length-prefixed), nonce (12 raw bytes), tag (16 raw bytes), and ciphertext
-/// (length-prefixed), in that order.
+/// encodes recipient domain (32 bytes), recipient subject (optional string), recipient sealing algorithm
+/// (string), recipient key-hash (32 bytes), ephemeral SPKI (length-prefixed), nonce (12 raw bytes), tag
+/// (16 raw bytes), and ciphertext (length-prefixed), in that order.
 /// </summary>
 public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     /// <summary>The only format version this codec currently emits or accepts.</summary>
@@ -74,15 +75,19 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
             writer: writer,
             header: envelope.Header,
             payloadKind: envelope.PayloadKind,
-            payloadBytes: envelope.PayloadBytes.Span
+            payloadBytes: envelope.PayloadSpan
         );
-        writer.WriteBytes(value: envelope.Signature.Span);
+        writer.WriteBytes(value: envelope.SignatureSpan);
 
         return writer.ToArray();
     }
 
     /// <inheritdoc/>
     public SignedCarriageEnvelope DecodeEnvelope(ReadOnlySpan<byte> wire) {
+        if (wire.Length > CarriageResourceLimits.EnvelopeBytes) {
+            throw new FormatException(message: $"The carriage envelope is {wire.Length} bytes; v1 permits at most {CarriageResourceLimits.EnvelopeBytes} before parsing.");
+        }
+
         var reader = new FixedLayoutReader(buffer: wire);
 
         var (header, payloadKind, payloadBytes) = ReadHeaderAndPayload(reader: ref reader);
@@ -166,22 +171,14 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
 
     /// <inheritdoc/>
     public byte[] EncodeSealedPayload(SealedPayload payload) {
-        if (payload.Nonce.Length != NonceLength) {
-            throw new ArgumentException(
-                message: $"A sealed payload's nonce must be {NonceLength} bytes.",
-                paramName: nameof(payload)
-            );
-        }
-
-        if (payload.Tag.Length != TagLength) {
-            throw new ArgumentException(
-                message: $"A sealed payload's tag must be {TagLength} bytes.",
-                paramName: nameof(payload)
-            );
-        }
+        SealedCarriage.ValidatePayloadStructure(payload: payload);
 
         var writer = new FixedLayoutWriter();
 
+        writer.WriteFixedBytes(value: Convert.FromHexString(s: payload.RecipientId.Domain));
+        writer.WriteOptionalString(value: payload.RecipientId.Subject);
+        writer.WriteString(value: payload.RecipientId.Algorithm);
+        writer.WriteFixedBytes(value: Convert.FromHexString(s: payload.RecipientId.KeyHash));
         writer.WriteBytes(value: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span);
         writer.WriteFixedBytes(value: payload.Nonce.Span);
         writer.WriteFixedBytes(value: payload.Tag.Span);
@@ -194,6 +191,12 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
     public SealedPayload DecodeSealedPayload(ReadOnlySpan<byte> bytes) {
         var reader = new FixedLayoutReader(buffer: bytes);
 
+        var recipientId = new KeyId {
+            Domain = Convert.ToHexStringLower(bytes: reader.ReadFixedBytes(count: FingerprintLength)),
+            Subject = reader.ReadOptionalString(),
+            Algorithm = reader.ReadString(),
+            KeyHash = Convert.ToHexStringLower(bytes: reader.ReadFixedBytes(count: FingerprintLength)),
+        };
         var ephemeralSpki = reader.ReadBytes().ToArray();
         var nonce = reader.ReadFixedBytes(count: NonceLength).ToArray();
         var tag = reader.ReadFixedBytes(count: TagLength).ToArray();
@@ -208,8 +211,11 @@ public sealed class FixedLayoutCarriageCodec : ICarriageCodec {
             Ciphertext: ciphertext,
             EphemeralPublicKeySubjectPublicKeyInfo: ephemeralSpki,
             Nonce: nonce,
+            RecipientId: recipientId,
             Tag: tag
         );
+
+        SealedCarriage.ValidatePayloadStructure(payload: payload);
 
         RequireCanonical(
             received: bytes,

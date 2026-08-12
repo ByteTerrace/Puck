@@ -31,7 +31,8 @@
         ]
       },
       "algorithm": {
-        "description": "One of Puck.Carriage.CarriageAlgorithms\u0027s SIGNING names (e.g. ecdsa-p256-sha256) \u2014 never a sealing algorithm; a sealing key can never admit a claim.",
+        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory carriage-v1-base profile.",
+        "const": "ecdsa-p256-sha256",
         "type": "string"
       },
       "publicKey": {

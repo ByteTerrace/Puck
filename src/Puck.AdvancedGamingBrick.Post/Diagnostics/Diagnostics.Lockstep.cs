@@ -49,7 +49,11 @@ internal static partial class Diagnostics {
         using var cosim = Process.Start(startInfo: psi)!;
         var cosimOut = cosim.StandardOutput;
 
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return 0;
         }
 
@@ -90,15 +94,24 @@ internal static partial class Diagnostics {
                         break;
                     }
 
-                    var f = line.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+                    var f = line.Split(
+                        separator: ' ',
+                        options: StringSplitOptions.RemoveEmptyEntries
+                    );
 
                     if (f.Length < 19) {
                         continue;
                     }
 
                     // oracle columns: f0=execAddr f1=cpsr f2..f17=r0..r15 f18=clock
-                    var oExec = Convert.ToUInt32(value: f[0], fromBase: 16);
-                    var oCpsr = Convert.ToUInt32(value: f[1], fromBase: 16);
+                    var oExec = Convert.ToUInt32(
+                        value: f[0],
+                        fromBase: 16
+                    );
+                    var oCpsr = Convert.ToUInt32(
+                        value: f[1],
+                        fromBase: 16
+                    );
                     var oClk = long.Parse(s: f[18]);
 
                     var pCpsr = cpu.Cpsr;
@@ -114,7 +127,10 @@ internal static partial class Diagnostics {
                     var funcReg = -1;
 
                     for (var r = 0; ((r < 15) && (funcReg < 0)); ++r) {
-                        if (Convert.ToUInt32(value: f[(2 + r)], fromBase: 16) != cpu.GetRegister(index: r)) {
+                        if (Convert.ToUInt32(
+                            value: f[(2 + r)],
+                            fromBase: 16
+                        ) != cpu.GetRegister(index: r)) {
                             funcReg = r;
                         }
                     }
@@ -146,9 +162,16 @@ internal static partial class Diagnostics {
                         _ = history.Dequeue();
                     }
 
-                    history.Enqueue(item: $"#{i,8} oraclePC={oExec:X8} cpsr o={oCpsr:X8}/p={pCpsr:X8} cyc o={oClk}/p={pCyc} do={((prevOracle < 0) ? 0 : (oClk - prevOracle))}/dp={((prevPuck < 0) ? 0 : (pCyc - prevPuck))}");
+                    history.Enqueue(item: $"#{i,8} oraclePC={oExec:X8} cpsr o={oCpsr:X8}/p={pCpsr:X8} cyc o={oClk}/p={pCyc} do={((prevOracle < 0)
+                        ? 0
+                        : (oClk - prevOracle))}/dp={((prevPuck < 0)
+                        ? 0
+                        : (pCyc - prevPuck))}");
 
-                    if (funcCpsr || (funcReg >= 0)) {
+                    if (
+                        funcCpsr ||
+                        (funcReg >= 0)
+                    ) {
                         Console.WriteLine(value: $"  == FUNCTIONAL DIVERGENCE at instr {i} ==");
                         Console.WriteLine(value: $"     oraclePC=0x{oExec:X8}  puckR15=0x{cpu.GetRegister(index: 15):X8}  thumb={((pCpsr & 0x20u) != 0u)}");
 
@@ -157,7 +180,10 @@ internal static partial class Diagnostics {
                         }
 
                         for (var r = 0; (r < 15); ++r) {
-                            var ov = Convert.ToUInt32(value: f[(2 + r)], fromBase: 16);
+                            var ov = Convert.ToUInt32(
+                                value: f[(2 + r)],
+                                fromBase: 16
+                            );
                             var pv = cpu.GetRegister(index: r);
 
                             if (ov != pv) {

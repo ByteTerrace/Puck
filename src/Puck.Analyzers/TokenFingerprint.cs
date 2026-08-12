@@ -76,7 +76,10 @@ internal static class TokenFingerprint {
         // Deterministic processing order: for the partial case this analyzer refuses anyway, and defensively for any
         // future symbol kind with more than one declaring reference.
         var references = symbol.DeclaringSyntaxReferences
-            .OrderBy(keySelector: reference => reference.SyntaxTree.FilePath, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: reference => reference.SyntaxTree.FilePath,
+            comparer: StringComparer.Ordinal
+        )
             .ThenBy(keySelector: reference => reference.Span.Start)
             .ToArray();
 
@@ -88,7 +91,11 @@ internal static class TokenFingerprint {
         var brandExcluded = false;
 
         using var sha256 = SHA256.Create();
-        using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: sha256);
+        using var stream = new CryptoStream(
+            mode: CryptoStreamMode.Write,
+            stream: Stream.Null,
+            transform: sha256
+        );
 
         foreach (var reference in references) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -105,12 +112,20 @@ internal static class TokenFingerprint {
 
             TextSpan? excluded = null;
 
-            if ((reference.SyntaxTree == brandReference.SyntaxTree) && node.Span.Contains(span: brandSpan)) {
+            if (
+                (reference.SyntaxTree == brandReference.SyntaxTree) &&
+                node.Span.Contains(span: brandSpan)
+            ) {
                 brandExcluded = true;
                 excluded = brandSpan;
             }
 
-            AppendTokens(tokens: node.DescendantTokens(descendIntoTrivia: false), excludedSpan: excluded, stream: stream, cancellationToken: cancellationToken);
+            AppendTokens(
+                tokens: node.DescendantTokens(descendIntoTrivia: false),
+                excludedSpan: excluded,
+                stream: stream,
+                cancellationToken: cancellationToken
+            );
         }
 
         if (!brandExcluded) {
@@ -118,24 +133,52 @@ internal static class TokenFingerprint {
         }
 
         var ordered = dependencies
-            .OrderBy(keySelector: dependency => dependency, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: dependency => dependency,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
-        WriteInt32(stream: stream, value: DependencySectionMarker);
-        WriteInt32(stream: stream, value: ordered.Length);
+        WriteInt32(
+            stream: stream,
+            value: DependencySectionMarker
+        );
+        WriteInt32(
+            stream: stream,
+            value: ordered.Length
+        );
 
         foreach (var dependency in ordered) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var resolved = ResolveDependency(compilation: compilation, documentationId: dependency, cancellationToken: cancellationToken);
+            var resolved = ResolveDependency(
+                compilation: compilation,
+                documentationId: dependency,
+                cancellationToken: cancellationToken
+            );
 
             if (resolved.Refusal is not null) {
-                return new TokenFingerprintResult(Hash: null, Refusal: resolved.Refusal, DependencyId: dependency);
+                return new TokenFingerprintResult(
+                    Hash: null,
+                    Refusal: resolved.Refusal,
+                    DependencyId: dependency
+                );
             }
 
-            WriteUtf8(stream: stream, text: dependency);
-            WriteInt32(stream: stream, value: resolved.Tokens.Count);
-            AppendTokens(tokens: resolved.Tokens, excludedSpan: null, stream: stream, cancellationToken: cancellationToken);
+            WriteUtf8(
+                stream: stream,
+                text: dependency
+            );
+            WriteInt32(
+                stream: stream,
+                value: resolved.Tokens.Count
+            );
+            AppendTokens(
+                tokens: resolved.Tokens,
+                excludedSpan: null,
+                stream: stream,
+                cancellationToken: cancellationToken
+            );
         }
 
         stream.FlushFinalBlock();
@@ -147,18 +190,29 @@ internal static class TokenFingerprint {
             builder.Append(value: b.ToString(format: "x2"));
         }
 
-        return new TokenFingerprintResult(Hash: builder.ToString(), Refusal: null, DependencyId: null);
+        return new TokenFingerprintResult(
+            Hash: builder.ToString(),
+            Refusal: null,
+            DependencyId: null
+        );
     }
 
     private static TokenFingerprintResult Refuse(string reason) =>
-        new(Hash: null, Refusal: reason, DependencyId: null);
+        new(
+        Hash: null,
+        Refusal: reason,
+        DependencyId: null
+    );
 
     /// <summary>The tokens one declared dependency contributes, or why it contributes none.</summary>
     /// <param name="Tokens">The dependency's own tokens, in source order.</param>
     /// <param name="Refusal">Why the dependency cannot be sealed, phrased to complete the sentence "cannot be sealed because …".</param>
     private readonly record struct DependencyWalk(IReadOnlyList<SyntaxToken> Tokens, string? Refusal) {
         public static DependencyWalk Refused(string reason) =>
-            new(Tokens: [], Refusal: reason);
+            new(
+            Tokens: [],
+            Refusal: reason
+        );
     }
 
     /// <summary>
@@ -172,8 +226,14 @@ internal static class TokenFingerprint {
     /// </remarks>
     private static DependencyWalk ResolveDependency(Compilation compilation, string documentationId, CancellationToken cancellationToken) {
         var candidates = DocumentationCommentId
-            .GetSymbolsForDeclarationId(id: documentationId, compilation: compilation)
-            .Where(predicate: candidate => SymbolEqualityComparer.Default.Equals(x: candidate.ContainingAssembly, y: compilation.Assembly))
+            .GetSymbolsForDeclarationId(
+            id: documentationId,
+            compilation: compilation
+        )
+            .Where(predicate: candidate => SymbolEqualityComparer.Default.Equals(
+            x: candidate.ContainingAssembly,
+            y: compilation.Assembly
+        ))
             .ToArray();
 
         if (candidates.Length == 0) {
@@ -185,7 +245,10 @@ internal static class TokenFingerprint {
         }
 
         var references = candidates[0].DeclaringSyntaxReferences
-            .OrderBy(keySelector: reference => reference.SyntaxTree.FilePath, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: reference => reference.SyntaxTree.FilePath,
+            comparer: StringComparer.Ordinal
+        )
             .ThenBy(keySelector: reference => reference.Span.Start)
             .ToArray();
 
@@ -207,9 +270,11 @@ internal static class TokenFingerprint {
         // declaration. So the type and modifiers are picked up from the shared declaration while the sibling
         // declarators are left out: `public const uint FirstMultiplier = 0x7FEB352DU` is sealed whole, and adding
         // or removing a constant beside it is a sibling edit, which no fingerprint here has ever moved.
-        if ((node is VariableDeclaratorSyntax declarator)
-            && (declarator.Parent is VariableDeclarationSyntax variableDeclaration)
-            && (variableDeclaration.Parent is BaseFieldDeclarationSyntax fieldDeclaration)) {
+        if (
+            (node is VariableDeclaratorSyntax declarator) &&
+            (declarator.Parent is VariableDeclarationSyntax variableDeclaration) &&
+            (variableDeclaration.Parent is BaseFieldDeclarationSyntax fieldDeclaration)
+        ) {
             if (fieldDeclaration.ContainsDirectives) {
                 return DependencyWalk.Refused(reason: "its declaration contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
             }
@@ -224,7 +289,10 @@ internal static class TokenFingerprint {
             tokens.AddRange(collection: variableDeclaration.Type.DescendantTokens(descendIntoTrivia: false));
             tokens.AddRange(collection: declarator.DescendantTokens(descendIntoTrivia: false));
 
-            return new DependencyWalk(Tokens: tokens, Refusal: null);
+            return new DependencyWalk(
+                Tokens: tokens,
+                Refusal: null
+            );
         }
 
         if (IsPartial(node: node)) {
@@ -235,7 +303,10 @@ internal static class TokenFingerprint {
             return DependencyWalk.Refused(reason: "it contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
         }
 
-        return new DependencyWalk(Tokens: node.DescendantTokens(descendIntoTrivia: false).ToArray(), Refusal: null);
+        return new DependencyWalk(
+            Tokens: node.DescendantTokens(descendIntoTrivia: false).ToArray(),
+            Refusal: null
+        );
     }
     private static bool IsPartial(SyntaxNode node) =>
         node switch {
@@ -249,12 +320,21 @@ internal static class TokenFingerprint {
         foreach (var token in tokens) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if ((excludedSpan is TextSpan span) && span.Contains(span: token.Span)) {
+            if (
+                (excludedSpan is TextSpan span) &&
+                span.Contains(span: token.Span)
+            ) {
                 continue;
             }
 
-            WriteInt32(stream: stream, value: token.RawKind);
-            WriteUtf8(stream: stream, text: token.Text);
+            WriteInt32(
+                stream: stream,
+                value: token.RawKind
+            );
+            WriteUtf8(
+                stream: stream,
+                text: token.Text
+            );
         }
     }
 
@@ -262,8 +342,15 @@ internal static class TokenFingerprint {
     private static void WriteUtf8(Stream stream, string text) {
         var textBytes = Encoding.UTF8.GetBytes(s: text);
 
-        WriteInt32(stream: stream, value: textBytes.Length);
-        stream.Write(buffer: textBytes, offset: 0, count: textBytes.Length);
+        WriteInt32(
+            stream: stream,
+            value: textBytes.Length
+        );
+        stream.Write(
+            buffer: textBytes,
+            offset: 0,
+            count: textBytes.Length
+        );
     }
 
     /// <summary>Writes <paramref name="value"/> little-endian, so the fingerprint does not depend on the host's byte order.</summary>
@@ -275,6 +362,10 @@ internal static class TokenFingerprint {
             (byte)(value >> 24),
         };
 
-        stream.Write(buffer: bytes, offset: 0, count: bytes.Length);
+        stream.Write(
+            buffer: bytes,
+            offset: 0,
+            count: bytes.Length
+        );
     }
 }

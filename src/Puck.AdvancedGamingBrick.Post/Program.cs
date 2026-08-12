@@ -14,19 +14,53 @@ var biosImage = LoadBios();
 Diagnostics.BiosImage = biosImage;
 
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
-if (Diagnostics.TryRun(args: args, exitCode: out var diagnosticExitCode)) {
+if (Diagnostics.TryRun(
+    args: args,
+    exitCode: out var diagnosticExitCode
+)) {
     return diagnosticExitCode;
 }
-var artifactsDirectory = (CommandLineArguments.Value(args: args, name: "--artifacts") ?? Path.Combine(path1: "artifacts", path2: "agb-post"));
-var tierFilter = CommandLineArguments.Value(args: args, name: "--tier");
-var nameFilter = CommandLineArguments.Value(args: args, name: "--filter");
-var testRomRoot = ResolveRoot(args: args, flag: "--roms", variable: "PUCK_AGB_TESTROMS");
-var gamesRoot = ResolveRoot(args: args, flag: "--games", variable: "PUCK_AGB_GAMES");
+var artifactsDirectory = (CommandLineArguments.Value(
+    args: args,
+    name: "--artifacts"
+) ?? Path.Combine(
+    path1: "artifacts",
+    path2: "agb-post"
+));
+var tierFilter = CommandLineArguments.Value(
+    args: args,
+    name: "--tier"
+);
+var nameFilter = CommandLineArguments.Value(
+    args: args,
+    name: "--filter"
+);
+var testRomRoot = ResolveRoot(
+    args: args,
+    flag: "--roms",
+    variable: "PUCK_AGB_TESTROMS"
+);
+var gamesRoot = ResolveRoot(
+    args: args,
+    flag: "--games",
+    variable: "PUCK_AGB_GAMES"
+);
 var stages = PostStages.Create()
-    .Where(predicate: stage => TierMatches(stage: stage, tierFilter: tierFilter))
-    .Where(predicate: stage => NameMatches(stage: stage, nameFilter: nameFilter))
+    .Where(predicate: stage => TierMatches(
+    stage: stage,
+    tierFilter: tierFilter
+))
+    .Where(predicate: stage => NameMatches(
+    stage: stage,
+    nameFilter: nameFilter
+))
     .ToArray();
-var context = new PostContext(artifactsDirectory: artifactsDirectory, testRomRoot: testRomRoot, gamesRoot: gamesRoot, biosImage: biosImage);
+var context = new PostContext(
+    artifactsDirectory: artifactsDirectory,
+    testRomRoot: testRomRoot,
+    gamesRoot: gamesRoot,
+    biosImage: biosImage
+);
 var report = new PostBattery(stages: stages).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
@@ -38,7 +72,10 @@ return report.ExitCode;
 static ReadOnlyMemory<byte> LoadBios() {
     var biosPath = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_BIOS");
 
-    if (!string.IsNullOrEmpty(value: biosPath) && File.Exists(path: biosPath)) {
+    if (
+        !string.IsNullOrEmpty(value: biosPath) &&
+        File.Exists(path: biosPath)
+    ) {
         var bytes = File.ReadAllBytes(path: biosPath);
 
         if (bytes.Length == ReplacementBios.ImageSize) {
@@ -57,7 +94,10 @@ static ReadOnlyMemory<byte> LoadBios() {
 // A directory root: the CLI flag wins, else the environment variable (when it names an existing directory), else null
 // (the stages that need it skip when it is absent).
 static string? ResolveRoot(string[] args, string flag, string variable) {
-    var explicitRoot = CommandLineArguments.Value(args: args, name: flag);
+    var explicitRoot = CommandLineArguments.Value(
+        args: args,
+        name: flag
+    );
 
     if (!string.IsNullOrEmpty(value: explicitRoot)) {
         return explicitRoot;
@@ -65,9 +105,18 @@ static string? ResolveRoot(string[] args, string flag, string variable) {
 
     var fromEnvironment = Environment.GetEnvironmentVariable(variable: variable);
 
-    return ((!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment)) ? fromEnvironment : null);
+    return ((!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment))
+        ? fromEnvironment
+        : null);
 }
 static bool TierMatches(IPostStage stage, string? tierFilter) =>
-    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(a: stage.Tier.ToString(), b: tierFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
+    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
+    a: stage.Tier.ToString(),
+    b: tierFilter,
+    comparisonType: StringComparison.OrdinalIgnoreCase
+));
 static bool NameMatches(IPostStage stage, string? nameFilter) =>
-    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(value: nameFilter, comparisonType: StringComparison.OrdinalIgnoreCase));
+    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
+    value: nameFilter,
+    comparisonType: StringComparison.OrdinalIgnoreCase
+));

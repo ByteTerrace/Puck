@@ -29,12 +29,21 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
 
         var bios = context.BiosImage.ToArray();
         var result = QueuedHostContractProbe.VerifyTimeTravel(
-            withContent: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios),
-            withAudio: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios, audioSampleRate: RequestedSampleRate),
+            withContent: () => new AdvancedMachineHost(
+                cartridgeRom: SyntheticRom.Create(),
+                biosImage: bios
+            ),
+            withAudio: () => new AdvancedMachineHost(
+                cartridgeRom: SyntheticRom.Create(),
+                biosImage: bios,
+                audioSampleRate: RequestedSampleRate
+            ),
             observe: ObserveState
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 
     // The emitted light of the synthetic ROM's uniform backdrop (its palette-entry-0 walk), folded to a long. The
@@ -44,8 +53,8 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     private static long ObserveState(AdvancedMachineHost host) {
         var light = host.EmittedLight;
 
-        return (((long)BitConverter.SingleToUInt32Bits(value: light.X) << 32)
+        return ((long)BitConverter.SingleToUInt32Bits(value: light.X) << 32)
             ^ ((long)BitConverter.SingleToUInt32Bits(value: light.Y) << 16)
-            ^ BitConverter.SingleToUInt32Bits(value: light.Z));
+            ^ BitConverter.SingleToUInt32Bits(value: light.Z);
     }
 }

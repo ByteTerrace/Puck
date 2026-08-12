@@ -40,9 +40,15 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(model: ConsoleModel.Dmg, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: SyntheticRom.Create()
+        );
 
-        PostMachine.RunFrames(instance: machine, frames: WarmFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: WarmFrames
+        );
 
         var midpoint = machine.Machine.Snapshot();
 
@@ -54,26 +60,38 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
             return PostStageOutcome.Fail(detail: rosterFailure);
         }
 
-        PostMachine.RunFrames(instance: machine, frames: TailFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: TailFrames
+        );
 
         var afterFirstRun = machine.Machine.Snapshot();
 
         machine.Machine.Restore(snapshot: midpoint);
 
-        PostMachine.RunFrames(instance: machine, frames: TailFrames);
+        PostMachine.RunFrames(
+            instance: machine,
+            frames: TailFrames
+        );
 
         var afterSecondRun = machine.Machine.Snapshot();
 
         return (afterFirstRun.ContentEquals(other: afterSecondRun)
             ? PostStageOutcome.Pass(detail: $"save@{WarmFrames}f, then +{TailFrames}f twice, byte-identical ({midpoint.Size} state bytes, format v{midpoint.Identity.Version}, {midpoint.Sections.Count} sections in the expected order)")
-            : PostStageOutcome.Fail(detail: $"restored run diverged from the original after {TailFrames} frames — {HashDivergenceProbe.DescribeDivergence(a: afterFirstRun, b: afterSecondRun)}"));
+            : PostStageOutcome.Fail(detail: $"restored run diverged from the original after {TailFrames} frames — {HashDivergenceProbe.DescribeDivergence(
+            a: afterFirstRun,
+            b: afterSecondRun
+        )}"));
     }
 
     // L-01: fails loudly on ANY roster drift — count, name, or order — rather than letting a stale
     // MachineIdentity.CurrentVersion silently mislabel a shifted layout.
     private static string? SectionRosterMismatch(IReadOnlyList<SnapshotSection> sections) {
         if (sections.Count != ExpectedSectionRoster.Length) {
-            return $"snapshot has {sections.Count} sections; expected {ExpectedSectionRoster.Length} ({string.Join(separator: ", ", values: ExpectedSectionRoster)}) — a component was added, removed, or the registration order changed without updating this roster (and MachineIdentity.CurrentVersion, if the byte layout moved)";
+            return $"snapshot has {sections.Count} sections; expected {ExpectedSectionRoster.Length} ({string.Join(
+                separator: ", ",
+                values: ExpectedSectionRoster
+            )}) — a component was added, removed, or the registration order changed without updating this roster (and MachineIdentity.CurrentVersion, if the byte layout moved)";
         }
 
         for (var index = 0; (index < sections.Count); ++index) {

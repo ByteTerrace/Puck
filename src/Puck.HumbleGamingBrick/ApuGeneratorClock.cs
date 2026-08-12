@@ -47,7 +47,10 @@ public sealed class ApuGeneratorClock : IClockedComponent {
         // The generator edge: the mid-dot step under double speed, every step otherwise. A speed switch can leave the
         // clock parked half a dot off the grid; whole-dot advances then keep the phase constant, so whichever arm
         // matches keeps firing exactly once per dot.
-        if ((m_clock.Now.SubCyclePhase != UFixedQ4816.Zero) || !m_key1.IsDoubleSpeed) {
+        if (
+            (m_clock.Now.SubCyclePhase != UFixedQ4816.Zero) ||
+            !m_key1.IsDoubleSpeed
+        ) {
             m_apu.TickGenerators();
         }
     }

@@ -27,9 +27,14 @@ public sealed class MachineConfiguration {
         // The overlay indexes the image directly (a monochrome model over 0x000-0x0FF, Color additionally over
         // 0x200-0x8FF), so reject an image too short to back that range rather than fault on the first fetch. The
         // AGB boot ROM shares the Color layout.
-        var requiredBootRomLength = (model.SupportsColor() ? CgbBootRomLength : DmgBootRomLength);
+        var requiredBootRomLength = (model.SupportsColor()
+            ? CgbBootRomLength
+            : DmgBootRomLength);
 
-        if ((bootRom is not null) && (bootRom.Length < requiredBootRomLength)) {
+        if (
+            (bootRom is not null) &&
+            (bootRom.Length < requiredBootRomLength)
+        ) {
             throw new ArgumentException(
                 message: $"A {model} boot ROM must be at least 0x{requiredBootRomLength:X} bytes; got 0x{bootRom.Length:X}.",
                 paramName: nameof(bootRom)

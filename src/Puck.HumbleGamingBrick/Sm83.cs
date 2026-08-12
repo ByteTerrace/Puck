@@ -78,7 +78,10 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // With a boot ROM the CPU powers on cold — every register zero and PC at 0x0000, the overlay's reset vector —
         // and the boot program itself produces the handoff state. Without one, the documented handoff is seeded.
         if (configuration.BootRom is null) {
-            SeedPostBootState(model: configuration.Model, header: header);
+            SeedPostBootState(
+                model: configuration.Model,
+                header: header
+            );
         }
     }
 
@@ -192,7 +195,10 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
             m_componentClock.IsDoubleSpeed = m_key1.IsDoubleSpeed;
 
-            if (!m_key1.AreInterruptsBlocked && (m_interrupts.Pending != InterruptKind.None)) {
+            if (
+                !m_key1.AreInterruptsBlocked &&
+                (m_interrupts.Pending != InterruptKind.None)
+            ) {
                 m_key1.CancelSwitch();
             }
 
@@ -225,7 +231,12 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // A newly armed VRAM DMA transfer loses the race to a pending interrupt: the hardware only freezes the CPU at
         // its next fetch, so a dispatch already due runs to completion first. Once the unit owns the bus the roles flip
         // and dispatch waits for the transfer to finish.
-        if (m_interruptMasterEnable && !m_key1.AreInterruptsBlocked && (m_interrupts.Pending != InterruptKind.None) && !m_hdma.IsTransferLocked) {
+        if (
+            m_interruptMasterEnable &&
+            !m_key1.AreInterruptsBlocked &&
+            (m_interrupts.Pending != InterruptKind.None) &&
+            !m_hdma.IsTransferLocked
+        ) {
             ServiceInterrupt();
 
             return;
@@ -306,8 +317,13 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     // boot ROM hands off the CGB state after one extra `inc b` — the single register difference cartridges probe to
     // detect Advance hardware — so B is one higher and F carries the increment's flags.
     private void SeedPostBootState(ConsoleModel model, CartridgeHeader header) {
-        if (model.SupportsColor() && !header.SupportsColor) {
-            var checksum = (header.IsFirstPartyGame ? header.TitleChecksum : (byte)0x00);
+        if (
+            model.SupportsColor() &&
+            !header.SupportsColor
+        ) {
+            var checksum = (header.IsFirstPartyGame
+                ? header.TitleChecksum
+                : (byte)0x00);
             var copyLogo = ((checksum == 0x43) || (checksum == 0x58));
 
             m_a = 0x11;
@@ -316,8 +332,12 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             m_c = 0x00;
             m_d = 0x00;
             m_e = 0x08;
-            m_h = (copyLogo ? (byte)0x99 : (byte)0x00);
-            m_l = (copyLogo ? (byte)0x1A : (byte)0x7C);
+            m_h = (copyLogo
+                ? (byte)0x99
+                : (byte)0x00);
+            m_l = (copyLogo
+                ? (byte)0x1A
+                : (byte)0x7C);
         } else if (model.SupportsColor()) {
             m_a = 0x11;
             m_f = 0x80;
@@ -343,7 +363,11 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         if (model == ConsoleModel.Agb) {
             var incremented = (byte)(m_b + 1);
 
-            m_f = (byte)(((incremented == 0x00) ? 0x80 : 0x00) | (((m_b & 0x0F) == 0x0F) ? 0x20 : 0x00));
+            m_f = (byte)(((incremented == 0x00)
+                ? 0x80
+                : 0x00) | (((m_b & 0x0F) == 0x0F)
+                ? 0x20
+                : 0x00));
             m_b = incremented;
         }
 
@@ -362,12 +386,18 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         InternalCycle();
 
         m_stackPointer = (ushort)(m_stackPointer - 1);
-        WriteCycle(address: m_stackPointer, value: (byte)(m_programCounter >> 8));
+        WriteCycle(
+            address: m_stackPointer,
+            value: (byte)(m_programCounter >> 8)
+        );
 
         var enabled = m_interrupts.Enabled;
 
         m_stackPointer = (ushort)(m_stackPointer - 1);
-        WriteCycle(address: m_stackPointer, value: (byte)m_programCounter);
+        WriteCycle(
+            address: m_stackPointer,
+            value: (byte)m_programCounter
+        );
 
         var pending = (InterruptKind)((byte)m_interrupts.Requested & (byte)enabled & 0x1F);
 

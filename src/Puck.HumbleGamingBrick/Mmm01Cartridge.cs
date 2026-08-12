@@ -34,9 +34,18 @@ public sealed class Mmm01Cartridge : CartridgeBase {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public Mmm01Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
-        m_ramBankWrapMask = ComputeBankWrapMask(byteCount: header.RamByteCount, bankSize: RamBankSize);
-        m_romBankWrapMask = ComputeBankWrapMask(byteCount: rom.Length, bankSize: RomBankSize);
+        : base(
+        rom: rom,
+        header: header
+    ) {
+        m_ramBankWrapMask = ComputeBankWrapMask(
+            byteCount: header.RamByteCount,
+            bankSize: RamBankSize
+        );
+        m_romBankWrapMask = ComputeBankWrapMask(
+            byteCount: rom.Length,
+            bankSize: RomBankSize
+        );
     }
 
     /// <inheritdoc/>
@@ -89,7 +98,9 @@ public sealed class Mmm01Cartridge : CartridgeBase {
 
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) {
-        var bank = ((address <= MemoryMap.RomBank0End) ? ResolveLowRomBank() : ResolveHighRomBank());
+        var bank = ((address <= MemoryMap.RomBank0End)
+            ? ResolveLowRomBank()
+            : ResolveHighRomBank());
 
         return (((bank & m_romBankWrapMask) * RomBankSize) + (address & (RomBankSize - 1)));
     }
@@ -135,7 +146,11 @@ public sealed class Mmm01Cartridge : CartridgeBase {
             return -2;
         }
 
-        var middleBits = (m_multiplexMode ? (m_mbc1Mode ? 0 : m_ramBankLow) : m_romBankMid);
+        var middleBits = (m_multiplexMode
+            ? (m_mbc1Mode
+                ? 0
+                : m_ramBankLow)
+            : m_romBankMid);
 
         return (m_romBankLow & (m_romBankMask << 1)) | (middleBits << 5) | (m_romBankHigh << 7);
     }
@@ -146,16 +161,22 @@ public sealed class Mmm01Cartridge : CartridgeBase {
             return -1;
         }
 
-        var middleBits = (m_multiplexMode ? m_ramBankLow : m_romBankMid);
+        var middleBits = (m_multiplexMode
+            ? m_ramBankLow
+            : m_romBankMid);
         var highBank = m_romBankLow | (middleBits << 5) | (m_romBankHigh << 7);
 
-        return ((highBank == ResolveLowRomBank()) ? (highBank + 1) : highBank);
+        return ((highBank == ResolveLowRomBank())
+            ? (highBank + 1)
+            : highBank);
     }
     private int ResolveRamBank() {
         if (!m_locked) {
             return 0;
         }
 
-        return (m_multiplexMode ? m_romBankMid | (m_ramBankHigh << 2) : m_ramBankLow | (m_ramBankHigh << 2));
+        return (m_multiplexMode
+            ? m_romBankMid | (m_ramBankHigh << 2)
+            : m_ramBankLow | (m_ramBankHigh << 2));
     }
 }

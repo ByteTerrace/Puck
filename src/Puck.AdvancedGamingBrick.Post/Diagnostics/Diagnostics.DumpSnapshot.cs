@@ -12,7 +12,10 @@ internal static partial class Diagnostics {
     // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
     // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
     private static int DumpSnapshot(string[] args) {
-        var romPath = CommandLineArguments.Value(args: args, name: "--rom");
+        var romPath = CommandLineArguments.Value(
+            args: args,
+            name: "--rom"
+        );
         byte[] rom;
         string romLabel;
 
@@ -28,26 +31,50 @@ internal static partial class Diagnostics {
             return 2;
         }
 
-        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
-        var frames = (((framesArg is not null) && int.TryParse(s: framesArg, result: out var parsedFrames)) ? parsedFrames : DefaultDumpSnapshotFrames);
-        var imagePath = (CommandLineArguments.Value(args: args, name: "--out") ?? Path.Combine("artifacts", "gba-post", "snapshot.bin"));
+        var framesArg = CommandLineArguments.Value(
+            args: args,
+            name: "--frames"
+        );
+        var frames = (((framesArg is not null) && int.TryParse(
+            s: framesArg,
+            result: out var parsedFrames
+        ))
+            ? parsedFrames
+            : DefaultDumpSnapshotFrames);
+        var imagePath = (CommandLineArguments.Value(
+            args: args,
+            name: "--out"
+        ) ?? Path.Combine(
+            path1: "artifacts",
+            path2: "gba-post",
+            path3: "snapshot.bin"
+        ));
         var imageDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: imagePath));
 
         if (!string.IsNullOrEmpty(value: imageDirectory)) {
             Directory.CreateDirectory(path: imageDirectory);
         }
 
-        using var machine = PostMachine.Build(bios: BiosImage, rom: rom);
+        using var machine = PostMachine.Build(
+            bios: BiosImage,
+            rom: rom
+        );
 
         machine.RunFrames(frames: frames);
 
         var snapshot = machine.Machine.Snapshot();
 
-        File.WriteAllBytes(path: imagePath, bytes: snapshot.Data.ToArray());
+        File.WriteAllBytes(
+            path: imagePath,
+            bytes: snapshot.Data.ToArray()
+        );
 
         var sectionsPath = $"{imagePath}.sections.txt";
 
-        WriteSectionTable(path: sectionsPath, sections: snapshot.Sections);
+        WriteSectionTable(
+            path: sectionsPath,
+            sections: snapshot.Sections
+        );
 
         // The same repo fingerprint HashDivergenceProbe hashes a snapshot with, so a --dump-snapshot fingerprint and a
         // --hash-divergence report describe the same instant the same way.

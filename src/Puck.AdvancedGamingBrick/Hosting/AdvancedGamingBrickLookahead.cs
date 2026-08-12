@@ -30,7 +30,11 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
 
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
-        m_machine.RestoreState(reader: new StateReader(buffer: buffer, start: 0, length: length));
+        m_machine.RestoreState(reader: new StateReader(
+        buffer: buffer,
+        start: 0,
+        length: length
+    ));
 
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) {
@@ -40,7 +44,10 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
         // light level AND tilt) so a sensor-bearing cart's predicted branch matches the authority's — a no-op on a cart
         // with no matching sensor.
         m_cartridge.SetLightLevel(level: input.LightLevel);
-        m_cartridge.SetTilt(x: input.Tilt.X, y: input.Tilt.Y);
+        m_cartridge.SetTilt(
+            x: input.Tilt.X,
+            y: input.Tilt.Y
+        );
     }
 
     /// <inheritdoc/>

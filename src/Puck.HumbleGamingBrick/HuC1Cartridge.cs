@@ -29,8 +29,14 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     /// <param name="rom">The full ROM image.</param>
     /// <param name="header">The decoded header.</param>
     public HuC1Cartridge(byte[] rom, CartridgeHeader header)
-        : base(rom: rom, header: header) {
-        m_ramBankWrapMask = ComputeBankWrapMask(byteCount: header.RamByteCount, bankSize: RamBankSize);
+        : base(
+        rom: rom,
+        header: header
+    ) {
+        m_ramBankWrapMask = ComputeBankWrapMask(
+            byteCount: header.RamByteCount,
+            bankSize: RamBankSize
+        );
         m_romBank = 1;
     }
 
@@ -72,8 +78,10 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     /// <returns>The IR value in IR mode, or the RAM byte.</returns>
     public override byte ReadRam(ushort address) =>
         (m_infraredMode
-            ? (byte)(InfraredNoLight | ((m_infrared?.ReceivedLight ?? false) ? 0x01 : 0x00))
-            : base.ReadRam(address: address));
+        ? (byte)(InfraredNoLight | ((m_infrared?.ReceivedLight ?? false)
+            ? 0x01
+            : 0x00))
+        : base.ReadRam(address: address));
     /// <summary>Writes to the external window: in IR mode bit 0 drives the shared IR LED (the same LED the RP register
     /// drives), otherwise banked RAM.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
@@ -87,7 +95,10 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
             return;
         }
 
-        base.WriteRam(address: address, value: value);
+        base.WriteRam(
+            address: address,
+            value: value
+        );
     }
     /// <inheritdoc/>
     /// <remarks>Overridden: the window is mode-selected between banked RAM and the IR register, so it stays on the
@@ -102,8 +113,8 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         ((address <= MemoryMap.RomBank0End)
-            ? address
-            : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        ? address
+        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));

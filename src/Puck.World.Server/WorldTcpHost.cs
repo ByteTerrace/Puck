@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
-using Puck.Carriage;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -280,7 +279,6 @@ public sealed class WorldTcpHost : IDisposable {
                 return;
             }
 
-            var codec = new FixedLayoutCarriageCodec();
             WorldAdmissionDoor.AdmissionOutcome outcome;
             // Captured alongside the exact entries TryAdmit consults below, so the tick-thread commit can prove the
             // policy has not moved since (WorldDefinition's sections are immutable records: an unrelated
@@ -289,14 +287,14 @@ public sealed class WorldTcpHost : IDisposable {
             var admissionEntriesAtVerify = m_server.Definition.Admission;
 
             try {
-                var claimEnvelope = codec.DecodeEnvelope(wire: identity.Claim);
-                var chainEnvelopes = identity.Chain.Select(selector: bytes => codec.DecodeEnvelope(wire: bytes)).ToArray();
+                var claimEnvelope = WorldAdmissionDoor.DecodeEnvelope(wire: identity.Claim);
+                var chainEnvelopes = identity.Chain.Select(selector: bytes => WorldAdmissionDoor.DecodeEnvelope(wire: bytes)).ToArray();
                 // Definition is read fresh, off the tick thread — an admission decision consulting a document that
                 // moves mid-handshake (a concurrent world.reset/load/reload) is eventual-consistency the same way
                 // any other cross-thread document read here would be. This is a presentation/networking admission
                 // decision, never simulation state, so it is not a determinism concern; the commit below still
                 // proves the policy this verdict rests on is the one the tick thread ultimately sees.
-                outcome = WorldAdmissionDoor.TryAdmit(entries: admissionEntriesAtVerify, challenge: challenge, codec: codec, claim: claimEnvelope, chain: chainEnvelopes, now: DateTimeOffset.UtcNow);
+                outcome = WorldAdmissionDoor.TryAdmit(entries: admissionEntriesAtVerify, challenge: challenge, claim: claimEnvelope, chain: chainEnvelopes, now: DateTimeOffset.UtcNow);
             } catch (FormatException exception) {
                 await WorldTcpWireFormat.WriteHelloRefusedAsync(stream: stream, reason: $"identity-refused: the presented claim or chain bytes do not decode — {exception.Message}", ct: handshakeCt).ConfigureAwait(continueOnCapturedContext: false);
 

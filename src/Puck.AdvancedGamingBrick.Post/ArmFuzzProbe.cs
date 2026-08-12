@@ -18,11 +18,17 @@ internal static class ArmFuzzProbe {
     public static (bool Pass, string Detail) Run(RomCase romCase, ReadOnlyMemory<byte> bios) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
-        using var machine = PostMachine.Build(bios: bios, rom: rom);
+        using var machine = PostMachine.Build(
+            bios: bios,
+            rom: rom
+        );
 
         MachineProbe.RunUntilSettled(machine: machine);
 
-        var marker = machine.Machine.Bus.Read32(address: EwramStart, access: BusAccessType.NonSequential);
+        var marker = machine.Machine.Bus.Read32(
+            address: EwramStart,
+            access: BusAccessType.NonSequential
+        );
 
         return (((marker != MarkerArm) && (marker != MarkerThumb))
             ? (true, "all tests passed")

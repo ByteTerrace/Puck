@@ -76,7 +76,10 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
 
         // The startup delay counts down whether or not a transfer is already running; on the tick it expires the new
         // transfer takes over. An in-flight transfer keeps running through a restart's delay, so OAM stays gated.
-        if (m_pending && (--m_delay == 0)) {
+        if (
+            m_pending &&
+            (--m_delay == 0)
+        ) {
             m_active = true;
             m_activeBase = m_pendingBase;
             m_activeBaseUnclamped = m_pendingBaseUnclamped;
@@ -135,7 +138,10 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         var source = CurrentSource();
 
         // A main-bus read while the DMA streams from the echo region sees open bus.
-        if ((BusForAddress(address: address) == DmaBus.Main) && (source >= MemoryMap.EchoRamStart)) {
+        if (
+            (BusForAddress(address: address) == DmaBus.Main) &&
+            (source >= MemoryMap.EchoRamStart)
+        ) {
             forceOpenBus = true;
 
             return true;
@@ -144,7 +150,10 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         // A colliding work-RAM access lands in the DMA's work-RAM cell; anything else sees the cell before the byte in
         // flight.
         redirect = (((address >= MemoryMap.WorkRamBank0Start) && ((BusForAddress(address: source) != DmaBus.Ram) || (source >= MemoryMap.EchoRamStart)))
-            ? RedirectedWorkRamCell(source: source, address: address)
+            ? RedirectedWorkRamCell(
+            source: source,
+            address: address
+        )
             : (ushort)(source - 1));
 
         return true;
@@ -159,18 +168,30 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
 
         var source = CurrentSource();
 
-        if ((BusForAddress(address: address) == DmaBus.Main) && (source >= MemoryMap.EchoRamStart)) {
+        if (
+            (BusForAddress(address: address) == DmaBus.Main) &&
+            (source >= MemoryMap.EchoRamStart)
+        ) {
             return OamDmaWriteConflict.Drop;
         }
 
-        if (((source < MemoryMap.WorkRamBank0Start) || (source >= MemoryMap.EchoRamStart)) && (address >= MemoryMap.WorkRamBank0Start)) {
-            target = RedirectedWorkRamCell(source: source, address: address);
+        if (
+            ((source < MemoryMap.WorkRamBank0Start) || (source >= MemoryMap.EchoRamStart)) &&
+            (address >= MemoryMap.WorkRamBank0Start)
+        ) {
+            target = RedirectedWorkRamCell(
+                source: source,
+                address: address
+            );
 
             return OamDmaWriteConflict.Store;
         }
 
         var redirect = (((source >= MemoryMap.EchoRamStart) && (address >= MemoryMap.WorkRamBank0Start))
-            ? RedirectedWorkRamCell(source: source, address: address)
+            ? RedirectedWorkRamCell(
+            source: source,
+            address: address
+        )
             : (ushort)(source - 1));
 
         if (redirect < MemoryMap.ExternalRamStart) {
@@ -233,11 +254,18 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
             return 0x00;
         }
 
-        if (m_supportsColor && (m_activeBaseUnclamped >= MemoryMap.EchoRamStart)) {
+        if (
+            m_supportsColor &&
+            (m_activeBaseUnclamped >= MemoryMap.EchoRamStart)
+        ) {
             return 0xFF;
         }
 
-        return DmaSource.Read(cartridgeSlot: m_cartridgeSlot, memory: m_memory, address: (ushort)(m_activeBase + m_index));
+        return DmaSource.Read(
+            cartridgeSlot: m_cartridgeSlot,
+            memory: m_memory,
+            address: (ushort)(m_activeBase + m_index)
+        );
     }
     // The unclamped source pointer at the byte currently in flight.
     private ushort CurrentSource() =>
@@ -248,7 +276,12 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     // Whether a CPU access at the address collides with the in-flight transfer's bus: Color only, only once the first
     // byte has actually moved, never in the OAM/IO page, and never on the source cell itself.
     private bool IsAddressInDmaUse(ushort address) {
-        if (!m_supportsColor || !m_active || (m_index == 0) || (address >= MemoryMap.ObjectAttributeMemoryStart)) {
+        if (
+            !m_supportsColor ||
+            !m_active ||
+            (m_index == 0) ||
+            (address >= MemoryMap.ObjectAttributeMemoryStart)
+        ) {
             return false;
         }
 
@@ -258,7 +291,10 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
             return false;
         }
 
-        if ((source >= MemoryMap.EchoRamStart) && ((source & ~0x2000) == address)) {
+        if (
+            (source >= MemoryMap.EchoRamStart) &&
+            ((source & ~0x2000) == address)
+        ) {
             return false;
         }
 

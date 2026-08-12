@@ -84,7 +84,9 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     /// <summary>Gets or sets the SPSR of the current mode; in User/System mode (which have none) the getter
     /// returns the CPSR and the setter is ignored.</summary>
     private uint Spsr {
-        get => (HasSpsr ? m_bankSpsr[BankIndex(mode: CurrentMode)] : m_cpsr);
+        get => (HasSpsr
+        ? m_bankSpsr[BankIndex(mode: CurrentMode)]
+        : m_cpsr);
         set {
             if (HasSpsr) {
                 m_bankSpsr[BankIndex(mode: CurrentMode)] = value;
@@ -181,15 +183,29 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         if (m_executeThumb) {
             var thumbOpcode = (ushort)opcode;
 
-            unsafe { s_thumbTable[(thumbOpcode >> 8)](this, thumbOpcode); }
+            unsafe {
+                ThumbTable[(thumbOpcode >> 8)](
+                    this,
+                    thumbOpcode
+                );
+            }
         } else {
             var condition = (opcode >> 28);
 
-            if ((condition == 0xEu) || CheckCondition(cpu: this, condition: condition)) {
+            if (
+                (condition == 0xEu) ||
+                CheckCondition(
+                cpu: this,
+                condition: condition
+            )
+            ) {
                 unsafe {
                     var index = ((opcode >> 16) & 0xFF0u) | ((opcode >> 4) & 0xFu);
 
-                    s_armTable[index](this, opcode);
+                    ArmTable[index](
+                        this,
+                        opcode
+                    );
                 }
             }
         }
@@ -261,9 +277,14 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         var thumb = ThumbState;
 
-        m_gpr[15] += (thumb ? 2u : 4u);
+        m_gpr[15] += (thumb
+            ? 2u
+            : 4u);
         m_fetchAddress = m_gpr[15];
-        m_fetchWord = FetchWord(address: m_fetchAddress, thumb: thumb);
+        m_fetchWord = FetchWord(
+            address: m_fetchAddress,
+            thumb: thumb
+        );
     }
 
     // A pipeline opcode read, charged as sequential unless a branch or data access made the next fetch non-seq.
@@ -275,8 +296,14 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_nextFetchNonSequential = false;
 
         return (thumb
-            ? m_bus.ReadCode16(address: address & ~1u, access: access)
-            : m_bus.ReadCode32(address: address & ~3u, access: access));
+            ? m_bus.ReadCode16(
+            address: address & ~1u,
+            access: access
+        )
+            : m_bus.ReadCode32(
+            address: address & ~3u,
+            access: access
+        ));
     }
 
     // ARM7TDMI reload: after a branch/exception writes R15, the pipeline is refilled
@@ -289,7 +316,10 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         var thumb = ThumbState;
 
         m_fetchAddress = m_gpr[15];
-        m_fetchWord = FetchWord(address: m_fetchAddress, thumb: thumb);
+        m_fetchWord = FetchWord(
+            address: m_fetchAddress,
+            thumb: thumb
+        );
 
         Fetch();
     }
@@ -319,15 +349,29 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     // A pre-empting IRQ recognised in Step. The link register is the decode-stage address (the instruction that was
     // about to execute); hardware adds 2 in Thumb so SUBS PC,LR,#4 returns to re-run it.
     private void TakeIrqException() {
-        var linkRegister = (m_decodeAddress + (m_executeThumb ? 2u : 0u));
+        var linkRegister = (m_decodeAddress + (m_executeThumb
+            ? 2u
+            : 0u));
 
-        Exception(mode: CpuMode.Irq, vector: 0x18u, linkRegister: linkRegister);
+        Exception(
+            mode: CpuMode.Irq,
+            vector: 0x18u,
+            linkRegister: linkRegister
+        );
     }
     private void SoftwareInterrupt() {
         // SWI returns with MOVS PC,LR straight to the following instruction (the decode-stage address).
-        Exception(mode: CpuMode.Supervisor, vector: 0x08u, linkRegister: m_decodeAddress);
+        Exception(
+            mode: CpuMode.Supervisor,
+            vector: 0x08u,
+            linkRegister: m_decodeAddress
+        );
     }
     private void UndefinedInstruction() {
-        Exception(mode: CpuMode.Undefined, vector: 0x04u, linkRegister: m_decodeAddress);
+        Exception(
+            mode: CpuMode.Undefined,
+            vector: 0x04u,
+            linkRegister: m_decodeAddress
+        );
     }
 }

@@ -30,12 +30,12 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
     /// <returns>The identity stamp.</returns>
     public static MachineIdentity Compute(ConsoleModel model, ReadOnlySpan<byte> bootRom, ReadOnlySpan<byte> rom) =>
         new(
-            Version: CurrentVersion,
-            Model: (int)model,
-            BootRomHash: Fnv1aHash.Compute(values: bootRom),
-            RomHash: Fnv1aHash.Compute(values: rom),
-            RomLength: rom.Length
-        );
+        Version: CurrentVersion,
+        Model: (int)model,
+        BootRomHash: Fnv1aHash.Compute(values: bootRom),
+        RomHash: Fnv1aHash.Compute(values: rom),
+        RomLength: rom.Length
+    );
 }
 
 /// <summary>
@@ -47,9 +47,17 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
 /// </summary>
 public sealed class MachineSnapshot : Puck.Snapshots.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
     internal MachineSnapshot(MachineIdentity identity, Tick takenAt, SnapshotImage image)
-        : base(identity: identity, takenAt: takenAt, image: image) { }
+        : base(
+        identity: identity,
+        takenAt: takenAt,
+        image: image
+    ) { }
 
     /// <inheritdoc/>
     protected override MachineSnapshot Create(MachineIdentity identity, Tick takenAt, SnapshotImage image) =>
-        new(identity: identity, takenAt: takenAt, image: image);
+        new(
+        identity: identity,
+        takenAt: takenAt,
+        image: image
+    );
 }

@@ -72,6 +72,7 @@ internal static class Program {
         RunArrivedBytesScenarios();
         RunSignatureLevelScenarios();
         RunSerialisationCrossCheck();
+        RunConformanceProfileScenarios();
         RunSealedCarriageScenarios();
         RunInterchangeRoundTrip();
         RunSizeAndComplexityReport();
@@ -299,7 +300,8 @@ internal static class Program {
 
         return new TrustList(
             entries: [entry],
-            defaultMaximumAge: defaultMaximumAge
+            defaultMaximumAge: defaultMaximumAge,
+            replayAcceptanceHorizon: defaultMaximumAge
         );
     }
 
@@ -358,8 +360,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -387,8 +388,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -405,8 +405,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -433,8 +432,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -449,8 +447,7 @@ internal static class Program {
             trustList: trustB,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -476,8 +473,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -502,8 +498,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -533,8 +528,7 @@ internal static class Program {
             trustList: trustGenerous,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -549,8 +543,7 @@ internal static class Program {
             trustList: trustGenerous,
             now: laterNow,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -559,11 +552,8 @@ internal static class Program {
             reasonMustContain: "issuer"
         );
 
-        // 7. Tighter-of-two, direction 2: the VERIFIER's maximum age is the tighter one and governs.
-        // The 1-hour ceiling applies to every hop (bindings included — a binding is "the longest a
-        // compromised subject key stays honoured", so the verifier's ceiling has to reach it too), so the
-        // refusal below may surface at a chain hop rather than at the claim itself; either way it is the
-        // verifier's ceiling doing the refusing.
+        // 7. Tighter-of-two, direction 2: the VERIFIER's CLAIM maximum age is the tighter one and governs.
+        // Binding ages are separate policy: this short claim cadence never forces the cold root to re-sign.
         var trustTight = BuildTrustList(
             keys: keysA,
             defaultMaximumAge: TimeSpan.FromHours(hours: 1)
@@ -585,8 +575,7 @@ internal static class Program {
             trustList: trustTight,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -601,14 +590,41 @@ internal static class Program {
             trustList: trustTight,
             now: muchLaterNow,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
             scenario: $"[{codec.Name}] tighter-of-two: the verifier's 1-hour ceiling governs even though the issuer allows 30 days",
             result: tightVerifierExpiredResult,
             reasonMustContain: "verifier"
+        );
+
+        var rootAgedTrust = new TrustList(
+            entries: [new TrustListEntry(
+                PinnedId: keysA.RootId,
+                PublicKeySubjectPublicKeyInfo: keysA.RootSpki,
+                Mode: CarriageTrustMode.Vouches,
+                Reach: DefaultReach,
+                MaximumAge: TimeSpan.FromDays(value: 30),
+                RootBindingMaximumAge: TimeSpan.FromHours(hours: 1),
+                SubjectBindingMaximumAge: TimeSpan.FromDays(value: 7)
+            )],
+            defaultMaximumAge: null
+        );
+        var rootAgedResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: tightVerifierClaim,
+            chain: chainA,
+            trustList: rootAgedTrust,
+            now: muchLaterNow,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home"
+        );
+
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] separated lifetime policy: a 1-hour root-binding ceiling refuses the aged root hop independently of the 30-day claim ceiling",
+            result: rootAgedResult,
+            reasonMustContain: "root-vouches-issuing"
         );
 
         // 8. Missing chain: a claim arrives with no bindings at all.
@@ -619,8 +635,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -638,8 +653,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -666,8 +680,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:market",
-            sequenceStore: null
+            expectedAudience: "world:market"
         );
 
         ExpectAccept(
@@ -681,8 +694,7 @@ internal static class Program {
             trustList: trustA,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:elsewhere",
-            sequenceStore: null
+            expectedAudience: "world:elsewhere"
         );
 
         ExpectRefuse(
@@ -692,7 +704,7 @@ internal static class Program {
         );
 
         // 11. Bearer sequence replay: equal AND lower are both refused; a higher sequence still advances.
-        var sequenceStore = new InMemorySequenceStore();
+        var sequenceStore = new ReplayTestStore();
         var bearer10 = SignTestClaim(
             codec: codec,
             keys: keysA,
@@ -703,16 +715,15 @@ internal static class Program {
             sequence: 10UL,
             text: "bearer sequence 10"
         );
-        var bearer10Result = CarriageVerifier.VerifyChain(
+        var bearer10Result = sequenceStore.Commit(CarriageVerifier.VerifyChain(
             codec: codec,
             claim: bearer10,
             chain: chainA,
             trustList: trustA,
             now: now,
             expectedPurpose: "test.bearer",
-            expectedAudience: null,
-            sequenceStore: sequenceStore
-        );
+            expectedAudience: null
+        ));
 
         ExpectAccept(
             scenario: $"[{codec.Name}] bearer sequence control: first use of sequence 10 accepted",
@@ -729,16 +740,15 @@ internal static class Program {
             sequence: 10UL,
             text: "bearer sequence 10 replay"
         );
-        var bearerEqualResult = CarriageVerifier.VerifyChain(
+        var bearerEqualResult = sequenceStore.Commit(CarriageVerifier.VerifyChain(
             codec: codec,
             claim: bearerEqual,
             chain: chainA,
             trustList: trustA,
             now: now,
             expectedPurpose: "test.bearer",
-            expectedAudience: null,
-            sequenceStore: sequenceStore
-        );
+            expectedAudience: null
+        ));
 
         ExpectRefuse(
             scenario: $"[{codec.Name}] bearer sequence replay: equal sequence (10 after 10) refused",
@@ -756,16 +766,15 @@ internal static class Program {
             sequence: 5UL,
             text: "bearer sequence 5 replay"
         );
-        var bearerLowerResult = CarriageVerifier.VerifyChain(
+        var bearerLowerResult = sequenceStore.Commit(CarriageVerifier.VerifyChain(
             codec: codec,
             claim: bearerLower,
             chain: chainA,
             trustList: trustA,
             now: now,
             expectedPurpose: "test.bearer",
-            expectedAudience: null,
-            sequenceStore: sequenceStore
-        );
+            expectedAudience: null
+        ));
 
         ExpectRefuse(
             scenario: $"[{codec.Name}] bearer sequence replay: lower sequence (5 after 10) refused",
@@ -783,16 +792,15 @@ internal static class Program {
             sequence: 11UL,
             text: "bearer sequence 11"
         );
-        var bearer11Result = CarriageVerifier.VerifyChain(
+        var bearer11Result = sequenceStore.Commit(CarriageVerifier.VerifyChain(
             codec: codec,
             claim: bearer11,
             chain: chainA,
             trustList: trustA,
             now: now,
             expectedPurpose: "test.bearer",
-            expectedAudience: null,
-            sequenceStore: sequenceStore
-        );
+            expectedAudience: null
+        ));
 
         ExpectAccept(
             scenario: $"[{codec.Name}] bearer sequence control: higher sequence (11 after 10) accepted, mark advances",
@@ -853,6 +861,14 @@ internal static class Program {
             keys: keys,
             defaultMaximumAge: TimeSpan.FromHours(hours: 24)
         );
+        Check(
+            scenario: "binding-age compatibility: an omitted binding-specific default inherits the authored default ceiling",
+            ok: (
+                trust.DefaultRootBindingMaximumAge == trust.DefaultMaximumAge &&
+                trust.DefaultSubjectBindingMaximumAge == trust.DefaultMaximumAge
+            ),
+            detail: "splitting lifetime policy does not silently remove an existing verifier ceiling"
+        );
         var claim = SignTestClaim(
             codec: codec,
             keys: keys,
@@ -871,8 +887,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -891,7 +906,7 @@ internal static class Program {
             ? $"reach reported as [{string.Join(
                 separator: ", ",
                 values: twoHopResult.Reach!
-            )}] — the verifier states the authored scope and never enforces it; NO engine consumer exists yet, so nothing enforces it today either"
+            )}] — the result encapsulates the authored scope behind slot-scoped admission queries"
             : $"reach was [{((twoHopResult.Reach is null)
                 ? "(null)"
                 : string.Join(
@@ -918,8 +933,7 @@ internal static class Program {
             trustList: narrowTrust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
         var narrowReported = (narrowResult.Verified && narrowResult.Admits(slot: "slot:title") && !narrowResult.Admits(slot: "slot:wallet"));
 
@@ -952,8 +966,7 @@ internal static class Program {
             trustList: emptyReachTrust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
         var emptyReachReported = (emptyReachResult.Verified && (emptyReachResult.Reach is not null) && (emptyReachResult.Reach.Count == 0));
 
@@ -978,8 +991,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.other",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         Check(
@@ -998,8 +1010,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.other",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1026,8 +1037,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1054,8 +1064,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1105,8 +1114,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1149,8 +1157,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1180,8 +1187,7 @@ internal static class Program {
             trustList: directTrust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -1196,8 +1202,7 @@ internal static class Program {
             trustList: directTrust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1233,8 +1238,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
@@ -1425,17 +1429,19 @@ internal static class Program {
             defaultMaximumAge: TimeSpan.FromHours(hours: 24)
         );
 
-        CarriageVerifyResult VerifyAt(SignedCarriageEnvelope envelope, ISequenceStore? store) =>
-            CarriageVerifier.VerifyChain(
-            codec: codec,
-            claim: envelope,
-            chain: chain,
-            trustList: trust,
-            now: now,
-            expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: store
-        );
+        CarriageVerifyResult VerifyAt(SignedCarriageEnvelope envelope, ReplayTestStore? store) {
+            var result = CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: envelope,
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.claim",
+                expectedAudience: "world:home"
+            );
+
+            return (store is null) ? result : store.Commit(result: result);
+        }
 
         // There is no skew tolerance: notBefore is honoured to the second, in both directions.
         var openingNowClaim = SignTestClaim(
@@ -1548,7 +1554,7 @@ internal static class Program {
             sequence: null,
             text: "directed, no sequence"
         );
-        var directedStore = new InMemorySequenceStore();
+        var directedStore = new ReplayTestStore();
 
         ExpectAccept(
             scenario: "directed claim control: no sequence, first presentation accepted",
@@ -1591,13 +1597,96 @@ internal static class Program {
             ),
             reasonMustContain: "sequence replay"
         );
-        ExpectRefuse(
-            scenario: "directed claim + sequence: no store supplied, so the declared replay defence cannot be honoured",
-            result: VerifyAt(
+        var pureSequencedResult = VerifyAt(
                 envelope: directedWithSequence,
                 store: null
+        );
+        Check(
+            scenario: "pure verification: a sequenced claim returns a replay commit requirement without mutating storage",
+            ok: (pureSequencedResult.Verified && (pureSequencedResult.ReplayCommit is not null)),
+            detail: "the receiver must atomically commit this requirement with the claim's semantic effect"
+        );
+        Check(
+            scenario: "sequenced verification is not admission: Admits stays false until the receiver performs its transaction",
+            ok: (
+                !pureSequencedResult.Admits(slot: "slot:wallet") &&
+                pureSequencedResult.TryGetReplayCommit(slot: "slot:wallet", requirement: out var scopedRequirement) &&
+                (scopedRequirement is not null)
             ),
-            reasonMustContain: "no sequence store"
+            detail: "the public result exposes a scoped prerequisite, never an already-admitted sequenced claim"
+        );
+
+        var commit = pureSequencedResult.ReplayCommit!;
+        var horizonSeconds = 86_400L;
+        var expectedEpochStart = Math.DivRem(
+            a: directedWithSequence.Header.NotBefore,
+            b: horizonSeconds,
+            result: out _
+        ) * horizonSeconds;
+        Check(
+            scenario: "finite replay horizon: verification derives the epoch and safe inclusive retention deadline from signed notBefore",
+            ok: (
+                (commit.EpochStartUnixSeconds == expectedEpochStart) &&
+                (commit.RetainThroughUnixSeconds == (expectedEpochStart + (2 * horizonSeconds) - 1)) &&
+                (commit.Sequence == 7UL)
+            ),
+            detail: $"epoch={commit.EpochStartUnixSeconds}, retainThrough={commit.RetainThroughUnixSeconds}, sequence={commit.Sequence}"
+        );
+
+        var noHorizonTrust = new TrustList(
+            entries: [new TrustListEntry(
+                PinnedId: keys.RootId,
+                PublicKeySubjectPublicKeyInfo: keys.RootSpki,
+                Mode: CarriageTrustMode.Vouches,
+                Reach: DefaultReach,
+                MaximumAge: null
+            )],
+            defaultMaximumAge: null
+        );
+        ExpectRefuse(
+            scenario: "finite replay horizon: a verifier that authors no finite horizon refuses every sequenced claim",
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: directedWithSequence,
+                chain: chain,
+                trustList: noHorizonTrust,
+                now: now,
+                expectedPurpose: "test.claim",
+                expectedAudience: "world:home"
+            ),
+            reasonMustContain: "no finite replay-acceptance horizon"
+        );
+
+        var tooLongSequenced = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + horizonSeconds + 60),
+            audience: "world:home",
+            sequence: 8UL,
+            text: "window exceeds replay horizon"
+        );
+        ExpectRefuse(
+            scenario: "finite replay horizon: a sequenced signed window longer than H is refused, closing the far-future lower-sequence hole",
+            result: VerifyAt(envelope: tooLongSequenced, store: null),
+            reasonMustContain: "exceeds the verifier's replay-acceptance horizon"
+        );
+
+        var extremeNotBefore = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: long.MinValue,
+            notAfter: (Epoch + 60),
+            audience: "world:home",
+            sequence: 9UL,
+            text: "extreme wire timestamp"
+        );
+        ExpectRefuse(
+            scenario: "extreme notBefore refuses without Int64 subtraction or TimeSpan overflow",
+            result: VerifyAt(envelope: extremeNotBefore, store: null),
+            reasonMustContain: "exceeds the verifier's maximum age"
         );
 
         // The sequence check is one atomic store call, so the same bearer claim presented concurrently is
@@ -1613,22 +1702,21 @@ internal static class Program {
             sequence: 42UL,
             text: "one bearer claim, two receivers"
         );
-        var contendedStore = new LockstepSequenceStore(participants: 4);
+        var contendedStore = new ReplayTestStore(participants: 4);
         var contendedResults = new CarriageVerifyResult[4];
 
         Parallel.For(
             fromInclusive: 0,
             toExclusive: 4,
-            body: index => contendedResults[index] = CarriageVerifier.VerifyChain(
+            body: index => contendedResults[index] = contendedStore.Commit(CarriageVerifier.VerifyChain(
                 codec: codec,
                 claim: bearerOnce,
                 chain: chain,
                 trustList: trust,
                 now: now,
                 expectedPurpose: "test.bearer",
-                expectedAudience: null,
-                sequenceStore: contendedStore
-            )
+                expectedAudience: null
+            ))
         );
 
         var verifiedCount = contendedResults.Count(predicate: result => result.Verified);
@@ -1641,125 +1729,57 @@ internal static class Program {
             : $"accepted {verifiedCount} times; a bearer claim is usable once, so anything but 1 is a replay the mark was supposed to refuse")
         );
 
-        var uncontendedStore = new LockstepSequenceStore(participants: 1);
+        var uncontendedStore = new ReplayTestStore(participants: 1);
 
         ExpectAccept(
             scenario: "sequence atomicity control: the same claim against the same store shape, uncontended, is accepted",
-            result: CarriageVerifier.VerifyChain(
+            result: uncontendedStore.Commit(CarriageVerifier.VerifyChain(
                 codec: codec,
                 claim: bearerOnce,
                 chain: chain,
                 trustList: trust,
                 now: now,
                 expectedPurpose: "test.bearer",
-                expectedAudience: null,
-                sequenceStore: uncontendedStore
-            )
+                expectedAudience: null
+            ))
         );
 
-        // A store that cannot decide — unreachable, unreadable, or unable to record the advance durably —
-        // refuses the claim (§8): accepting instead would invert the one check whose purpose is to make a claim
-        // usable once. The failure must not propagate out of the verifier either, or a receiver whose database
-        // blinked stops producing verdicts at all.
-        var unavailable = SignTestClaim(
-            codec: codec,
-            keys: keys,
-            purpose: "test.bearer",
-            notBefore: (Epoch - 60),
-            notAfter: (Epoch + 3_600),
-            audience: null,
-            sequence: 99UL,
-            text: "presented while the store is down"
-        );
-
-        ExpectRefuse(
-            scenario: "sequence store unavailable: a claim carrying a sequence, against a mark store that cannot decide, is REFUSED",
-            result: CarriageVerifier.VerifyChain(
-                codec: codec,
-                claim: unavailable,
-                chain: chain,
-                trustList: trust,
-                now: now,
-                expectedPurpose: "test.bearer",
-                expectedAudience: null,
-                sequenceStore: new UnavailableSequenceStore()
-            ),
-            reasonMustContain: "could not decide"
-        );
-
-        ExpectAccept(
-            scenario: "sequence store unavailable control: the identical claim against a working store is accepted",
-            result: CarriageVerifier.VerifyChain(
-                codec: codec,
-                claim: unavailable,
-                chain: chain,
-                trustList: trust,
-                now: now,
-                expectedPurpose: "test.bearer",
-                expectedAudience: null,
-                sequenceStore: new InMemorySequenceStore()
-            )
-        );
-
-        // The other half of deny-by-default: a store that decides "no" without raising — the shape a
-        // conditional update takes when contention cannot be resolved — is a refusal, not a retry the
-        // verifier makes on its own.
-        ExpectRefuse(
-            scenario: "sequence store indeterminate: a store that resolves nothing and returns false refuses the claim",
-            result: CarriageVerifier.VerifyChain(
-                codec: codec,
-                claim: unavailable,
-                chain: chain,
-                trustList: trust,
-                now: now,
-                expectedPurpose: "test.bearer",
-                expectedAudience: null,
-                sequenceStore: new UndecidedSequenceStore()
-            ),
-            reasonMustContain: "sequence replay"
-        );
-    }
-
-    /// <summary>An <see cref="ISequenceStore"/> that is down. Standing in for a database that cannot be reached, a disk that will not flush, or a transaction that aborted.</summary>
-    private sealed class UnavailableSequenceStore : ISequenceStore {
-        /// <inheritdoc/>
-        public bool TryAdvance(string domain, string subject, ulong sequence) =>
-            throw new IOException(message: "the mark store is unreachable");
-    }
-
-    /// <summary>An <see cref="ISequenceStore"/> that never resolves contention and therefore never advances — the non-raising way a store declines to decide.</summary>
-    private sealed class UndecidedSequenceStore : ISequenceStore {
-        /// <inheritdoc/>
-        public bool TryAdvance(string domain, string subject, ulong sequence) => false;
     }
 
     /// <summary>
-    /// An atomic <see cref="ISequenceStore"/> that additionally holds every caller at the door until all of
-    /// them have arrived. The rendezvous is what makes the contention scenario deterministic: without it,
+    /// A receiver-side atomic replay commit demonstration. A real receiver performs this compare/advance
+    /// in the same durable transaction as the claim's semantic effect.
+    /// The rendezvous waits until all participants have arrived, which makes the contention scenario deterministic: without it,
     /// four threads would usually serialise by luck and the test would pass on a broken store.
     /// </summary>
-    private sealed class LockstepSequenceStore(int participants) : ISequenceStore {
-        private readonly Barrier m_barrier = new(participantCount: participants);
-        private readonly Dictionary<(string Domain, string Subject), ulong> m_marks = [];
+    private sealed class ReplayTestStore(int participants = 1) {
+        private readonly Barrier? m_barrier = (participants > 1) ? new Barrier(participantCount: participants) : null;
+        private readonly Dictionary<(string Domain, string Subject, long EpochStartUnixSeconds), ulong> m_marks = [];
 
-        /// <inheritdoc/>
-        public bool TryAdvance(string domain, string subject, ulong sequence) {
-            m_barrier.SignalAndWait();
+        public CarriageVerifyResult Commit(CarriageVerifyResult result) {
+            if (!result.Verified || (result.ReplayCommit is null)) {
+                return result;
+            }
+
+            m_barrier?.SignalAndWait();
+
+            var requirement = result.ReplayCommit;
+            var key = (requirement.Domain, requirement.Subject, requirement.EpochStartUnixSeconds);
 
             lock (m_marks) {
                 if (
                     m_marks.TryGetValue(
-                    key: (domain, subject),
+                    key: key,
                     out var mark
                 ) &&
-                    (sequence <= mark)
+                    (requirement.Sequence <= mark)
                 ) {
-                    return false;
+                    return CarriageVerifyResult.Refuse(reason: $"sequence replay: claim sequence {requirement.Sequence} does not strictly exceed the recorded epoch high-water mark");
                 }
 
-                m_marks[(domain, subject)] = sequence;
+                m_marks[key] = requirement.Sequence;
 
-                return true;
+                return result;
             }
         }
     }
@@ -2130,8 +2150,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -2284,8 +2303,7 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
@@ -2309,14 +2327,311 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectRefuse(
             scenario: "serialisation cross-check: a fixed-layout-signed envelope re-encoded as CBOR does NOT verify",
             result: crossCheckResult,
             reasonMustContain: "signature"
+        );
+    }
+
+    // ---- Named conformance profiles ---------------------------------------------------------------------
+
+    private static void RunConformanceProfileScenarios() {
+        Console.WriteLine();
+        Console.WriteLine(value: "=== Named conformance profiles and resource ceilings ===");
+
+        const long Epoch = 1_700_000_000L;
+
+        var now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
+        var keys = MintDomainKeys(subject: "user:profile");
+        var cbor = new CborCarriageCodec();
+        var fixedLayout = new FixedLayoutCarriageCodec();
+        var trustSha256 = BuildDirectTrustList(keys: keys, reach: DefaultReach);
+        var claimCbor = SignTestClaim(
+            codec: cbor,
+            keys: keys,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            text: "base profile"
+        );
+        var claimFixed = SignTestClaim(
+            codec: fixedLayout,
+            keys: keys,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            text: "fixed-layout extension"
+        );
+
+        ExpectAccept(
+            scenario: "[profile] carriage-v1-base requires and accepts CBOR + ECDSA-P256-SHA256",
+            result: CarriageConformanceProfile.Base.VerifyChain(
+                codec: cbor,
+                claim: claimCbor,
+                chain: null,
+                trustList: trustSha256,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            )
+        );
+
+        using var unrelatedKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+        var unrelatedSpki = unrelatedKey.ExportSubjectPublicKeyInfo();
+        var unrelatedSha384Id = KeyId.ForSubject(
+            domain: keys.Domain,
+            subject: "user:unrelated-sha384",
+            subjectPublicKeyInfo: unrelatedSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha384
+        );
+        var mixedTrust = new TrustList(
+            entries: [
+                trustSha256.Entries[0],
+                new TrustListEntry(
+                    PinnedId: unrelatedSha384Id,
+                    PublicKeySubjectPublicKeyInfo: unrelatedSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: DefaultReach,
+                    MaximumAge: null
+                ),
+            ],
+            defaultMaximumAge: null
+        );
+        ExpectAccept(
+            scenario: "[profile] a disabled algorithm on an unrelated trust entry cannot poison a selected SHA-256 admission",
+            result: CarriageConformanceProfile.Base.VerifyChain(
+                codec: cbor,
+                claim: claimCbor,
+                chain: null,
+                trustList: mixedTrust,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            )
+        );
+
+        Check(
+            scenario: "[profile] the resource/profile facade is the only public verification boundary",
+            ok: !typeof(CarriageVerifier).IsPublic,
+            detail: "the core verifier is assembly-only, so callers cannot bypass a receiver-selected profile"
+        );
+
+        ExpectRefuse(
+            scenario: "[profile] carriage-v1-base does not silently accept the optional fixed layout",
+            result: CarriageConformanceProfile.Base.VerifyChain(
+                codec: fixedLayout,
+                claim: claimFixed,
+                chain: null,
+                trustList: trustSha256,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            ),
+            reasonMustContain: "does not enable"
+        );
+
+        var fixedProfile = CarriageConformanceProfile.Base.WithExtensions(
+            extensions: CarriageConformanceExtensions.FixedLayoutV1
+        );
+
+        Check(
+            scenario: "[profile] composed profile names use the normative extension spelling",
+            ok: string.Equals(
+                a: fixedProfile.Name,
+                b: "carriage-v1-base+fixed-layout-v1",
+                comparisonType: StringComparison.Ordinal
+            ),
+            detail: $"profile name is '{fixedProfile.Name}'"
+        );
+
+        ExpectAccept(
+            scenario: "[profile] the named fixed-layout-v1 extension enables fixed layout without removing mandatory CBOR",
+            result: fixedProfile.VerifyChain(
+                codec: fixedLayout,
+                claim: claimFixed,
+                chain: null,
+                trustList: trustSha256,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            )
+        );
+
+        var subjectSha384Id = KeyId.ForSubject(
+            domain: keys.Domain,
+            subject: keys.Subject,
+            subjectPublicKeyInfo: keys.SubjectSigningSpki,
+            algorithm: CarriageAlgorithms.EcdsaP256Sha384
+        );
+        var trustSha384 = new TrustList(
+            entries: [
+                new TrustListEntry(
+                    PinnedId: subjectSha384Id,
+                    PublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                    Mode: CarriageTrustMode.SignsDirectly,
+                    Reach: DefaultReach,
+                    MaximumAge: null
+                ),
+            ],
+            defaultMaximumAge: null
+        );
+        var claimSha384 = CarriageSigner.SignClaim(
+            codec: cbor,
+            domain: keys.Domain,
+            subject: keys.Subject,
+            signerKey: keys.SubjectSigningKey,
+            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha384,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            claimBytes: "sha384 extension"u8.ToArray()
+        );
+
+        ExpectRefuse(
+            scenario: "[profile] SHA-384 is not part of the mandatory base algorithm set",
+            result: CarriageConformanceProfile.Base.VerifyChain(
+                codec: cbor,
+                claim: claimSha384,
+                chain: null,
+                trustList: trustSha384,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            ),
+            reasonMustContain: "does not enable"
+        );
+
+        var sha384Profile = CarriageConformanceProfile.Base.WithExtensions(
+            extensions: CarriageConformanceExtensions.EcdsaP256Sha384
+        );
+
+        ExpectAccept(
+            scenario: "[profile] the named SHA-384 extension accepts an honestly pinned SHA-384 claim",
+            result: sha384Profile.VerifyChain(
+                codec: cbor,
+                claim: claimSha384,
+                chain: null,
+                trustList: trustSha384,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            )
+        );
+
+        var confusedClaim = SignTestClaim(
+            codec: cbor,
+            keys: keys,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            text: "message-selected downgrade",
+            declaredAlgorithm: CarriageAlgorithms.EcdsaP256Sha384
+        );
+
+        ExpectRefuse(
+            scenario: "[profile] enabling SHA-384 does not let a message select it over its pinned SHA-256 key",
+            result: sha384Profile.VerifyChain(
+                codec: cbor,
+                claim: confusedClaim,
+                chain: null,
+                trustList: trustSha256,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            ),
+            reasonMustContain: "algorithm confusion"
+        );
+
+        ExpectThrows<FormatException>(
+            scenario: "[profile] the envelope ceiling is enforced before CBOR parsing",
+            action: () => _ = CarriageConformanceProfile.Base.DecodeEnvelope(
+                codec: cbor,
+                wire: new byte[CarriageResourceLimits.EnvelopeBytes + 1]
+            ),
+            messageMustContain: "permits at most"
+        );
+
+        var oversizedPayloadClaim = CarriageSigner.SignClaim(
+            codec: cbor,
+            domain: keys.Domain,
+            subject: keys.Subject,
+            signerKey: keys.SubjectSigningKey,
+            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            purpose: "profile.test",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            claimBytes: new byte[CarriageResourceLimits.PayloadBytes + 1]
+        );
+
+        ExpectThrows<FormatException>(
+            scenario: "[profile] a payload above the explicit ceiling is refused deterministically",
+            action: () => _ = CarriageConformanceProfile.Base.DecodeEnvelope(
+                codec: cbor,
+                wire: cbor.EncodeEnvelope(envelope: oversizedPayloadClaim)
+            ),
+            messageMustContain: "payload"
+        );
+
+        var oversizedSignature = new byte[CarriageResourceLimits.SignatureBytes + 1];
+
+        ExpectRefuse(
+            scenario: "[profile] a P-256 signature outside the exact 64-byte ceiling is refused before signature verification",
+            result: CarriageConformanceProfile.Base.VerifyChain(
+                codec: cbor,
+                claim: (claimCbor with { Signature = oversizedSignature }),
+                chain: null,
+                trustList: trustSha256,
+                now: now,
+                expectedPurpose: "profile.test",
+                expectedAudience: "world:profile"
+            ),
+            reasonMustContain: "exactly 64"
+        );
+
+        var oversizedPurposeClaim = CarriageSigner.SignClaim(
+            codec: cbor,
+            domain: keys.Domain,
+            subject: keys.Subject,
+            signerKey: keys.SubjectSigningKey,
+            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            purpose: new string(c: 'p', count: (CarriageResourceLimits.TextStringUtf8Bytes + 1)),
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:profile",
+            sequence: null,
+            claimBytes: Array.Empty<byte>()
+        );
+
+        ExpectThrows<FormatException>(
+            scenario: "[profile] text ceilings are measured in UTF-8 bytes, not characters or allocator capacity",
+            action: () => _ = CarriageConformanceProfile.Base.DecodeEnvelope(
+                codec: cbor,
+                wire: cbor.EncodeEnvelope(envelope: oversizedPurposeClaim)
+            ),
+            messageMustContain: "UTF-8 bytes"
+        );
+
+        Check(
+            scenario: "[profile] interchange tooling is an explicit named extension",
+            ok: (
+                !CarriageConformanceProfile.Base.SupportsInterchangeTooling &&
+                CarriageConformanceProfile.Base.WithExtensions(CarriageConformanceExtensions.InterchangeV1).SupportsInterchangeTooling
+            ),
+            detail: "the base verifier does not claim optional fixture tooling; the extension does"
         );
     }
 
@@ -2344,6 +2659,7 @@ internal static class Program {
         var plaintext = Encoding.UTF8.GetBytes(s: "a secret only dana's sealing key can open");
 
         var sealedPayload = SealedCarriage.Seal(
+            recipientId: keys.SubjectSealingId,
             recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
             associatedData: headerBytes,
             plaintext: plaintext
@@ -2399,11 +2715,34 @@ internal static class Program {
         // check fails — a clean refusal, not a garbled plaintext.
         var otherKeys = MintDomainKeys(subject: "user:eve");
 
-        ExpectThrows<CryptographicException>(
-            scenario: "sealed wrong recipient: another identity's sealing key cannot open it",
+        ExpectThrows<FormatException>(
+            scenario: "sealed wrong recipient: another identity's sealing key is refused against the signed recipient id before decryption",
             action: () => _ = SealedCarriage.Unseal(
                 recipientPrivateKey: otherKeys.SubjectSealingKey,
                 payload: sealedPayload,
+                associatedData: headerBytes
+            ),
+            messageMustContain: "does not identify"
+        );
+
+        ExpectThrows<FormatException>(
+            scenario: "sealed role separation: a signing-algorithm id cannot be presented as a recipient sealing key",
+            action: () => _ = SealedCarriage.Seal(
+                recipientId: keys.SubjectSigningId,
+                recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSigningSpki,
+                associatedData: headerBytes,
+                plaintext: plaintext
+            ),
+            messageMustContain: "rather than a sealing algorithm"
+        );
+
+        ExpectThrows<CryptographicException>(
+            scenario: "sealed recipient-context tamper: changing the recipient subject while retaining the same key breaks the AEAD tag",
+            action: () => _ = SealedCarriage.Unseal(
+                recipientPrivateKey: keys.SubjectSealingKey,
+                payload: (sealedPayload with {
+                    RecipientId = sealedPayload.RecipientId with { Subject = "user:someone-else" },
+                }),
                 associatedData: headerBytes
             ),
             messageMustContain: "tag"
@@ -2465,9 +2804,20 @@ internal static class Program {
             messageMustContain: "nonce must be"
         );
 
+        foreach (var payloadCodec in new ICarriageCodec[] { new FixedLayoutCarriageCodec(), new CborCarriageCodec() }) {
+            ExpectThrows<FormatException>(
+                scenario: $"sealed encode/decode symmetry [{payloadCodec.Name}]: an invalid recipient fingerprint is refused by the encoder",
+                action: () => _ = payloadCodec.EncodeSealedPayload(payload: sealedPayload with {
+                    RecipientId = sealedPayload.RecipientId with { KeyHash = "not-a-fingerprint" },
+                }),
+                messageMustContain: "fingerprint"
+            );
+        }
+
         // The nonce is random per seal AND the AEAD key is fresh per seal (ephemeral agreement), so two
         // seals of the same plaintext under the same header share neither.
         var secondSeal = SealedCarriage.Seal(
+            recipientId: keys.SubjectSealingId,
             recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
             associatedData: headerBytes,
             plaintext: plaintext
@@ -2526,6 +2876,7 @@ internal static class Program {
             Sequence: null
         );
         var payload = SealedCarriage.Seal(
+            recipientId: keys.SubjectSealingId,
             recipientPublicKeySubjectPublicKeyInfo: keys.SubjectSealingSpki,
             associatedData: codec.EncodeHeader(header: header),
             plaintext: plaintext
@@ -2547,13 +2898,57 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.sealed",
-            expectedAudience: "world:vault",
-            sequenceStore: null
+            expectedAudience: "world:vault"
         );
 
         ExpectAccept(
             scenario: $"[{codec.Name}] sealed envelope: a payload-kind-3 claim survives encode/decode and its chain verifies",
             result: result
+        );
+
+        // Structural validation belongs to verification, but only AFTER signature authentication. Sign a
+        // malformed nested payload to prove the verifier examines it; then corrupt that signature to prove
+        // the same bytes stop at authentication and are never interpreted first.
+        var malformed = CarriageSigner.Sign(
+            codec: codec,
+            header: header,
+            payloadKind: CarriagePayloadKind.Sealed,
+            payloadBytes: new byte[] { 0x00 },
+            signingKey: keys.SubjectSigningKey,
+            signingAlgorithm: CarriageAlgorithms.EcdsaP256Sha256
+        );
+        var malformedResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: malformed,
+            chain: chain,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.sealed",
+            expectedAudience: "world:vault"
+        );
+
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] sealed envelope validation: an authenticated but malformed kind-3 payload is refused during claim verification",
+            result: malformedResult,
+            reasonMustContain: "sealed claim payload is malformed"
+        );
+
+        var badSignature = malformed.Signature.ToArray();
+
+        badSignature[^1] ^= 0xFF;
+
+        ExpectRefuse(
+            scenario: $"[{codec.Name}] sealed envelope validation order: malformed nested bytes under a bad signature stop at authentication",
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: (malformed with { Signature = badSignature }),
+                chain: chain,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.sealed",
+                expectedAudience: "world:vault"
+            ),
+            reasonMustContain: "claim signature"
         );
 
         var recovered = SealedCarriage.Unseal(
@@ -2702,6 +3097,11 @@ internal static class Program {
                 ("an algorithm outside the §4 registry", manifest => manifest.Replace(
                 oldValue: $"algorithm={CarriageAlgorithms.EcdsaP256Sha256}",
                 newValue: "algorithm=ecdsa-p521-sha512",
+                comparisonType: StringComparison.Ordinal
+            )),
+                ("a non-positive replay horizon", manifest => manifest.Replace(
+                oldValue: $"replay-horizon-seconds={CarriageInterchange.InterchangeReplayHorizonSeconds}",
+                newValue: "replay-horizon-seconds=0",
                 comparisonType: StringComparison.Ordinal
             )),
                 ("a sequence the claim does not carry", manifest => manifest.Replace(
@@ -2910,13 +3310,87 @@ internal static class Program {
             trustList: trust,
             now: now,
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home",
-            sequenceStore: null
+            expectedAudience: "world:home"
         );
 
         ExpectAccept(
             scenario: "[fixed-layout-v1] arrived-bytes control: the honestly encoded envelope decodes and verifies",
             result: VerifyWire(bytes: wire)
+        );
+
+        Check(
+            scenario: "[object boundary] raw signed-portion construction is not public",
+            ok: (typeof(SignedCarriageEnvelope).GetMethod(
+                name: nameof(SignedCarriageEnvelope.FromSignedPortion),
+                bindingAttr: (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            ) is null),
+            detail: "public callers can only construct an envelope through a codec-backed encoding path"
+        );
+
+        // This is the exact object-boundary attack the old public factory admitted: retain a valid
+        // signature and its authentic bytes, but substitute the separately projected payload that the
+        // application consumes after verification. The factory is now internal, and the verifier's
+        // coherence guard makes even an accidentally forged in-assembly object fail closed.
+        var forgedProjection = SignedCarriageEnvelope.FromSignedPortion(
+            header: claim.Header,
+            payloadKind: claim.PayloadKind,
+            payloadBytes: Encoding.UTF8.GetBytes(s: "attacker-substituted payload"),
+            signature: claim.Signature,
+            signedPortion: claim.SignedPortion
+        );
+        var forgedProjectionResult = CarriageVerifier.VerifyChain(
+            codec: codec,
+            claim: forgedProjection,
+            chain: null,
+            trustList: trust,
+            now: now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home"
+        );
+
+        ExpectRefuse(
+            scenario: "[object boundary] a substituted payload projection cannot ride a valid signed portion",
+            result: forgedProjectionResult,
+            reasonMustContain: "parsed fields"
+        );
+
+        // ReadOnlyMemory is only a read-only VIEW; when it wraps a byte[], whoever owns that array can
+        // still mutate it. Signing must therefore take its own copy rather than retaining caller storage.
+        var callerOwnedPayload = Encoding.UTF8.GetBytes(s: "caller-owned payload");
+        var callerOwnedControl = callerOwnedPayload.ToArray();
+        var isolatedClaim = CarriageSigner.SignClaim(
+            codec: codec,
+            domain: keys.Domain,
+            subject: keys.Subject,
+            signerKey: keys.SubjectSigningKey,
+            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            claimBytes: callerOwnedPayload
+        );
+
+        callerOwnedPayload.AsSpan().Fill(value: 0xA5);
+
+        Check(
+            scenario: "[object boundary] caller-owned payload storage cannot mutate a signed envelope",
+            ok: isolatedClaim.PayloadBytes.Span.SequenceEqual(other: callerOwnedControl),
+            detail: "the envelope owns defensive copies of all signed byte fields"
+        );
+
+        ExpectAccept(
+            scenario: "[object boundary] mutating the caller's source array leaves the isolated envelope verifiable",
+            result: CarriageVerifier.VerifyChain(
+                codec: codec,
+                claim: isolatedClaim,
+                chain: null,
+                trustList: trust,
+                now: now,
+                expectedPurpose: "test.claim",
+                expectedAudience: "world:home"
+            )
         );
 
         Check(
@@ -3111,16 +3585,10 @@ internal static class Program {
         Console.WriteLine(value: $"  cbor:         root-binding {cborRootBytes.Length} B, issuing-binding {cborIssuingBytes.Length} B, claim {cborClaimBytes.Length} B, TOTAL {cborTotal} B");
         Console.WriteLine(value: $"  difference:   CBOR is {(cborTotal - fixedTotal)} B ({((100.0 * (cborTotal - fixedTotal)) / fixedTotal):+0.0;-0.0}%) relative to fixed-layout for this representative set.");
         Console.WriteLine();
-        Console.WriteLine(value: "  Code size/complexity (source lines, this prototype, both hardened to the same standard):");
-        Console.WriteLine(value: "    fixed-layout: FixedLayoutBuffer.cs (171 lines, hand-rolled bounds-checked reader/writer)");
-        Console.WriteLine(value: "                  + FixedLayoutCarriageCodec.cs (263 lines) = 434 lines total.");
-        Console.WriteLine(value: "    cbor:         CborCarriageCodec.cs only (373 lines) — no separate buffer helper needed.");
-        Console.WriteLine();
-        Console.WriteLine(value: "  Recommendation: CBOR for the shipped format, and the code-size argument now points the SAME");
-        Console.WriteLine(value: "  way rather than against it — 373 vs 434 lines, the fixed layout ~16% larger. An earlier");
-        Console.WriteLine(value: "  revision of this report had it at 353 vs 368 and credited the fixed layout with getting");
-        Console.WriteLine(value: "  canonicality 'for free'. It was not free, it was missing: the presence-flag rule (a reader");
-        Console.WriteLine(value: "  treating non-zero as present gave one model 255 wire forms per optional field), the");
+        Console.WriteLine(value: "  Recommendation: CBOR for the shipped format. Source-line totals are deliberately not printed:");
+        Console.WriteLine(value: "  they stale on every edit and are not a protocol property. An earlier revision credited the fixed");
+        Console.WriteLine(value: "  layout with getting canonicality 'for free'. It was not free, it was missing: the presence-flag");
+        Console.WriteLine(value: "  rule (a reader treating non-zero as present gave one model 255 wire forms per optional field), the");
         Console.WriteLine(value: "  decoder-side payload-kind set check, and the re-encode identity check were all absent. The");
         Console.WriteLine(value: "  saving was measuring unwritten checks, not a simpler format. Every degree of freedom a");
         Console.WriteLine(value: "  format offers is one the decoder must close by hand, because a signature is over BYTES —");

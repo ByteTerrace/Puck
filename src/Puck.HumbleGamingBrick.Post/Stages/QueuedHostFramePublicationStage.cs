@@ -20,10 +20,15 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyFramePublication(
-            withContent: () => new MachineHost(model: ConsoleModel.Dmg, cartridgeRom: SyntheticRom.Create()),
+            withContent: () => new MachineHost(
+                model: ConsoleModel.Dmg,
+                cartridgeRom: SyntheticRom.Create()
+            ),
             empty: () => new MachineHost(model: ConsoleModel.Dmg)
         );
 
-        return (result.Passed ? PostStageOutcome.Pass(detail: result.Detail) : PostStageOutcome.Fail(detail: result.Detail));
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail));
     }
 }

@@ -42,7 +42,10 @@ internal sealed class LinkChurnStage : IPostStage {
 
         // The reference (unchurned) run also probes every budget boundary, so both churn points are chosen
         // deterministically from its own transfer-idle windows.
-        var reference = RunScenario(bios: context.BiosImage, churnAtSteps: []);
+        var reference = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: []
+        );
 
         if (Verify(result: reference) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
@@ -50,22 +53,39 @@ internal sealed class LinkChurnStage : IPostStage {
 
         var (firstChurn, secondChurn) = PickChurnSteps(probes: reference.Probes);
 
-        if ((firstChurn < 0) || (secondChurn < 0)) {
+        if (
+            (firstChurn < 0) ||
+            (secondChurn < 0)
+        ) {
             return PostStageOutcome.Fail(detail: "fewer than two transfer-idle budget boundaries appeared mid-exchange; the round schedule is wrong");
         }
 
         // (a) Determinism: a second fresh, uninterrupted run reproduces the protocol verdicts and final snapshots.
-        var replay = RunScenario(bios: context.BiosImage, churnAtSteps: []);
+        var replay = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: []
+        );
 
-        if (Difference(expected: reference, actual: replay, leg: "replay") is { } replayFailure) {
+        if (Difference(
+            expected: reference,
+            actual: replay,
+            leg: "replay"
+        ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
         }
 
         // (b) Churn, twice: suspend/snapshot/restore/reconnect at both idle boundaries, continue, demand the
         // identical tail.
-        var churned = RunScenario(bios: context.BiosImage, churnAtSteps: [firstChurn, secondChurn]);
+        var churned = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: [firstChurn, secondChurn]
+        );
 
-        if (Difference(expected: reference, actual: churned, leg: "churn") is { } churnFailure) {
+        if (Difference(
+            expected: reference,
+            actual: churned,
+            leg: "churn"
+        ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
@@ -84,13 +104,14 @@ internal sealed class LinkChurnStage : IPostStage {
         // (e) Mid-transfer suspend: Suspend() at a busy (non-transfer-idle) budget boundary is rejected with
         // InvalidOperationException, and the session is left fully live — continuing it to completion reproduces
         // the reference exactly (M-04).
-        if (VerifyMidTransferSuspendRejected(bios: context.BiosImage, reference: reference) is { } suspendFailure) {
+        if (VerifyMidTransferSuspendRejected(
+            bios: context.BiosImage,
+            reference: reference
+        ) is { } suspendFailure) {
             return PostStageOutcome.Fail(detail: suspendFailure);
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"{MicroRoms.LinkRounds} multiplayer rounds (parent 0 / child 1), severed transfer-idle at budget steps {firstChurn} and {secondChurn}, replay-identical and churn-identical across both cycles ({reference.ParentState.Size}+{reference.ChildState.Size} state bytes); reordered/substituted resume rejected+unlinked, null/mismatched resume token rejected+unlinked, mid-transfer Suspend rejected with the session left live and driven to an identical completion"
-        );
+        return PostStageOutcome.Pass(detail: $"{MicroRoms.LinkRounds} multiplayer rounds (parent 0 / child 1), severed transfer-idle at budget steps {firstChurn} and {secondChurn}, replay-identical and churn-identical across both cycles ({reference.ParentState.Size}+{reference.ChildState.Size} state bytes); reordered/substituted resume rejected+unlinked, null/mismatched resume token rejected+unlinked, mid-transfer Suspend rejected with the session left live and driven to an identical completion");
     }
 
     // One complete scenario on the fixed budget schedule. At each step index in churnAtSteps the live session is
@@ -100,25 +121,49 @@ internal sealed class LinkChurnStage : IPostStage {
         var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
         var childRom = MicroRoms.GenerateBytes(kind: "link-child");
 
-        var parent = CreateConsole(bios: bios, rom: parentRom);
-        var child = CreateConsole(bios: bios, rom: childRom);
+        var parent = CreateConsole(
+            bios: bios,
+            rom: parentRom
+        );
+        var child = CreateConsole(
+            bios: bios,
+            rom: childRom
+        );
         var probes = new List<BoundaryProbe>(capacity: StepCount);
-        var session = new AgbLinkSession(parent, child);
+        var session = new AgbLinkSession(
+            parent,
+            child
+        );
 
         try {
             for (var step = 0; (step < StepCount); ++step) {
-                probes.Add(item: Probe(parent: parent, child: child));
+                probes.Add(item: Probe(
+                    parent: parent,
+                    child: child
+                ));
 
-                if (Array.IndexOf(array: churnAtSteps, value: step) >= 0) {
-                    if (!IsTransferIdle(parent: parent, child: child)) {
+                if (Array.IndexOf(
+                    array: churnAtSteps,
+                    value: step
+                ) >= 0) {
+                    if (!IsTransferIdle(
+                        parent: parent,
+                        child: child
+                    )) {
                         throw new InvalidOperationException(message: $"the churn boundary at budget step {step} is not transfer-idle on both consoles.");
                     }
 
                     var token = session.Suspend();
                     var parentState = parent.Machine.Snapshot();
                     var childState = child.Machine.Snapshot();
-                    var freshParent = CreateConsole(bios: bios, rom: parentRom);
-                    var freshChild = CreateConsole(bios: bios, rom: childRom);
+                    var freshParent = CreateConsole(
+                        bios: bios,
+                        rom: parentRom
+                    );
+                    var freshChild = CreateConsole(
+                        bios: bios,
+                        rom: childRom
+                    );
 
                     freshParent.Machine.Restore(snapshot: parentState);
                     freshChild.Machine.Restore(snapshot: childState);
@@ -129,7 +174,11 @@ internal sealed class LinkChurnStage : IPostStage {
                     parent = freshParent;
                     child = freshChild;
 
-                    session = new AgbLinkSession(token, parent, child);
+                    session = new AgbLinkSession(
+                        token,
+                        parent,
+                        child
+                    );
                 }
 
                 session.Run(cycles: BudgetStep);
@@ -149,7 +198,10 @@ internal sealed class LinkChurnStage : IPostStage {
         }
     }
     private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
-        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(bios: bios, rom: rom));
+        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: rom
+        ));
 
         console.Machine.DirectBoot();
 
@@ -160,7 +212,13 @@ internal sealed class LinkChurnStage : IPostStage {
     // how many of the parent's round records have landed in IWRAM (a round's low word is never zero once the parent
     // has written it, so a non-zero slot is proof the round completed — no protocol change needed to observe it).
     private static BoundaryProbe Probe(AgbMachineInstance parent, AgbMachineInstance child) =>
-        new(Idle: IsTransferIdle(parent: parent, child: child), RecordedRounds: CountRecordedRounds(console: parent));
+        new(
+        Idle: IsTransferIdle(
+            parent: parent,
+            child: child
+        ),
+        RecordedRounds: CountRecordedRounds(console: parent)
+    );
     private static bool IsTransferIdle(AgbMachineInstance parent, AgbMachineInstance child) =>
         (((DebugReadSioCnt(console: parent) & SioCntStartMask) == 0)
             && ((DebugReadSioCnt(console: child) & SioCntStartMask) == 0));
@@ -168,7 +226,10 @@ internal sealed class LinkChurnStage : IPostStage {
         var bus = (AgbBus)console.Machine.Bus;
         var count = 0;
 
-        while ((count < MicroRoms.LinkRounds) && (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + ((uint)count * 8u))) != 0u)) {
+        while (
+            (count < MicroRoms.LinkRounds) &&
+            (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + ((uint)count * 8u))) != 0u)
+        ) {
             ++count;
         }
 
@@ -186,7 +247,11 @@ internal sealed class LinkChurnStage : IPostStage {
         for (var step = 0; (step < probes.Count); ++step) {
             var probe = probes[index: step];
 
-            if (!probe.Idle || (probe.RecordedRounds < 1) || (probe.RecordedRounds >= MicroRoms.LinkRounds)) {
+            if (
+                !probe.Idle ||
+                (probe.RecordedRounds < 1) ||
+                (probe.RecordedRounds >= MicroRoms.LinkRounds)
+            ) {
                 continue;
             }
 
@@ -224,23 +289,41 @@ internal sealed class LinkChurnStage : IPostStage {
     private static string? VerifyReorderedResumeRejected(ReadOnlyMemory<byte> bios) {
         var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
         var childRom = MicroRoms.GenerateBytes(kind: "link-child");
-        var parent = CreateConsole(bios: bios, rom: parentRom);
-        var child = CreateConsole(bios: bios, rom: childRom);
+        var parent = CreateConsole(
+            bios: bios,
+            rom: parentRom
+        );
+        var child = CreateConsole(
+            bios: bios,
+            rom: childRom
+        );
 
         try {
-            var session = new AgbLinkSession(parent, child);
+            var session = new AgbLinkSession(
+                parent,
+                child
+            );
 
             session.Run(cycles: BudgetStep);
 
-            if (!IsTransferIdle(parent: parent, child: child)) {
+            if (!IsTransferIdle(
+                parent: parent,
+                child: child
+            )) {
                 return "the reordered-resume probe's suspend point is not transfer-idle; pick a different budget";
             }
 
             var token = session.Suspend();
             var parentState = parent.Machine.Snapshot();
             var childState = child.Machine.Snapshot();
-            var freshParent = CreateConsole(bios: bios, rom: parentRom);
-            var freshChild = CreateConsole(bios: bios, rom: childRom);
+            var freshParent = CreateConsole(
+                bios: bios,
+                rom: parentRom
+            );
+            var freshChild = CreateConsole(
+                bios: bios,
+                rom: childRom
+            );
 
             freshParent.Machine.Restore(snapshot: parentState);
             freshChild.Machine.Restore(snapshot: childState);
@@ -249,7 +332,11 @@ internal sealed class LinkChurnStage : IPostStage {
                 ArgumentException? caught = null;
 
                 try {
-                    using var rejected = new AgbLinkSession(token, freshChild, freshParent); // reordered
+                    using var rejected = new AgbLinkSession(
+                        token,
+                        freshChild,
+                        freshParent
+                    ); // reordered
                 } catch (ArgumentException ex) {
                     caught = ex;
                 }
@@ -259,7 +346,10 @@ internal sealed class LinkChurnStage : IPostStage {
                 }
 
                 try {
-                    using var proof = new AgbLinkSession(freshChild, freshParent);
+                    using var proof = new AgbLinkSession(
+                        freshChild,
+                        freshParent
+                    );
                 } catch (Exception ex) {
                     return $"a fresh session over the same consoles failed after the rejected reorder ({ex.GetType().Name}: {ex.Message}); the rejected resume must have left a console linked";
                 }
@@ -281,15 +371,25 @@ internal sealed class LinkChurnStage : IPostStage {
     private static string? VerifyInvalidResumeTokenRejected(ReadOnlyMemory<byte> bios) {
         var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
         var childRom = MicroRoms.GenerateBytes(kind: "link-child");
-        var parent = CreateConsole(bios: bios, rom: parentRom);
-        var child = CreateConsole(bios: bios, rom: childRom);
+        var parent = CreateConsole(
+            bios: bios,
+            rom: parentRom
+        );
+        var child = CreateConsole(
+            bios: bios,
+            rom: childRom
+        );
         AgbMachineInstance? third = null;
 
         try {
             ArgumentNullException? nullCaught = null;
 
             try {
-                using var rejected = new AgbLinkSession(resumeToken: null!, parent, child);
+                using var rejected = new AgbLinkSession(
+                    resumeToken: null!,
+                    parent,
+                    child
+                );
             } catch (ArgumentNullException ex) {
                 nullCaught = ex;
             }
@@ -299,27 +399,44 @@ internal sealed class LinkChurnStage : IPostStage {
             }
 
             try {
-                using var proof = new AgbLinkSession(parent, child);
+                using var proof = new AgbLinkSession(
+                    parent,
+                    child
+                );
             } catch (Exception ex) {
                 return $"a fresh session over the same consoles failed after the null-token rejection ({ex.GetType().Name}: {ex.Message}); the rejected resume must have left a console linked";
             }
 
-            var session = new AgbLinkSession(parent, child);
+            var session = new AgbLinkSession(
+                parent,
+                child
+            );
 
             session.Run(cycles: BudgetStep);
 
-            if (!IsTransferIdle(parent: parent, child: child)) {
+            if (!IsTransferIdle(
+                parent: parent,
+                child: child
+            )) {
                 return "the mismatched-token probe's suspend point is not transfer-idle; pick a different budget";
             }
 
             var token = session.Suspend();
 
-            third = CreateConsole(bios: bios, rom: parentRom);
+            third = CreateConsole(
+                bios: bios,
+                rom: parentRom
+            );
 
             ArgumentException? mismatchCaught = null;
 
             try {
-                using var rejected = new AgbLinkSession(token, parent, child, third);
+                using var rejected = new AgbLinkSession(
+                    token,
+                    parent,
+                    child,
+                    third
+                );
             } catch (ArgumentException ex) {
                 mismatchCaught = ex;
             }
@@ -329,7 +446,10 @@ internal sealed class LinkChurnStage : IPostStage {
             }
 
             try {
-                using var proof = new AgbLinkSession(parent, child);
+                using var proof = new AgbLinkSession(
+                    parent,
+                    child
+                );
             } catch (Exception ex) {
                 return $"a fresh session over the same consoles failed after the mismatched-token rejection ({ex.GetType().Name}: {ex.Message}); the rejected resume must have left a console linked";
             }
@@ -355,16 +475,28 @@ internal sealed class LinkChurnStage : IPostStage {
 
         var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
         var childRom = MicroRoms.GenerateBytes(kind: "link-child");
-        var parent = CreateConsole(bios: bios, rom: parentRom);
-        var child = CreateConsole(bios: bios, rom: childRom);
-        var session = new AgbLinkSession(parent, child);
+        var parent = CreateConsole(
+            bios: bios,
+            rom: parentRom
+        );
+        var child = CreateConsole(
+            bios: bios,
+            rom: childRom
+        );
+        var session = new AgbLinkSession(
+            parent,
+            child
+        );
 
         try {
             for (var step = 0; (step < busyStep); ++step) {
                 session.Run(cycles: BudgetStep);
             }
 
-            if (IsTransferIdle(parent: parent, child: child)) {
+            if (IsTransferIdle(
+                parent: parent,
+                child: child
+            )) {
                 return $"the mid-transfer probe step {busyStep} is transfer-idle on replay; the round schedule is not reproducible";
             }
 
@@ -394,7 +526,11 @@ internal sealed class LinkChurnStage : IPostStage {
                 Probes: []
             );
 
-            return Difference(expected: reference, actual: actual, leg: "mid-transfer-suspend");
+            return Difference(
+                expected: reference,
+                actual: actual,
+                leg: "mid-transfer-suspend"
+            );
         } finally {
             session.Dispose();
             parent.Dispose();
@@ -405,26 +541,46 @@ internal sealed class LinkChurnStage : IPostStage {
     // Judges the reference run: both sides completed every round with the right IRQ count and daisy-chain id, and
     // every round's recorded slots prove data actually crossed the cable.
     private static string? Verify(LinkChurnScenarioResult result) =>
-        (LinkStageProtocol.VerifySide(verdict: result.ParentVerdict, side: "parent", expectedControl: ExpectedParentControl)
-            ?? LinkStageProtocol.VerifySide(verdict: result.ChildVerdict, side: "child", expectedControl: ExpectedChildControl));
+        (LinkStageProtocol.VerifySide(
+        verdict: result.ParentVerdict,
+        side: "parent",
+        expectedControl: ExpectedParentControl
+    )
+            ?? LinkStageProtocol.VerifySide(
+        verdict: result.ChildVerdict,
+        side: "child",
+        expectedControl: ExpectedChildControl
+    ));
 
     // Compares a later run against the reference: both protocol verdicts and both final snapshots must match.
     // Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
     private static string? Difference(LinkChurnScenarioResult expected, LinkChurnScenarioResult actual, string leg) {
-        if (!VerdictsEqual(a: expected.ParentVerdict, b: actual.ParentVerdict)) {
+        if (!VerdictsEqual(
+            a: expected.ParentVerdict,
+            b: actual.ParentVerdict
+        )) {
             return $"the {leg} parent protocol verdict diverged from the reference";
         }
 
-        if (!VerdictsEqual(a: expected.ChildVerdict, b: actual.ChildVerdict)) {
+        if (!VerdictsEqual(
+            a: expected.ChildVerdict,
+            b: actual.ChildVerdict
+        )) {
             return $"the {leg} child protocol verdict diverged from the reference";
         }
 
         if (!expected.ParentState.ContentEquals(other: actual.ParentState)) {
-            return $"the {leg} parent final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.ParentState, b: actual.ParentState)}";
+            return $"the {leg} parent final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.ParentState,
+                b: actual.ParentState
+            )}";
         }
 
         if (!expected.ChildState.ContentEquals(other: actual.ChildState)) {
-            return $"the {leg} child final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.ChildState, b: actual.ChildState)}";
+            return $"the {leg} child final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.ChildState,
+                b: actual.ChildState
+            )}";
         }
 
         return null;

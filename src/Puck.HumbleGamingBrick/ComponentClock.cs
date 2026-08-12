@@ -85,18 +85,48 @@ public sealed class ComponentClock {
 
         var cartridgeClock = (cartridge as IClockedComponent);
 
-        VerifyDomain(component: timer, slot: ClockDomain.Cpu);
-        VerifyDomain(component: key1, slot: ClockDomain.Cpu);
-        VerifyDomain(component: serial, slot: ClockDomain.Cpu);
-        VerifyDomain(component: apu, slot: ClockDomain.Cpu);
-        VerifyDomain(component: apuGeneratorClock, slot: ClockDomain.Cpu);
-        VerifyDomain(component: audioOutput, slot: ClockDomain.Cpu);
-        VerifyDomain(component: oamDma, slot: ClockDomain.Cpu);
-        VerifyDomain(component: hdma, slot: ClockDomain.Cpu);
-        VerifyDomain(component: ppu, slot: ClockDomain.Lcd);
+        VerifyDomain(
+            component: timer,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: key1,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: serial,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: apu,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: apuGeneratorClock,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: audioOutput,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: oamDma,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: hdma,
+            slot: ClockDomain.Cpu
+        );
+        VerifyDomain(
+            component: ppu,
+            slot: ClockDomain.Lcd
+        );
 
         if (cartridgeClock is not null) {
-            VerifyDomain(component: cartridgeClock, slot: ClockDomain.Lcd);
+            VerifyDomain(
+                component: cartridgeClock,
+                slot: ClockDomain.Lcd
+            );
         }
 
         m_clock = clock;
@@ -175,9 +205,7 @@ public sealed class ComponentClock {
     }
     private static void VerifyDomain(IClockedComponent component, ClockDomain slot) {
         if (component.Domain != slot) {
-            throw new InvalidOperationException(
-                message: $"{component.GetType().Name} declares domain {component.Domain} but is wired into the {slot} slot."
-            );
+            throw new InvalidOperationException(message: $"{component.GetType().Name} declares domain {component.Domain} but is wired into the {slot} slot.");
         }
     }
 }

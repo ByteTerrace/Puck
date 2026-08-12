@@ -20,20 +20,35 @@ internal sealed class ForkDeterminismStage : IPostStage {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        using var parent = PostMachine.Build(model: ConsoleModel.Dmg, rom: SyntheticRom.Create());
+        using var parent = PostMachine.Build(
+            model: ConsoleModel.Dmg,
+            rom: SyntheticRom.Create()
+        );
 
-        PostMachine.RunFrames(instance: parent, frames: WarmFrames);
+        PostMachine.RunFrames(
+            instance: parent,
+            frames: WarmFrames
+        );
 
         using var fork = parent.Fork();
 
-        PostMachine.RunFrames(instance: parent, frames: TailFrames);
-        PostMachine.RunFrames(fork: fork, frames: TailFrames);
+        PostMachine.RunFrames(
+            instance: parent,
+            frames: TailFrames
+        );
+        PostMachine.RunFrames(
+            fork: fork,
+            frames: TailFrames
+        );
 
         var parentState = parent.Machine.Snapshot();
         var forkState = fork.Machine.Snapshot();
 
         if (!parentState.ContentEquals(other: forkState)) {
-            return PostStageOutcome.Fail(detail: $"fork diverged from the parent after {TailFrames} frames — {HashDivergenceProbe.DescribeDivergence(a: parentState, b: forkState)}");
+            return PostStageOutcome.Fail(detail: $"fork diverged from the parent after {TailFrames} frames — {HashDivergenceProbe.DescribeDivergence(
+                a: parentState,
+                b: forkState
+            )}");
         }
 
         // H-06: no stale fork handle can return a later rental. Two sequences must both stay safe:
@@ -56,13 +71,19 @@ internal sealed class ForkDeterminismStage : IPostStage {
 
         using var forkC = parent.Fork();
 
-        if (ReferenceEquals(objA: forkB.Machine, objB: forkC.Machine)) {
+        if (ReferenceEquals(
+            objA: forkB.Machine,
+            objB: forkC.Machine
+        )) {
             return PostStageOutcome.Fail(detail: "a stale fork handle parked a re-rented sibling — two later forks alias one machine");
         }
 
         var forkBBefore = forkB.Machine.Snapshot();
 
-        PostMachine.RunFrames(fork: forkC, frames: TailFrames);
+        PostMachine.RunFrames(
+            fork: forkC,
+            frames: TailFrames
+        );
 
         var forkCAfter = forkC.Machine.Snapshot();
         var forkBAfter = forkB.Machine.Snapshot();

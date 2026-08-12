@@ -87,19 +87,19 @@ there to be *checked against* the pin, never to select behaviour.
 The envelope is a **specification, implemented on each side** rather than a
 shared library. The byte layout is all that must agree, and disagreement fails
 loudly because signatures stop verifying. Trust evaluation is deliberately not
-shared: each side trusts different things. The serialisation is CBOR, committed
-to by both independent implementations. Reach is what decided it: CBOR lets a
+shared: each side trusts different things. The mandatory serialisation is CBOR.
+Reach is what decided it: CBOR lets a
 third party reach for a library instead of a spec, at the price of a package
 reference (`System.Formats.Cbor` is Microsoft-authored but arrives inbox only
 through the ASP.NET Core shared framework) and of closing by hand every degree
 of freedom it offers, because a signature is over bytes and one model must have
 exactly one encoding. The fixed layout — which keeps parsing away from
-unauthenticated bytes and gets canonicality for free, since every field is
+unauthenticated bytes and makes canonicality cheap, since every field is
 fixed-width or minimally length-prefixed — stays shelved but alive in the
 specification's closing section, implemented and harness-covered. The field
 list is identical either way. Claims are ephemeral and constrain nothing.
-The wire specification below is the normative text both independent
-implementations are written against and conform to.
+The wire specification below is the normative contract an independent
+implementation must meet; current evidence is stated explicitly at its start.
 
 Sealed carriage is the same envelope with the payload encrypted and the header
 as associated data — literal AEAD, and the reason two keypairs are provisioned
@@ -126,15 +126,22 @@ whenever a claim carries one at all. A directed claim without a sequence is
 replayable at its own audience, which is an authored choice — correct for a
 claim whose effect is idempotent, wrong for one that is not.
 
-The mark is durable keyed state — one sequence per issuer-and-subject pair — so
+The mark is durable keyed state — one sequence per issuer, subject, and signed
+replay epoch — so
 bearer claims are gated on the same keyed-table primitive threat tables want,
 slots being scalars today. It is written at admission through the ordered
 submission domain like any other durable write, which is what keeps it
-tick-stamped and taped rather than a mid-tick read of storage. **Retention is
-coupled to the window, and the coupling is load-bearing:** a mark must outlive
-the receiver's acceptance window for its pair, or evicting it reopens replay
-for a claim that is still valid. That coupling is also what bounds the table,
-since a mark whose claims can no longer be accepted can be dropped.
+tick-stamped and taped rather than a mid-tick read of storage. The epoch is not
+an unsigned database guess: it is `floor(notBefore / H)`, where signed
+`notBefore` comes from the claim and `H` is the verifier-wide finite replay
+horizon. A sequenced claim's signed window may span at most `H`, and the
+verifier also caps its age at `H`. The mark for an epoch stays through the end
+of the following epoch. That closes the subtle future-window hole: a lower
+sequence with a later `notBefore` either belongs to the same epoch and is dead
+before its mark can be removed, or belongs to a later epoch and has a distinct
+mark. Merely retaining a mark until the last accepted claim expires would not
+do this — an already-minted lower sequence with a far-future window could wake
+after eviction.
 
 **A trust entry pins an id** and says whether that key signs directly or may
 *vouch* for others, plus which slots it reaches. A vouching entry is a domain,
@@ -161,10 +168,15 @@ capability. **The engine compiles in no root.** A shipped game ships its
 publisher's; a blank template ships none. Every world verifies against its own
 list, so admission negotiates nothing.
 
-**Validity is authored at both ends.** The issuer sets a window when it mints;
-a verifying world sets the maximum age it will accept, and the tighter of the
-two governs. Neither can loosen the other — an author cannot reach past what
-was signed, and an issuer cannot force a world to honour something stale. The
+**Validity is authored at both ends, separately for each layer.** The issuer
+sets a signed window when it mints; a verifying world may set independent
+maximum ages for root-to-issuing bindings, issuing-to-subject bindings, and
+claims. The tighter signed/verifier window at that layer governs. Neither side
+can loosen the other. This separation is load-bearing: a claim-hour ceiling
+must not force the cold root to re-sign its issuing key hourly. The root binding
+can be long-lived (or have no verifier age ceiling beyond its signed window),
+the subject binding can follow account re-attestation cadence, and the claim
+can be short-lived. The
 window is not the only lever, and conflating them oversizes it: removing an
 issuer from the trust list revokes its standing at once and for everything it
 ever signed, while the window governs only how long a claim from a
@@ -174,8 +186,11 @@ own scope the window is the whole story, which makes it the longest a
 compromised subject key stays honoured. The cost of shortening it is easy to
 miss: verifying is offline but re-attesting is online, so a tight window
 quietly makes long offline play impossible. A world wanting that sets a
-permissive ceiling; a high-stakes world sets a tight one; both read the same
-signed binding.
+permissive claim ceiling; a high-stakes world sets a tight one; both read the
+same signed artifacts. The trade is explicit: a long root binding is also the
+longest a stolen issuing key can keep minting fresh subject bindings without a
+trust-list update. Fast issuing-key revocation requires distributing newer
+trusted state; offline verification cannot discover it by itself.
 
 A short window is only affordable because **re-attestation is routine**: the
 issuer re-signs the same binding with a fresh window, and its natural trigger
@@ -225,11 +240,18 @@ of the signed carriage envelope described in
 [Signed carriage](#signed-carriage) above. The envelope is a
 specification implemented on each side, never a shared library, so this text —
 not any one codebase — is what the two sides agree on. It is written to be
-implementable from prose alone, in any language, with only a CBOR encoder, an
-ECDSA implementation, and SHA-256.
+implementable from prose alone in any language. The base profile needs CBOR,
+ECDSA P-256, and SHA-256; the sealed extension additionally needs ECDH P-256,
+HKDF-SHA256, and AES-256-GCM.
 
-Two implementations exist today and both conform: `src/Puck.Carriage` (this
-repository) and `BindingCarriage` (Web.Functions). They share no source.
+This repository currently contains one implementation, `src/Puck.Carriage`.
+`BindingCarriage` in Web.Functions is intended to be the independent peer, but
+neither its source nor a fixture it minted is present here. **Independent
+conformance is therefore not currently evidenced by this repository.** The
+claim may be restored only when fixtures minted by both implementations are
+checked in or supplied to CI and each implementation verifies the other's bytes,
+including the required broken-fixture control in §17. A self-round-trip by this
+implementation is useful regression coverage, never independent evidence.
 
 Keywords: **MUST**, **MUST NOT**, **MAY**, **REFUSE**. *Refuse* means: produce a
 negative verdict without side effects. It never means throw-or-return — that is
@@ -244,10 +266,66 @@ security-relevant work happens.
 Not fixed, deliberately: which refusal an implementation *reports* when several
 apply, the text of any message, the shape of the trust list beyond the two
 fields §7 names, and what an accepting verifier then permits. Trust evaluation
-is not shared — each side trusts different things. **Two conforming
-implementations always agree on accept-versus-refuse and MAY disagree on the
-reason.** A cross-check that compares reasons is testing something this
+is not shared — each side trusts different things. **Two implementations using
+the same conformance profile and the same policy inputs always agree on
+accept-versus-refuse and MAY disagree on the reason.** Policy inputs include the
+trust entries and their age/horizon policy, the taped verification instant,
+expected purpose and audience, and the replay mark supplied to the eventual
+atomic commit. Comparing different profiles or policy is not a conformance
+comparison; a cross-check that compares reasons is testing something this
 specification does not promise.
+
+#### 0.1 Mandatory profile and named extensions
+
+The mandatory profile is **`carriage-v1-base`**. Every conforming implementation
+MUST implement all of it:
+
+- the deterministic CBOR v1 encoding in §§2–3;
+- `ecdsa-p256-sha256` signing and verification;
+- opaque claims, key bindings, both permitted chain shapes, windows, audience,
+  finite-horizon replay requirements, and the refusal rules that apply to them;
+- the resource ceilings below.
+
+Capabilities outside that set are named extensions, never an unnamed
+implementation subset:
+
+| Extension | Adds |
+|---|---|
+| `fixed-layout-v1` | the alternative encoding in §16, while CBOR remains mandatory |
+| `ecdsa-p256-sha384` | the SHA-384 signing registry entry |
+| `sealed-carriage-v1` | payload kind 3 and the sealing scheme in §14 |
+| `interchange-v1` | the fixture and tool protocol in §17 |
+
+A verifier selects its profile out of band. **No envelope, algorithm field,
+payload, manifest, or other message data selects a profile or enables an
+extension.** A value that is valid only under a disabled extension REFUSES. In
+particular, enabling the SHA-384 extension merely makes that algorithm
+available to a pin; it does not weaken §6 or let an envelope choose SHA-384 over
+the algorithm attached to its pinned key. An implementation MAY expose profiles
+that combine named extensions, and MUST report which combination a conformance
+run uses.
+
+Every named v1 profile has the following acceptance ceilings. These numbers are
+part of the profile, so two implementations do not disagree because one happened
+to allocate more than the other:
+
+| Item | Maximum |
+|---|---:|
+| complete encoded envelope | 65,536 bytes |
+| signed portion | 61,440 bytes |
+| payload byte string (any kind) | 49,152 bytes |
+| any text field | 256 bytes after UTF-8 encoding |
+| any DER SPKI | 512 bytes |
+| P-256 P1363 signature | exactly 64 bytes |
+
+The complete-envelope ceiling MUST be checked before parsing. The remaining
+ceilings MUST be checked before cryptographic work where the field is already
+authenticated or structurally visible; nested binding and sealed payload bytes
+MUST still obey the rule that their contents are interpreted only after the
+containing signature verifies. Exceeding any ceiling REFUSES. Implementations
+MAY impose lower operational transport limits, but those form a different local
+profile/policy input and therefore cannot claim base-profile verdict equivalence
+for inputs between the two limits.
 
 ### 1. Roles and identities
 
@@ -262,7 +340,9 @@ An **id** is `(domain, subject, algorithm, keyHash)`.
   and the hash; nothing else may appear here.
 - `keyHash` — SHA-256 of this key's `SubjectPublicKeyInfo` (SPKI) DER encoding,
   32 bytes. Always derived from actual key bytes, never accepted as an
-  independent claim.
+  independent claim. Identity is intentionally over the exact DER bytes, not
+  over an abstract EC point: two byte-distinct SPKI encodings are two distinct
+  `KeyId` values even if a crypto library imports them to the same public point.
 
 A **root** id satisfies `domain == keyHash` and has no subject — no flag records
 this, the shape proves it. An **issuing** id shares its root's domain and has no
@@ -305,10 +385,14 @@ key-binding-payload = [
 
 ; payloadKind 3 (sealed); the content of payload is:
 sealed-payload = [
-    ephemeralKey: bstr,           ; SPKI DER of the sender's one-time key
-    nonce:        bstr,           ; exactly 12 bytes
-    tag:          bstr,           ; exactly 16 bytes
-    ciphertext:   bstr,
+    recipientDomain:    bstr,        ; exactly 32 bytes
+    recipientSubject:   tstr / null,
+    recipientAlgorithm: tstr,        ; MUST be the §4 sealing algorithm
+    recipientKeyHash:   bstr,        ; exactly 32 bytes
+    ephemeralKey:       bstr,        ; SPKI DER of the sender's one-time key
+    nonce:              bstr,        ; exactly 12 bytes
+    tag:                bstr,        ; exactly 16 bytes
+    ciphertext:         bstr,
 ]
 ```
 
@@ -388,8 +472,10 @@ and the curve alone does not pin the scheme.
 
 A name outside this table MUST be REFUSED wherever it appears — an envelope's
 `algorithm`, a binding payload's `targetAlgorithm`, or a trust entry's pinned
-id. An implementation MAY support a subset of the table (Web.Functions signs
-only `ecdsa-p256-sha256`); it MUST NOT accept a name that is not in it.
+id. Every implementation MUST support `ecdsa-p256-sha256`; the other entries are
+available only under their named §0.1 extensions. A known registry name whose
+extension is disabled MUST also be refused. An implementation MUST NOT accept a
+name that is not in the registry.
 
 **A sealing algorithm can never admit a claim.** A trust entry pinning one MUST
 be REFUSED at construction.
@@ -436,11 +522,15 @@ An entry whose key bytes do not hash to its own pinned `keyHash` MUST be
 REFUSED at construction: otherwise the bytes do the verifying while the pin sits
 there decorative.
 
-A verifier MAY carry more per-entry policy — a maximum claim age (§9), which
-slots the entry reaches, anything else. Only a maximum age affects the verdict,
-and only by tightening. Everything else is the receiving side's business and is
-outside this specification. An empty trust list honours nothing; deny by
-default.
+A verifier MAY carry more per-entry policy — independent maximum ages for
+root-to-issuing bindings, issuing-to-subject bindings, and claims (§9), which
+slots the entry reaches, anything else. Each age only tightens the signed window
+at its own layer. A verifier accepting sequenced claims MUST additionally author
+one positive, whole-second, verifier-wide replay horizon `H`; unlike the three
+ages it is not per entry, because it defines the replay-store key and retention
+contract. A verifier with no finite `H` MUST REFUSE every sequenced claim.
+Everything else is the receiving side's business and is outside this
+specification. An empty trust list honours nothing; deny by default.
 
 A direct pin is strictly more specific than a domain root, so a verifier MUST
 consult direct pins first.
@@ -467,26 +557,41 @@ purpose. A claim's kind MUST be 1 or 3; a binding's MUST be 2. A kind outside
 - A bearer claim (no audience) with no `sequence` MUST REFUSE — it would have no
   replay defence at all.
 - **Whenever `sequence` is present — directed or bearer — the verifier MUST
-  check it against a durable high-water mark per `(domain, subject)`, REFUSE if
-  it does not strictly exceed the mark, and advance the mark on acceptance.**
+  have a finite replay horizon `H`, derive `epochStart = floor(notBefore / H) ×
+  H`, and return a replay-commit requirement containing `(domain, subject,
+  epochStart, sequence, retainThrough = epochStart + 2H - 1)`. Verification is
+  pure: it MUST NOT read or mutate replay storage.**
   Binding an audience defends against replay *elsewhere* and never against
   replay at the audience itself.
-- **The compare and the advance MUST be one atomic operation** with respect to
-  every other verification of the same `(domain, subject)` pair — a lock, a
-  conditional update, a compare-and-swap, or a transaction. Two concurrent
-  presentations of the SAME claim MUST produce exactly one acceptance.
-  A verifier that reads the mark, compares, and then writes is a check-then-act
-  race on the one check whose entire purpose is to make a claim usable once:
+- A verification result carrying that requirement MUST NOT report the claim as
+  admitted. Its ordinary admission query returns false; the receiver must
+  explicitly request the scoped replay requirement and transact it with the
+  effect. This keeps pure verification while preventing the convenience API
+  from silently turning a prerequisite into an admission verdict.
+- `H` MUST be positive and an exact number of wire seconds. A sequenced claim
+  MUST REFUSE when `notAfter - notBefore > H`; its verifier-side maximum age is
+  also the tighter of the ordinary claim maximum and `H`.
+- The issuer MUST allocate sequences strictly monotonically within each
+  `(domain, subject, epochStart)` across every purpose, issuing device, and
+  subject-key rotation. It MAY restart at any value in a later epoch. This is an
+  issuance constraint, not something a verifier can infer after seeing only one
+  claim; violating it lets a legitimately higher claim suppress a later lower
+  one, by design.
+- **The receiver MUST commit the requirement and the claim's semantic effect in
+  one atomic transaction.** In that transaction it compares `sequence` with the
+  durable high-water mark for `(domain, subject, epochStart)`, refuses unless it
+  strictly exceeds the mark, advances the mark, and applies the effect. Two
+  concurrent presentations of the SAME claim MUST produce exactly one committed
+  effect. Splitting compare from advance is a check-then-act race:
   both readers see the old mark, both find the sequence higher, both accept, and
   the mark ends up recording a replay that it was supposed to refuse. This is
   not a remote hazard — a verifier serving a network is concurrent by
   construction, and the single-threaded case is the special one.
-- The advance MUST be durable before the claim is admitted. A mark lost to a
-  crash after acceptance reopens exactly the replay it just refused.
-- A claim carrying a `sequence` presented to a verifier with no mark store MUST
-  REFUSE. A declared replay defence is never skipped because the receiver has
-  nowhere to record it.
-- **A mark store that cannot decide REFUSES the claim.** Unreachable,
+- The advance and effect MUST become durable together before the claim is
+  admitted. Advancing first can lose the effect on a crash; applying the effect
+  first can replay it. This is deliberately a receiver transaction contract,
+  not verifier I/O hidden behind a callback.
+- **A receiver that cannot commit REFUSES the claim.** Unreachable,
   unreadable, unable to persist the advance before answering, or unable to
   settle the atomic compare — a timeout, an aborted transaction, a lock nobody
   won — every one of these is a refusal, never an admission. "Durable before
@@ -497,30 +602,45 @@ purpose. A claim's kind MUST be 1 or 3; a binding's MUST be 2. A kind outside
   cannot be honoured; there is no exception for the store being the thing that
   failed. Deny by default.
 - Nothing is consumed by such a refusal, so the same claim MAY be presented
-  again once the store recovers, and a verifier MAY retry internally before
+  again once the store recovers, and a receiver MAY retry internally before
   refusing. What it MUST NOT do is admit the claim in the meantime, or report an
   advance it has not durably recorded.
-- The failure MUST NOT escape the verifier as something other than a verdict
+- The failure MUST NOT be reported as admission
   either. A receiver whose store blinked must still produce accept-or-refuse for
-  every input; a verifier that propagates the storage fault instead has stopped
-  answering the question it was asked, which is a third outcome this
-  specification does not have.
+  every input. Verification may already have succeeded; its replay-commit
+  requirement is a prerequisite, not evidence that the effect was admitted.
 
-Retention of the mark is coupled to the acceptance window: a mark MUST outlive
-the window for its pair, or evicting it reopens replay for a claim still valid.
+For an epoch beginning at `E`, the store MUST retain the mark through Unix
+second `E + 2H - 1` inclusive, and a repeated advance MUST never shorten a
+previously recorded deadline. It MAY delete the mark only when `now` is greater
+than that deadline. The verifier supplies both `E` and this deadline in the
+replay-commit requirement.
+
+The bound is a proof, not a heuristic. The latest possible `notBefore` in the
+epoch is `E + H - 1`; the `H` age/window limits make its latest acceptance
+`E + 2H - 1`. Thus no claim from that epoch can pass its window after deletion.
+A claim with an arbitrarily far-future `notBefore` belongs to another epoch and
+cannot depend on this mark. Retention based only on the expiry of claims already
+seen is non-conforming, because an unseen lower sequence may carry a later
+signed window.
 
 ### 9. The validity window
 
 `notBefore` and `notAfter` are Unix seconds authored by the issuer. A verifier
-MAY additionally impose a maximum age. The tighter of the two governs; neither
-loosens the other.
+MAY independently impose maximum ages for (1) root-to-issuing bindings, (2)
+issuing-to-subject bindings, and (3) claims. The policy for the artifact being
+checked, never another layer's policy, is applied. The tighter signed and
+verifier windows govern; neither loosens the other. A sequenced claim is also
+capped by the verifier-wide replay horizon `H` from §8.
 
 REFUSE when any of these hold:
 
 - `notAfter < notBefore` (malformed window)
 - `now < notBefore` (not yet valid)
 - `now > notAfter` (expired)
-- `now - notBefore > maximumAge`, when the verifier authored one
+- `now - notBefore > applicableMaximumAge`, when the verifier authored one for
+  this layer
+- for a sequenced claim, `notAfter - notBefore > H` or `now - notBefore > H`
 
 **Where `now` comes from is a requirement, not a style note.** The verifier MUST
 NOT read a clock; that much is easy. But a caller that reads one *immediately
@@ -532,7 +652,7 @@ same verdict. Reading the clock at the call site makes the verdict depend on
 when the replay is run, which is the failure the parameter exists to prevent.
 
 The same reasoning bars verification from a simulation step at all: it consults
-wall-clock time *and*, whenever a claim carries a `sequence`, both reads and
+boundary-authored wall-clock time, and the receiver's later replay/effect commit
 writes durable storage (§8). An implementation with a deterministic tick MUST
 verify at the boundary and carry the verdict inward, never verify inside the
 tick. An implementation with no such constraint — a request-scoped web service —
@@ -551,9 +671,20 @@ auditable, and signed — unlike a verifier-side grace window, which every
 verifier would size differently and which silently widens every window in the
 system by twice its size.
 
-The verifier's maximum age applies to **every hop**, bindings included: a
-binding is the longest a compromised subject key stays honoured, so a ceiling
-that did not reach it would not be a ceiling.
+The three age policies MUST NOT bleed across layers. In particular, the claim
+maximum MUST NOT be applied to either binding. A root-binding maximum governs
+how long a compromised issuing key can remain vouched for; a subject-binding
+maximum governs how long a compromised subject key remains vouched for; a claim
+maximum governs only claim staleness. A world MAY omit a root-binding ceiling
+and rely on the root binding's signed `notAfter`, preserving the cold-root
+architecture. That choice deliberately accepts the corresponding issuing-key
+compromise window.
+
+At the API boundary, omitting either binding-specific default inherits the
+existing default maximum-age value. A receiver that wants independent values
+authors them explicitly; a receiver that wants no verifier ceiling sets the
+general default to `null` and relies on the signed window. This prevents the
+introduction of the split controls from silently removing an existing ceiling.
 
 #### The issuer re-attestation profile
 
@@ -649,8 +780,7 @@ The hop yields `(targetId, targetKey)` for the hop below.
 ### 13. Verifying a claim and its chain
 
 Inputs: the claim envelope, its chain (0 or 2 bindings), a trust list, `now`,
-the expected purpose, the verifier's own audience identity, and a sequence mark
-store.
+the expected purpose, and the verifier's own audience identity.
 
 1. REFUSE if the caller's expected purpose is blank or `key-binding` (a
    programming error, not an attack).
@@ -666,20 +796,23 @@ store.
    ("not a trusted vouching root"), if the chain is absent or empty ("missing
    chain"), or if it does not hold exactly two bindings ("broken chain").
 7. Walk:
-   1. Verify `chain[0]` by §12, pinned on the root entry. REFUSE if its target
+   1. Verify `chain[0]` by §12, pinned on the root entry and using the
+      root-binding maximum age. REFUSE if its target
       carries a subject (an issuing key must carry none), if the target's domain
       is not the claim's, or if the target's `keyHash` equals the root's own
       (§10, root self-vouching).
    2. Verify `chain[1]` by §12, pinned on the issuing id and key that step 7.1
-      yielded. REFUSE if its target carries **no** subject, if the target's
+      yielded and using the subject-binding maximum age. REFUSE if its target
+      carries **no** subject, if the target's
       domain is not the claim's, or if the target's subject is not the claim's
       subject.
    3. Verify the claim by §11 against the subject id and key that step 7.2
       yielded — which is where the claim's own `algorithm` is checked against
       the pin.
-8. Apply the window to the claim (§9). Every binding hop has already had it
-   applied with the same maximum age.
-9. Apply audience and sequence (§8).
+8. Apply the window to the claim using the claim maximum age (§9), and for a
+   sequenced claim additionally apply `H` and derive its replay epoch (§8).
+9. Apply audience and sequence policy (§8), returning a replay-commit
+   requirement when `sequence` is present. Do not access storage.
 10. Accept.
 
 Refusals in steps 5–7 that come from §11 or §12 propagate as refusals of the
@@ -697,9 +830,20 @@ times and establish nothing, while looking exactly like a verifier that checked.
 
 The same envelope with `payloadKind = 3`: the payload is AEAD ciphertext.
 Key agreement is ECDH P-256, **ephemeral to static**, feeding HKDF-SHA256 to an
-AES-256-GCM key; the associated data is the encoding of the **context header**
-alone — signed-portion elements 1 through 9, with no `payloadKind` and no
-`payload`. Tampering any header byte changes the AAD, so decryption fails closed.
+AES-256-GCM key. The sealed payload names the recipient's complete
+self-certifying id. `recipientAlgorithm` MUST equal
+`ecdh-p256-hkdf-sha256-aes256gcm`; any signing algorithm or unknown name
+REFUSES. Before sealing, the sender MUST check
+`SHA-256(recipient SPKI) == recipientKeyHash`. Before unsealing, the recipient
+MUST make the same check against the public half of the supplied private key.
+This is what prevents a valid P-256 signing key, or merely the wrong sealing
+key, from being silently accepted in the recipient role.
+
+The recipient id is part of the signed payload and is additionally bound into
+both HKDF info and AEAD associated data. The header component of that associated
+data is the encoding of the **context header** alone — signed-portion elements 1
+through 9, with no `payloadKind` and no `payload`. Tampering the header or any
+recipient-id field therefore fails closed.
 
 **The header's encoding differs by wire format, and §14 is the one place §§4–15
 do NOT apply unchanged to §16's layout.** The two are stated separately because
@@ -723,16 +867,27 @@ payload is sealed under exactly one wire format, and the AAD is that format's
 encoding of that header. Sealing under one and opening under the other fails as a
 tag mismatch, correctly.
 
-**The derivation and the AEAD construction are fixed in all five of their
-inputs**, and every one of them MUST be exactly this:
+First form `recipientContext` independently of the envelope codec:
+
+1. `recipientDomain`, 32 raw bytes.
+2. One subject-presence byte: `0x00` for absent, `0x01` for present.
+3. When present, the subject's UTF-8 byte length as an unsigned 32-bit
+   big-endian integer, followed by those UTF-8 bytes.
+4. The recipient-algorithm UTF-8 byte length as an unsigned 32-bit big-endian
+   integer, followed by those UTF-8 bytes.
+5. `recipientKeyHash`, 32 raw bytes.
+
+No other presence value or text encoding is valid. The derivation and AEAD
+construction MUST then use exactly these inputs:
 
 | Parameter | Value |
 |---|---|
 | HKDF input keying material | the **raw** secret agreement — the shared point's X coordinate, exactly as the curve produces it, **not** hashed first |
 | HKDF salt | **absent** (zero-length; the all-zero default of RFC 5869) |
-| HKDF info | the ASCII bytes `puck.carriage.sealed.v1`, 23 bytes, no terminator |
+| HKDF info | the ASCII bytes `puck.carriage.sealed.v1`, 23 bytes with no terminator, immediately followed by `recipientContext` |
 | Output length | **32** bytes — the AES-256-GCM key |
 | AEAD tag length | **16** bytes. Wherever the AEAD construction takes a tag length — `AesGcm(key, tagSizeInBytes)` and its equivalents — 16 is what MUST be passed |
+| AEAD associated data | ASCII `puck.carriage.sealed.aad.v1` (27 bytes, no terminator), then the header-byte length as an unsigned 64-bit big-endian integer, then the header bytes, then `recipientContext` |
 
 The last row is derivable from §2's "tag: exactly 16 bytes" and is stated as a
 construction input anyway, because a library that lets you *name* a tag length is
@@ -743,7 +898,7 @@ and then opened with a 12-byte tag would refuse honest ciphertext forever while
 its format checks all passed. That argument is the same one the four rows above
 already rest on; the row was simply missing.
 
-None of these appears anywhere in the ciphertext, so a disagreement about any one
+Most of these do not appear in the ciphertext, so a disagreement about any one
 of them is invisible until the far end fails — and it fails as an AEAD tag
 mismatch, which is *byte-identical to the failure a tampered payload produces*.
 An implementation cannot tell an interoperability bug from an attack, so leaving
@@ -770,15 +925,23 @@ private scalar.
 - **Curve.** The named curve MUST be P-256, the only curve the sealing algorithm
   names.
 
-There is deliberately nothing else to check here, and that is worth saying
+There is deliberately no key-intent bit in SPKI itself, and that is worth saying
 because a platform whose ECDSA and ECDH APIs are separate types invites the
 belief that the key bytes are separate too. They are not: an EC public key's SPKI
 is byte-identical in shape whether its holder means to sign with it or to agree
 with it, so an ephemeral key records no signing-versus-agreement intent and an
 implementation MUST NOT invent one to check. What separates a signing key from a
-sealing key in this specification is the §4 algorithm *name* in the envelope and
-the trust list, never the key bytes — which is also why §7 refuses a trust entry
-pinning a sealing algorithm rather than trying to tell the keys apart.
+sealing key in this specification is the recipient id's §4 algorithm name,
+authenticated inside the sealed payload, never the key bytes — which is also why
+§7 refuses a trust entry pinning a sealing algorithm rather than trying to tell
+the keys apart.
+
+For `payloadKind = 3`, §11 step 10 MUST decode all eight sealed-payload fields
+and apply the recipient-algorithm, nonce, tag, SPKI size, key type, and curve
+checks above. An authenticated claim with malformed sealed bytes REFUSES as part
+of verification. This decoding MUST NOT move before signature verification;
+until step 8 succeeds, the nested bytes and attacker-chosen EC point are not
+interpreted.
 
 A nonce that is not 12 bytes and a tag that is not 16 MUST REFUSE as format
 errors, before any cryptographic call.
@@ -791,17 +954,19 @@ sender.
 
 ### 15. Conformance summary
 
-An implementation conforms when, for every input, it produces the same
-accept-or-refuse verdict as this document requires. The conditions that MUST
-refuse, gathered:
+An implementation conforms to a named profile when, for every input within
+that profile and under identical policy inputs, it produces the same
+accept-or-refuse verdict as this document requires. A conformance report MUST
+name the base profile and every enabled extension; bare "v1 conforming" is
+insufficient. The conditions that MUST refuse, gathered:
 
 | # | Condition |
 |---|---|
 | 1 | Ill-formed CBOR, wrong major type, wrong array length, or an unknown `formatVersion` |
 | 2 | Non-canonical encoding (§3), including trailing bytes at any level |
-| 3 | `domain`, `targetDomain`, or `targetKeyHash` not exactly 32 bytes |
+| 3 | `domain`, `targetDomain`, `targetKeyHash`, `recipientDomain`, or `recipientKeyHash` not exactly 32 bytes |
 | 4 | `payloadKind` outside {1, 2, 3}; a claim outside {1, 3}; a binding not 2 |
-| 5 | `algorithm` or `targetAlgorithm` outside the §4 registry |
+| 5 | `algorithm`, `targetAlgorithm`, or `recipientAlgorithm` outside the §4 registry or selected profile; a recipient algorithm that is not the sealing algorithm |
 | 6 | `algorithm` not equal to the pinned key's algorithm (§6) |
 | 7 | An imported key whose curve is not the pinned algorithm's |
 | 8 | A signature that is not exactly `2 × fieldWidth` bytes, or does not verify |
@@ -814,16 +979,18 @@ refuse, gathered:
 | 15 | A binding payload that is not self-certifying (§12.2) |
 | 16 | A cross-domain binding target |
 | 17 | A claim subject that is not the chain's subject |
-| 18 | `sequence` present and not strictly above the mark, or present with no store |
+| 18 | `sequence` present with no finite verifier-wide horizon, or carrying a signed window longer than that horizon |
 | 19 | Bearer claim (no audience) with no `sequence` |
 | 20 | Directed claim whose `audience` is not the verifier's |
 | 21 | A trust entry whose key bytes do not hash to its pinned id, whose mode does not match its id's shape, or that pins a sealing algorithm |
-| 22 | Sealed payload with a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not an `id-ecPublicKey` key on P-256 — key type and curve are separate checks in that order (§14) |
+| 22 | Sealed payload with a recipient id/key mismatch, a non-sealing recipient role, a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not an `id-ecPublicKey` key on P-256 — key type and curve are separate checks in that order (§14) |
 | 23 | A fixed-layout presence flag that is neither `0x00` nor `0x01` (§16) — an instance of row 2, listed separately because the natural "non-zero means present" reader gets it wrong silently |
-| 24 | A sequence mark store that cannot decide: unreachable, unreadable, unable to persist the advance, or unable to settle the atomic compare (§8) |
+| 24 | A receiver cannot atomically and durably commit the replay requirement together with the semantic effect (§8); verification itself remains pure |
+| 25 | An envelope, signed portion, payload, text field, SPKI, or signature outside the selected profile's §0.1 resource ceilings |
+| 26 | A codec, algorithm, payload kind, or tooling claim that requires a named extension the verifier did not enable |
 
-Two obligations in this document are not refusal conditions and so cannot appear
-in the table, but conformance depends on them just as much. Both are invisible to
+Three obligations in this document are not refusal conditions and so cannot appear
+in the table, but conformance depends on them just as much. They are invisible to
 any single-input test, which is exactly why they are called out here:
 
 - **The signature is checked over the signed-portion bytes as they arrived**
@@ -831,13 +998,16 @@ any single-input test, which is exactly why they are called out here:
   re-encodes still produces the right verdict on every honest input, and turns
   every decoder laxity anywhere in its stack into an accepted alternate wire form
   for a real claim.
-- **The sequence compare-and-advance is atomic** (§8). A non-atomic
-  implementation is correct on every sequential input and admits a bearer claim
-  twice under concurrency.
+- **The replay/effect commit is atomic** (§8). A non-atomic receiver is correct
+  on every sequential input and either applies a bearer claim twice under
+  concurrency or loses its effect across a crash.
+- **Replay retention is epoch-derived** (§8). A store keyed only by domain and
+  subject cannot bound retention safely: an unseen lower sequence with a
+  far-future signed window can outlive a mark evicted from observed expiry data.
 
-#### Demonstrating the two
+#### Demonstrating the three
 
-Calling them out is not enough. Conformance to precisely the two rules this
+Calling them out is not enough. Conformance to precisely these rules
 section names as most important would otherwise be unfalsifiable, since neither
 can fail on the inputs a conformance run naturally has. **An implementation MUST
 therefore demonstrate each, and the demonstrations MUST be part of what it
@@ -845,14 +1015,15 @@ routinely runs** — the same obligation §17 places on a deliberately broken
 fixture, and for the same reason: a verifier only ever shown correct input proves
 nothing.
 
-- **A concurrency demonstration.** One claim carrying a `sequence`, presented by
-  at least two verifications that reach the mark store *simultaneously*, of which
-  **exactly one** MUST be accepted. The simultaneity MUST be arranged — a
+- **A concurrency demonstration.** One verified claim carrying a replay-commit
+  requirement, presented to at least two receiver commits *simultaneously*, of
+  which **exactly one** MUST apply the effect. The simultaneity MUST be arranged — a
   rendezvous, a barrier, a store that holds every caller at the door until all
   have arrived — so that a non-atomic store fails deterministically. A test that
   passes because the threads happened to serialise has demonstrated luck. The
-  discriminating property is that the SAME implementation with the compare and
-  the advance split into two store calls MUST fail the demonstration.
+  discriminating property is that the SAME receiver with the compare and
+  advance split into two store calls MUST fail the demonstration. The harness
+  must also assert that pure verification alone performs no commit.
 - **A mutated-but-parseable demonstration.** Wire bytes that differ from an
   honest envelope, still decode, decode to the **same model**, and MUST be
   refused. These inputs are the only ones that separate a verifier checking the
@@ -862,11 +1033,16 @@ nothing.
   an indefinite-length item (§3 rules 1 and 2); for the fixed layout, an optional
   field's presence flag written as `0x02` (§16). An implementation that verifies
   over a re-encoding accepts every one of them.
+- **A finite-retention demonstration.** At least one sequenced claim whose
+  signed window exceeds `H` MUST be refused, and at least one accepted sequenced
+  claim MUST yield exactly the epoch and `E + 2H - 1` retention deadline §8
+  derives. This distinguishes the bounded proof from a store that merely evicts
+  from the expiries of claims it has happened to observe.
 
-Neither demonstration can be carried by the §17 fixture — one needs two threads
-and the other needs bytes minted against a specific implementation's own honest
-output — so both live with the implementation rather than in the interchange
-directory.
+These demonstrations cannot all be carried by the §17 fixture — concurrency
+needs multiple receiver transactions and mutated wire bytes need output minted
+against a specific implementation — so they live with the implementation rather
+than only in the interchange directory.
 
 ### 16. Shelved alternative — the fixed layout
 
@@ -954,11 +1130,11 @@ by the other:
 | `binding-2.envelope` | issuing vouches subject |
 | `claim.envelope` | one signed claim by the subject key |
 | `sealed.envelope` | one sealed claim: `payloadKind = 3`, signed by the same subject key |
-| `recipient-sealing.pkcs8` | the recipient's PRIVATE sealing key, PKCS#8 DER — a throwaway fixture key, minted per export, belonging to no identity |
+| `recipient-sealing.pkcs8` | the recipient's PRIVATE sealing key, PKCS#8 DER — a throwaway fixture key minted per export, identified only by the self-certifying recipient id inside `sealed.envelope` |
 | `manifest.txt` | `key=value` lines naming what the verifier must expect — format and key set below |
 
-The sealed pair is not optional. §14 fixes five construction inputs that appear
-nowhere in any signed envelope, and a disagreement about any of them surfaces
+The sealed pair is not optional. §14 fixes construction inputs that cannot be
+validated from signatures alone, and a disagreement about any of them surfaces
 only as an AEAD tag mismatch — the same failure tampering produces. A fixture
 carrying only signed envelopes cross-verifies §§1–13 and leaves §14 resting on
 both sides having read the same paragraph the same way. Shipping the recipient's
@@ -996,13 +1172,13 @@ a value both sides already know needs no channel. `sealed-purpose` and
 the verifier cannot derive them; an audience equal to one already in the file and
 a sequence that is always absent do not.
 
-**A verifier MUST use a sequence-mark store scoped to the verification run** —
-fresh each time, discarded after — rather than its production store. The claim
-carries `sequence`, so §8 requires the mark to advance on acceptance; against a
-store that outlived the run, the *second* verification of the same fixture file
-would be refused as a replay, and be right to. This is why the sealed envelope
-carries no sequence at all: one artifact demonstrating the mark is enough, and a
-second would double the chance of a fixture that verifies exactly once.
+**The fixture verifier MUST inspect but MUST NOT commit the replay requirement.**
+The claim carries `sequence`, so §8 requires pure verification to return a
+requirement whose domain, subject, sequence, derived epoch, and retention
+deadline match the fixture. A conformance tool is not the world applying the
+claim's semantic effect and therefore has no transaction in which a durable
+mark could correctly participate. This is why verification of the same fixture
+is repeatable without special test-only storage.
 
 #### `manifest.txt`
 
@@ -1036,7 +1212,7 @@ under everyone's reader and means slightly different things.
   that treated the required set as closed would reject a conforming fixture the
   moment the minting side added a note to it.
 
-Required keys — all eight MUST be present with a **non-empty** value:
+Required keys — all nine MUST be present with a **non-empty** value:
 
 | Key | Value |
 |---|---|
@@ -1046,6 +1222,7 @@ Required keys — all eight MUST be present with a **non-empty** value:
 | `purpose` | the claim's `purpose`. MUST NOT be `key-binding` (§8) |
 | `audience` | the audience BOTH envelopes are directed at |
 | `sequence` | the claim's `sequence`, decimal digits only — no sign, no separators, no leading zeros |
+| `replay-horizon-seconds` | the positive whole-second verifier-wide horizon `H` used to verify this fixture and derive its replay requirement. Fixture verification uses this value so two conforming tools do not disagree merely because their production receivers choose different horizons |
 | `sealed-purpose` | `sealed.envelope`'s `purpose` |
 | `sealed-plaintext` | what a correct unseal of `sealed.envelope` MUST produce, as **UTF-8 text** after unescaping — not hex. The three escapes are what let it hold a line break |
 

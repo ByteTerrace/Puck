@@ -1,6 +1,6 @@
-using Puck.HumbleGamingBrick.Timing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.HumbleGamingBrick.Timing;
 
 namespace Puck.HumbleGamingBrick;
 

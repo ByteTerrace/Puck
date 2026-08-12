@@ -23,13 +23,19 @@ internal static class BessDiagnostic {
     public static bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
 
-        if (Array.IndexOf(array: args, value: "--bess-export") >= 0) {
+        if (Array.IndexOf(
+            array: args,
+            value: "--bess-export"
+        ) >= 0) {
             exitCode = RunExport(args: args);
 
             return true;
         }
 
-        if (Array.IndexOf(array: args, value: "--bess-import") >= 0) {
+        if (Array.IndexOf(
+            array: args,
+            value: "--bess-import"
+        ) >= 0) {
             exitCode = RunImport(args: args);
 
             return true;
@@ -39,7 +45,10 @@ internal static class BessDiagnostic {
     }
 
     private static int RunExport(string[] args) {
-        var outPath = CommandLineArguments.Value(args: args, name: "--bess-export");
+        var outPath = CommandLineArguments.Value(
+            args: args,
+            name: "--bess-export"
+        );
 
         if (string.IsNullOrEmpty(value: outPath)) {
             Console.WriteLine(value: "  [SKIP] --bess-export: no output path given");
@@ -47,18 +56,40 @@ internal static class BessDiagnostic {
             return 2;
         }
 
-        if (!TryResolveRom(args: args, rom: out var rom, romLabel: out var romLabel, model: out var model)) {
+        if (!TryResolveRom(
+            args: args,
+            rom: out var rom,
+            romLabel: out var romLabel,
+            model: out var model
+        )) {
             return 2;
         }
 
-        var framesArg = CommandLineArguments.Value(args: args, name: "--frames");
-        var frames = (((framesArg is not null) && int.TryParse(s: framesArg, result: out var parsedFrames)) ? parsedFrames : DefaultExportFrames);
+        var framesArg = CommandLineArguments.Value(
+            args: args,
+            name: "--frames"
+        );
+        var frames = (((framesArg is not null) && int.TryParse(
+            s: framesArg,
+            result: out var parsedFrames
+        ))
+            ? parsedFrames
+            : DefaultExportFrames);
 
-        using var source = PostMachine.Build(model: model, rom: rom);
+        using var source = PostMachine.Build(
+            model: model,
+            rom: rom
+        );
 
-        PostMachine.RunFrames(instance: source, frames: frames);
+        PostMachine.RunFrames(
+            instance: source,
+            frames: frames
+        );
 
-        var (file, exportedScope) = BessExporter.Export(instance: source, model: model);
+        var (file, exportedScope) = BessExporter.Export(
+            instance: source,
+            model: model
+        );
         var exportedFingerprint = BessScope.Fingerprint(capture: exportedScope);
 
         var outputDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: outPath));
@@ -67,35 +98,60 @@ internal static class BessDiagnostic {
             Directory.CreateDirectory(path: outputDirectory);
         }
 
-        File.WriteAllBytes(path: outPath, bytes: file);
+        File.WriteAllBytes(
+            path: outPath,
+            bytes: file
+        );
 
         // Self-consistency round trip: import the just-exported bytes into a SECOND, independently built machine of
         // the same configuration and re-capture the same scope. A matching fingerprint proves the export/import pair
         // round-trips the BESS-modeled state exactly (registers, IME/IE/execution-state, the memory regions, and CGB
         // palettes when applicable) — the evidence the task asks for, without depending on an external tool.
-        using var target = PostMachine.Build(model: model, rom: rom);
+        using var target = PostMachine.Build(
+            model: model,
+            rom: rom
+        );
 
-        var report = BessImporter.Import(instance: target, file: file);
-        var roundTripScope = BessScope.Capture(instance: target, model: model);
+        var report = BessImporter.Import(
+            instance: target,
+            file: file
+        );
+        var roundTripScope = BessScope.Capture(
+            instance: target,
+            model: model
+        );
         var roundTripFingerprint = BessScope.Fingerprint(capture: roundTripScope);
-        var roundTripVerdict = ((exportedFingerprint == roundTripFingerprint) ? "MATCH" : "MISMATCH");
+        var roundTripVerdict = ((exportedFingerprint == roundTripFingerprint)
+            ? "MATCH"
+            : "MISMATCH");
 
         Console.WriteLine(value: $"  bess-export {romLabel} ({model}, {frames} frames) -> {outPath} ({file.Length:N0} bytes)");
         Console.WriteLine(value: $"    scope fingerprint 0x{exportedFingerprint:X16}; round-trip (export -> import -> re-capture) into a fresh machine: 0x{roundTripFingerprint:X16} [{roundTripVerdict}]");
-        Console.WriteLine(value: $"    restored: pc={report.Pc:X4} af={report.Af:X4} bc={report.Bc:X4} de={report.De:X4} hl={report.Hl:X4} sp={report.Sp:X4} ime={(report.Ime ? 1 : 0)} ie={report.Ie:X2} if={report.If:X2} lcdc={report.Lcdc:X2} stat={report.Stat:X2} ly={report.Ly:X2} romBank={report.RomBank} ramBank={report.RamBank}");
+        Console.WriteLine(value: $"    restored: pc={report.Pc:X4} af={report.Af:X4} bc={report.Bc:X4} de={report.De:X4} hl={report.Hl:X4} sp={report.Sp:X4} ime={(report.Ime
+            ? 1
+            : 0)} ie={report.Ie:X2} if={report.If:X2} lcdc={report.Lcdc:X2} stat={report.Stat:X2} ly={report.Ly:X2} romBank={report.RomBank} ramBank={report.RamBank}");
 
-        var malformedCorpusClean = RunMalformedImportSelfCheck(goodFile: file, rom: rom, model: model);
+        var malformedCorpusClean = RunMalformedImportSelfCheck(
+            goodFile: file,
+            rom: rom,
+            model: model
+        );
 
         PrintReferenceEmulatorNote();
 
-        return (((roundTripVerdict == "MATCH") && malformedCorpusClean) ? 0 : 1);
+        return (((roundTripVerdict == "MATCH") && malformedCorpusClean)
+            ? 0
+            : 1);
     }
     // M-08 self-check: a malformed BESS file must be rejected before anything is applied. Each corpus case is imported
     // against ONE dedicated probe machine (never the export/import pair above, so a bug here cannot contaminate the
     // round-trip evidence); a snapshot taken before the whole run and after every attempt must stay byte-identical,
     // proving a rejected import is a true no-op, not merely a caught exception over already-mutated state.
     private static bool RunMalformedImportSelfCheck(byte[] goodFile, byte[] rom, ConsoleModel model) {
-        using var probe = PostMachine.Build(model: model, rom: rom);
+        using var probe = PostMachine.Build(
+            model: model,
+            rom: rom
+        );
         var baseline = probe.Machine.Snapshot();
         var allRejectedCleanly = true;
 
@@ -103,7 +159,10 @@ internal static class BessDiagnostic {
             InvalidDataException? rejection = null;
 
             try {
-                BessImporter.Import(instance: probe, file: malformed);
+                BessImporter.Import(
+                    instance: probe,
+                    file: malformed
+                );
             } catch (InvalidDataException exception) {
                 rejection = exception;
             }
@@ -117,31 +176,52 @@ internal static class BessDiagnostic {
 
             var untouched = baseline.ContentEquals(other: probe.Machine.Snapshot());
 
-            Console.WriteLine(value: $"    bess-import malformed-corpus \"{label}\": rejected ({rejection.Message}); probe machine {(untouched ? "untouched" : "[FAIL] MUTATED")}");
+            Console.WriteLine(value: $"    bess-import malformed-corpus \"{label}\": rejected ({rejection.Message}); probe machine {(untouched
+                ? "untouched"
+                : "[FAIL] MUTATED")}");
             allRejectedCleanly &= untouched;
         }
 
         return allRejectedCleanly;
     }
     private static int RunImport(string[] args) {
-        var filePath = CommandLineArguments.Value(args: args, name: "--bess-import");
+        var filePath = CommandLineArguments.Value(
+            args: args,
+            name: "--bess-import"
+        );
 
-        if (string.IsNullOrEmpty(value: filePath) || !File.Exists(path: filePath)) {
+        if (
+            string.IsNullOrEmpty(value: filePath) ||
+            !File.Exists(path: filePath)
+        ) {
             Console.WriteLine(value: $"  [SKIP] --bess-import: file not found at {filePath}");
 
             return 2;
         }
 
-        if (!TryResolveRom(args: args, rom: out var rom, romLabel: out var romLabel, model: out var model)) {
+        if (!TryResolveRom(
+            args: args,
+            rom: out var rom,
+            romLabel: out var romLabel,
+            model: out var model
+        )) {
             return 2;
         }
 
-        using var machine = PostMachine.Build(model: model, rom: rom);
-        var report = BessImporter.Import(instance: machine, file: File.ReadAllBytes(path: filePath));
+        using var machine = PostMachine.Build(
+            model: model,
+            rom: rom
+        );
+        var report = BessImporter.Import(
+            instance: machine,
+            file: File.ReadAllBytes(path: filePath)
+        );
 
         Console.WriteLine(value: $"  bess-import {Path.GetFileName(path: filePath)} into {romLabel} ({model})");
         Console.WriteLine(value: $"    emulator=\"{report.EmulatorName}\" model={report.ModelTag}");
-        Console.WriteLine(value: $"    pc={report.Pc:X4} af={report.Af:X4} bc={report.Bc:X4} de={report.De:X4} hl={report.Hl:X4} sp={report.Sp:X4} ime={(report.Ime ? 1 : 0)} ie={report.Ie:X2} if={report.If:X2} lcdc={report.Lcdc:X2} stat={report.Stat:X2} ly={report.Ly:X2} romBank={report.RomBank} ramBank={report.RamBank}");
+        Console.WriteLine(value: $"    pc={report.Pc:X4} af={report.Af:X4} bc={report.Bc:X4} de={report.De:X4} hl={report.Hl:X4} sp={report.Sp:X4} ime={(report.Ime
+            ? 1
+            : 0)} ie={report.Ie:X2} if={report.If:X2} lcdc={report.Lcdc:X2} stat={report.Stat:X2} ly={report.Ly:X2} romBank={report.RomBank} ramBank={report.RamBank}");
         PrintReferenceEmulatorNote();
 
         return 0;
@@ -149,7 +229,10 @@ internal static class BessDiagnostic {
     // --rom <path> selects the cartridge (model inferred from its header); absent, the synthetic Tier-A cartridge on
     // Dmg. Returns false (with a printed [SKIP]) when --rom names a missing file.
     private static bool TryResolveRom(string[] args, out byte[] rom, out string romLabel, out ConsoleModel model) {
-        var romPath = CommandLineArguments.Value(args: args, name: "--rom");
+        var romPath = CommandLineArguments.Value(
+            args: args,
+            name: "--rom"
+        );
 
         if (string.IsNullOrEmpty(value: romPath)) {
             rom = SyntheticRom.Create();
@@ -171,7 +254,9 @@ internal static class BessDiagnostic {
 
         rom = File.ReadAllBytes(path: romPath);
         romLabel = Path.GetFileName(path: romPath);
-        model = (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80))) ? ConsoleModel.Cgb : ConsoleModel.Dmg);
+        model = (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
+            ? ConsoleModel.Cgb
+            : ConsoleModel.Dmg);
 
         return true;
     }

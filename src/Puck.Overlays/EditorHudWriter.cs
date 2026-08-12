@@ -27,7 +27,10 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
     private const string Title = "EDITOR";
 
     static EditorHudWriter() {
-        System.Diagnostics.Debug.Assert(condition: (Title.Length == TitleChars), message: "EditorHudWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' EditorHudTextWordsPerSeat, which reads it) to match.");
+        System.Diagnostics.Debug.Assert(
+            condition: (Title.Length == TitleChars),
+            message: "EditorHudWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' EditorHudTextWordsPerSeat, which reads it) to match."
+        );
     }
 
     private readonly IEditorHudSource m_source;
@@ -54,7 +57,12 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
 
         var seats = frame.Seats.Span;
 
-        OverlaySeatLoop.Emit(builder: builder, seats: seats, writerName: nameof(EditorHudWriter), writer: this);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: seats,
+            writerName: nameof(EditorHudWriter),
+            writer: this
+        );
     }
 
     // One seat's panel: sized to its longest line, anchored at the seat region's top-left with the standard gutter,
@@ -62,7 +70,10 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) {
         var region = seat.Viewport;
 
-        if ((region.Width < MinRegionExtent) || (region.Height < MinRegionExtent)) {
+        if (
+            (region.Width < MinRegionExtent) ||
+            (region.Height < MinRegionExtent)
+        ) {
             return;
         }
 
@@ -76,14 +87,30 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
         var monoCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMonoSize);
         var microCell = OverlayFrameBuilder.CellHeight(sizePx: DesignTokens.Type.TypeMicroSize);
         var lineStep = (monoCell + DesignTokens.Space.Space1);
-        var lineCount = Math.Max(val1: 1, val2: (((CountPresent(text: seat.SelectionLine) + CountPresent(text: seat.ContextLine)) + CountPresent(text: seat.SessionLine)) + CountPresent(text: seat.DragLine)));
-        var widestChars = Math.Min(val1: MaxLineChars, val2: Math.Max(
-            val1: Title.Length,
+        var lineCount = Math.Max(
+            val1: 1,
+            val2: (((CountPresent(text: seat.SelectionLine) + CountPresent(text: seat.ContextLine)) + CountPresent(text: seat.SessionLine)) + CountPresent(text: seat.DragLine))
+        );
+        var widestChars = Math.Min(
+            val1: MaxLineChars,
             val2: Math.Max(
-                val1: Math.Max(val1: seat.SelectionLine.Length, val2: seat.SessionLine.Length),
-                val2: Math.Max(val1: seat.ContextLine.Length, val2: seat.DragLine.Length))
+                val1: Title.Length,
+                val2: Math.Max(
+                    val1: Math.Max(
+                        val1: seat.SelectionLine.Length,
+                        val2: seat.SessionLine.Length
+                    ),
+                    val2: Math.Max(
+                        val1: seat.ContextLine.Length,
+                        val2: seat.DragLine.Length
+                    )
+                )
+            )
+        );
+        var panelWidth = ((DesignTokens.Space.Space3 * 2f) + builder.TextWidth(
+            chars: widestChars,
+            cellHeight: monoCell
         ));
-        var panelWidth = ((DesignTokens.Space.Space3 * 2f) + builder.TextWidth(chars: widestChars, cellHeight: monoCell));
         var bandHeight = (microCell + DesignTokens.Space.Space2);
         var panelHeight = ((bandHeight + DesignTokens.Space.Space2) + (lineCount * lineStep));
         var x = ((region.X * builder.Width) + DesignTokens.Space.Space4);
@@ -93,7 +120,9 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
             alpha: 1f,
             bandHeight: bandHeight,
             h: panelHeight,
-            ringRole: (seat.DragActive ? OverlayColorRole.Accent : (OverlayColorRole?)null),
+            ringRole: (seat.DragActive
+            ? OverlayColorRole.Accent
+            : (OverlayColorRole?)null),
             style: OverlayPanelStyle.Strip,
             titleBand: true,
             w: panelWidth,
@@ -112,25 +141,70 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
 
         var lineY = ((y + bandHeight) + DesignTokens.Space.Space2);
 
-        lineY = EmitLine(builder: builder, text: seat.SelectionLine, role: OverlayColorRole.TextPrimary, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
-        lineY = EmitLine(builder: builder, text: seat.ContextLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
-        lineY = EmitLine(builder: builder, text: seat.SessionLine, role: OverlayColorRole.TextDim, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
-        _ = EmitLine(builder: builder, text: seat.DragLine, role: OverlayColorRole.Accent, x: (x + DesignTokens.Space.Space3), y: lineY, cellHeight: monoCell, lineStep: lineStep);
+        lineY = EmitLine(
+            builder: builder,
+            text: seat.SelectionLine,
+            role: OverlayColorRole.TextPrimary,
+            x: (x + DesignTokens.Space.Space3),
+            y: lineY,
+            cellHeight: monoCell,
+            lineStep: lineStep
+        );
+        lineY = EmitLine(
+            builder: builder,
+            text: seat.ContextLine,
+            role: OverlayColorRole.TextDim,
+            x: (x + DesignTokens.Space.Space3),
+            y: lineY,
+            cellHeight: monoCell,
+            lineStep: lineStep
+        );
+        lineY = EmitLine(
+            builder: builder,
+            text: seat.SessionLine,
+            role: OverlayColorRole.TextDim,
+            x: (x + DesignTokens.Space.Space3),
+            y: lineY,
+            cellHeight: monoCell,
+            lineStep: lineStep
+        );
+        _ = EmitLine(
+            builder: builder,
+            text: seat.DragLine,
+            role: OverlayColorRole.Accent,
+            x: (x + DesignTokens.Space.Space3),
+            y: lineY,
+            cellHeight: monoCell,
+            lineStep: lineStep
+        );
         builder.EndClip();
     }
 
     void IOverlaySeatEmitter<OverlayEditorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) =>
-        EmitSeat(builder: builder, seat: in seat);
+        EmitSeat(
+            builder: builder,
+            seat: in seat
+        );
 
     private static float EmitLine(OverlayFrameBuilder builder, string text, OverlayColorRole role, float x, float y, int cellHeight, float lineStep) {
         if (text.Length == 0) {
             return y;
         }
 
-        builder.WriteText(alpha: 1f, cellHeight: cellHeight, maxChars: MaxLineChars, role: role, text: text, x: x, y: y);
+        builder.WriteText(
+            alpha: 1f,
+            cellHeight: cellHeight,
+            maxChars: MaxLineChars,
+            role: role,
+            text: text,
+            x: x,
+            y: y
+        );
 
         return (y + lineStep);
     }
-
-    private static int CountPresent(string text) => ((text.Length > 0) ? 1 : 0);
+    private static int CountPresent(string text) => ((text.Length > 0)
+        ? 1
+        : 0
+    );
 }

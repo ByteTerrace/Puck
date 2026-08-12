@@ -41,7 +41,10 @@ internal static class SyntheticRom {
         // monochrome color flag), so only the program bytes — and any non-default header bytes — need to be written.
         var rom = new byte[RomSize];
 
-        Program.CopyTo(array: rom, index: EntryPoint);
+        Program.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
 
         rom[0x0147] = cartridgeType;
         rom[0x0149] = ramSize;

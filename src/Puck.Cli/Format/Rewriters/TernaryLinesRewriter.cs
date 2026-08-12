@@ -12,7 +12,18 @@ namespace Puck.Cli.Format.Rewriters;
 //       : "B";
 // A `? : ? :` chain (the whenFalse — or whenTrue — is itself a conditional) nests one level deeper per
 // link; the chain's root drives the layout so the nested links indent off the rebuilt shape rather than
-// their original source position. Condition and branch inner trivia are preserved and only the outer
+// their original source position. When the laid-out construct is wrapped in parentheses (paren-clarity
+// wraps every value-position ternary) and ENDS ITS STATEMENT (the close-paren run is followed by `;`),
+// the run hangs on its own line, left-justified to the root's condition indent —
+//   var clamped = ((scale < 0f)
+//       ? 0f
+//       : ((scale > 1f)
+//           ? 1f
+//           : scale
+//   ));
+// — the same hanging-close convention arg-lines and logical-lines apply to their delimiters. A wrapper
+// that sits mid-expression or in argument position instead hugs its final branch (`: -1f) * span`),
+// normalized in both directions so the pass converges from either shape. Condition and branch inner trivia are preserved and only the outer
 // layout trivia is reset, so a second run reproduces the same shape — the pass is idempotent. A ternary
 // carrying a comment or #directive in one of those reset slots is left exactly as authored.
 // Indentation is computed structurally, never read from the condition's own line, so sibling ternaries
@@ -36,6 +47,70 @@ internal sealed class TernaryLinesRewriter : CSharpSyntaxRewriter {
         }
 
         return Layout(conditional: visited, conditionIndent: ConditionIndent(node: node));
+    }
+
+    // Lays out the trailing close parens of a paren-wrapped laid-out ternary: the run of wrapper `)`s
+    // that ends the construct (this paren's own close, plus the closes of nested chain-link wrappers that
+    // sit immediately before it). A run that ends its statement (`;` follows) drops to ONE line at the
+    // root's condition indent, innermost first, the rest hugging; any other run — mid-expression or
+    // argument position — hugs the final branch. Both directions are normalized, so the pass converges
+    // from either shape. A wrapper that is itself a branch of an enclosing conditional is a chain link —
+    // its close joins the enclosing root's run rather than being laid out on its own.
+    public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node) {
+        var visited = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node: node)!;
+
+        if ((node.Expression is not ConditionalExpressionSyntax original)
+            || (visited.Expression is not ConditionalExpressionSyntax laidOut)) {
+            return visited;
+        }
+
+        if ((node.Parent is ConditionalExpressionSyntax parent) && ((parent.WhenTrue == node) || (parent.WhenFalse == node))) {
+            return visited;
+        }
+
+        // An annotated chain was declined by the conditional visit and stays exactly as authored — its
+        // delimiting parens included.
+        if (IsAnnotated(conditional: laidOut)) {
+            return visited;
+        }
+
+        var closes = TrailingCloseRun(paren: visited);
+
+        // The layout reissues the run's leading trivia, so a comment or #directive there would be deleted
+        // outright; leave such a construct as written.
+        if (closes.Any(predicate: static close => RewriteShaping.HasCommentOrDirective(trivia: close.LeadingTrivia))) {
+            return visited;
+        }
+
+        var hangs = node.CloseParenToken.GetNextToken().IsKind(kind: SyntaxKind.SemicolonToken);
+        var indent = ConditionIndent(node: original);
+        var first = closes[0];
+
+        return visited.ReplaceTokens(
+            tokens: closes,
+            computeReplacementToken: (oldToken, _) => ((hangs && oldToken.Equals(other: first))
+                ? oldToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: indent))
+                : oldToken.WithLeadingTrivia()));
+    }
+
+    // The construct-terminating close parens in source order (innermost first): descend while the final
+    // branch is itself a paren-wrapped, un-annotated chain link — an annotated link kept its authored
+    // layout, so its close paren must stay where the author put it.
+    private static List<SyntaxToken> TrailingCloseRun(ParenthesizedExpressionSyntax paren) {
+        var closes = new List<SyntaxToken> { paren.CloseParenToken };
+        var current = paren;
+
+        while ((current.Expression is ConditionalExpressionSyntax conditional)
+            && (conditional.WhenFalse is ParenthesizedExpressionSyntax inner)
+            && (inner.Expression is ConditionalExpressionSyntax innerConditional)
+            && !IsAnnotated(conditional: innerConditional)) {
+            closes.Add(item: inner.CloseParenToken);
+            current = inner;
+        }
+
+        closes.Reverse();
+
+        return closes;
     }
 
     private static ConditionalExpressionSyntax Layout(ConditionalExpressionSyntax conditional, string conditionIndent) {

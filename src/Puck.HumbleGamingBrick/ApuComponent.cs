@@ -176,7 +176,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             // The boot ROM leaves the frame sequencer mid-cycle, not at step zero: one DIV-APU event has elapsed on Color
             // (eighteen on monochrome, whose step counter is that modulo eight). The hardware-accurate sound tests align themselves
             // to this phase through length-counter syncs, so the seed is load-bearing.
-            m_frameSequencerStep = (configuration.Model.SupportsColor() ? 1 : 2);
+            m_frameSequencerStep = (configuration.Model.SupportsColor()
+                ? 1
+                : 2);
         }
 
         m_lastDivApuBit = DivApuBit();
@@ -205,7 +207,11 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         // DIV survives a power cycle; only the stepping (and thus length/sweep/envelope clocking) is gated on power.
         var bit = DivApuBit();
 
-        if (m_powered && m_lastDivApuBit && !bit) {
+        if (
+            m_powered &&
+            m_lastDivApuBit &&
+            !bit
+        ) {
             StepFrameSequencer();
         }
 
@@ -228,7 +234,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         // The wave channel's frequency timer runs every dot while the channel plays, stepping through its 32 samples;
         // each expiry advances the position and FETCHES the addressed byte into the sample latch the output plays from.
-        if (m_channelEnabled[2] && (--m_waveTimer <= 0)) {
+        if (
+            m_channelEnabled[2] &&
+            (--m_waveTimer <= 0)
+        ) {
             m_waveTimer = WavePeriod();
             m_wavePosition = (m_wavePosition + 1) & 0x1F;
             m_waveSampleLatch = m_waveRam[(m_wavePosition >> 1)];
@@ -241,7 +250,11 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         AdvanceSquareTimer(channel: 0);
         AdvanceSquareTimer(channel: 1);
 
-        if (m_channelEnabled[3] && ((m_registers[Nr43] >> 4) < NoiseShiftGateCode) && (--m_noiseTimer <= 0)) {
+        if (
+            m_channelEnabled[3] &&
+            ((m_registers[Nr43] >> 4) < NoiseShiftGateCode) &&
+            (--m_noiseTimer <= 0)
+        ) {
             m_noiseTimer = NoisePeriod();
             StepNoiseLfsr();
         }
@@ -256,7 +269,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             // While the channel plays, CPU access follows the channel, not the address: it lands on the byte at the
             // live sample position. Color silicon buffers the port so the access always succeeds; monochrome access
             // succeeds only within the short window a fetch opens, and reads outside it float to 0xFF.
-            return ((m_isColor || (m_waveFetchHold > 0)) ? m_waveRam[(m_wavePosition >> 1)] : (byte)0xFF);
+            return ((m_isColor || (m_waveFetchHold > 0))
+                ? m_waveRam[(m_wavePosition >> 1)]
+                : (byte)0xFF);
         }
 
         if (address == MemoryMap.AudioMasterControl) {
@@ -268,7 +283,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
                 }
             }
 
-            return (byte)(Nr52Readable | (m_powered ? MasterPower : 0) | status);
+            return (byte)(Nr52Readable | (m_powered
+                ? MasterPower
+                : 0) | status);
         }
 
         if (address > MemoryMap.AudioEnd) {
@@ -319,23 +336,37 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         // "length counter during power" case checks.
         if (!m_powered) {
             if (!m_isColor) {
-                WriteLengthCounterWhilePoweredOff(offset: offset, value: value);
+                WriteLengthCounterWhilePoweredOff(
+                    offset: offset,
+                    value: value
+                );
             }
 
             return;
         }
 
-        WriteChannelRegister(offset: offset, value: value);
+        WriteChannelRegister(
+            offset: offset,
+            value: value
+        );
     }
     /// <inheritdoc/>
     public byte ReadPcm(ushort address) {
         // PCM12 packs channel 1 in the low nibble and channel 2 in the high; PCM34 packs channel 3 (wave) low and
         // channel 4 (noise) high. Each nibble is the channel's live digital output, or zero while it is not sounding.
         if (address == MemoryMap.PcmAmplitude12) {
-            return (byte)((m_channelEnabled[0] ? SquareOutput(channel: 0) : 0) | ((m_channelEnabled[1] ? SquareOutput(channel: 1) : 0) << 4));
+            return (byte)((m_channelEnabled[0]
+                ? SquareOutput(channel: 0)
+                : 0) | ((m_channelEnabled[1]
+                ? SquareOutput(channel: 1)
+                : 0) << 4));
         }
 
-        return (byte)((m_channelEnabled[2] ? WaveOutput() : 0) | ((m_channelEnabled[3] ? NoiseOutput() : 0) << 4));
+        return (byte)((m_channelEnabled[2]
+            ? WaveOutput()
+            : 0) | ((m_channelEnabled[3]
+            ? NoiseOutput()
+            : 0) << 4));
     }
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
@@ -407,7 +438,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // The single DIV-counter bit whose falling edge advances the frame sequencer, higher under double speed so the event
     // stays at 512 Hz.
     private bool DivApuBit() {
-        var bit = (m_key1.IsDoubleSpeed ? DoubleSpeedDivApuBit : NormalDivApuBit);
+        var bit = (m_key1.IsDoubleSpeed
+            ? DoubleSpeedDivApuBit
+            : NormalDivApuBit);
 
         return ((m_timer.DivCounter & (1 << bit)) != 0);
     }
@@ -420,7 +453,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             ClockLengthCounters();
         }
 
-        if ((m_frameSequencerStep == 2) || (m_frameSequencerStep == 6)) {
+        if (
+            (m_frameSequencerStep == 2) ||
+            (m_frameSequencerStep == 6)
+        ) {
             ClockSweep();
         }
 
@@ -432,7 +468,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // it reaches zero.
     private void ClockLengthCounters() {
         for (var channel = 0; (channel < ChannelCount); ++channel) {
-            if (m_lengthEnabled[channel] && (m_lengthCounter[channel] > 0)) {
+            if (
+                m_lengthEnabled[channel] &&
+                (m_lengthCounter[channel] > 0)
+            ) {
                 if (--m_lengthCounter[channel] == 0) {
                     m_channelEnabled[channel] = false;
                 }
@@ -446,9 +485,15 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     private void WriteMasterControl(byte value) {
         var powerOn = ((value & MasterPower) != 0);
 
-        if (m_powered && !powerOn) {
+        if (
+            m_powered &&
+            !powerOn
+        ) {
             PowerOff();
-        } else if (!m_powered && powerOn) {
+        } else if (
+            !m_powered &&
+            powerOn
+        ) {
             // The step counter restarts so the first DIV-APU event advances it to step 0 (a length clock); the event's
             // timing itself is preserved by the continuous DIV tracking in Tick.
             m_powered = true;
@@ -495,7 +540,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
                 // Clearing the sweep's negate bit after a negate calculation has run since the last trigger disables the
                 // channel at once (the calculation could no longer keep the frequency in range).
-                if (m_sweepNegateUsed && ((value & SweepNegate) == 0)) {
+                if (
+                    m_sweepNegateUsed &&
+                    ((value & SweepNegate) == 0)
+                ) {
                     m_channelEnabled[0] = false;
                 }
 
@@ -529,19 +577,35 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
                 break;
             case Nr14:
-                WriteControlRegister(channel: 0, offset: offset, value: value);
+                WriteControlRegister(
+                    channel: 0,
+                    offset: offset,
+                    value: value
+                );
 
                 break;
             case Nr24:
-                WriteControlRegister(channel: 1, offset: offset, value: value);
+                WriteControlRegister(
+                    channel: 1,
+                    offset: offset,
+                    value: value
+                );
 
                 break;
             case Nr34:
-                WriteControlRegister(channel: 2, offset: offset, value: value);
+                WriteControlRegister(
+                    channel: 2,
+                    offset: offset,
+                    value: value
+                );
 
                 break;
             case Nr44:
-                WriteControlRegister(channel: 3, offset: offset, value: value);
+                WriteControlRegister(
+                    channel: 3,
+                    offset: offset,
+                    value: value
+                );
 
                 break;
             default:
@@ -582,8 +646,16 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         m_registers[offset] = value;
 
-        if (nowLengthEnabled && !wasLengthEnabled && !NextStepClocksLength() && (m_lengthCounter[channel] > 0)) {
-            if ((--m_lengthCounter[channel] == 0) && !triggering) {
+        if (
+            nowLengthEnabled &&
+            !wasLengthEnabled &&
+            !NextStepClocksLength() &&
+            (m_lengthCounter[channel] > 0)
+        ) {
+            if (
+                (--m_lengthCounter[channel] == 0) &&
+                !triggering
+            ) {
                 m_channelEnabled[channel] = false;
             }
         }
@@ -602,7 +674,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         if (m_lengthCounter[channel] == 0) {
             m_lengthCounter[channel] = LengthMaxima[channel];
 
-            if (m_lengthEnabled[channel] && !NextStepClocksLength()) {
+            if (
+                m_lengthEnabled[channel] &&
+                !NextStepClocksLength()
+            ) {
                 --m_lengthCounter[channel];
             }
         }
@@ -613,13 +688,19 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         switch (channel) {
             case 0:
                 m_squareTimer[0] = SquarePeriod(channel: 0);
-                LoadEnvelope(channel: 0, register: Nr12);
+                LoadEnvelope(
+                    channel: 0,
+                    register: Nr12
+                );
                 TriggerSweep();
 
                 break;
             case 1:
                 m_squareTimer[1] = SquarePeriod(channel: 1);
-                LoadEnvelope(channel: 1, register: Nr22);
+                LoadEnvelope(
+                    channel: 1,
+                    register: Nr22
+                );
 
                 break;
             case 2:
@@ -627,7 +708,11 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
                 // hardware (the CPU's trigger and the fetch collide on the RAM port); Color hardware buffers the port
                 // and is immune. The fetch-busy predicate is (m_waveFetchHold > 0) — inside the window a fetch
                 // opens — not a countdown check against m_waveTimer, which fires one slot late.
-                if (!m_isColor && m_channelEnabled[2] && (m_waveFetchHold > 0)) {
+                if (
+                    !m_isColor &&
+                    m_channelEnabled[2] &&
+                    (m_waveFetchHold > 0)
+                ) {
                     CorruptWaveRamOnRetrigger();
                 }
 
@@ -641,7 +726,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             default:
                 m_noiseLfsr = 0;
                 m_noiseTimer = NoisePeriod();
-                LoadEnvelope(channel: 3, register: Nr42);
+                LoadEnvelope(
+                    channel: 3,
+                    register: Nr42
+                );
 
                 break;
         }
@@ -682,7 +770,10 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // One dot of a square channel's frequency timer: while it plays, count down and, on expiry, reload from the
     // current frequency and step the duty position. The position wraps but is never reset here, so it free-runs.
     private void AdvanceSquareTimer(int channel) {
-        if (m_channelEnabled[channel] && (--m_squareTimer[channel] <= 0)) {
+        if (
+            m_channelEnabled[channel] &&
+            (--m_squareTimer[channel] <= 0)
+        ) {
             m_squareTimer[channel] = SquarePeriod(channel: channel);
             m_squarePosition[channel] = (m_squarePosition[channel] + 1) & 0x07;
         }
@@ -700,7 +791,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // TickGenerators, which never lets the countdown run under them).
     private int NoisePeriod() {
         var code = m_registers[Nr43] & 0x07;
-        var divisor = ((code == 0) ? 8 : (code << 4));
+        var divisor = ((code == 0)
+            ? 8
+            : (code << 4));
 
         return (divisor << (m_registers[Nr43] >> 4));
     }
@@ -708,7 +801,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // selected by NR43 bit 3), so the low bit that gates the output follows the pseudo-random sequence.
     private void StepNoiseLfsr() {
         var feedback = (m_noiseLfsr ^ (m_noiseLfsr >> 1) ^ 1) & 1;
-        var mask = (((m_registers[Nr43] & 0x08) != 0) ? 0x4040 : 0x4000);
+        var mask = (((m_registers[Nr43] & 0x08) != 0)
+            ? 0x4040
+            : 0x4000);
 
         m_noiseLfsr >>= 1;
 
@@ -720,38 +815,61 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     }
     // The envelope clock (frame-sequencer step 7, 64 Hz): step the two square channels' and the noise channel's volume.
     private void ClockEnvelopes() {
-        ClockEnvelope(channel: 0, register: Nr12);
-        ClockEnvelope(channel: 1, register: Nr22);
-        ClockEnvelope(channel: 3, register: Nr42);
+        ClockEnvelope(
+            channel: 0,
+            register: Nr12
+        );
+        ClockEnvelope(
+            channel: 1,
+            register: Nr22
+        );
+        ClockEnvelope(
+            channel: 3,
+            register: Nr42
+        );
     }
     // One envelope clock for a channel: a zero period disables the envelope; otherwise count down and, on expiry, reload
     // and step the volume one unit in the NRx2 direction, holding at the 0 or 15 rail.
     private void ClockEnvelope(int channel, int register) {
         var period = m_registers[register] & 0x07;
 
-        if ((period == 0) || (--m_envelopeTimer[channel] > 0)) {
+        if (
+            (period == 0) ||
+            (--m_envelopeTimer[channel] > 0)
+        ) {
             return;
         }
 
         m_envelopeTimer[channel] = period;
 
-        var next = (m_envelopeVolume[channel] + (((m_registers[register] & 0x08) != 0) ? 1 : -1));
+        var next = (m_envelopeVolume[channel] + (((m_registers[register] & 0x08) != 0)
+            ? 1
+            : -1));
 
-        if ((next >= 0) && (next <= 15)) {
+        if (
+            (next >= 0) &&
+            (next <= 15)
+        ) {
             m_envelopeVolume[channel] = next;
         }
     }
     // A square channel's current digital output (0-15): its envelope volume when the selected duty pattern's bit for the
     // current position is high, otherwise zero.
     private int SquareOutput(int channel) {
-        var duty = (m_registers[((channel == 0) ? Nr11 : Nr21)] >> 6);
+        var duty = (m_registers[((channel == 0)
+            ? Nr11
+            : Nr21)] >> 6);
 
-        return ((DutyTable[((duty * 8) + m_squarePosition[channel])] != 0) ? m_envelopeVolume[channel] : 0);
+        return ((DutyTable[((duty * 8) + m_squarePosition[channel])] != 0)
+            ? m_envelopeVolume[channel]
+            : 0);
     }
     // The wave channel's current digital output: the four-bit sample from the LAST-FETCHED byte latch (never a live
     // wave-RAM read — a CPU write while playing changes RAM, not what is heard), right-shifted by the NR32 volume code.
     private int WaveOutput() {
-        var nibble = (((m_wavePosition & 1) != 0) ? m_waveSampleLatch & 0x0F : (m_waveSampleLatch >> 4));
+        var nibble = (((m_wavePosition & 1) != 0)
+            ? m_waveSampleLatch & 0x0F
+            : (m_waveSampleLatch >> 4));
 
         return (nibble >> WaveVolumeShift[(m_registers[Nr32] >> 5) & 0x03]);
     }
@@ -773,7 +891,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     }
     // The noise channel's current digital output: its envelope volume when the LFSR's low bit is set, otherwise zero.
     private int NoiseOutput() =>
-        (((m_noiseLfsr & 1) != 0) ? m_envelopeVolume[3] : 0);
+        (((m_noiseLfsr & 1) != 0)
+        ? m_envelopeVolume[3]
+        : 0);
     // A trigger arms the sweep unit: it copies the current frequency into the shadow register, reloads the sweep timer,
     // enables the unit when it has a period or a shift, and — when a shift is set — runs one frequency calculation
     // immediately so an already-overflowing sweep disables the channel on the trigger itself.
@@ -782,7 +902,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         var shift = m_registers[Nr10] & SweepShiftMask;
 
         m_sweepShadow = CurrentFrequency();
-        m_sweepTimer = ((period != 0) ? period : SweepReloadPeriod);
+        m_sweepTimer = ((period != 0)
+            ? period
+            : SweepReloadPeriod);
         m_sweepEnabled = ((period != 0) || (shift != 0));
         m_sweepNegateUsed = false;
 
@@ -800,15 +922,23 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         var period = SweepPeriod();
 
-        m_sweepTimer = ((period != 0) ? period : SweepReloadPeriod);
+        m_sweepTimer = ((period != 0)
+            ? period
+            : SweepReloadPeriod);
 
-        if (!m_sweepEnabled || (period == 0)) {
+        if (
+            !m_sweepEnabled ||
+            (period == 0)
+        ) {
             return;
         }
 
         var newFrequency = CalculateSweepFrequency();
 
-        if ((newFrequency <= MaxFrequency) && ((m_registers[Nr10] & SweepShiftMask) != 0)) {
+        if (
+            (newFrequency <= MaxFrequency) &&
+            ((m_registers[Nr10] & SweepShiftMask) != 0)
+        ) {
             m_sweepShadow = newFrequency;
 
             WriteSweepFrequency(frequency: newFrequency);

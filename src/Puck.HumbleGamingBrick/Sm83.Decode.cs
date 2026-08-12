@@ -30,7 +30,10 @@ public sealed partial class Sm83 {
     }
     private void WriteCycle(ushort address, byte value) {
         AdvanceTCycles(count: LeadingTCyclesBeforeWrite);
-        m_bus.WriteByte(address: address, value: value);
+        m_bus.WriteByte(
+            address: address,
+            value: value
+        );
         AdvanceTCycles(count: (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeWrite));
     }
     private void InternalCycle() =>
@@ -56,7 +59,10 @@ public sealed partial class Sm83 {
             _ = ReadNextByte();
         }
 
-        if (m_supportsColor && m_key1.IsSwitchArmed) {
+        if (
+            m_supportsColor &&
+            m_key1.IsSwitchArmed
+        ) {
             m_key1.BeginSwitch();
         } else if (m_supportsColor) {
             m_key1.EnterStop();
@@ -81,9 +87,15 @@ public sealed partial class Sm83 {
     }
     private void PushWord(ushort value) {
         m_stackPointer = (ushort)(m_stackPointer - 1);
-        WriteCycle(address: m_stackPointer, value: (byte)(value >> 8));
+        WriteCycle(
+            address: m_stackPointer,
+            value: (byte)(value >> 8)
+        );
         m_stackPointer = (ushort)(m_stackPointer - 1);
-        WriteCycle(address: m_stackPointer, value: (byte)value);
+        WriteCycle(
+            address: m_stackPointer,
+            value: (byte)value
+        );
     }
     private ushort PopWord() {
         var low = ReadCycle(address: m_stackPointer);
@@ -115,7 +127,11 @@ public sealed partial class Sm83 {
             case 3: m_e = value; break;
             case 4: m_h = value; break;
             case 5: m_l = value; break;
-            case 6: WriteCycle(address: Hl, value: value); break;
+            case 6:
+                WriteCycle(
+                    address: Hl,
+                    value: value
+                ); break;
             default: m_a = value; break;
         }
     }
@@ -133,12 +149,19 @@ public sealed partial class Sm83 {
             return;
         }
 
-        if ((opcode >= 0x40) && (opcode <= 0x7F)) {
+        if (
+            (opcode >= 0x40) &&
+            (opcode <= 0x7F)
+        ) {
             if (opcode == 0x76) {
                 // HALT with interrupts disabled while a line is already pending does not halt at all — it arms the HALT
                 // bug, making the next opcode fetch fail to advance PC. An EI whose delayed enable is still counting
                 // down escapes the bug: IME lands during the halt and the interrupt is serviced normally.
-                if (!m_interruptMasterEnable && (m_interruptEnableCountdown == 0) && (m_interrupts.Pending != InterruptKind.None)) {
+                if (
+                    !m_interruptMasterEnable &&
+                    (m_interruptEnableCountdown == 0) &&
+                    (m_interrupts.Pending != InterruptKind.None)
+                ) {
                     m_haltBug = true;
                 } else {
                     m_halted = true;
@@ -149,13 +172,22 @@ public sealed partial class Sm83 {
                 return;
             }
 
-            WriteOperand(index: (opcode >> 3) & 7, value: ReadOperand(index: opcode & 7));
+            WriteOperand(
+                index: (opcode >> 3) & 7,
+                value: ReadOperand(index: opcode & 7)
+            );
 
             return;
         }
 
-        if ((opcode >= 0x80) && (opcode <= 0xBF)) {
-            AluA(operation: (opcode >> 3) & 7, value: ReadOperand(index: opcode & 7));
+        if (
+            (opcode >= 0x80) &&
+            (opcode <= 0xBF)
+        ) {
+            AluA(
+                operation: (opcode >> 3) & 7,
+                value: ReadOperand(index: opcode & 7)
+            );
 
             return;
         }
@@ -163,7 +195,10 @@ public sealed partial class Sm83 {
         if ((opcode & 0xC7) == 0x04) {
             var index = (opcode >> 3) & 7;
 
-            WriteOperand(index: index, value: IncByte(value: ReadOperand(index: index)));
+            WriteOperand(
+                index: index,
+                value: IncByte(value: ReadOperand(index: index))
+            );
 
             return;
         }
@@ -171,19 +206,28 @@ public sealed partial class Sm83 {
         if ((opcode & 0xC7) == 0x05) {
             var index = (opcode >> 3) & 7;
 
-            WriteOperand(index: index, value: DecByte(value: ReadOperand(index: index)));
+            WriteOperand(
+                index: index,
+                value: DecByte(value: ReadOperand(index: index))
+            );
 
             return;
         }
 
         if ((opcode & 0xC7) == 0x06) {
-            WriteOperand(index: (opcode >> 3) & 7, value: ReadNextByte());
+            WriteOperand(
+                index: (opcode >> 3) & 7,
+                value: ReadNextByte()
+            );
 
             return;
         }
 
         if ((opcode & 0xC7) == 0xC6) {
-            AluA(operation: (opcode >> 3) & 7, value: ReadNextByte());
+            AluA(
+                operation: (opcode >> 3) & 7,
+                value: ReadNextByte()
+            );
 
             return;
         }
@@ -210,8 +254,16 @@ public sealed partial class Sm83 {
             case 0x10: ExecuteStop(); break;                                             // STOP
             case 0x01: Bc = ReadNextWord(); break;
             case 0x11: De = ReadNextWord(); break;
-            case 0x02: WriteCycle(address: Bc, value: m_a); break;
-            case 0x12: WriteCycle(address: De, value: m_a); break;
+            case 0x02:
+                WriteCycle(
+                    address: Bc,
+                    value: m_a
+                ); break;
+            case 0x12:
+                WriteCycle(
+                    address: De,
+                    value: m_a
+                ); break;
             case 0x0A: m_a = ReadCycle(address: Bc); break;
             case 0x1A: m_a = ReadCycle(address: De); break;
             case 0x03: Bc = (ushort)(Bc + 1); InternalCycle(); break;
@@ -232,8 +284,16 @@ public sealed partial class Sm83 {
         switch (opcode) {
             case 0x21: Hl = ReadNextWord(); break;
             case 0x31: m_stackPointer = ReadNextWord(); break;
-            case 0x22: WriteCycle(address: Hl, value: m_a); Hl = (ushort)(Hl + 1); break;
-            case 0x32: WriteCycle(address: Hl, value: m_a); Hl = (ushort)(Hl - 1); break;
+            case 0x22:
+                WriteCycle(
+                    address: Hl,
+                    value: m_a
+                ); Hl = (ushort)(Hl + 1); break;
+            case 0x32:
+                WriteCycle(
+                    address: Hl,
+                    value: m_a
+                ); Hl = (ushort)(Hl - 1); break;
             case 0x2A: m_a = ReadCycle(address: Hl); Hl = (ushort)(Hl + 1); break;
             case 0x3A: m_a = ReadCycle(address: Hl); Hl = (ushort)(Hl - 1); break;
             case 0x23: Hl = (ushort)(Hl + 1); InternalCycle(); break;
@@ -267,16 +327,28 @@ public sealed partial class Sm83 {
     }
     private void ExecuteHighPageGroup(byte opcode) {
         switch (opcode) {
-            case 0xE0: WriteCycle(address: (ushort)(0xFF00 + ReadNextByte()), value: m_a); break;
+            case 0xE0:
+                WriteCycle(
+                    address: (ushort)(0xFF00 + ReadNextByte()),
+                    value: m_a
+                ); break;
             case 0xF0: m_a = ReadCycle(address: (ushort)(0xFF00 + ReadNextByte())); break;
             case 0xE1: Hl = PopWord(); break;
             case 0xF1: Af = PopWord(); break;
             case 0xE5: InternalCycle(); PushWord(value: Hl); break;
             case 0xF5: InternalCycle(); PushWord(value: Af); break;
-            case 0xE2: WriteCycle(address: (ushort)(0xFF00 + m_c), value: m_a); break;
+            case 0xE2:
+                WriteCycle(
+                    address: (ushort)(0xFF00 + m_c),
+                    value: m_a
+                ); break;
             case 0xF2: m_a = ReadCycle(address: (ushort)(0xFF00 + m_c)); break;
             case 0xE9: m_programCounter = Hl; break;
-            case 0xEA: WriteCycle(address: ReadNextWord(), value: m_a); break;
+            case 0xEA:
+                WriteCycle(
+                    address: ReadNextWord(),
+                    value: m_a
+                ); break;
             case 0xFA: m_a = ReadCycle(address: ReadNextWord()); break;
             case 0xE8: m_stackPointer = AddStackPointerOffset(offset: (sbyte)ReadNextByte()); InternalCycle(); InternalCycle(); break;
             case 0xF8: Hl = AddStackPointerOffset(offset: (sbyte)ReadNextByte()); InternalCycle(); break;
@@ -295,7 +367,10 @@ public sealed partial class Sm83 {
             // disagreeing with both the hardware-derived reference and the single-step test corpus — recorded as the
             // fb evidence-conflict skip in Sm83SstStage.
             case 0xFB:
-                if (!m_interruptMasterEnable && (m_interruptEnableCountdown == 0)) {
+                if (
+                    !m_interruptMasterEnable &&
+                    (m_interruptEnableCountdown == 0)
+                ) {
                     m_interruptEnableCountdown = 2;
                 }
 
@@ -314,19 +389,34 @@ public sealed partial class Sm83 {
 
         switch (opcode >> 6) {
             case 0: // rotates and shifts
-                WriteOperand(index: index, value: RotateOrShift(operation: operation, value: ReadOperand(index: index)));
+                WriteOperand(
+                    index: index,
+                    value: RotateOrShift(
+                        operation: operation,
+                        value: ReadOperand(index: index)
+                    )
+                );
 
                 break;
             case 1: // BIT b, r
-                TestBit(bit: operation, value: ReadOperand(index: index));
+                TestBit(
+                    bit: operation,
+                    value: ReadOperand(index: index)
+                );
 
                 break;
             case 2: // RES b, r
-                WriteOperand(index: index, value: (byte)(ReadOperand(index: index) & ~(1 << operation)));
+                WriteOperand(
+                    index: index,
+                    value: (byte)(ReadOperand(index: index) & ~(1 << operation))
+                );
 
                 break;
             default: // SET b, r
-                WriteOperand(index: index, value: (byte)(ReadOperand(index: index) | (1 << operation)));
+                WriteOperand(
+                    index: index,
+                    value: (byte)(ReadOperand(index: index) | (1 << operation))
+                );
 
                 break;
         }
@@ -334,8 +424,14 @@ public sealed partial class Sm83 {
     private void WriteStackPointerToMemory() {
         var address = ReadNextWord();
 
-        WriteCycle(address: address, value: (byte)m_stackPointer);
-        WriteCycle(address: (ushort)(address + 1), value: (byte)(m_stackPointer >> 8));
+        WriteCycle(
+            address: address,
+            value: (byte)m_stackPointer
+        );
+        WriteCycle(
+            address: (ushort)(address + 1),
+            value: (byte)(m_stackPointer >> 8)
+        );
     }
     private void JumpRelative(bool taken) {
         var offset = (sbyte)ReadNextByte();

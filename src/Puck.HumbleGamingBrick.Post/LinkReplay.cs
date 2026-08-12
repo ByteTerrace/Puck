@@ -76,7 +76,10 @@ internal static class LinkReplay {
         };
 
         try {
-            using var session = new SerialLinkSession(first: first, second: second);
+            using var session = new SerialLinkSession(
+                first: first,
+                second: second
+            );
 
             for (var frame = 0; (frame < frames); ++frame) {
                 firstJoypad.SetButtons(pressed: firstScript.ButtonsAt(frame: frame));
@@ -92,8 +95,16 @@ internal static class LinkReplay {
         }
 
         return new LinkReplayResult(
-            First: new LinkSideTraffic(MasterSends: firstMasterSends, Completions: firstCompletions, TrafficHash: firstHash.Value),
-            Second: new LinkSideTraffic(MasterSends: secondMasterSends, Completions: secondCompletions, TrafficHash: secondHash.Value),
+            First: new LinkSideTraffic(
+                MasterSends: firstMasterSends,
+                Completions: firstCompletions,
+                TrafficHash: firstHash.Value
+            ),
+            Second: new LinkSideTraffic(
+                MasterSends: secondMasterSends,
+                Completions: secondCompletions,
+                TrafficHash: secondHash.Value
+            ),
             FirstState: first.Machine.Snapshot(),
             SecondState: second.Machine.Snapshot()
         );

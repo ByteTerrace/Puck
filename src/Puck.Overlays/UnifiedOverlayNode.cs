@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Recording.Capture;
 using Puck.Hosting;
+using Puck.Recording.Capture;
 
 namespace Puck.Overlays;
 
@@ -74,8 +74,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private const uint TimingQueryCount = 2;
 
     private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
-    private static readonly string[] s_passLabels = ["overlay"];
-
+    private static readonly string[] OverlayPassLabels = ["overlay"];
     private readonly OverlayFrameBuilder m_builder;
     private readonly BindingBarWriter? m_bindingBarWriter;
     // THE DRAW-ORDER TABLE for the five FIRST-PARTY writers: indexed by (int)OverlayChannel, built once in the
@@ -179,21 +178,50 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         ArgumentNullException.ThrowIfNull(argument: services);
         ArgumentNullException.ThrowIfNull(argument: sources);
 
-        m_builder = new OverlayFrameBuilder(glyphs: glyphs, height: height, width: width);
-        m_bindingBarWriter = ((sources.BindingBar is { } bindingBar) ? new BindingBarWriter(source: bindingBar) : null);
+        m_builder = new OverlayFrameBuilder(
+            glyphs: glyphs,
+            height: height,
+            width: width
+        );
+        m_bindingBarWriter = ((sources.BindingBar is { } bindingBar)
+            ? new BindingBarWriter(source: bindingBar)
+            : null
+        );
         m_commandRecorder = services.CommandRecorder;
-        m_consoleWriter = ((sources.Console is { } console) ? new ConsolePanelWriter(source: console) : null);
-        m_cursorWriter = ((sources.Cursor is { } cursor) ? new CursorWriter(source: cursor) : null);
-        m_wheelWriter = ((sources.Wheel is { } wheel) ? new WheelWriter(source: wheel) : null);
+        m_consoleWriter = ((sources.Console is { } console)
+            ? new ConsolePanelWriter(source: console)
+            : null
+        );
+        m_cursorWriter = ((sources.Cursor is { } cursor)
+            ? new CursorWriter(source: cursor)
+            : null
+        );
+        m_wheelWriter = ((sources.Wheel is { } wheel)
+            ? new WheelWriter(source: wheel)
+            : null
+        );
         m_createRenderTarget = services.CreateRenderTarget;
-        m_descriptor = new NodeDescriptor(Name: "unified-overlay", SurfaceId: SurfaceId.New());
+        m_descriptor = new NodeDescriptor(
+            Name: "unified-overlay",
+            SurfaceId: SurfaceId.New()
+        );
         m_descriptorAllocator = services.DescriptorAllocator;
         m_deviceContext = services.DeviceContext;
-        m_editorHudWriter = ((sources.EditorHud is { } editorHud) ? new EditorHudWriter(source: editorHud) : null);
-        m_gizmoWriter = ((sources.Gizmos is { } gizmos) ? new EditorGizmoWriter(source: gizmos) : null);
-        m_hudWriter = ((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings)
-            ? new HudWriter(source: hudSource, bindings: hudBindings)
-            : null);
+        m_editorHudWriter = ((sources.EditorHud is { } editorHud)
+            ? new EditorHudWriter(source: editorHud)
+            : null
+        );
+        m_gizmoWriter = ((sources.Gizmos is { } gizmos)
+            ? new EditorGizmoWriter(source: gizmos)
+            : null
+        );
+        m_hudWriter = (((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings))
+            ? new HudWriter(
+            source: hudSource,
+            bindings: hudBindings
+        )
+            : null
+        );
         m_fragmentBytecode = fragmentBytecode;
         m_height = height;
         m_inner = inner;
@@ -206,7 +234,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_surfaceTransferFactory = services.SurfaceTransferFactory;
         m_timingPoolFactory = services.TimingPoolFactory;
         m_timingRecorder = services.TimingRecorder;
-        m_toastWriter = ((sources.Toast is { } toast) ? new ToastWriter(source: toast) : null);
+        m_toastWriter = ((sources.Toast is { } toast)
+            ? new ToastWriter(source: toast)
+            : null
+        );
         m_vertexBufferFactory = services.VertexBufferFactory;
         m_vertexBytecode = vertexBytecode;
         m_width = width;
@@ -216,11 +247,29 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // FIRST-PARTY channels only (FirstPartyChannelCount) — OverlayChannel.Hud is drawn through m_hudWriter's
         // own under/base/over calls, never through this table.
         m_channelWriters = new Action<OverlayFrameBuilder>?[FirstPartyChannelCount];
-        m_channelWriters[(int)OverlayChannel.Console] = ((m_consoleWriter is { } consoleForTable) ? (builder => consoleForTable.Emit(builder: builder)) : null);
-        m_channelWriters[(int)OverlayChannel.BindingBar] = ((m_bindingBarWriter is { } bindingBarForTable) ? (builder => bindingBarForTable.Emit(builder: builder)) : null);
-        m_channelWriters[(int)OverlayChannel.Gizmos] = ((m_gizmoWriter is { } gizmosForTable) ? (builder => gizmosForTable.Emit(builder: builder)) : null);
-        m_channelWriters[(int)OverlayChannel.EditorHud] = ((m_editorHudWriter is { } editorHudForTable) ? (builder => editorHudForTable.Emit(builder: builder)) : null);
-        m_channelWriters[(int)OverlayChannel.Toast] = ((m_toastWriter is { } toastForTable) ? (builder => toastForTable.Emit(builder: builder, renderTicks: m_currentFrameRenderTicks)) : null);
+        m_channelWriters[((int)OverlayChannel.Console)] = ((m_consoleWriter is { } consoleForTable)
+            ? (builder => consoleForTable.Emit(builder: builder))
+            : null
+        );
+        m_channelWriters[((int)OverlayChannel.BindingBar)] = ((m_bindingBarWriter is { } bindingBarForTable)
+            ? (builder => bindingBarForTable.Emit(builder: builder))
+            : null
+        );
+        m_channelWriters[((int)OverlayChannel.Gizmos)] = ((m_gizmoWriter is { } gizmosForTable)
+            ? (builder => gizmosForTable.Emit(builder: builder))
+            : null
+        );
+        m_channelWriters[((int)OverlayChannel.EditorHud)] = ((m_editorHudWriter is { } editorHudForTable)
+            ? (builder => editorHudForTable.Emit(builder: builder))
+            : null
+        );
+        m_channelWriters[((int)OverlayChannel.Toast)] = ((m_toastWriter is { } toastForTable)
+            ? (builder => toastForTable.Emit(
+            builder: builder,
+            renderTicks: m_currentFrameRenderTicks
+        ))
+            : null
+        );
     }
 
     /// <inheritdoc/>
@@ -242,7 +291,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // before its submit, so this same-queue pass samples it with no CPU wait.
         var inner = m_inner.ProduceFrame(context: context);
 
-        if (inner.IsEmpty || (0 == inner.ImageViewHandle)) {
+        if (
+            inner.IsEmpty ||
+            (0 == inner.ImageViewHandle)
+        ) {
             ForwardPendingCapture();
 
             return inner;
@@ -283,7 +335,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                     continue;
                 }
 
-                m_builder.BeginChannel(channel: (OverlayChannel)index);
+                m_builder.BeginChannel(channel: ((OverlayChannel)index));
                 writer(m_builder);
                 m_builder.EndChannel();
             }
@@ -375,14 +427,17 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
 
     /// <inheritdoc/>
-    public ReadOnlySpan<string> PassLabels => s_passLabels;
+    public ReadOnlySpan<string> PassLabels => OverlayPassLabels;
 
     /// <inheritdoc/>
     public int PassCount => 1;
 
     /// <inheritdoc/>
     public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frameMilliseconds) {
-        if (!m_timingReadValid || (passMilliseconds.Length < 1)) {
+        if (
+            !m_timingReadValid ||
+            (passMilliseconds.Length < 1)
+        ) {
             passCount = 0;
             frameMilliseconds = 0.0;
 
@@ -403,16 +458,35 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         var deviceHandle = m_deviceContext.DeviceHandle;
         var commandBufferHandle = m_renderTarget!.CommandBufferHandle;
 
-        m_commandRecorder.BeginCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+        m_commandRecorder.BeginCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
 
         if (timed) {
             var poolHandle = m_timingPool!.PoolHandle;
 
-            m_timingRecorder!.ResetTimestamps(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstQuery: 0, poolHandle: poolHandle, queryCount: TimingQueryCount);
-            m_timingRecorder.WriteTimestamp(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, poolHandle: poolHandle, queryIndex: 0, stageFlags: GpuTimingStage.TopOfPipe);
+            m_timingRecorder!.ResetTimestamps(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle,
+                firstQuery: 0,
+                poolHandle: poolHandle,
+                queryCount: TimingQueryCount
+            );
+            m_timingRecorder.WriteTimestamp(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle,
+                poolHandle: poolHandle,
+                queryIndex: 0,
+                stageFlags: GpuTimingStage.TopOfPipe
+            );
         }
 
-        m_commandRecorder.BeginDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, label: "unified-overlay");
+        m_commandRecorder.BeginDebugGroup(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            label: "unified-overlay"
+        );
         m_commandRecorder.BeginRenderPass(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
@@ -421,9 +495,24 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             renderPassHandle: m_renderTarget.RenderPassHandle,
             width: m_renderTarget.Width
         );
-        m_commandRecorder.SetScissor(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, height: m_renderTarget.Height, width: m_renderTarget.Width, x: 0, y: 0);
-        m_commandRecorder.BindGraphicsPipeline(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, pipelineHandle: m_pipeline!.Handle);
-        m_commandRecorder.BindVertexBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, vertexBufferHandle: m_vertexBuffer!.BufferHandle);
+        m_commandRecorder.SetScissor(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            height: m_renderTarget.Height,
+            width: m_renderTarget.Width,
+            x: 0,
+            y: 0
+        );
+        m_commandRecorder.BindGraphicsPipeline(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            pipelineHandle: m_pipeline!.Handle
+        );
+        m_commandRecorder.BindVertexBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            vertexBufferHandle: m_vertexBuffer!.BufferHandle
+        );
         m_commandRecorder.PushConstants(
             commandBufferHandle: commandBufferHandle,
             data: m_pushConstantData,
@@ -432,19 +521,52 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             pipelineLayoutHandle: m_pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Fragment
         );
-        m_commandRecorder.BindDescriptorSet(commandBufferHandle: commandBufferHandle, descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle, pipelineLayoutHandle: m_pipeline.LayoutHandle);
-        m_commandRecorder.Draw(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstInstance: 0, firstVertex: 0, instanceCount: 1, vertexCount: VertexCount);
-        m_commandRecorder.EndRenderPass(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
-        m_commandRecorder.EndDebugGroup(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+        m_commandRecorder.BindDescriptorSet(
+            commandBufferHandle: commandBufferHandle,
+            descriptorSetHandle: m_descriptorSet,
+            deviceHandle: deviceHandle,
+            pipelineLayoutHandle: m_pipeline.LayoutHandle
+        );
+        m_commandRecorder.Draw(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle,
+            firstInstance: 0,
+            firstVertex: 0,
+            instanceCount: 1,
+            vertexCount: VertexCount
+        );
+        m_commandRecorder.EndRenderPass(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
+        m_commandRecorder.EndDebugGroup(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
 
         if (timed) {
             var poolHandle = m_timingPool!.PoolHandle;
 
-            m_timingRecorder!.WriteTimestamp(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, poolHandle: poolHandle, queryIndex: 1, stageFlags: GpuTimingStage.BottomOfPipe);
-            m_timingRecorder.ResolveTimestamps(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, firstQuery: 0, poolHandle: poolHandle, queryCount: TimingQueryCount);
+            m_timingRecorder!.WriteTimestamp(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle,
+                poolHandle: poolHandle,
+                queryIndex: 1,
+                stageFlags: GpuTimingStage.BottomOfPipe
+            );
+            m_timingRecorder.ResolveTimestamps(
+                commandBufferHandle: commandBufferHandle,
+                deviceHandle: deviceHandle,
+                firstQuery: 0,
+                poolHandle: poolHandle,
+                queryCount: TimingQueryCount
+            );
         }
 
-        m_commandRecorder.EndCommandBuffer(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle);
+        m_commandRecorder.EndCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
 
         return commandBufferHandle;
     }
@@ -456,7 +578,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             return true;
         }
 
-        if ((m_timingPoolFactory is null) || (m_timingRecorder is null)) {
+        if (
+            (m_timingPoolFactory is null) ||
+            (m_timingRecorder is null)
+        ) {
             return false;
         }
 
@@ -473,7 +598,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             return false;
         }
 
-        m_timingPool = m_timingPoolFactory.CreateTimestampPool(deviceContext: m_deviceContext, queryCapacity: TimingQueryCount);
+        m_timingPool = m_timingPoolFactory.CreateTimestampPool(
+            deviceContext: m_deviceContext,
+            queryCapacity: TimingQueryCount
+        );
 
         return true;
     }
@@ -481,14 +609,26 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // Reads the retired previous submission's timestamp pair into the published milliseconds (called right after the
     // frame fence wait, so the read never stalls).
     private void ReadPreviousTiming() {
-        if (!m_previousFrameTimed || (m_timingPool is null)) {
+        if (
+            !m_previousFrameTimed ||
+            (m_timingPool is null)
+        ) {
             return;
         }
 
-        Span<ulong> ticks = stackalloc ulong[(int)TimingQueryCount];
+        Span<ulong> ticks = stackalloc ulong[((int)TimingQueryCount)];
 
-        if (m_timingRecorder!.ReadTimestamps(deviceHandle: m_deviceContext.DeviceHandle, firstQuery: 0, poolHandle: m_timingPool.PoolHandle, queryCount: TimingQueryCount, rawTicks: ticks) == TimingQueryCount) {
-            m_lastOverlayMilliseconds = m_timingCapabilities.TicksToMilliseconds(startTicks: ticks[0], endTicks: ticks[1]);
+        if (m_timingRecorder!.ReadTimestamps(
+            deviceHandle: m_deviceContext.DeviceHandle,
+            firstQuery: 0,
+            poolHandle: m_timingPool.PoolHandle,
+            queryCount: TimingQueryCount,
+            rawTicks: ticks
+        ) == TimingQueryCount) {
+            m_lastOverlayMilliseconds = m_timingCapabilities.TicksToMilliseconds(
+                startTicks: ticks[0],
+                endTicks: ticks[1]
+            );
             m_timingReadValid = true;
         }
     }
@@ -510,12 +650,24 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         for (var index = 0; (index < OverlayChannelLeases.Count); index++) {
-            var channel = (OverlayChannel)index;
+            var channel = ((OverlayChannel)index);
             var reservation = m_builder.ReservationOf(channel: channel);
             var written = m_builder.Written(channel: channel);
 
-            NarrateReservationOverflow(channel: channel, index: index, dropped: m_builder.Dropped(channel: channel), reservation: in reservation, written: in written);
-            NarrateOwnCapRefusal(channel: channel, index: index, refused: m_builder.Refused(channel: channel), reservation: in reservation, written: in written);
+            NarrateReservationOverflow(
+                channel: channel,
+                index: index,
+                dropped: m_builder.Dropped(channel: channel),
+                reservation: in reservation,
+                written: in written
+            );
+            NarrateOwnCapRefusal(
+                channel: channel,
+                index: index,
+                refused: m_builder.Refused(channel: channel),
+                reservation: in reservation,
+                written: in written
+            );
         }
     }
 
@@ -534,7 +686,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         m_overflowEpisodeOpen[index] = true;
 
-        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" exceeded its own reservation and clipped: {Describe(verb: "dropped", counts: dropped, reservation: reservation, written: written)}. No other channel lost capacity; silent until this channel renders clean and overflows again.");
+        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" exceeded its own reservation and clipped: {Describe(
+            verb: "dropped",
+            counts: dropped,
+            reservation: reservation,
+            written: written
+        )}. No other channel lost capacity; silent until this channel renders clean and overflows again.");
     }
 
     // CAUSE 2: the writer itself refused content before ever offering it to the builder (NoteRefused), or a
@@ -553,7 +710,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         m_refusalEpisodeOpen[index] = true;
 
-        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" refused its own excess at a writer-declared cap (NOT a reservation overflow — its reservation is fine): {Describe(verb: "refused", counts: refused, reservation: reservation, written: written)}. A deliberate, pinned truncation the writer authored; silent until this channel renders clean and refuses again.");
+        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" refused its own excess at a writer-declared cap (NOT a reservation overflow — its reservation is fine): {Describe(
+            verb: "refused",
+            counts: refused,
+            reservation: reservation,
+            written: written
+        )}. A deliberate, pinned truncation the writer authored; silent until this channel renders clean and refuses again.");
     }
 
     // The resources a channel actually lost this frame, each as {verb} ({written} of {reserved} written) — shared by
@@ -577,7 +739,10 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             parts.Add(item: $"{counts.Clips} clips {verb} ({written.Clips} of {reservation.Clips} written)");
         }
 
-        return string.Join(separator: ", ", values: parts);
+        return string.Join(
+            separator: ", ",
+            values: parts
+        );
     }
 
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
@@ -622,7 +787,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             width: m_width
         );
 
-        if (TryWriteCapturePng(path: path, rgba: pixels.Span, width: (int)m_width, height: (int)m_height)) {
+        if (TryWriteCapturePng(
+            path: path,
+            rgba: pixels.Span,
+            width: ((int)m_width),
+            height: ((int)m_height)
+        )) {
             Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
         } else {
             m_captureUnavailable = true;
@@ -639,23 +809,32 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // call (the callee never got to run), which is exactly where a surrounding try/catch can observe and report it.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static void WriteCapturePngCore(string path, ReadOnlySpan<byte> rgba, int width, int height) {
-        PngEncoder.Write(height: height, path: path, rgba: rgba, width: width);
+        PngEncoder.Write(
+            height: height,
+            path: path,
+            rgba: rgba,
+            width: width
+        );
     }
 
     // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Recording.
     // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
     private static bool TryWriteCapturePng(string path, ReadOnlySpan<byte> rgba, int width, int height) {
         try {
-            WriteCapturePngCore(path: path, rgba: rgba, width: width, height: height);
+            WriteCapturePngCore(
+                path: path,
+                rgba: rgba,
+                width: width,
+                height: height
+            );
 
             return true;
-        } catch (Exception exception) when (exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException) {
+        } catch (Exception exception) when ((exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException)) {
             Console.Error.WriteLine(value: $"[capture] WARNING: Puck.Recording is unavailable ({exception.GetType().Name}: {exception.Message}) — frame capture skipped, render continues without it.");
 
             return false;
         }
     }
-
     private void FillPushConstants() {
         var floats = MemoryMarshal.Cast<byte, float>(span: m_pushConstantData.AsSpan());
 
@@ -682,29 +861,41 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private void UploadFrameRegions() {
         if (m_builder.PanelCount > 0) {
             m_dataBuffer!.Write<uint>(
-                data: m_builder.Scratch.Slice(start: m_builder.PanelBaseWords, length: (m_builder.PanelCount * OverlayFrameBuilder.PanelWords)),
-                destinationOffsetBytes: (ulong)(m_builder.PanelBaseWords * sizeof(uint))
+                data: m_builder.Scratch.Slice(
+                    start: m_builder.PanelBaseWords,
+                    length: (m_builder.PanelCount * OverlayFrameBuilder.PanelWords)
+                ),
+                destinationOffsetBytes: ((ulong)(m_builder.PanelBaseWords * sizeof(uint)))
             );
         }
 
         if (m_builder.ElementCount > 0) {
             m_dataBuffer!.Write<uint>(
-                data: m_builder.Scratch.Slice(start: m_builder.ElementBaseWords, length: (m_builder.ElementCount * OverlayFrameBuilder.ElementWords)),
-                destinationOffsetBytes: (ulong)(m_builder.ElementBaseWords * sizeof(uint))
+                data: m_builder.Scratch.Slice(
+                    start: m_builder.ElementBaseWords,
+                    length: (m_builder.ElementCount * OverlayFrameBuilder.ElementWords)
+                ),
+                destinationOffsetBytes: ((ulong)(m_builder.ElementBaseWords * sizeof(uint)))
             );
         }
 
         if (m_builder.TextWordCount > 0) {
             m_dataBuffer!.Write<uint>(
-                data: m_builder.Scratch.Slice(start: m_builder.TextBaseWords, length: m_builder.TextWordCount),
-                destinationOffsetBytes: (ulong)(m_builder.TextBaseWords * sizeof(uint))
+                data: m_builder.Scratch.Slice(
+                    start: m_builder.TextBaseWords,
+                    length: m_builder.TextWordCount
+                ),
+                destinationOffsetBytes: ((ulong)(m_builder.TextBaseWords * sizeof(uint)))
             );
         }
 
         if (m_builder.ClipCount > 0) {
             m_dataBuffer!.Write<uint>(
-                data: m_builder.Scratch.Slice(start: m_builder.ClipBaseWords, length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords)),
-                destinationOffsetBytes: (ulong)(m_builder.ClipBaseWords * sizeof(uint))
+                data: m_builder.Scratch.Slice(
+                    start: m_builder.ClipBaseWords,
+                    length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords)
+                ),
+                destinationOffsetBytes: ((ulong)(m_builder.ClipBaseWords * sizeof(uint)))
             );
         }
     }
@@ -713,18 +904,40 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             return;
         }
 
-        m_renderTarget = m_createRenderTarget(arg1: m_width, arg2: m_height);
+        m_renderTarget = m_createRenderTarget(
+            arg1: m_width,
+            arg2: m_height
+        );
         m_frameFence = m_queueSubmitter.CreateSubmissionFence(deviceContext: m_deviceContext);
-        m_vertexShader = m_shaderModuleFactory.Create(bytecode: m_vertexBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Vertex);
-        m_fragmentShader = m_shaderModuleFactory.Create(bytecode: m_fragmentBytecode, deviceContext: m_deviceContext, stage: GpuShaderStage.Fragment);
-        m_vertexBuffer = m_vertexBufferFactory.Create(deviceContext: m_deviceContext, strideBytes: VertexStrideBytes, vertexData: FullscreenTriangleVertexData);
-        m_dataBuffer = m_storageBufferFactory.Create(deviceContext: m_deviceContext, sizeBytes: ((uint)m_builder.WordCount * sizeof(uint)));
+        m_vertexShader = m_shaderModuleFactory.Create(
+            bytecode: m_vertexBytecode,
+            deviceContext: m_deviceContext,
+            stage: GpuShaderStage.Vertex
+        );
+        m_fragmentShader = m_shaderModuleFactory.Create(
+            bytecode: m_fragmentBytecode,
+            deviceContext: m_deviceContext,
+            stage: GpuShaderStage.Fragment
+        );
+        m_vertexBuffer = m_vertexBufferFactory.Create(
+            deviceContext: m_deviceContext,
+            strideBytes: VertexStrideBytes,
+            vertexData: FullscreenTriangleVertexData
+        );
+        m_dataBuffer = m_storageBufferFactory.Create(
+            deviceContext: m_deviceContext,
+            sizeBytes: (((uint)m_builder.WordCount) * sizeof(uint))
+        );
         m_pipeline = m_pipelineFactory.Create(
             deviceContext: m_deviceContext,
             enableStorageBuffer: true,
             fragmentShaderModule: m_fragmentShader,
             height: m_height,
-            pushConstantBinding: new GpuPushConstantBinding(data: new byte[PushConstantByteLength], offset: 0, stageFlags: GpuShaderStage.Fragment),
+            pushConstantBinding: new GpuPushConstantBinding(
+                data: new byte[PushConstantByteLength],
+                offset: 0,
+                stageFlags: GpuShaderStage.Fragment
+            ),
             renderTarget: m_renderTarget,
             textureSamplerCount: 1,
             vertexShaderModule: m_vertexShader,
@@ -743,9 +956,19 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 AccelerationStructureCount: 0
             )
         );
-        m_descriptorSet = m_descriptorAllocator.AllocateSet(descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle, deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
+        m_descriptorSet = m_descriptorAllocator.AllocateSet(
+            descriptorSetLayoutHandle: m_pipeline.DescriptorSetLayoutHandle,
+            deviceHandle: deviceHandle,
+            poolHandle: m_descriptorPool
+        );
         m_sampler = m_descriptorAllocator.CreateSampler(deviceHandle: deviceHandle);
-        m_descriptorAllocator.WriteStorageBuffer(binding: m_storageBufferBinding, bufferHandle: m_dataBuffer.BufferHandle, bufferSize: ((uint)m_builder.WordCount * sizeof(uint)), descriptorSetHandle: m_descriptorSet, deviceHandle: deviceHandle);
+        m_descriptorAllocator.WriteStorageBuffer(
+            binding: m_storageBufferBinding,
+            bufferHandle: m_dataBuffer.BufferHandle,
+            bufferSize: (((uint)m_builder.WordCount) * sizeof(uint)),
+            descriptorSetHandle: m_descriptorSet,
+            deviceHandle: deviceHandle
+        );
         // The token slab + glyph atlas are static — upload them ONCE now (the front PanelBaseWords uints); each
         // produced frame rewrites only the dynamic slice after them. A device-loss rebuild re-seeds them here.
         m_dataBuffer.Write<uint>(data: m_builder.Scratch[..m_builder.PanelBaseWords]);
@@ -758,13 +981,25 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             (3f, -1f),
             (-1f, 3f),
         };
-        var vertexData = new byte[(int)(VertexStrideBytes * vertices.Length)];
+        var vertexData = new byte[((int)(VertexStrideBytes * vertices.Length))];
 
         for (var index = 0; (index < vertices.Length); index++) {
-            var offset = (index * (int)VertexStrideBytes);
+            var offset = (index * ((int)VertexStrideBytes));
 
-            _ = BitConverter.TryWriteBytes(destination: vertexData.AsSpan(length: sizeof(float), start: offset), value: vertices[index].X);
-            _ = BitConverter.TryWriteBytes(destination: vertexData.AsSpan(length: sizeof(float), start: (offset + sizeof(float))), value: vertices[index].Y);
+            _ = BitConverter.TryWriteBytes(
+                destination: vertexData.AsSpan(
+                    length: sizeof(float),
+                    start: offset
+                ),
+                value: vertices[index].X
+            );
+            _ = BitConverter.TryWriteBytes(
+                destination: vertexData.AsSpan(
+                    length: sizeof(float),
+                    start: (offset + sizeof(float))
+                ),
+                value: vertices[index].Y
+            );
         }
 
         return vertexData;
@@ -791,12 +1026,18 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         var deviceHandle = m_deviceContext.DeviceHandle;
 
         if (0 != m_sampler) {
-            m_descriptorAllocator.DestroySampler(deviceHandle: deviceHandle, samplerHandle: m_sampler);
+            m_descriptorAllocator.DestroySampler(
+                deviceHandle: deviceHandle,
+                samplerHandle: m_sampler
+            );
             m_sampler = 0;
         }
 
         if (0 != m_descriptorPool) {
-            m_descriptorAllocator.DestroyPool(deviceHandle: deviceHandle, poolHandle: m_descriptorPool);
+            m_descriptorAllocator.DestroyPool(
+                deviceHandle: deviceHandle,
+                poolHandle: m_descriptorPool
+            );
             m_descriptorPool = 0;
             m_descriptorSet = 0;
         }

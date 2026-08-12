@@ -22,9 +22,18 @@ internal static class PostStages {
             // Tier A — the solar sensor's GPIO protocol, proven directly against AgbCartridge (no ROM asset).
             new SolarDeviceStage(),
             // Tier B — reference conformance suites (r12 verdict register; skip when the corpus is absent).
-            new ConformanceRomStage(group: "cpu", cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")]),
-            new ConformanceRomStage(group: "save", cases: [("save/none.gba", "none"), ("save/sram.gba", "sram"), ("save/flash64.gba", "flash64"), ("save/flash128.gba", "flash128")]),
-            new ConformanceRomStage(group: "misc", cases: [("nes/nes.gba", "nes")]),
+            new ConformanceRomStage(
+        group: "cpu",
+        cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")]
+    ),
+            new ConformanceRomStage(
+        group: "save",
+        cases: [("save/none.gba", "none"), ("save/sram.gba", "sram"), ("save/flash64.gba", "flash64"), ("save/flash128.gba", "flash128")]
+    ),
+            new ConformanceRomStage(
+        group: "misc",
+        cases: [("nes/nes.gba", "nes")]
+    ),
             // Tier B — ARM/Thumb fuzz-corpus coverage (EWRAM failure marker; skip when absent).
             new ArmFuzzStage(),
             // Tier B — deterministic render-hash floors. The ppu screen demos are BIOS-independent direct-boot ROMs from
@@ -33,11 +42,46 @@ internal static class PostStages {
             // skip on the zeroed stub. Re-capture a shifted floor with --render-hash after confirming the frame is still
             // visually correct.
             new RenderHashStage(floors: [
-                new RenderFloor(Source: RenderFloorSource.Corpus, RelativePath: "ppu/shades.gba", Name: "ppu/shades", Steps: 6_000_000, ExpectedHash: 0x19E7C5AF1FB0BF25ul, NeedsBios: false),
-                new RenderFloor(Source: RenderFloorSource.Corpus, RelativePath: "ppu/hello.gba", Name: "ppu/hello", Steps: 6_000_000, ExpectedHash: 0x62B76C0E0223A81Cul, NeedsBios: false),
-                new RenderFloor(Source: RenderFloorSource.Corpus, RelativePath: "ppu/stripes.gba", Name: "ppu/stripes", Steps: 6_000_000, ExpectedHash: 0x2F1E64B48356B525ul, NeedsBios: false),
-                new RenderFloor(Source: RenderFloorSource.Games, RelativePath: "A.gba", Name: "A (commercial RPG)", Steps: 120_000_000, ExpectedHash: 0x634D863B8CE386E8ul, NeedsBios: true),
-                new RenderFloor(Source: RenderFloorSource.Games, RelativePath: "AGS Aging Cartridge (World) (v7.1).gba", Name: "AGS menu", Steps: 6_000_000, ExpectedHash: 0x64044FC6D20B9C93ul, NeedsBios: true),
+                new RenderFloor(
+        Source: RenderFloorSource.Corpus,
+        RelativePath: "ppu/shades.gba",
+        Name: "ppu/shades",
+        Steps: 6_000_000,
+        ExpectedHash: 0x19E7C5AF1FB0BF25ul,
+        NeedsBios: false
+    ),
+                new RenderFloor(
+        Source: RenderFloorSource.Corpus,
+        RelativePath: "ppu/hello.gba",
+        Name: "ppu/hello",
+        Steps: 6_000_000,
+        ExpectedHash: 0x62B76C0E0223A81Cul,
+        NeedsBios: false
+    ),
+                new RenderFloor(
+        Source: RenderFloorSource.Corpus,
+        RelativePath: "ppu/stripes.gba",
+        Name: "ppu/stripes",
+        Steps: 6_000_000,
+        ExpectedHash: 0x2F1E64B48356B525ul,
+        NeedsBios: false
+    ),
+                new RenderFloor(
+        Source: RenderFloorSource.Games,
+        RelativePath: "A.gba",
+        Name: "A (commercial RPG)",
+        Steps: 120_000_000,
+        ExpectedHash: 0x634D863B8CE386E8ul,
+        NeedsBios: true
+    ),
+                new RenderFloor(
+        Source: RenderFloorSource.Games,
+        RelativePath: "AGS Aging Cartridge (World) (v7.1).gba",
+        Name: "AGS menu",
+        Steps: 6_000_000,
+        ExpectedHash: 0x64044FC6D20B9C93ul,
+        NeedsBios: true
+    ),
             ]),
             // Tier B — reference suites with known partial conformance (measurement, not a gate; skip when the ROM is absent).
             new AccuracySuiteStage(),

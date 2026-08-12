@@ -26,10 +26,10 @@ public sealed class WasmModuleLoader {
     /// <param name="assetSource">The source module bytes are read from.</param>
     public WasmModuleLoader(ScriptingEngine engine, IAssetSource assetSource)
         : this(
-            assetSource: assetSource,
-            engine: engine,
-            maxCachedModules: DefaultMaxCachedModules
-        ) {
+        assetSource: assetSource,
+        engine: engine,
+        maxCachedModules: DefaultMaxCachedModules
+    ) {
     }
 
     /// <summary>Initializes a loader over the given engine and asset source.</summary>

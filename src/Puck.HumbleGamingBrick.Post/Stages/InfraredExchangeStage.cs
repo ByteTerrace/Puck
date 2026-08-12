@@ -45,37 +45,62 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         var firstPattern = InfraredRom.ExpandPattern(sourceBytes: FirstPatternSource);
         var secondPattern = InfraredRom.ExpandPattern(sourceBytes: SecondPatternSource);
-        var reference = RunScenario(firstPattern: firstPattern, secondPattern: secondPattern, churnAtStep: -1);
+        var reference = RunScenario(
+            firstPattern: firstPattern,
+            secondPattern: secondPattern,
+            churnAtStep: -1
+        );
 
-        if (Judge(result: reference, firstPattern: firstPattern, secondPattern: secondPattern) is { } failure) {
+        if (Judge(
+            result: reference,
+            firstPattern: firstPattern,
+            secondPattern: secondPattern
+        ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
 
         // The probed progress is the FIRST machine's RECEIVE progress — how many of the SECOND machine's bits it has
         // received so far (its own transmit phase never touches ProgressAddress).
-        var churnStep = PickChurnStep(probes: reference.Probes, total: secondPattern.Length);
+        var churnStep = PickChurnStep(
+            probes: reference.Probes,
+            total: secondPattern.Length
+        );
 
         if (churnStep < 0) {
             return PostStageOutcome.Fail(detail: "no mid-exchange budget boundary appeared; the pattern length or budget schedule is wrong");
         }
 
         // Determinism: a second fresh run on the same schedule reproduces both transcripts and both final snapshots.
-        var replay = RunScenario(firstPattern: firstPattern, secondPattern: secondPattern, churnAtStep: -1);
+        var replay = RunScenario(
+            firstPattern: firstPattern,
+            secondPattern: secondPattern,
+            churnAtStep: -1
+        );
 
-        if (Difference(expected: reference, actual: replay, leg: "replay") is { } replayFailure) {
+        if (Difference(
+            expected: reference,
+            actual: replay,
+            leg: "replay"
+        ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
         }
 
         // Churn: suspend/snapshot/restore/reconnect (with the resume token) mid-exchange, continue, demand the identical tail.
-        var churned = RunScenario(firstPattern: firstPattern, secondPattern: secondPattern, churnAtStep: churnStep);
+        var churned = RunScenario(
+            firstPattern: firstPattern,
+            secondPattern: secondPattern,
+            churnAtStep: churnStep
+        );
 
-        if (Difference(expected: reference, actual: churned, leg: "churn") is { } churnFailure) {
+        if (Difference(
+            expected: reference,
+            actual: churned,
+            leg: "churn"
+        ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(
-            detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay- and churn-identical (severed mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)"
-        );
+        return PostStageOutcome.Pass(detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay- and churn-identical (severed mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)");
     }
 
     // M-02 probes: hardware self-sensing (SameBoy Core/memory.c ~723, Core/timing.c ~136-140 — see
@@ -104,10 +129,16 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // An unpaired CGB arms RP's data-read-enable bits and lights its own LED bit — with no peer at all, it must read its
     // own light back (RP bit 1 clear), not dark.
     private static string? VerifyCgbSelfSensesOwnLedViaRp() {
-        using var machine = PostMachine.Build(model: ConsoleModel.Cgb, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: SyntheticRom.Create()
+        );
         var bus = machine.GetRequiredService<ISystemBus>();
 
-        bus.WriteByte(address: MemoryMap.InfraredPort, value: 0xC1);
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
 
         var value = bus.ReadByte(address: MemoryMap.InfraredPort);
 
@@ -118,14 +149,26 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // An unpaired CGB selects a HuC1 cartridge's IR window and lights the shared cart LED through it — the SAME window
     // must read its own light back.
     private static string? VerifyCgbSelfSensesOwnCartLedViaHuC1Window() {
-        var rom = SyntheticRom.Create(cartridgeType: 0xFF, ramSize: 0x02); // HuC1 + RAM + battery
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFF,
+            ramSize: 0x02
+        ); // HuC1 + RAM + battery
 
-        using var machine = PostMachine.Build(model: ConsoleModel.Cgb, rom: rom);
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: rom
+        );
 
         var cartridge = machine.GetRequiredService<ICartridge>();
 
-        cartridge.WriteControl(address: 0x0000, value: 0x0E); // route the external window to the IR register
-        cartridge.WriteRam(address: 0xA000, value: 0x01); // light the shared cart LED
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0E
+        ); // route the external window to the IR register
+        cartridge.WriteRam(
+            address: 0xA000,
+            value: 0x01
+        ); // light the shared cart LED
 
         var value = cartridge.ReadRam(address: 0xA000);
 
@@ -136,10 +179,16 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // An unpaired Agb costume with no HuC cartridge lights its own RP LED bit and must still read dark — Puck's
     // pre-existing correct behavior, now guarded as a regression probe against the self-sensing fix.
     private static string? VerifyAgbRpSelfSenseSuppressedWithoutHuC() {
-        using var machine = PostMachine.Build(model: ConsoleModel.Agb, rom: SyntheticRom.Create());
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: SyntheticRom.Create()
+        );
         var bus = machine.GetRequiredService<ISystemBus>();
 
-        bus.WriteByte(address: MemoryMap.InfraredPort, value: 0xC1);
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
 
         var value = bus.ReadByte(address: MemoryMap.InfraredPort);
 
@@ -151,18 +200,30 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // cartridge is present" exception), and because Puck's one shared transceiver feeds every view identically, driving
     // the LED through RP alone must be visible through the HuC1 window too — cross-view consistency.
     private static string? VerifyCrossViewConsistencyWithHuCCartridge() {
-        var rom = SyntheticRom.Create(cartridgeType: 0xFF, ramSize: 0x02); // HuC1 + RAM + battery
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFF,
+            ramSize: 0x02
+        ); // HuC1 + RAM + battery
 
-        using var machine = PostMachine.Build(model: ConsoleModel.Agb, rom: rom);
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
 
         var bus = machine.GetRequiredService<ISystemBus>();
         var cartridge = machine.GetRequiredService<ICartridge>();
 
-        bus.WriteByte(address: MemoryMap.InfraredPort, value: 0xC1);
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
 
         var rpValue = bus.ReadByte(address: MemoryMap.InfraredPort);
 
-        cartridge.WriteControl(address: 0x0000, value: 0x0E);
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0E
+        );
 
         var huc1Value = cartridge.ReadRam(address: 0xA000);
 
@@ -183,14 +244,29 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // that boundary (which the reference confirmed mid-exchange), both machines snapshotted and restored into fresh
     // machines, and the cable reconnected with the resume token before the remaining budgets run.
     private static InfraredScenarioResult RunScenario(byte[] firstPattern, byte[] secondPattern, int churnAtStep) {
-        var firstRom = InfraredRom.CreatePrimary(patternBits: firstPattern, expectedReceiveCount: secondPattern.Length);
-        var secondRom = InfraredRom.CreateSecondary(patternBits: secondPattern, expectedReceiveCount: firstPattern.Length);
-        var first = PostMachine.Build(model: ConsoleModel.Cgb, rom: firstRom);
-        var second = PostMachine.Build(model: ConsoleModel.Cgb, rom: secondRom);
+        var firstRom = InfraredRom.CreatePrimary(
+            patternBits: firstPattern,
+            expectedReceiveCount: secondPattern.Length
+        );
+        var secondRom = InfraredRom.CreateSecondary(
+            patternBits: secondPattern,
+            expectedReceiveCount: firstPattern.Length
+        );
+        var first = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: firstRom
+        );
+        var second = PostMachine.Build(
+            model: ConsoleModel.Cgb,
+            rom: secondRom
+        );
         var probes = new List<int>(capacity: StepCount);
 
         try {
-            var session = new IrLinkSession(first: first, second: second);
+            var session = new IrLinkSession(
+                first: first,
+                second: second
+            );
 
             try {
                 for (var step = 0; (step < StepCount); ++step) {
@@ -200,8 +276,14 @@ internal sealed class InfraredExchangeStage : IPostStage {
                         var token = session.Suspend();
                         var firstState = first.Machine.Snapshot();
                         var secondState = second.Machine.Snapshot();
-                        var freshFirst = PostMachine.Build(model: ConsoleModel.Cgb, rom: firstRom);
-                        var freshSecond = PostMachine.Build(model: ConsoleModel.Cgb, rom: secondRom);
+                        var freshFirst = PostMachine.Build(
+                            model: ConsoleModel.Cgb,
+                            rom: firstRom
+                        );
+                        var freshSecond = PostMachine.Build(
+                            model: ConsoleModel.Cgb,
+                            rom: secondRom
+                        );
 
                         freshFirst.Machine.Restore(snapshot: firstState);
                         freshSecond.Machine.Restore(snapshot: secondState);
@@ -212,20 +294,36 @@ internal sealed class InfraredExchangeStage : IPostStage {
                         first = freshFirst;
                         second = freshSecond;
 
-                        session = new IrLinkSession(first: first, second: second, resumeToken: token);
+                        session = new IrLinkSession(
+                            first: first,
+                            second: second,
+                            resumeToken: token
+                        );
                     }
 
                     session.Run(tCycles: BudgetStep);
                 }
 
                 return new InfraredScenarioResult(
-                    FirstReceived: ReadReceived(instance: first, count: secondPattern.Length),
-                    FirstMarker: ReadByte(instance: first, address: InfraredRom.CompletionMarkerAddress),
+                    FirstReceived: ReadReceived(
+                        instance: first,
+                        count: secondPattern.Length
+                    ),
+                    FirstMarker: ReadByte(
+                        instance: first,
+                        address: InfraredRom.CompletionMarkerAddress
+                    ),
                     FirstProgress: ReadProgress(instance: first),
                     FirstState: first.Machine.Snapshot(),
                     Probes: probes,
-                    SecondReceived: ReadReceived(instance: second, count: firstPattern.Length),
-                    SecondMarker: ReadByte(instance: second, address: InfraredRom.CompletionMarkerAddress),
+                    SecondReceived: ReadReceived(
+                        instance: second,
+                        count: firstPattern.Length
+                    ),
+                    SecondMarker: ReadByte(
+                        instance: second,
+                        address: InfraredRom.CompletionMarkerAddress
+                    ),
                     SecondProgress: ReadProgress(instance: second),
                     SecondState: second.Machine.Snapshot()
                 );
@@ -280,11 +378,17 @@ internal sealed class InfraredExchangeStage : IPostStage {
         }
 
         if (!expected.FirstState.ContentEquals(other: actual.FirstState)) {
-            return $"the {leg} first-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.FirstState, b: actual.FirstState)}";
+            return $"the {leg} first-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.FirstState,
+                b: actual.FirstState
+            )}";
         }
 
         if (!expected.SecondState.ContentEquals(other: actual.SecondState)) {
-            return $"the {leg} second-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(a: expected.SecondState, b: actual.SecondState)}";
+            return $"the {leg} second-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.SecondState,
+                b: actual.SecondState
+            )}";
         }
 
         return null;
@@ -294,14 +398,16 @@ internal sealed class InfraredExchangeStage : IPostStage {
     // IR boundary is a clean severing instant — no bit is ever mid-shift — so only the mid-exchange window matters here.)
     private static int PickChurnStep(List<int> probes, int total) {
         for (var step = 0; (step < probes.Count); ++step) {
-            if ((probes[index: step] >= 1) && (probes[index: step] < total)) {
+            if (
+                (probes[index: step] >= 1) &&
+                (probes[index: step] < total)
+            ) {
                 return step;
             }
         }
 
         return -1;
     }
-
     private static byte[] ReadReceived(MachineInstance instance, int count) {
         var bus = instance.GetRequiredService<ISystemBus>();
         var received = new byte[count];
@@ -313,7 +419,10 @@ internal sealed class InfraredExchangeStage : IPostStage {
         return received;
     }
     private static int ReadProgress(MachineInstance instance) =>
-        ReadByte(instance: instance, address: InfraredRom.ProgressAddress);
+        ReadByte(
+        instance: instance,
+        address: InfraredRom.ProgressAddress
+    );
     private static byte ReadByte(MachineInstance instance, ushort address) =>
         instance.GetRequiredService<ISystemBus>().ReadByte(address: address);
 

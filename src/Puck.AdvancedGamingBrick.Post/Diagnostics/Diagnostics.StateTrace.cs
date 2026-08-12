@@ -7,7 +7,11 @@ internal static partial class Diagnostics {
     /// architectural registers (not just PC) finds the first true divergence unambiguously — immune to the
     /// pipeline PC offset and to single-instruction count slips that defeat a naive line-by-line PC diff.</summary>
     public static void StateTrace(string romPath, long steps) {
-        if (!TryLoad(romPath: romPath, name: Path.GetFileName(path: romPath), out var instance)) {
+        if (!TryLoad(
+            romPath: romPath,
+            name: Path.GetFileName(path: romPath),
+            out var instance
+        )) {
             return;
         }
 
@@ -15,7 +19,10 @@ internal static partial class Diagnostics {
             var machine = instance.Machine;
             var cpu = machine.Cpu;
             var bus = (AgbBus)machine.Bus;
-            using var output = new StreamWriter(stream: Console.OpenStandardOutput(), bufferSize: (1 << 20));
+            using var output = new StreamWriter(
+                stream: Console.OpenStandardOutput(),
+                bufferSize: (1 << 20)
+            );
             var sb = new System.Text.StringBuilder(capacity: 160);
 
             // Boot through the BIOS reset routine (undo TryLoad's direct boot) so the trace aligns with the oracle.

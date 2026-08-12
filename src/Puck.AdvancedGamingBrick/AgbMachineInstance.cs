@@ -65,7 +65,10 @@ public sealed class AgbMachineInstance : IDisposable {
     /// machine is never handed out directly, so a stale handle over an earlier rental can never reach a later renter's
     /// machine.</returns>
     public AgbMachineFork Fork() {
-        m_forkPool ??= new AgbMachineInstancePool(configuration: Configuration, compose: m_compose);
+        m_forkPool ??= new AgbMachineInstancePool(
+            configuration: Configuration,
+            compose: m_compose
+        );
 
         var fork = m_forkPool.Rent();
 
@@ -99,7 +102,10 @@ public sealed class AgbMachineInstance : IDisposable {
     internal AgbMachineFork Arm() {
         m_rented = true;
 
-        return new AgbMachineFork(instance: this, generation: ++m_rentalGeneration);
+        return new AgbMachineFork(
+            instance: this,
+            generation: ++m_rentalGeneration
+        );
     }
     // A AgbMachineFork is the CURRENT rental iff this instance is still alive, still rented, and rented under that exact
     // generation. A handle over a returned or superseded rental resolves false and can touch nothing.
@@ -107,7 +113,10 @@ public sealed class AgbMachineInstance : IDisposable {
         (!m_disposed && m_rented && (m_rentalGeneration == generation));
     // Routes the current rental handle's dispose to its pool, which resolves the generation under its gate.
     internal void ReturnRental(int generation) =>
-        (m_returnPool ?? throw new InvalidOperationException(message: "A pooled fork has no return pool.")).Return(instance: this, generation: generation);
+        (m_returnPool ?? throw new InvalidOperationException(message: "A pooled fork has no return pool.")).Return(
+        instance: this,
+        generation: generation
+    );
     // Marks this belonging to a fork pool: its handle's Dispose parks it there instead of tearing down its container.
     // Set once, when the pool builds the instance.
     internal void SetReturnPool(AgbMachineInstancePool pool) =>

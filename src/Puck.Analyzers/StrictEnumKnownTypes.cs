@@ -11,7 +11,7 @@ internal sealed class StrictEnumKnownTypes {
     /// <summary>The BCL/aggregate types the walk treats as leaves — none of them can carry a user enum, so recursing
     /// into their own members would only waste work (or, for a sealed BCL type with private fields, fail outright).
     /// A hand-maintained list, not a derived one: see <see cref="StrictEnumAnalyzer"/>'s remarks for why.</summary>
-    private static readonly string[] s_knownLeafMetadataNames = [
+    private static readonly string[] KnownLeafMetadataNames = [
         "System.Guid",
         "System.TimeSpan",
         "System.DateTimeOffset",
@@ -86,14 +86,21 @@ internal sealed class StrictEnumKnownTypes {
     public static bool IsKnownLeaf(ITypeSymbol type) {
         var ns = type.ContainingNamespace;
 
-        if ((ns is null) || ns.IsGlobalNamespace) {
+        if (
+            (ns is null) ||
+            ns.IsGlobalNamespace
+        ) {
             return false;
         }
 
         var fullName = $"{ns.ToDisplayString()}.{type.MetadataName}";
 
-        foreach (var candidate in s_knownLeafMetadataNames) {
-            if (string.Equals(a: candidate, b: fullName, comparisonType: StringComparison.Ordinal)) {
+        foreach (var candidate in KnownLeafMetadataNames) {
+            if (string.Equals(
+                a: candidate,
+                b: fullName,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return true;
             }
         }
@@ -118,6 +125,7 @@ internal sealed class StrictEnumKnownTypes {
             jsonDerivedTypeAttributeType: compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Text.Json.Serialization.JsonDerivedTypeAttribute"),
             jsonConverterOpenGenericType: compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Text.Json.Serialization.JsonConverter`1"),
             jsonStringEnumConverterOpenGenericType: compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Text.Json.Serialization.JsonStringEnumConverter`1"),
-            enumerableOpenGenericType: compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Collections.Generic.IEnumerable`1"));
+            enumerableOpenGenericType: compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Collections.Generic.IEnumerable`1")
+        );
     }
 }

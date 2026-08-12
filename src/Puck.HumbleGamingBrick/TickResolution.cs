@@ -38,8 +38,14 @@ public readonly record struct TickResolution {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="subdivisionLog2"/> is outside
     /// <c>[<see cref="MinimumSubdivisionLog2"/>, <see cref="MaximumSubdivisionLog2"/>]</c>.</exception>
     public TickResolution(int subdivisionLog2) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: subdivisionLog2, other: MinimumSubdivisionLog2);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: subdivisionLog2, other: MaximumSubdivisionLog2);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: subdivisionLog2,
+            other: MinimumSubdivisionLog2
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: subdivisionLog2,
+            other: MaximumSubdivisionLog2
+        );
 
         SubdivisionLog2 = subdivisionLog2;
     }

@@ -93,7 +93,10 @@ public sealed partial class AgbSerialController : ISnapshotable {
         var when = reader.ReadInt64();
 
         if (scheduled) {
-            m_scheduler.ScheduleAbsolute(e: m_transferEvent, when: when);
+            m_scheduler.ScheduleAbsolute(
+                e: m_transferEvent,
+                when: when
+            );
         }
     }
 }
