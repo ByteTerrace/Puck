@@ -315,6 +315,51 @@ public sealed class WorldSolidField : IContactField {
     }
 
     /// <inheritdoc/>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        // An endpoint inside a thin floor has an ambiguous nearest gradient; near an edge it can point sideways or
+        // downward. Walk the deterministic segment until the ordinary endpoint solver first reports contact. That
+        // sample is still on the approached exterior, so its measured normal resolves the same top face the body
+        // actually reached instead of extracting through an arbitrary nearer side.
+        var delta = (position - previousPosition);
+        var distance = delta.Length;
+        var stepLength = SmallestSweepRadius(volumes: volumes);
+        if ((distance <= stepLength) || (stepLength <= FixedQ4816.Zero)) {
+            return Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+        }
+
+        var steps = Math.Max(val1: 2, val2: checked((int)((distance.Value + stepLength.Value - 1L) / stepLength.Value)));
+        var denominator = FixedQ4816.FromInteger(value: steps);
+        var originalVelocity = velocity;
+        for (var step = 1; step <= steps; step++) {
+            var proposed = (previousPosition + (delta * (FixedQ4816.FromInteger(value: step) / denominator)));
+            var candidate = proposed;
+            var candidateVelocity = originalVelocity;
+            var resolution = Resolve(position: ref candidate, velocity: ref candidateVelocity, orientation: in orientation, volumes: volumes);
+            if (resolution.Grounded || (resolution.ObstructionNormal != FixedVector3.Zero) || (candidate != proposed)) {
+                position = candidate;
+                velocity = candidateVelocity;
+                return resolution;
+            }
+        }
+
+        return Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+    }
+
+    private static FixedQ4816 SmallestSweepRadius(ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var smallest = FixedQ4816.MaxValue;
+        foreach (ref readonly var volume in volumes) {
+            var radius = (volume.Kind == FixedBodyColliderKind.Box)
+                ? FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))
+                : volume.Radius;
+            if ((radius > FixedQ4816.Zero) && (radius < smallest)) {
+                smallest = radius;
+            }
+        }
+        return ((smallest == FixedQ4816.MaxValue) ? FixedQ4816.Zero : smallest);
+    }
+
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         // Gradient-derived up is authored (WorldContactRequirement.GradientDerivedUp), never assumed: a flat-up world
         // keeps world +Y so its walls push without ever grounding, at zero field-query cost.

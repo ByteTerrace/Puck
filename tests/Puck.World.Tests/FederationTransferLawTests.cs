@@ -24,7 +24,7 @@ public sealed class FederationTransferLawTests {
             PlanarVelocity: new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.One),
             VerticalVelocity: FixedQ4816.FromInteger(value: 3),
             ActionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(Name: "jump", PreviousBit: true)],
+                Channels: [new WorldTransferChannelEdge(Name: "jump", PreviousBit: true, HeldValue: FixedQ4816.One)],
                 Registers: [new WorldTransferActionRegister(Name: "jumpUses", Kind: ActionStateKind.Counter, Value: FixedQ4816.One, TimerTicks: 0)]));
 
         var encoded = WorldFederationWireFormat.EncodeCommit(sourceAuthority: "source/world", transferId: 7, members: [expected]);
@@ -35,6 +35,7 @@ public sealed class FederationTransferLawTests {
         var member = Assert.Single(collection: members);
         Assert.Equal(expected: "free", actual: member.BodyMotionProgramName);
         Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
+        Assert.Equal(expected: FixedQ4816.One, actual: Assert.Single(collection: member.ActionContinuity.Channels).HeldValue);
         Assert.Equal(expected: FixedQ4816.One, actual: Assert.Single(collection: member.ActionContinuity.Registers).Value);
     }
 

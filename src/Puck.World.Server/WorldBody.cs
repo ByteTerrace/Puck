@@ -179,6 +179,11 @@ public sealed class WorldBody {
     // auto-release timer drains. m_previousChannelBit is the previous sub-step's threshold-crossing bit per ordinal —
     // the model reads it to detect a rising (fire) and release (cut) edge, generalizing the old ActionLanes OR/XOR.
     private PlayerIntent m_heldChannels;
+    // A committed authority handoff can precede the new input stream's first publication by one or more destination
+    // ticks. Preserve the source writer's last admitted composition image through that gap; SetHeldChannels is the
+    // single replacement door and clears this bridge on the first genuine destination input, including neutral.
+    private PlayerIntent m_transferHeldChannels;
+    private bool m_hasTransferHeldChannels;
     // player.channels' post-fold read-back: the held overlay NextIntent actually admitted and the result after composing
     // it with the resolved movement tier. Written on that existing join path, retained after the one-tick input images
     // clear, and never read by simulation — diagnostic only, with no allocation and no feedback into either fold.
@@ -980,6 +985,8 @@ public sealed class WorldBody {
     /// submission, and the merge admits it only under <see cref="IntentSource.Live"/>.</summary>
     /// <param name="channels">The channel image live-held this tick (composition ordinals only).</param>
     public void SetHeldChannels(in PlayerIntent channels) {
+        m_transferHeldChannels = default;
+        m_hasTransferHeldChannels = false;
         m_heldChannels = channels;
     }
 
@@ -998,7 +1005,10 @@ public sealed class WorldBody {
             SubmitIntent(intent: input.Intent);
         }
 
-        SetHeldChannels(channels: input.HeldChannels);
+        // This is the input-hold runtime replaying its selected historical image, not a new writer publication.
+        // Do not clear the authority-handoff bridge here: only ApplyIntentSubmission's SetHeldChannels call proves
+        // the destination stream has actually supplied a replacement image (neutral included).
+        m_heldChannels = input.HeldChannels;
     }
     /// <summary>Gets the held-channel overlay admitted by the last <see cref="Advance"/>, retained only for
     /// <c>player.channels</c>.</summary>
@@ -1190,8 +1200,9 @@ public sealed class WorldBody {
     /// <c>world.contacts</c>; losing the latch only ever produces a missing witness until the next real push or grace
     /// timeout, never a wrong positive one. <c>m_submerged</c>/<c>m_atSurface</c> — the swim surface stage
     /// re-derives both, purely as a function of the restored position and waterline, on the very next Advance.
-    /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — one-tick
-    /// diagnostic images, explicitly documented as "never read by simulation" and republished every submission.
+    /// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — ordinary one-tick images; the
+    /// last admitted held composition image is separately named in <paramref name="HeldChannelImage"/> solely for
+    /// the bounded authority-handoff bridge.
     /// <c>m_submittedIntent</c>/<c>m_hasSubmittedIntent</c>/<c>m_producerIntent</c>/<c>m_hasProducerIntent</c> —
     /// one-tick device/producer images, consumed and reset every <see cref="Advance"/> by design ("a missed producer
     /// tick can never leave a stale entity moving forever" — this type's own existing doc comment). <c>m_actionStateRequested</c>/
@@ -1232,6 +1243,8 @@ public sealed class WorldBody {
     /// <param name="Source">The intent-source axis (<c>player.control</c>/the peer sweep).</param>
     /// <param name="PreviousChannelBit">The previous tick's per-ordinal threshold-crossing bit (edge-detection carry),
     /// copied defensively.</param>
+    /// <param name="HeldChannelImage">The last admitted device-held composition image, carried so a destination
+    /// authority does not manufacture a release while its replacement input stream is connecting.</param>
     /// <param name="PendingDefaultChannelPress">Per-ordinal: an argument-less <c>player.press</c> tap staged but not
     /// yet materialized into a lane timer, copied defensively.</param>
     /// <param name="PendingDefaultChannelValue">The value each pending tap in <paramref name="PendingDefaultChannelPress"/>
@@ -1277,6 +1290,7 @@ public sealed class WorldBody {
         string BodyMotionProgramName,
         IntentSource Source,
         bool[] PreviousChannelBit,
+        PlayerIntent HeldChannelImage,
         bool[] PendingDefaultChannelPress,
         FixedQ4816[] PendingDefaultChannelValue,
         ulong[] MotionRecency,
@@ -1341,6 +1355,7 @@ public sealed class WorldBody {
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
             PreviousChannelBit: [.. m_previousChannelBit],
+            HeldChannelImage: (m_hasTransferHeldChannels ? m_transferHeldChannels : m_channelReadHeld),
             PendingDefaultChannelPress: [.. m_pendingDefaultChannelPress],
             PendingDefaultChannelValue: [.. m_pendingDefaultChannelValue],
             MotionRecency: [.. m_motionRecency],
@@ -1408,6 +1423,8 @@ public sealed class WorldBody {
         }
 
         CopyClamped(source: state.PreviousChannelBit, destination: m_previousChannelBit);
+        m_transferHeldChannels = state.HeldChannelImage;
+        m_hasTransferHeldChannels = (state.HeldChannelImage != default);
         CopyClamped(source: state.PendingDefaultChannelPress, destination: m_pendingDefaultChannelPress);
         CopyClamped(source: state.PendingDefaultChannelValue, destination: m_pendingDefaultChannelValue);
         CopyClamped(source: state.MotionRecency, destination: m_motionRecency);
@@ -1485,11 +1502,16 @@ public sealed class WorldBody {
         ArgumentNullException.ThrowIfNull(continuity);
         ArgumentNullException.ThrowIfNull(channels);
 
+        var held = default(PlayerIntent);
         foreach (var channel in continuity.Channels) {
             if (channels.TryGetOrdinal(name: channel.Name, ordinal: out var ordinal) && ((uint)ordinal < (uint)m_previousChannelBit.Length)) {
                 m_previousChannelBit[ordinal] = channel.PreviousBit;
+                held = held.WithChannel(ordinal: ordinal, value: channel.HeldValue);
             }
         }
+
+        m_transferHeldChannels = held;
+        m_hasTransferHeldChannels = (held != default);
 
         foreach (var register in continuity.Registers) {
             for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
@@ -1712,6 +1734,8 @@ public sealed class WorldBody {
         m_producerIntent = default;
         m_hasProducerIntent = false;
         m_heldChannels = default;
+        m_transferHeldChannels = default;
+        m_hasTransferHeldChannels = false;
     }
 
     /// <summary>Consumes this tick's continuity hint for the snapshot: how the pose changed (ordinary integration, a
@@ -2343,8 +2367,8 @@ public sealed class WorldBody {
         if ((m_contactField is { } field) && (m_collider is { } collider)) {
             var resolvedVelocity = scratch.Velocity;
             var contactResolution = ((field is IEntityContactField entityField)
-                ? entityField.ResolveEntity(entityIndex: scratch.EntityIndex, position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes)
-                : field.Resolve(position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes));
+                ? entityField.ResolveEntitySweep(entityIndex: scratch.EntityIndex, previousPosition: m_position, position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes)
+                : field.ResolveSweep(previousPosition: m_position, position: ref scratch.NextPosition, velocity: ref resolvedVelocity, orientation: in scratch.Orientation, volumes: collider.Volumes));
 
             m_grounded = contactResolution.Grounded;
             m_lastContactCount = (m_grounded ? 1 : 0);
@@ -2878,13 +2902,14 @@ public sealed class WorldBody {
         // one the way a numeric max used to.
         var channels = movement.Channels;
         var heldOverlay = default(ChannelValues);
+        var liveHeld = (m_hasTransferHeldChannels ? m_transferHeldChannels : m_heldChannels);
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_laneTimers[ordinal] > 0) {
                 channels[ordinal] = m_channelTimerValues[ordinal];
             } else if (m_source.IsLive && !m_roleChannels[ordinal]) {
-                heldOverlay[ordinal] = m_heldChannels[ordinal];
-                channels[ordinal] = FixedQ4816.FromRawBits(value: WorldChannelTable.ComposeHeld(a: channels[ordinal].Value, b: m_heldChannels[ordinal].Value, shape: m_channelShapes[ordinal]));
+                heldOverlay[ordinal] = liveHeld[ordinal];
+                channels[ordinal] = FixedQ4816.FromRawBits(value: WorldChannelTable.ComposeHeld(a: channels[ordinal].Value, b: liveHeld[ordinal].Value, shape: m_channelShapes[ordinal]));
             }
         }
 

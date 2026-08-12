@@ -29,6 +29,13 @@ public interface IContactField {
     /// the body).</returns>
     ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes);
 
+    /// <summary>Resolves one integrated step from <paramref name="previousPosition"/> to
+    /// <paramref name="position"/>. Providers whose endpoint solve is already sufficient inherit that behavior;
+    /// fields may use the start point to recover the approached surface when the endpoint lies inside geometry.</summary>
+    ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+
     /// <summary>Returns the world up axis at a position — the direction a grounded body's gravity opposes and a standing test
     /// aligns against. The analytic provider always answers constant <c>+Y</c>.</summary>
     /// <param name="position">The body's foot point.</param>
@@ -41,6 +48,9 @@ public interface IContactField {
 /// entity index only to this refinement; ordinary terrain fields remain unaware of population addressing.</summary>
 internal interface IEntityContactField : IContactField {
     ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes);
+    ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ResolveEntity(entityIndex: entityIndex, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
 }
 
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator

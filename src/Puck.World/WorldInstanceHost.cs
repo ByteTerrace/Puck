@@ -1353,7 +1353,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
 
         var population = instance.Server.Population;
         var candidates = new List<AdjacencyEdgeHit>[population.Capacity];
-        _ = WorldAdjacencyPolicy.TryBodyReach(definition: instance.Server.Definition, reach: out var reciprocalHysteresis, reason: out _);
+        _ = WorldAdjacencyPolicy.TryReciprocalHysteresis(definition: instance.Server.Definition, depth: out var reciprocalHysteresis, reason: out _);
 
         foreach (var adjacency in adjacencies) {
             if (adjacency is null) {
@@ -1366,22 +1366,26 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
                     continue;
                 }
 
-                var crossing = WorldAdjacencyRegion.Sweep(frame: frame, from: body.FixedPreviousPosition, to: body.FixedPosition);
-                if (!crossing.Crossed) {
-                    continue;
-                }
-
                 // A remotely committed arrival bypasses this host's FinalizeCommittedTransfer path, but escrow
-                // retains the authenticated source border on the destination authority. Keep that final writer
-                // authoritative across a collider-sized reciprocal overlap: contact correction or an exactly-on-plane
-                // arrival can no longer re-cross on the next tick and start an endless reserve/commit ping-pong.
-                // Other edges remain eligible at parameter zero, preserving deliberate multi-edge corner traversal.
+                // retains the authenticated source border on the destination authority. Its reciprocal edge is a
+                // Schmitt latch, not a distance cap: it remains disarmed at ANY outward distance until this writer
+                // has observed the whole two-body contact envelope inside its owned half-space. Thus a seam melee's
+                // contact correction cannot manufacture immediate handback, while entering the new world genuinely
+                // re-arms an intentional return. Other edges remain eligible, preserving parameter-zero corner
+                // forwarding without letting the edge just crossed compete with them.
                 if (instance.Server.TryTransferArrivalBorder(bodyIndex: seat, border: out var arrivalBorder) &&
                     string.Equals(a: arrivalBorder, b: $"adjacency/{adjacency.Counterpart}", comparisonType: StringComparison.Ordinal)) {
                     var outward = FixedVector3.Dot(left: (body.FixedPosition - frame.Origin), right: frame.Normal);
-                    if (outward <= reciprocalHysteresis) {
+                    if (outward > -reciprocalHysteresis) {
                         continue;
                     }
+
+                    _ = instance.Server.ClearTransferArrivalBorder(bodyIndex: seat, expectedBorder: arrivalBorder);
+                }
+
+                var crossing = WorldAdjacencyRegion.Sweep(frame: frame, from: body.FixedPreviousPosition, to: body.FixedPosition);
+                if (!crossing.Crossed) {
+                    continue;
                 }
 
                 (candidates[seat] ??= []).Add(item: new AdjacencyEdgeHit(Adjacency: adjacency, Seat: seat, Frame: frame, SeamU: crossing.SeamU, SeamV: crossing.SeamV, Parameter: crossing.Parameter));

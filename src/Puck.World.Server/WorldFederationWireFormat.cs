@@ -308,7 +308,7 @@ public static class WorldFederationWireFormat {
             var continuity = member.ActionContinuity ?? new WorldTransferActionContinuity(Channels: [], Registers: []);
             writer.Write(continuity.Channels.Count);
             foreach (var channel in continuity.Channels) {
-                writer.Write(channel.Name); writer.Write(channel.PreviousBit);
+                writer.Write(channel.Name); writer.Write(channel.PreviousBit); writer.Write(channel.HeldValue.Value);
             }
             writer.Write(continuity.Registers.Count);
             foreach (var register in continuity.Registers) {
@@ -339,7 +339,7 @@ public static class WorldFederationWireFormat {
                 if ((channelCount < 0) || (channelCount > ChannelLimits.MaxChannels)) { throw new FormatException($"commit channel count {channelCount} is invalid"); }
                 var channels = new WorldTransferChannelEdge[channelCount];
                 for (var channel = 0; (channel < channelCount); channel++) {
-                    channels[channel] = new WorldTransferChannelEdge(Name: reader.ReadString(), PreviousBit: reader.ReadBoolean());
+                    channels[channel] = new WorldTransferChannelEdge(Name: reader.ReadString(), PreviousBit: reader.ReadBoolean(), HeldValue: new FixedQ4816(reader.ReadInt64()));
                 }
                 var registerCount = reader.ReadInt32();
                 if ((registerCount < 0) || (registerCount > ChannelLimits.MaxChannels)) { throw new FormatException($"commit action register count {registerCount} is invalid"); }

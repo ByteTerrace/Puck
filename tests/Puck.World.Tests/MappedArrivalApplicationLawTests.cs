@@ -47,7 +47,7 @@ public sealed class MappedArrivalApplicationLawTests {
             planarVelocity: mappedPlanarVelocity,
             verticalVelocity: mappedVerticalVelocity,
             actionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(Name: "forward", PreviousBit: true)],
+                Channels: [new WorldTransferChannelEdge(Name: "forward", PreviousBit: true, HeldValue: FixedQ4816.One)],
                 Registers: []));
 
         Assert.True(condition: applied);
@@ -65,6 +65,47 @@ public sealed class MappedArrivalApplicationLawTests {
         Assert.Equal(expected: mappedPlanarVelocity, actual: state.PlanarVelocity);
         Assert.Equal(expected: mappedVerticalVelocity, actual: state.VerticalVelocity);
         Assert.True(condition: state.PreviousChannelBit[0], userMessage: "the mapped writer change manufactured a fresh held-channel edge");
+        Assert.Equal(expected: FixedQ4816.One, actual: state.HeldChannelImage[0]);
+    }
+
+    [Fact]
+    public void ApplyMappedArrival_HeldCompositionBridgesUntilFirstDestinationInput() {
+        var definition = Fixtures.BuildDocument();
+        definition = definition with {
+            Channels = [.. definition.Channels, new WorldChannel(Name: "jump", Shape: ChannelShape.Binary, Composition: true)],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var channels = fixture.Server.Population.Channels;
+        Assert.True(channels.TryGetOrdinal(name: "jump", ordinal: out var ordinal));
+
+        Assert.True(fixture.Server.Population.ApplyMappedArrival(
+            slot: actor.Index,
+            motionProgramName: "grounded",
+            position: body.FixedPosition,
+            yawRadians: body.FixedYaw,
+            planarVelocity: FixedVector3.Zero,
+            verticalVelocity: FixedQ4816.Zero,
+            actionContinuity: new WorldTransferActionContinuity(
+                Channels: [new WorldTransferChannelEdge(Name: "jump", PreviousBit: true, HeldValue: FixedQ4816.One)],
+                Registers: [])));
+
+        fixture.Step();
+        Assert.Equal(expected: FixedQ4816.One, actual: body.ChannelReadHeld[ordinal]);
+
+        var neutral = new IntentSubmission(
+            Tick: fixture.Server.NextInputTick,
+            EntityIndex: actor.Index,
+            Intent: default,
+            Principal: actor,
+            HeldChannels: default);
+        fixture.Server.EnqueueIntent(submission: in neutral);
+        fixture.Step();
+
+        Assert.Equal(expected: FixedQ4816.Zero, actual: body.ChannelReadHeld[ordinal]);
     }
 
     [Fact]

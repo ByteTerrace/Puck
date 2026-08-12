@@ -311,9 +311,30 @@ public static class WorldAdjacencyPolicy {
         return (((double)fixedValue < Math.Abs(value)) ? FixedQ4816.FromRawBits(value: checked(fixedValue.Value + 1L)) : fixedValue);
     }
 
-    /// <summary>Derives the greatest collider-center reach in a document. Besides overlap proof, the handoff scanner
-    /// uses this as the reciprocal-edge hysteresis width: a newly arrived body remains owned by its final writer
-    /// throughout the collider-sized seam overlap instead of being immediately handed back by contact jitter.</summary>
+    /// <summary>Derives the reciprocal handoff hysteresis needed to survive the strongest local contact correction:
+    /// two maximum-radius body colliders separated beside the seam, plus the authored contact skin. A one-radius
+    /// latch is insufficient for the intended seam melee: another body can legally push an arrival by the sum of
+    /// both radii and falsely re-arm the reciprocal edge.</summary>
+    public static bool TryReciprocalHysteresis(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        depth = FixedQ4816.Zero;
+        if (!TryBodyReach(definition: definition, reach: out var reach, reason: out reason)) {
+            return false;
+        }
+
+        try {
+            var skin = CeilingFixed(value: MathF.Abs(x: definition.Collision.ContactSkin));
+            depth = new FixedQ4816(Value: checked((reach.Value * 2L) + skin.Value));
+            reason = string.Empty;
+            return true;
+        } catch (OverflowException) {
+            reason = "the reciprocal contact hysteresis exceeds the fixed-point range";
+            return false;
+        }
+    }
+
+    /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs.</summary>
     public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
         reach = FixedQ4816.Zero;
         foreach (var kit in definition.Kits) {

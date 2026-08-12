@@ -57,16 +57,25 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        return ResolveCore(entityIndex: -1, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+        return ResolveCore(entityIndex: -1, previousPosition: position, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
     }
 
     /// <inheritdoc/>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ResolveCore(entityIndex: -1, previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+
+    /// <inheritdoc/>
     public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        return ResolveCore(entityIndex: entityIndex, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+        return ResolveCore(entityIndex: entityIndex, previousPosition: position, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
     }
 
-    private ContactResolution ResolveCore(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var resolution = m_inner.Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+    /// <inheritdoc/>
+    public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ResolveCore(entityIndex: entityIndex, previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+
+    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var resolution = m_inner.ResolveSweep(previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
 
         if (m_bands.Count == 0) {
             return resolution;
@@ -81,6 +90,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
             var neighbourFrame = neighbour.CounterpartFrame;
             var deltaRotation = WorldFrameIsometry.Rotation(source: band.Frame, destination: neighbourFrame);
+            var neighbourPreviousPosition = WorldFrameIsometry.MapPoint(point: previousPosition, source: band.Frame, destination: neighbourFrame);
             var neighbourPosition = WorldFrameIsometry.MapPoint(point: position, source: band.Frame, destination: neighbourFrame);
             var neighbourVelocity = WorldFrameIsometry.MapVector(value: velocity, source: band.Frame, destination: neighbourFrame);
             var neighbourOrientation = (deltaRotation * orientation).Normalize();
@@ -118,7 +128,8 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
             var neighbourResolution = default(ContactResolution);
             if (!resolution.Grounded && neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) && (neighbourField is not null)) {
-                neighbourResolution = neighbourField.Resolve(position: ref neighbourPosition, velocity: ref neighbourVelocity, orientation: in neighbourOrientation, volumes: volumes);
+                neighbourResolution = neighbourField.ResolveSweep(previousPosition: neighbourPreviousPosition, position: ref neighbourPosition,
+                    velocity: ref neighbourVelocity, orientation: in neighbourOrientation, volumes: volumes);
             }
 
             if ((dynamicObstruction == FixedVector3.Zero) && !neighbourResolution.Grounded && (neighbourResolution.ObstructionNormal == FixedVector3.Zero)) {

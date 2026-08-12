@@ -123,6 +123,14 @@ try {
         $state = Join-Path $scratch "state-$id"
         $startupWait = if ($id -eq 'nw') { 45 } else { 90 }
         $neighbourWait = if ($id -eq 'nw') { 15 } else { 30 }
+        # Scripts express time in authority ticks. Keep every feel/control probe at the same wall-clock duration
+        # even though NW deliberately runs at 30 Hz while the other authorities run at 60 Hz.
+        $halfSecondWait = if ($id -eq 'nw') { 15 } else { 30 }
+        $tenthSecondWait = if ($id -eq 'nw') { 3 } else { 6 }
+        $oneSecondWait = if ($id -eq 'nw') { 30 } else { 60 }
+        $twoSecondWait = if ($id -eq 'nw') { 60 } else { 120 }
+        $fourSecondWait = if ($id -eq 'nw') { 120 } else { 240 }
+        $fiveSecondWait = if ($id -eq 'nw') { 150 } else { 300 }
         # Give the cross-authority contact loop half a physical second at either authored rate.
         $contactWait = if ($id -eq 'nw') { 15 } else { 120 }
         $autonomous = if ($id -eq 'island') { '' } else { @"
@@ -154,6 +162,10 @@ wire.errors
         # Probe ordinary open air beside the solid platform. The handoff plane sits below the island, so the
         # traveler must enter island authority first and rise around its edge rather than pass through furniture.
         $upCenter = switch ($id) { 'nw' { '-23 1 -23' }; 'ne' { '23 1 -23' }; 'se' { '23 1 23' }; 'sw' { '-23 1 23' } }
+        # Once above platform height, walk/fly from that quadrant's open air toward the island centre. The small
+        # vertical drive holds altitude without accumulating ballistic velocity; releasing it then exercises an
+        # ordinary gravity landing on the authored top surface.
+        $islandApproach = switch ($id) { 'nw' { '-1 1 0.1' }; 'ne' { '-1 -1 0.1' }; 'se' { '1 -1 0.1' }; 'sw' { '1 1 0.1' } }
         @"
 world.wait $startupWait
 wire.errors reset
@@ -184,45 +196,53 @@ world.wait 8
 player.signal gamepad.leftStick 0 0
 player.stop 1
 player.where 1
+player.signal gamepad.buttonSouth 1
 player.signal gamepad.rightTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.rightTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.rightTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.rightTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.rightTrigger 0
-world.wait 30
+world.wait $halfSecondWait
+player.state 1
+player.signal gamepad.buttonSouth 0
+world.wait $tenthSecondWait
 player.where 1
-world.wait 60
+world.wait $oneSecondWait
 player.where 1
 player.stop 1
 player.signal gamepad.leftTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.leftTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.leftTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.leftTrigger 1
-world.wait 30
+world.wait $halfSecondWait
 player.signal gamepad.leftTrigger 0
 player.stop 1
 player.where 1
 world.adjacencies
 player.pose $upCenter 0 0 0 4
 player.fly 0 0 1 0 0 0 2 4
-world.wait 120
-player.fly 0 0 1 0 0 0 2 4
-world.wait 180
+world.wait $twoSecondWait
+player.fly $islandApproach 0 0 0 4 4
+world.wait $fourSecondWait
+player.stop 4
+world.wait $twoSecondWait
 player.where 4
 $continuation
 player.where 4
+world.contacts 4
 player.press jump 1 0.05 4
-world.wait 30
+world.wait $tenthSecondWait
 player.where 4
-world.wait 300
+world.wait $fiveSecondWait
 player.where 4
+world.contacts 4
 wire.errors
 "@ }
         [System.IO.File]::WriteAllText($stdin, $script, $utf8NoBom)
@@ -318,6 +338,8 @@ wire.errors
             }
         }
         Require (-not [regex]::IsMatch($stdout, '\[wire\.errors: [1-9][0-9]* rejected\]')) "$id reported rejected wire commands"
+        $groundedReads = [regex]::Matches($stdout, '\[world\.contacts: p[0-9]+ grounded=true ')
+        Require ($groundedReads.Count -ge 2) "$id post-transition jump was not grounded both before takeoff and after landing"
         Require ($stdout.Contains('derived=corner') -and $stdout.Contains("entities=$(Endpoint $row.Corner)/")) "$id did not derive its diagonal corner peer $($row.Corner)"
         Require (-not $stdout.Contains('entities=boot/')) "$id observed a process-local boot entity address"
         Require (-not $combined.Contains('[world.continuum: committed transfer=')) "$id could not seed a committed authority epoch before publishing its route"
@@ -384,8 +406,12 @@ wire.errors
     if ($nwCameraEpochs.Count -ge 5) {
         Require ([int]$nwCameraEpochs[$nwCameraEpochs.Count - 1].Groups[1].Value -ge 5) "nw camera route did not advance through a distinct CAS epoch for every authority handoff"
     }
-    $nwFinalWhere = [regex]::Matches($nwTranscript, '\[player\.where: p[0-9]+ pos=\(([-0-9.]+), ([-0-9.]+), ([-0-9.]+)\)') | Select-Object -Last 1
-    $nwFinalAnchor = [regex]::Matches($nwTranscript, '\[world\.view\.camera:.*?anchor=\(([-0-9.]+),([-0-9.]+),([-0-9.]+)\)') | Select-Object -Last 1
+    $nwCameraMatches = [regex]::Matches($nwTranscript, '\[world\.view\.camera:.*?anchor=\(([-0-9.]+),([-0-9.]+),([-0-9.]+)\)')
+    $nwFinalAnchor = $nwCameraMatches | Select-Object -Last 1
+    $nwBeforeFinalCamera = if ($null -ne $nwFinalAnchor) { $nwTranscript.Substring(0, $nwFinalAnchor.Index) } else { '' }
+    # Pair the camera read with the traveler query immediately preceding that camera epoch. Later p4 island/jump
+    # probes name a different body and must never be compared with p1's camera merely because they occur last.
+    $nwFinalWhere = [regex]::Matches($nwBeforeFinalCamera, '\[player\.where: p[0-9]+ pos=\(([-0-9.]+), ([-0-9.]+), ([-0-9.]+)\)') | Select-Object -Last 1
     Require (($null -ne $nwFinalWhere) -and ($null -ne $nwFinalAnchor)) "nw did not expose the final traveler and camera anchor poses"
     if (($null -ne $nwFinalWhere) -and ($null -ne $nwFinalAnchor)) {
         $deltaSquared = 0.0

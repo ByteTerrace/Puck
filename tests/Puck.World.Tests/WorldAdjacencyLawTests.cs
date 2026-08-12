@@ -63,6 +63,15 @@ public sealed class WorldAdjacencyLawTests {
     }
 
     [Fact]
+    public void ReciprocalHysteresisCoversTwoBodyContactAndSkin() {
+        var definition = Fixtures.BuildGradientUpDocument(gradientUp: true);
+
+        Assert.True(WorldAdjacencyPolicy.TryReciprocalHysteresis(definition, out var depth, out var reason), reason);
+        Assert.True(depth >= FixedQ4816.FromDouble(value: 0.72));
+        Assert.True(depth < FixedQ4816.FromDouble(value: 0.721));
+    }
+
+    [Fact]
     public void ValidatorProvesReciprocalBoundaryAndRefusesDrift() {
         var (west, east) = Pair();
         var resolver = new Resolver(new Dictionary<string, WorldDefinition> { ["east.world.json"] = east, ["west.world.json"] = west });

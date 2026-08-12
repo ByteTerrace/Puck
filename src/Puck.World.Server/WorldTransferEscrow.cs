@@ -37,8 +37,10 @@ public readonly record struct WorldTransferKey(string SourceAuthority, ulong Tra
 public enum WorldTransferStatus : byte { Missing = 0, Reserved = 1, Committed = 2 }
 
 /// <summary>One named channel edge carried across an authority change. Names, rather than ordinals, keep a
-/// destination's independently-authored channel order from changing the meaning of a held control.</summary>
-public readonly record struct WorldTransferChannelEdge(string Name, bool PreviousBit);
+/// destination's independently-authored channel order from changing the meaning of a held control. HeldValue is
+/// the last admitted device-held composition value: the destination bridges it until the first real input image
+/// arrives, so transport handoff cannot insert a synthetic release/press pair into one physical hold.</summary>
+public readonly record struct WorldTransferChannelEdge(string Name, bool PreviousBit, FixedQ4816 HeldValue);
 
 /// <summary>One named action register carried across an authority change. A destination accepts it only when its
 /// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
@@ -314,6 +316,14 @@ internal sealed class WorldTransferEscrow {
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
     public bool TryArrivalBorder(int bodyIndex, out string border) =>
         m_borderAdmissions.TryGetValue(key: bodyIndex, value: out border!);
+
+    /// <summary>Re-arms a committed arrival's reciprocal edge after the body has been observed fully inside its new
+    /// owner's half-space. The expected identity makes slot reuse or a later arrival unable to clear another
+    /// transfer's latch.</summary>
+    public bool ClearArrivalBorder(int bodyIndex, string expectedBorder) =>
+        m_borderAdmissions.TryGetValue(key: bodyIndex, value: out var border) &&
+        string.Equals(a: border, b: expectedBorder, comparisonType: StringComparison.Ordinal) &&
+        m_borderAdmissions.Remove(key: bodyIndex);
 
     public void ReclaimExpired(ulong tick) {
         PruneDepartedAdmissions();

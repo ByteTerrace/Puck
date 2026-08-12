@@ -345,6 +345,11 @@ public sealed class WorldServer : IWorldServerHost {
     public bool TryTransferArrivalBorder(int bodyIndex, out string border) =>
         m_transferEscrow.TryArrivalBorder(bodyIndex: bodyIndex, border: out border);
 
+    /// <summary>Clears one exact authenticated arrival-border latch after reciprocal hysteresis is satisfied.
+    /// Callers already execute under the authority operation gate.</summary>
+    public bool ClearTransferArrivalBorder(int bodyIndex, string expectedBorder) =>
+        m_transferEscrow.ClearArrivalBorder(bodyIndex: bodyIndex, expectedBorder: expectedBorder);
+
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);

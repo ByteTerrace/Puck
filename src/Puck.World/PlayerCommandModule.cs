@@ -575,6 +575,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.channels: expected at most 1 value — an optional player index]");
         }
 
+        if (TryRoutedSeatQuery(args: in args, query: static index => new WorldQuery.PlayerChannels(Index: index), result: out var routed)) {
+            return routed;
+        }
+
         var (player, index, error) = ResolveTarget(args: in args, requiredCount: 0, verb: "player.channels");
 
         if (player is null) {
@@ -599,6 +603,10 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.state: expected at most 1 value — an optional player index]");
         }
 
+        if (TryRoutedSeatQuery(args: in args, query: static index => new WorldQuery.PlayerState(Index: index), result: out var routed)) {
+            return routed;
+        }
+
         var (player, index, error) = ResolveTarget(args: in args, requiredCount: 0, verb: "player.state");
         if (player is null) {
             return CommandResult.Error(output: error!);
@@ -610,6 +618,31 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
         });
         return result;
+    }
+
+    private bool TryRoutedSeatQuery(in WireArgs args, Func<int, WorldQuery> query, out CommandResult result) {
+        result = default;
+        if (!WorldArgs.TryParseIndex(args: in args, at: 0, min: 1, max: m_population.Capacity, fallback: 1, value: out var index) ||
+            (index > PlayerRoster.MaxSlots)) {
+            return false;
+        }
+
+        var slot = PlayerRoster.SlotFromDisplay(number: index);
+        if (!m_roster.IsJoined(slot: slot)) {
+            return false;
+        }
+
+        var route = m_instances.SeatRoute(slot: slot);
+        if (string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        var routedResult = default(CommandResult);
+        route.Endpoint.Submissions.Query(query: query(route.EntityIndex + 1), completion: answer => {
+            routedResult = new CommandResult(Output: WithInstanceTag(text: answer.Text, instanceName: route.Endpoint.Identity)) { IsError = answer.Refused };
+        });
+        result = routedResult;
+        return true;
     }
     private CommandResult DesignateHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -1429,26 +1462,48 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             return CommandResult.Error(output: "[player.press: expected a channel name — plus an optional value, hold time, and player index]");
         }
 
+        // Layout: <channel> [value] [holdSeconds] [player]. Resolve the console-facing seat before the channel:
+        // after a transfer the destination document owns both the body's channel vocabulary and the command door.
+        // Looking either up in the boot world makes an otherwise fully routed seat lose action buttons precisely at
+        // an invisible boundary (movement continued to work because player.fly already followed this route).
+        if (!WorldArgs.TryParseIndex(args: in args, at: 3, min: 1, max: m_population.Capacity, fallback: 1, value: out var index)) {
+            return CommandResult.Error(output: $"[player.press: player index must be an integer 1..{m_population.Capacity}]");
+        }
+
+        WorldAuthorityRoute? routedLocation = null;
+        var targetChannels = m_channels;
+
+        if (index <= PlayerRoster.MaxSlots) {
+            var rosterSlot = PlayerRoster.SlotFromDisplay(number: index);
+            var location = m_instances.SeatRoute(slot: rosterSlot);
+
+            if (m_roster.IsJoined(slot: rosterSlot) &&
+                !string.Equals(a: location.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                routedLocation = location;
+                targetChannels = WorldChannelTable.Compile(channels: m_instances.ResolveRoutedDefinition(slot: rosterSlot).Channels);
+            }
+        }
+
         var channelName = args[0].ToString();
 
-        if (!m_channels.TryGetOrdinal(name: channelName, ordinal: out var ordinal)) {
+        if (!targetChannels.TryGetOrdinal(name: channelName, ordinal: out var ordinal)) {
             return CommandResult.Error(output: $"[player.press: unknown channel '{channelName}' — see world.affordances]");
         }
 
-        // Layout: <channel> [value] [holdSeconds] [player] — strictly positional and cumulative (mirroring the old
-        // lane grammar's own convention): a 2nd token is always <value>, a 3rd always <holdSeconds>; the player index
-        // can only be reached by supplying both, and always defaults to player 1 otherwise.
-        var (player, index, error) = ResolveTarget(args: in args, requiredCount: 3, verb: "player.press");
+        if (routedLocation is null) {
+            // Preserve the boot body's joined/active refusal and pending-seat semantics when no handoff occurred.
+            var (player, _, error) = ResolveTarget(args: in args, requiredCount: 3, verb: "player.press");
 
-        if (player is null) {
-            return CommandResult.Error(output: error!);
+            if (player is null) {
+                return CommandResult.Error(output: error!);
+            }
+
+            if (PendingTapeError(index: index, verb: "player.press") is { } pendingError) {
+                return pendingError;
+            }
         }
 
-        if (PendingTapeError(index: index, verb: "player.press") is { } pendingError) {
-            return pendingError;
-        }
-
-        var shape = m_channels.Shape(ordinal: ordinal);
+        var shape = targetChannels.Shape(ordinal: ordinal);
         var value = FixedQ4816.One;
 
         if (args.Count >= 2) {
@@ -1482,6 +1537,25 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             // and the engine backstop) and the one that labels which bound the result. NaN and non-positive values
             // are handled authoritatively server-side (PressHoldCapKind.Ignored).
             holdSeconds = authoredHoldSeconds;
+        }
+
+        if (routedLocation is { } route) {
+            route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.PressChannel(
+                Principal: context.ActingPrincipal(),
+                EntityIndex: route.EntityIndex,
+                ChannelOrdinal: ordinal,
+                Value: value,
+                HoldSeconds: holdSeconds
+            ));
+
+            // Federation submission is intentionally transport-shaped: unlike the in-process boot link, its
+            // authoritative press outcome arrives through observation rather than as a synchronous population
+            // side effect. Echo the request (and let wire.errors expose refusal) without fabricating which cap won.
+            var routedDuration = (holdSeconds is { } routedSeconds)
+                ? $" for {routedSeconds:0.###}s"
+                : " for one host step";
+
+            return Echoed(args: in args, handler: $"[player.press: {channelName}={(double)value:0.###} p{index} via '{route.Endpoint.Identity}' body={route.EntityIndex}{routedDuration}]");
         }
 
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(Principal: context.ActingPrincipal(), EntityIndex: (index - 1), ChannelOrdinal: ordinal, Value: value, HoldSeconds: holdSeconds));
