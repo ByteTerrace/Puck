@@ -13,6 +13,32 @@ namespace Puck.World;
 /// <summary>A committed body's immutable address on one remote authority hop.</summary>
 internal readonly record struct WorldRemoteRouteCredential(int BodyIndex, string SourceAuthority, WorldMobilityIdentity Mobility);
 
+/// <summary>The forwarded-authority arm for a traveler whose current authority is reached over a socket.</summary>
+/// <param name="authority">The remote authority holding the traveler.</param>
+/// <param name="credential">The immutable route credential committed for it.</param>
+internal sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority, WorldRemoteRouteCredential credential) : IWorldForwardedAuthority {
+    /// <inheritdoc/>
+    public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
+        var held = credential;
+
+        return authority.TryForwardIntent(credential: in held, submission: in submission, reason: out reason);
+    }
+
+    /// <inheritdoc/>
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+        var held = credential;
+
+        return authority.TryForwardSubmission(credential: in held, payload: payload, result: out result, reason: out reason);
+    }
+
+    /// <inheritdoc/>
+    public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
+        var held = credential;
+
+        return authority.TryDescribeRoute(credential: in held, route: out route, reason: out reason);
+    }
+}
+
 /// <summary>The concerns that get their own ordered connection to one peer authority.</summary>
 internal enum WorldFederationLane : byte {
     /// <summary>Reserve, commit, abort, acknowledge, status.</summary>

@@ -83,7 +83,10 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
-    private readonly record struct ForwardedBody(WorldRemoteAuthority Authority, WorldRemoteRouteCredential Credential);
+    // The onward authority is transport-neutral: a colocated destination forwards through the same interface a
+    // socket one does, so a traveler that leaves over an in-process adjacency keeps the control its client already
+    // has. BodyIndex is the destination-local slot a forwarded payload is rebound to.
+    private readonly record struct ForwardedBody(IWorldForwardedAuthority Authority, int BodyIndex);
 
     /// <inheritdoc/>
     public void ResolveContinuations(WorldServer source) {
@@ -216,8 +219,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
-        var credential = route.Credential;
-        return route.Authority.TryForwardIntent(credential: in credential, submission: in submission, reason: out reason);
+        return route.Authority.TryForwardIntent(submission: in submission, reason: out reason);
     }
 
     /// <inheritdoc/>
@@ -228,11 +230,11 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
-        var credential = route.Credential;
-        var accepted = route.Authority.TryForwardSubmission(credential: in credential, payload: RebindForwardedPayload(payload: payload, bodyIndex: credential.BodyIndex), result: out result, reason: out reason);
+        var accepted = route.Authority.TryForwardSubmission(payload: RebindForwardedPayload(payload: payload, bodyIndex: route.BodyIndex), result: out result, reason: out reason);
         if (accepted && (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-            (result is WorldSubmissionResult.Session { Reply.Accepted: true })) {
-            _ = m_forwardedBodies.TryRemove(key: (source, mobility.Incarnation), value: out _);
+            (result is WorldSubmissionResult.Session { Reply.Accepted: true }) &&
+            m_forwardedBodies.TryRemove(key: (source, mobility.Incarnation), value: out var departed)) {
+            (departed.Authority as IDisposable)?.Dispose();
         }
         return accepted;
     }
@@ -245,8 +247,7 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
             return false;
         }
 
-        var credential = route.Credential;
-        return route.Authority.TryDescribeRoute(credential: in credential, route: out routeDescription, reason: out reason);
+        return route.Authority.TryDescribeRoute(route: out routeDescription, reason: out reason);
     }
 
     private static WorldSubmissionPayload RebindForwardedPayload(WorldSubmissionPayload payload, int bodyIndex) => payload switch {
@@ -2809,11 +2810,37 @@ internal sealed class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
         // no inverse operation to keep in sync with rollback.
         for (var memberOrdinal = 0; memberOrdinal < landed.Count; memberOrdinal++) {
             var member = landed[memberOrdinal];
-            if ((member.Peer is { Source.IsLive: true }) && (sourceInstance is not null) && (targetAuthority.Remote is { } forwardedAuthority)) {
-                if (!forwardedAuthority.TryRouteCredential(bodyIndex: member.TargetSlot, credential: out var credential)) {
-                    throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
+            // A live peer's control follows its body to whichever authority now owns it. The colocated arm is
+            // registered on the same rule as the socket arm: without it, an in-process onward crossing leaves the
+            // client's intents and submissions naming a body this source no longer has.
+            if ((member.Peer is { Source.IsLive: true }) && (sourceInstance is not null)) {
+                IWorldForwardedAuthority? onward = null;
+                var onwardSlot = member.TargetSlot;
+
+                if (targetAuthority.Remote is { } forwardedAuthority) {
+                    if (!forwardedAuthority.TryRouteCredential(bodyIndex: member.TargetSlot, credential: out var credential)) {
+                        throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
+                    }
+
+                    onward = new WorldRemoteForwardedAuthority(authority: forwardedAuthority, credential: credential);
+                    onwardSlot = credential.BodyIndex;
+                } else if (targetAuthority.Local is { } localTarget) {
+                    onward = new WorldLocalForwardedAuthority(
+                        server: localTarget.Server,
+                        endpoint: (localTarget.Server.Definition.Host.Authority ?? EndpointFor(instance: localTarget).Identity),
+                        sourceAuthority: $"{m_machineId:N}/{transfer.SourceInstance}",
+                        mobility: member.Mobility.Advance());
                 }
-                m_forwardedBodies[(sourceInstance.Server, member.Mobility.Incarnation)] = new ForwardedBody(Authority: forwardedAuthority, Credential: credential);
+
+                if (onward is not null) {
+                    var key = (sourceInstance.Server, member.Mobility.Incarnation);
+
+                    if (m_forwardedBodies.TryGetValue(key: key, value: out var superseded)) {
+                        (superseded.Authority as IDisposable)?.Dispose();
+                    }
+
+                    m_forwardedBodies[key] = new ForwardedBody(Authority: onward, BodyIndex: onwardSlot);
+                }
             }
 
             if (targetAuthority.Local is { } target) {
