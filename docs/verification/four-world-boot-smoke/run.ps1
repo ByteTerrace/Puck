@@ -199,7 +199,7 @@ world.save $savedPath
     # Ordered parse rather than four independent regexes: the four echoes differ only in their numbers, so matching
     # them positionally is what lets the before/after PAIR be compared. Fewer than four means the run did not get far
     # enough, which must fail rather than silently satisfy a subset.
-    $orbits = [regex]::Matches($stdout, '\[world\.view\.camera: player=(\d) arming=(\w+) yawReference=\w+ yawSensitivity=([-0-9.]+)')
+    $orbits = [regex]::Matches($stdout, '\[world\.view\.camera: player=(\d)[^\]]*? arming=(\w+) yawReference=\w+ yawSensitivity=([-0-9.]+)')
     Test-Assertion -Name "$id (stdout): four world.view.camera echoes (seat 1 and 2, before and after the live edit)" `
         -Matched ($orbits.Count -eq 4) -Require $true
 
