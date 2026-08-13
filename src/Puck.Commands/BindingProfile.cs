@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -53,10 +55,17 @@ public static class BindingProfile {
 
         var modifierIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var modifierIndexBySource = new Dictionary<string, int>(comparer: StringComparer.OrdinalIgnoreCase);
-        var modifiers = (document.Modifiers ?? []);
+        IReadOnlyList<BindingModifierDefinition> modifiers = (document.Modifiers ?? []).ToImmutableArray();
 
         for (var modifierIndex = 0; (modifierIndex < modifiers.Count); modifierIndex++) {
             var modifier = modifiers[modifierIndex];
+
+            if (modifier is null) {
+                throw new ArgumentException(
+                    message: $"Modifier {modifierIndex} is null.",
+                    paramName: nameof(document)
+                );
+            }
 
             if (string.IsNullOrEmpty(value: modifier.Id)) {
                 throw new ArgumentException(
@@ -72,9 +81,13 @@ public static class BindingProfile {
                 );
             }
 
-            if (modifier.ReleaseThreshold > modifier.PressThreshold) {
+            if (
+                !float.IsFinite(f: modifier.PressThreshold) ||
+                !float.IsFinite(f: modifier.ReleaseThreshold) ||
+                (modifier.ReleaseThreshold > modifier.PressThreshold)
+            ) {
                 throw new ArgumentException(
-                    message: $"Modifier \"{modifier.Id}\" has a release threshold above its press threshold.",
+                    message: $"Modifier \"{modifier.Id}\" must carry finite thresholds with release at or below press.",
                     paramName: nameof(document)
                 );
             }
@@ -396,7 +409,16 @@ public static class BindingProfile {
                 holdRows[holdIndex] = holdRow.RowIndex;
             }
 
-            var style = (wheel.Style ?? new BindingWheelStyleDefinition());
+            var authoredStyle = (wheel.Style ?? new BindingWheelStyleDefinition());
+            var style = authoredStyle with {
+                Excursion = authoredStyle.Excursion is { } authoredExcursion
+                    ? authoredExcursion with {
+                        Thresholds = authoredExcursion.Thresholds is null
+                            ? null!
+                            : authoredExcursion.Thresholds.ToImmutableArray(),
+                    }
+                    : null,
+            };
 
             if (
                 !Enum.IsDefined(value: style.PointerSelection) ||
@@ -525,9 +547,9 @@ public static class BindingProfile {
 
                 excursionView = new BindingWheelExcursionView(
                     DeadZoneSquared: (excursion.DeadZone * excursion.DeadZone),
-                    ThresholdsSquared: thresholdSquares,
-                    OutwardThresholdsSquared: outwardSquares,
-                    InwardThresholdsSquared: inwardSquares,
+                    ThresholdsSquared: thresholdSquares.ToImmutableArray(),
+                    OutwardThresholdsSquared: outwardSquares.ToImmutableArray(),
+                    InwardThresholdsSquared: inwardSquares.ToImmutableArray(),
                     SpatialTravelFraction: excursion.SpatialTravelFraction
                 );
             }
@@ -622,6 +644,16 @@ public static class BindingProfile {
                         );
                     }
 
+                    if (
+                        !Enum.IsDefined(value: sector.Mode) ||
+                        ((sector.ActivateOn is { } sectorPhase) && !Enum.IsDefined(value: sectorPhase))
+                    ) {
+                        throw new ArgumentException(
+                            message: $"{sectorPath} carries an invalid mode or activation phase.",
+                            paramName: nameof(document)
+                        );
+                    }
+
                     ValidateValue(
                         value: sector.Value,
                         path: sectorPath,
@@ -647,15 +679,15 @@ public static class BindingProfile {
                 ringViews[ringIndex] = new BindingWheelRingView(
                     PageId: ring.Id,
                     Label: ring.Label,
-                    Sectors: sectorViews
+                    Sectors: sectorViews.ToImmutableArray()
                 );
             }
 
             var view = new BindingWheelView(
                 Id: wheel.Id,
                 Group: wheel.Group,
-                HoldPageIds: holdPages,
-                Rings: ringViews,
+                HoldPageIds: holdPages.ToImmutableArray(),
+                Rings: ringViews.ToImmutableArray(),
                 Style: style,
                 Excursion: excursionView
             );
@@ -687,17 +719,17 @@ public static class BindingProfile {
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
-                    Chord: [.. rowChords[rowIndex].Select(selector: index => modifiers[index].Id)],
+                    Chord: rowChords[rowIndex].Select(selector: index => modifiers[index].Id).ToImmutableArray(),
                     Command: effectiveCommand,
                     HoldRelease: command.HoldRelease,
                     Icon: command.Icon,
                     Label: command.Label,
-                    Sources: [.. rowChords[rowIndex].Select(selector: index => modifiers[index].Source)]
+                    Sources: rowChords[rowIndex].Select(selector: index => modifiers[index].Source).ToImmutableArray()
                 ));
             }
 
             commandRowsByGroup[groupIndex] = [.. commandRows];
-            hintsByGroup[groupIndex] = hints;
+            hintsByGroup[groupIndex] = hints.ToImmutableArray();
         }
 
         var rows = new CompiledBindingProfile.CompiledChordRow[documentRows.Count];
@@ -721,7 +753,7 @@ public static class BindingProfile {
                     GroupIndex: groupIndex,
                     Table: table,
                     Activators: ((activators.Count > 0)
-                    ? activators
+                    ? activators.ToImmutableArray()
                     : null),
                     View: BuildView(
                         chord: [.. chord],
@@ -787,7 +819,21 @@ public static class BindingProfile {
         var seenActivatorKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
-            var entry = entries[entryIndex];
+            var entry = (entries[entryIndex]
+                ?? throw new ArgumentException(
+                message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
+                paramName: nameof(page)
+            ));
+
+            if (
+                !Enum.IsDefined(value: entry.Mode) ||
+                ((entry.ActivateOn is { } activateOn) && !Enum.IsDefined(value: activateOn))
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry {entryIndex} carries an invalid mode or activation phase.",
+                    paramName: nameof(page)
+                );
+            }
             var hasSource = !string.IsNullOrEmpty(value: entry.Source);
             var hasActivator = (entry.Activator is not null);
 
@@ -862,6 +908,13 @@ public static class BindingProfile {
             if (hasActivator) {
                 var activator = entry.Activator!;
 
+                if (!Enum.IsDefined(value: activator.Mode)) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} carries an invalid activator mode.",
+                        paramName: nameof(page)
+                    );
+                }
+
                 if (entry.ActivateOn is not null) {
                     throw new ArgumentException(
                         message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.",
@@ -935,7 +988,7 @@ public static class BindingProfile {
 
                 activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
                     ActivatorIndex: nextActivatorIndex++,
-                    Activator: activator,
+                    Activator: activator with { Sequence = activator.Sequence.ToImmutableArray(), },
                     Edge: new CompiledBindingProfile.CompiledCommandEdge(
                         Command: effectiveCommand,
                         // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
@@ -996,7 +1049,7 @@ public static class BindingProfile {
         var table = new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var (source, list) in grouped) {
-            table[source] = list;
+            table[source] = list.ToImmutableArray();
         }
 
         return (table, activators);
@@ -1042,12 +1095,12 @@ public static class BindingProfile {
         }
 
         return new BindingPageView(
-            Buttons: buttons,
-            CommandChords: hints,
+            Buttons: buttons.ToImmutableArray(),
+            CommandChords: hints.ToImmutableArray(),
             Group: group,
             Icon: page.Icon,
             Label: page.Label,
-            Modifiers: modifierViews,
+            Modifiers: modifierViews.ToImmutableArray(),
             PageId: page.Id
         );
     }

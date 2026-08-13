@@ -23,19 +23,18 @@ namespace Puck.Hosting;
 /// presents its framebuffer while the real machine stays the tick-locked authority and the only audio source. The layer
 /// advances the lookahead by the authority's own native-frame delta each submission (catching up to authority + N), so
 /// the lead stays exactly N under a mismatched host/native cadence and under fast-forward rather than drifting.</para>
-/// <para><b>Fast-forward.</b> A host-level cycle-budget multiplier the host reads and applies to its per-frame budget,
-/// with presentation frames skipped — never a timing hack inside the core. Clamped to <see cref="MaxFastForwardFactor"/>
-/// so the host multiply can never overflow its checked cycle-budget arithmetic and fault the worker loop.</para>
+/// <para><b>Fast-forward.</b> A host-level repeat count the host applies to each exact tick segment, with intermediate
+/// presentation frames skipped — never a timing hack inside the core. Clamped to <see cref="MaxFastForwardFactor"/> as
+/// a usability and workload bound.</para>
 /// </summary>
-/// <typeparam name="TInput">The core's held-input image, recorded per frame and replayed verbatim.</typeparam>
-public sealed class MachineTimeTravel<TInput> : IDisposable {
+/// <typeparam name="TInput">The unmanaged held-input image recorded per frame and replayed verbatim.</typeparam>
+public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unmanaged {
     /// <summary>The most frames the persistent lookahead is ever kept ahead — beyond this the predicted-input divergence
     /// makes the runahead frame a worse guess than the real frame.</summary>
     public const int MaxRunaheadFrames = 10;
 
     /// <summary>The largest supported fast-forward factor. A verb boundary rejects an over-cap factor cleanly; this layer
-    /// additionally clamps here so even a caller that skips its own bound cannot drive the host's checked cycle-budget
-    /// multiply to overflow (which would escape into the worker-loop catch and stop the queue).</summary>
+    /// additionally clamps here so callers cannot request an unbounded amount of emulation work per submission.</summary>
     public const int MaxFastForwardFactor = 32;
 
     private readonly ITimeTravelMachineCore<TInput> m_core;
@@ -90,8 +89,8 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     /// <summary>Gets whether the lookahead machine is live (runahead armed with a forked sibling).</summary>
     public bool RunaheadActive => ((m_runaheadFrames > 0) && (m_lookahead is not null));
 
-    /// <summary>Gets the fast-forward factor — the host-level per-frame cycle-budget multiplier (1 = realtime). The host
-    /// reads this and scales the budget it advances the core by; presentation frames are skipped.</summary>
+    /// <summary>Gets the fast-forward factor — the number of exact tick segments the host runs per submission
+    /// (1 = realtime). Intermediate presentation frames are skipped.</summary>
     public int FastForwardFactor => m_fastForward;
 
     // The newest live segment (valid only while m_segCount > 0).
@@ -112,9 +111,8 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     }
 
     /// <summary>Sets the fast-forward factor, clamped to <c>[1, <see cref="MaxFastForwardFactor"/>]</c>. A verb boundary
-    /// rejects an over-cap value cleanly before reaching here; this clamp is the defensive floor/ceiling that keeps the
-    /// host's checked per-frame multiply bounded regardless.</summary>
-    /// <param name="factor">The cycle-budget multiplier.</param>
+    /// rejects an over-cap value cleanly before reaching here; this clamp is the defensive workload bound.</summary>
+    /// <param name="factor">The exact-segment repeat count.</param>
     public void SetFastForward(int factor) =>
         m_fastForward = Math.Clamp(value: factor, min: 1, max: MaxFastForwardFactor);
 
@@ -144,7 +142,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
             // was pure waste; the keyframe capture below is the sole state serialization the ring consumes.
             var length = m_core.CaptureState(buffer: ref m_captureScratch);
 
-            EnsureScratch(size: length);
+            UpdateSnapshotLayout(size: length);
             StartSegment(length: length, cycle: cycle, nativeFrame: nativeFrame, hostAccumulator: hostAccumulator);
         } else {
             AppendDelta(cycle: cycle, nativeFrame: nativeFrame, input: in input, budget: budget, hostAccumulator: hostAccumulator);
@@ -192,14 +190,16 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
 
     // ---- Rewind -------------------------------------------------------------------------------------------------
 
-    /// <summary>Rewinds the authoritative machine backward by up to <paramref name="frames"/> native frames, clamped to
-    /// the oldest captured frame, by restoring the target frame's keyframe and replaying the intervening inputs, then
-    /// truncating the abandoned future so play resumes cleanly forward. A no-op when the ring is empty or disarmed.</summary>
+    /// <summary>Rewinds the authoritative machine by landing on the oldest captured instant in the requested native-frame
+    /// window. When the history has no instant in that window, lands on the nearest older instant instead. Restores the
+    /// target instant's keyframe, replays its intervening inputs, and truncates the abandoned future so play resumes
+    /// cleanly forward. A no-op when the ring is empty or disarmed.</summary>
     /// <param name="frames">The number of native frames to move backward.</param>
     /// <param name="hostAccumulator">Receives the host tick-to-cycle accumulator phase the landed frame was produced
     /// under — the caller restores its own accumulator to this atomically with the core so identical future ticks buy
     /// identical budgets. Left at 0 when nothing was rewound.</param>
-    /// <returns>The number of native frames actually rewound.</returns>
+    /// <returns>The number of native frames actually rewound, which may exceed <paramref name="frames"/> only when the
+    /// history has no captured instant inside the requested window.</returns>
     public int RewindBy(int frames, out ulong hostAccumulator) {
         hostAccumulator = 0UL;
 
@@ -235,22 +235,39 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
         return (int)Math.Max(val1: 0L, val2: (current - m_core.NativeFrameIndex));
     }
 
-    // Find the frame with the largest native-frame index not exceeding target; clamp to the oldest captured frame.
+    // Prefer the oldest captured instant in [target, current): this stays within the requested rewind window while moving
+    // as far back through it as the request permits. If no instant exists there (an instruction can cross more than one
+    // native-frame boundary), fall back to the nearest older instant so repeated RewindBy(1) calls still make progress.
     private void Locate(long target, out int slot, out int frameIndex) {
         slot = m_segHead;
         frameIndex = 0;
+        var current = m_core.NativeFrameIndex;
 
         for (var s = 0; (s < m_segCount); ++s) {
             var index = ((m_segHead + s) % m_capacity);
             var segment = m_segments[index];
 
-            if (segment.BaseNativeFrame <= target) {
+            if ((segment.BaseNativeFrame >= target) && (segment.BaseNativeFrame < current)) {
+                slot = index;
+                frameIndex = 0;
+
+                return;
+            }
+
+            if (segment.BaseNativeFrame < target) {
                 slot = index;
                 frameIndex = 0;
             }
 
             for (var i = 0; (i < segment.DeltaCount); ++i) {
-                if (segment.NativeFrame[i] <= target) {
+                if ((segment.NativeFrame[i] >= target) && (segment.NativeFrame[i] < current)) {
+                    slot = index;
+                    frameIndex = (i + 1);
+
+                    return;
+                }
+
+                if (segment.NativeFrame[i] < target) {
                     slot = index;
                     frameIndex = (i + 1);
                 }
@@ -304,6 +321,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
             // then the catch-up loop below re-advances it the configured N frames on the new prediction.
             var length = m_core.CaptureState(buffer: ref m_captureScratch);
 
+            UpdateSnapshotLayout(size: length);
             lookahead.RestoreState(buffer: m_captureScratch, length: length);
 
             m_lastPrediction = predicted;
@@ -428,9 +446,10 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
         }
     }
 
-    // Build (once) the segment ring sized so the whole ring stays within the memory budget. A keyframe span costs its
-    // keyframe length PLUS its once-allocated per-frame record arrays (input/budget/accumulator/cycle/native-frame); the
-    // ring never grows those after this, so budget / true-per-span-cost spans keep the retained footprint under budget.
+    // Build the segment ring for the current snapshot size so the whole ring stays within the memory budget. A keyframe
+    // span costs its keyframe length PLUS its once-allocated per-frame record arrays
+    // (input/budget/accumulator/cycle/native-frame); the ring never grows those after this, so budget /
+    // true-per-span-cost spans keep the retained footprint under budget.
     // A one-span ring is the documented degraded floor (it still rewinds within the most recent keyframe span); the ring
     // is never forced to two spans it cannot afford. A budget too small for even a single span is a configuration error,
     // rejected loudly rather than silently overrun.
@@ -461,11 +480,24 @@ public sealed class MachineTimeTravel<TInput> : IDisposable {
     // 8-byte lanes) plus the held-input image, each sized interval-1. Fixed per segment; allocated once in the ctor.
     private long PerFrameRecordBytes() =>
         ((long)(m_interval - 1) * (32L + Unsafe.SizeOf<TInput>()));
-    private void EnsureScratch(int size) {
+    private void UpdateSnapshotLayout(int size) {
+        if ((size < 0) || (size > m_captureScratch.Length)) {
+            throw new InvalidOperationException(
+                message: $"The core reported a {size} B state image for a {m_captureScratch.Length} B capture buffer."
+            );
+        }
+
         if (m_snapshotSize == size) {
             return;
         }
 
+        // CaptureState is allowed to grow its image. Capacity was computed from the previous image size, so retaining it
+        // would let larger recycled keyframe buffers exceed the configured ceiling. A size transition starts a fresh ring
+        // at the current instant and recomputes capacity from the new per-span cost.
+        m_segments = [];
+        m_capacity = 0;
+        m_segHead = 0;
+        m_segCount = 0;
         m_snapshotSize = size;
     }
 

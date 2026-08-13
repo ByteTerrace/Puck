@@ -42,4 +42,55 @@ public sealed class BindingVocabularyCheckTests {
         Assert.Contains(expectedSubstring: "activator[]", actualString: error);
         Assert.Contains(expectedSubstring: "names no registered command", actualString: error);
     }
+
+    [Fact]
+    public void ANullPageEntryIsRefusedNotThrown() {
+        var document = Document(entry: null!);
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: null,
+            sourceKind: null,
+            errors: errors
+        );
+
+        Assert.Contains(expectedSubstring: "entry 0 is null", actualString: Assert.Single(errors));
+    }
+
+    [Fact]
+    public void AValueLessActivatorDispatchesDigitalForKindValidation() {
+        var document = Document(entry: new BindingPageEntryDefinition(
+            Source: null,
+            Command: "axis.command",
+            Activator: new BindingActivatorDefinition(Sequence: ["key.a"])
+        ));
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Axis1D,
+                Routing: CommandRouting.Immediate,
+                Bindability: CommandBindability.Bindable
+            ),
+            sourceKind: static _ => CommandValueKind.Digital,
+            errors: errors
+        );
+
+        Assert.Contains(expectedSubstring: "sends digital", actualString: Assert.Single(errors));
+    }
+
+    private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
+        return new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "base", Entries: [entry])
+            )]
+        );
+    }
 }

@@ -7,7 +7,7 @@ namespace Puck.Hosting;
 /// tree, and a host may shadow it for a child subtree (e.g. handing a DirectX child a DirectX device). Held
 /// capabilities, by contrast, resolve from the primary only — they never flow through the inherited fallback.
 /// </summary>
-public sealed class ChainedHostContext : IHostContext {
+public sealed class ChainedHostContext : IHostContext, IHeldCapabilityLeaseSource {
     private readonly IHostContext m_fallback;
     private readonly IHostContext m_primary;
 
@@ -31,5 +31,15 @@ public sealed class ChainedHostContext : IHostContext {
     /// not propagate to a child unless this host explicitly re-grants it on the child's primary context.</remarks>
     public bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class {
         return m_primary.HoldsCapability(capability: out capability);
+    }
+
+    bool IHeldCapabilityLeaseSource.TryResolveHeldLease(Type capabilityType, out HeldCapabilityLease lease) {
+        if (m_primary is IHeldCapabilityLeaseSource source) {
+            return source.TryResolveHeldLease(capabilityType: capabilityType, lease: out lease);
+        }
+
+        lease = null!;
+
+        return false;
     }
 }

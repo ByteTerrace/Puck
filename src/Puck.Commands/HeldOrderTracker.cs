@@ -37,7 +37,8 @@ public sealed class HeldOrderTracker {
     /// <see cref="BindingModifierDefinition"/> declares, where every modifier may pick its own feel.</summary>
     /// <param name="pressThresholds">Each modifier's press threshold, by index.</param>
     /// <param name="releaseThresholds">Each modifier's release threshold, by index (same length as <paramref name="pressThresholds"/>).</param>
-    /// <exception cref="ArgumentException">The two threshold lists have different lengths.</exception>
+    /// <exception cref="ArgumentException">The two threshold lists have different lengths, or a threshold pair is
+    /// non-finite or has release above press.</exception>
     public HeldOrderTracker(IReadOnlyList<float> pressThresholds, IReadOnlyList<float> releaseThresholds) {
         ArgumentNullException.ThrowIfNull(argument: pressThresholds);
         ArgumentNullException.ThrowIfNull(argument: releaseThresholds);
@@ -47,6 +48,19 @@ public sealed class HeldOrderTracker {
                 message: "pressThresholds and releaseThresholds must be the same length.",
                 paramName: nameof(releaseThresholds)
             );
+        }
+
+        for (var index = 0; index < pressThresholds.Count; index++) {
+            if (
+                !float.IsFinite(f: pressThresholds[index]) ||
+                !float.IsFinite(f: releaseThresholds[index]) ||
+                (releaseThresholds[index] > pressThresholds[index])
+            ) {
+                throw new ArgumentException(
+                    message: $"Threshold pair {index} must be finite with release at or below press.",
+                    paramName: nameof(releaseThresholds)
+                );
+            }
         }
 
         m_latched = new bool[pressThresholds.Count];
@@ -116,6 +130,8 @@ public sealed class HeldOrderTracker {
     }
 
     private static float[] Fill(int count, float value) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
+
         var array = new float[count];
 
         Array.Fill(

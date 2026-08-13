@@ -39,7 +39,8 @@ public sealed class BindingSession {
     /// <summary>Initializes a new instance of the <see cref="BindingSession"/> class.</summary>
     /// <param name="plan">The plan to walk.</param>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The plan has no steps, requires fewer than one press, or its release threshold exceeds its press threshold.</exception>
+    /// <exception cref="ArgumentException">The plan has no steps, requires fewer than one press, or its thresholds
+    /// are non-finite or inverted.</exception>
     public BindingSession(BindingSessionPlan plan) {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -57,9 +58,13 @@ public sealed class BindingSession {
             );
         }
 
-        if (plan.ReleaseThreshold > plan.PressThreshold) {
+        if (
+            !float.IsFinite(f: plan.PressThreshold) ||
+            !float.IsFinite(f: plan.ReleaseThreshold) ||
+            (plan.ReleaseThreshold > plan.PressThreshold)
+        ) {
             throw new ArgumentException(
-                message: "the release threshold must not exceed the press threshold",
+                message: "the thresholds must be finite and release must not exceed press",
                 paramName: nameof(plan)
             );
         }

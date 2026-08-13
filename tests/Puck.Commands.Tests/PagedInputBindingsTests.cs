@@ -196,19 +196,181 @@ public sealed class PagedInputBindingsTests {
         Assert.Equal(expected: "base", actual: bindings.ViewFor(slot: 0).PageId);
     }
 
+    [Fact]
+    public void ReloadCancelsRouterHoldsAndDropsDeferredActivatorEdges() {
+        var bindings = Bindings(entries: [
+            new BindingPageEntryDefinition(Source: "key.hold", Command: ActionCommand),
+            new BindingPageEntryDefinition(
+                Source: null,
+                Command: ActionCommand,
+                Activator: new BindingActivatorDefinition(
+                    Sequence: ["key.tap"],
+                    Mode: BindingActivatorMode.Tapped
+                )
+            ),
+        ]);
+        var router = Router(
+            bindings: bindings,
+            definitions: [(ActionCommand, CommandValueKind.Digital)]
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.hold"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Press(source: "key.tap"));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        bindings.Reload(profile: Profile(entries: []));
+
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: ActionCommand));
+        var cancellation = Assert.Single(
+            Assert.Single(router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries,
+            predicate: static entry => entry.Phase == CommandPhase.Canceled
+        );
+
+        Assert.Equal(expected: "key.hold", actual: cancellation.Source);
+        Assert.Empty(collection: bindings.DrainScheduledEdges());
+    }
+
+    [Fact]
+    public async Task ViewForRemainsProfileCoherentDuringConcurrentReloads() {
+        var first = Profile(entries: [], pageId: "first");
+        var second = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [
+                new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "second", Entries: [])
+                ),
+                new BindingChordDefinition(
+                    Group: "menu",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "menu", Entries: [])
+                ),
+            ]
+        ));
+        var bindings = new PagedInputBindings(profile: second);
+
+        Assert.True(condition: bindings.SetActiveGroup(slot: 0, group: "menu"));
+
+        var reload = Task.Run(action: () => {
+            for (var index = 0; index < 50_000; index++) {
+                bindings.Reload(profile: ((index & 1) == 0) ? second : first);
+            }
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        var read = Task.Run(action: () => {
+            for (var index = 0; index < 50_000; index++) {
+                var pageId = bindings.ViewFor(slot: 0).PageId;
+
+                Assert.True(condition: pageId is "first" or "menu");
+            }
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        await Task.WhenAll(reload, read);
+    }
+
+    [Fact]
+    public void CompiledProfileDefensivelyOwnsAuthoredCollections() {
+        var modifiers = new List<BindingModifierDefinition> {
+            new(Id: "shift", Source: "key.shift"),
+        };
+        var sequence = new List<string> { "key.a", "key.b", };
+        var entries = new List<BindingPageEntryDefinition> {
+            new(Source: "key.action", Command: ActionCommand),
+            new(
+                Source: null,
+                Command: ActionCommand,
+                Activator: new BindingActivatorDefinition(Sequence: sequence)
+            ),
+        };
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: modifiers,
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "base", Entries: entries)
+            )]
+        ));
+
+        modifiers.Clear();
+        entries.Clear();
+        sequence.Clear();
+
+        var bindings = new PagedInputBindings(profile: profile);
+        var resolved = bindings.Resolve(slot: 0, source: "key.action");
+
+        Assert.Single(collection: profile.Modifiers);
+        Assert.Single(collection: resolved!);
+        Assert.Equal(expected: 2, actual: bindings.ViewFor(slot: 0).Buttons.Count);
+
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.a"));
+        Resolve(bindings: bindings, signal: InputSignal.Press(source: "key.b"));
+        Assert.Single(collection: bindings.DrainChordEdges(slot: 0).ToArray());
+    }
+
+    [Fact]
+    public void CompiledWheelDefensivelyOwnsNestedThresholdCollections() {
+        var thresholds = new List<float> { 0.5f, };
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "hold", Entries: [])
+            )],
+            Wheels: [new BindingWheelDefinition(
+                Id: "tools",
+                Group: "play",
+                HoldPages: ["hold"],
+                Rings: [
+                    Ring(id: "inner"),
+                    Ring(id: "outer"),
+                ],
+                Style: new BindingWheelStyleDefinition(
+                    RingSelection: BindingWheelRingSelectionMode.Excursion,
+                    Excursion: new BindingWheelExcursionDefinition(
+                        DeadZone: 0.1f,
+                        Thresholds: thresholds
+                    )
+                )
+            )]
+        ));
+
+        thresholds[0] = 0.9f;
+
+        var wheel = new PagedInputBindings(profile: profile).WheelFor(slot: 0)!;
+
+        Assert.Equal(expected: 0.5f, actual: Assert.Single(wheel.Style.Excursion!.Thresholds));
+        Assert.Equal(expected: 0.25f, actual: Assert.Single(wheel.Excursion!.ThresholdsSquared));
+    }
+
     private static PagedInputBindings Bindings(IReadOnlyList<BindingPageEntryDefinition> entries) {
-        return new PagedInputBindings(profile: BindingProfile.Compile(
+        return new PagedInputBindings(profile: Profile(entries: entries));
+    }
+
+    private static CompiledBindingProfile Profile(IReadOnlyList<BindingPageEntryDefinition> entries, string pageId = "base") {
+        return BindingProfile.Compile(
             document: new BindingProfileDocument(
                 Version: BindingProfileDocument.CurrentVersion,
                 Modifiers: [],
                 Chords: [new BindingChordDefinition(
                     Group: "play",
                     Chord: [],
-                    Page: new BindingPageDefinition(Id: "base", Entries: entries)
+                    Page: new BindingPageDefinition(Id: pageId, Entries: entries)
                 )]
             ),
             channelCommandName: static _ => ChannelCommand
-        ));
+        );
+    }
+
+    private static BindingPageDefinition Ring(string id) {
+        return new BindingPageDefinition(Id: id, Entries: [
+            new BindingPageEntryDefinition(Source: null, Command: ActionCommand),
+            new BindingPageEntryDefinition(Source: null, Command: ActionCommand),
+        ]);
     }
 
     private static void Resolve(PagedInputBindings bindings, InputSignal signal) {

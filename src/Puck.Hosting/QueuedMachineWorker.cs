@@ -36,6 +36,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     private readonly int m_audioCapacityFrames;
     private readonly string m_workerName;
     private readonly object m_frameLock = new();
+    private readonly object m_lifecycleLock = new();
     private readonly object m_uploadLock = new();
     private readonly object m_workLock = new();
     private readonly object m_audioLock = new();
@@ -175,32 +176,39 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// the previous core, stages the new core's first frame, and starts its worker thread.</summary>
     /// <param name="core">The booted core to run. The worker takes ownership and disposes it on the next
     /// <see cref="Load"/>/<see cref="Eject"/>/<see cref="Dispose"/>.</param>
+    /// <exception cref="ObjectDisposedException">The worker is disposed.</exception>
     public void Load(IQueuedMachineCore core) {
         ArgumentNullException.ThrowIfNull(argument: core);
 
-        DetachCore();
-        m_core = core;
-        m_timeTravel = new MachineTimeTravel<MachinePadState>(core: core, cyclesPerSecond: core.CyclesPerSecond);
-        m_cycleRemainder = 0UL;
+        lock (m_lifecycleLock) {
+            ObjectDisposedException.ThrowIf(condition: (0 != Volatile.Read(location: ref m_disposed)), instance: this);
 
-        lock (m_frameLock) {
-            m_motorLevel = 0f;
+            DetachCore();
+            m_core = core;
+            m_timeTravel = new MachineTimeTravel<MachinePadState>(core: core, cyclesPerSecond: core.CyclesPerSecond);
+            m_cycleRemainder = 0UL;
+
+            lock (m_frameLock) {
+                m_motorLevel = 0f;
+            }
+            core.ConfigureAudio(sampleRate: m_audioSampleRate);
+            ResetAudioRing();
+            StageMachineFrame(core: core);
+            StartWorker(core: core);
         }
-        core.ConfigureAudio(sampleRate: m_audioSampleRate);
-        ResetAudioRing();
-        StageMachineFrame(core: core);
-        StartWorker(core: core);
     }
 
     /// <summary>Detaches the core (draining accepted history and disposing it) and returns the framebuffer to black.</summary>
     public void Eject() {
-        if (m_core is null) {
-            return;
-        }
+        lock (m_lifecycleLock) {
+            if (m_core is null) {
+                return;
+            }
 
-        DetachCore();
-        StageBlackFrame();
-        ResetAudioRing();
+            DetachCore();
+            StageBlackFrame();
+            ResetAudioRing();
+        }
     }
 
     /// <summary>Advances the machine by one fixed-step tick budget holding <paramref name="input"/>, then stages a fresh
@@ -388,7 +396,9 @@ public sealed class QueuedMachineWorker : IDisposable {
             return;
         }
 
-        DetachCore();
+        lock (m_lifecycleLock) {
+            DetachCore();
+        }
 
         lock (m_uploadLock) {
             m_upload?.Dispose();
@@ -482,21 +492,26 @@ public sealed class QueuedMachineWorker : IDisposable {
                 switch (current.Kind) {
                     case WorkKind.Step:
                         var input = current.Input;
-                        var budget = checked((long)TakeCycleBudget(core: core, ticks: current.DeltaTicks));
+                        var factor = (m_timeTravel?.FastForwardFactor ?? 1);
 
-                        core.ApplyInput(input: in input);
-                        core.RunCycles(cycles: budget);
+                        // Fast-forward repeats the exact 1x tick segment rather than folding the factor into one large
+                        // RunCycles call. The accumulator carries across each sub-step, so every rewind record owns the
+                        // exact budget and phase that produced it while the framebuffer is still staged only once below.
+                        for (var i = 0; (i < factor); ++i) {
+                            var budget = checked((long)TakeCycleBudget(core: core, ticks: current.DeltaTicks));
+
+                            core.ApplyInput(input: in input);
+                            core.RunCycles(cycles: budget);
+                            m_timeTravel?.Record(input: in input, budget: budget, hostAccumulator: m_cycleRemainder);
+                        }
 
                         lock (m_frameLock) {
                             m_motorLevel = core.MotorLevel;
                         }
 
-                        // Time-travel is host state outside the emulation path: record the just-advanced frame into the
-                        // rewind ring (when armed) and keep the persistent lookahead ahead on the held input (when
-                        // runahead is armed). Both only READ the real machine, so its trajectory is untouched. A no-op
-                        // (single null check) while both features are off — the battery/steady-state path.
+                        // The persistent lookahead advances only after the authoritative sub-steps finish, so presentation
+                        // still exposes one final fast-forward frame while the real machine remains the sole audio source.
                         if (m_timeTravel is { } timeTravel) {
-                            timeTravel.Record(input: in input, budget: budget, hostAccumulator: m_cycleRemainder);
                             timeTravel.AdvanceLookahead(predicted: in input);
                         }
 
@@ -595,11 +610,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     // core's current rate. Carried on the worker thread so a rate that tracks emulated state (a clock-multiplier latch) is
     // read consistently with the cycles it gates.
     private ulong TakeCycleBudget(IQueuedMachineCore core, ulong ticks) {
-        // Fast-forward is a host-level multiplier on the per-frame cycle budget (never a timing hack inside the core): the
-        // machine advances FastForwardFactor frames of emulated time per submitted frame, and only the final frame is
-        // staged/published, so presentation frames are skipped. Read on the worker thread; mutated only via the queue.
-        var factor = (ulong)(m_timeTravel?.FastForwardFactor ?? 1);
-        var scaled = checked((((ticks * factor) * core.CyclesPerSecond) + m_cycleRemainder));
+        var scaled = checked(((ticks * core.CyclesPerSecond) + m_cycleRemainder));
 
         m_cycleRemainder = (scaled % EngineTicks.PerSecond);
 
@@ -941,10 +952,11 @@ public sealed class QueuedMachineWorker : IDisposable {
     public void SetRewindEnabled(bool enabled) =>
         _ = RunTimeTravel(op: TimeTravelOp.SetRewindEnabled, arg: (enabled ? 1 : 0));
 
-    /// <summary>Rewinds the machine backward by up to <paramref name="frames"/> native frames (marshaled onto the worker
-    /// thread).</summary>
+    /// <summary>Rewinds to the oldest captured instant inside the requested native-frame window, or the nearest older
+    /// instant when that window is empty (marshaled onto the worker thread).</summary>
     /// <param name="frames">The number of native frames to move backward.</param>
-    /// <returns>The number of native frames actually rewound.</returns>
+    /// <returns>The number of native frames actually rewound, which may exceed <paramref name="frames"/> only when the
+    /// history has no captured instant inside the requested window.</returns>
     public int RewindBy(int frames) =>
         RunTimeTravel(op: TimeTravelOp.RewindBy, arg: frames).IntResult;
 
@@ -954,7 +966,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         _ = RunTimeTravel(op: TimeTravelOp.SetRunahead, arg: frames);
 
     /// <summary>Sets the fast-forward factor (marshaled onto the worker thread).</summary>
-    /// <param name="factor">The cycle-budget multiplier (clamped to at least 1).</param>
+    /// <param name="factor">The exact-segment repeat count (clamped to at least 1).</param>
     public void SetFastForward(int factor) =>
         _ = RunTimeTravel(op: TimeTravelOp.SetFastForward, arg: factor);
 

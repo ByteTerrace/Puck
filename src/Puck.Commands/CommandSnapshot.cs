@@ -21,13 +21,20 @@ public readonly record struct CommandSnapshot {
     /// <summary>Initializes a new instance of the <see cref="CommandSnapshot"/> struct.</summary>
     /// <param name="tick">The fixed-step tick this snapshot is the input for.</param>
     /// <param name="lanes">The per-slot command lanes, ordered by <see cref="CommandLane.Slot"/>.</param>
-    internal CommandSnapshot(ulong tick, ImmutableArray<CommandLane> lanes) {
+    /// <param name="registry">The registry whose interned command-id namespace the lanes use.</param>
+    internal CommandSnapshot(ulong tick, ImmutableArray<CommandLane> lanes, CommandRegistry? registry = null) {
         Lanes = lanes;
+        Registry = registry;
         Tick = tick;
     }
 
     /// <summary>The per-slot command lanes, ordered by <see cref="CommandLane.Slot"/> for a deterministic layout.</summary>
     public ImmutableArray<CommandLane> Lanes { get; internal init; }
+
+    // The registry that minted the command-id namespace carried by Lanes. Internal so provenance is neither
+    // forgeable nor part of the public snapshot payload; ApplySnapshot uses reference identity to keep an id from
+    // one registry from being reinterpreted as a different command in another.
+    internal CommandRegistry? Registry { get; init; }
 
     /// <summary>The fixed-step tick this snapshot is the input for.</summary>
     public ulong Tick { get; internal init; }
@@ -41,6 +48,20 @@ public readonly record struct CommandSnapshot {
             tick: tick
         );
     }
+
+    /// <summary>Compares deterministic snapshot content. Registry provenance is an application guard, not payload.</summary>
+    public bool Equals(CommandSnapshot other) {
+        return (
+            (Tick == other.Tick) &&
+            Lanes.Equals(other: other.Lanes)
+        );
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(
+        Tick,
+        Lanes
+    );
 
     /// <summary>Finds the lane for a logical slot, if it has any active input this tick.</summary>
     /// <param name="slot">The logical player slot to look up.</param>

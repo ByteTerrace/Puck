@@ -29,7 +29,7 @@ namespace Puck.Commands;
 /// All state mutates on the router's single snapshot thread; only the published <see cref="BindingPageView"/>
 /// reference crosses threads (the render-side UI reads it via <see cref="ViewFor"/>).
 /// </remarks>
-public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
+public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInputBindingsReloadSource {
     // Requested group names by slot — kept OUTSIDE the slot states so a Reload (which drops every state) re-applies
     // each slot's mode to the new profile instead of silently falling back to the default group.
     private readonly ConcurrentDictionary<int, string> m_requestedGroups = new();
@@ -40,6 +40,13 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     private readonly List<(int Slot, BindingChordEdge Edge)> m_scheduledEdges = [];
     private bool m_scheduledEdgesPending;
     private volatile CompiledBindingProfile m_profile;
+
+    event Action IInputBindingsReloadSource.Reloading {
+        add => Reloading += value;
+        remove => Reloading -= value;
+    }
+
+    private event Action? Reloading;
 
     private sealed class SlotState {
         public required bool[] ArmedRows { get; init; }
@@ -219,13 +226,18 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     /// <param name="slot">The logical player slot.</param>
     /// <returns>The active page's precomputed view.</returns>
     public BindingPageView ViewFor(int slot) {
+        var profile = m_profile;
+
         return ((m_slots.TryGetValue(
             key: slot,
             value: out var state
+        ) && ReferenceEquals(
+            objA: state.Profile,
+            objB: profile
         ))
             ? state.View
-            : m_profile.ViewOf(rowIndex: m_profile.RestingRowOf(groupIndex: ResolveGroupIndex(
-            profile: m_profile,
+            : profile.ViewOf(rowIndex: profile.RestingRowOf(groupIndex: ResolveGroupIndex(
+            profile: profile,
             slot: slot
         ))));
     }
@@ -291,6 +303,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     public void Reload(CompiledBindingProfile profile) {
         ArgumentNullException.ThrowIfNull(profile);
 
+        Reloading?.Invoke();
+        m_scheduledEdges.Clear();
+        m_scheduledEdgesPending = false;
         m_profile = profile;
         m_slots.Clear();
     }

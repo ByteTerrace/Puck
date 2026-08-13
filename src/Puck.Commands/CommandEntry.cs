@@ -24,6 +24,8 @@ public readonly record struct CommandEntry {
     /// <param name="source">The provider-neutral physical source that produced this command; <see langword="null"/> for injected/synthesized input with no physical control behind it.</param>
     /// <param name="assignedSlot">Whether the physical signal that produced this entry created its device-to-slot assignment.</param>
     /// <param name="principal">The identity acting through this entry, as stamped by its ingress door.</param>
+    /// <param name="dispatchWhenMapInactive">Whether this entry releases router-owned state and therefore must pass
+    /// a map that closed after the matching press.</param>
     internal CommandEntry(
         ushort commandId,
         CommandValue value,
@@ -33,12 +35,14 @@ public readonly record struct CommandEntry {
         InputDeviceId device = default,
         string? source = null,
         bool assignedSlot = false,
-        CommandPrincipal principal = default
+        CommandPrincipal principal = default,
+        bool dispatchWhenMapInactive = false
     ) {
         AssignedSlot = assignedSlot;
         CommandId = commandId;
         Device = device;
         Dispatch = dispatch;
+        DispatchWhenMapInactive = dispatchWhenMapInactive;
         Phase = phase;
         Principal = principal;
         Source = source;
@@ -65,6 +69,9 @@ public readonly record struct CommandEntry {
     /// this <see langword="false"/>, while continuous analog routes re-dispatch; bindings that explicitly activate on
     /// release carry <see langword="true"/> on their completed edge.</summary>
     public bool Dispatch { get; internal init; }
+
+    // Not public binding data: only the router can assert that this edge unwinds ownership it previously created.
+    internal bool DispatchWhenMapInactive { get; init; }
 
     /// <summary>The edge this tick represents: <see cref="CommandPhase.Started"/> / <see cref="CommandPhase.Active"/>
     /// (held) / <see cref="CommandPhase.Completed"/>.</summary>

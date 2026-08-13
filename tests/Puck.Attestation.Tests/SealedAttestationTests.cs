@@ -40,12 +40,13 @@ public sealed class SealedAttestationTests {
     }
 
     [Fact]
-    public void BindingAttestationKnownAnswer_IndependentSealedAttestationOpensExactly() {
-        const string SealedAttestationBase64 = "glkBsosBWCAeZLSaUYAZHCocFTx+EPR39ATppL+x1+q5xyf8Rhdq+Hghd2ViLmZ1bmN0aW9uczppbnRlcmNoYW5nZS1zdWJqZWN0cWVjZHNhLXAyNTYtc2hhMjU2eBtjYXJyaWFnZS5jcm9zcy1jaGVjay5zZWFsZWQaan0CkhpqpJ2icXdvcmxkOmludGVyY2hhbmdl9gNZARuIWCA3O22jicb/s7iJOH+lQbRwegSaheqKFpgfs/QFeK97VfZ4H2VjZGgtcDI1Ni1oa2RmLXNoYTI1Ni1hZXMyNTZnY21YIDc7baOJxv+zuIk4f6VBtHB6BJqF6ooWmB+z9AV4r3tVWFswWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQxo4M6SFz87nFc/5UscQupi/bVb6SruO6QdIO+zUunups4Fwkad47MS1Yt2xxB1BJjuog9wz39H1hYKnl1VybqTNmP5UpuNB6CUyppYVCTwOZ+mYDz9lcxyFEB46P/WDfMdH5459UXohQ1c6SmL4Y2DLcVzzw7BYbDgxmAMj3DeILTvQbLZt39SdmOTSLwlilwcEnlsbd3WEBwIVNxdaB504veT8gRT1ajnJvKDjJte032xEdKapwvdYigegv842AIVNXHmIWGQ829Hysc+2khHSil/dmP4u6u";
+    public void SealedPayloadKnownAnswer_NewAttestationLabelsOpenExactly() {
+        const string HeaderBase64 = "iQFYIB5ktJpRgBkcKhwVPH4Q9Hf0BOmkv7HX6rnHJ/xGF2r4eCF3ZWIuZnVuY3Rpb25zOmludGVyY2hhbmdlLXN1YmplY3RxZWNkc2EtcDI1Ni1zaGEyNTZ4HmF0dGVzdGF0aW9uLmNyb3NzLWNoZWNrLnNlYWxlZBpqfQKSGmqknaJxd29ybGQ6aW50ZXJjaGFuZ2X2";
+        const string SealedPayloadBase64 = "iFggNztto4nG/7O4iTh/pUG0cHoEmoXqihaYH7P0BXive1X2eB9lY2RoLXAyNTYtaGtkZi1zaGEyNTYtYWVzMjU2Z2NtWCA3O22jicb/s7iJOH+lQbRwegSaheqKFpgfs/QFeK97VVhbMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/dPlM45DvoX4/Y5IJEHX5AcCY5oFw579HoIfhsEMHR9cSZnU54iPNanNgJ7VweDAVkiF5Vt7WGWoqDEpEDHSwkz2kYugtZxBetQYcadQpblhzBaOfazLkft6sOaPDlg7eMZV2ACrVjbXeUNM4/qX5nncuMNZ/YxSSDrHOxrCO6ECN4RBJLTAKxZH4Dfm9HeDEdcjTTig3N3wjL8=";
         const string RecipientPrivateKeyBase64 = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/aB8cus5B1vOFFpOmvz23Hp/X5p2pN/OT9i8uQ5zbgihRANCAAQxuZWmDSc5hgEQloPvOVe1IU0tVD+YrLGEkh/TJfo1RQIb08YRGr+rt4XI5ivUkULJM1HaECoqu7UXGrgcgBOL";
         var codec = new CborAttestationCodec();
-        var attestation = codec.DecodeAttestation(wire: Convert.FromBase64String(s: SealedAttestationBase64));
-        var payload = codec.DecodeSealedPayload(bytes: attestation.PayloadBytes.Span);
+        var headerBytes = Convert.FromBase64String(s: HeaderBase64);
+        var payload = codec.DecodeSealedPayload(bytes: Convert.FromBase64String(s: SealedPayloadBase64));
 
         using var recipientKey = ECDiffieHellman.Create();
 
@@ -57,11 +58,11 @@ public sealed class SealedAttestationTests {
         var plaintext = SealedAttestation.Unseal(
             recipientPrivateKey: recipientKey,
             payload: payload,
-            associatedData: codec.EncodeHeader(header: attestation.Header)
+            associatedData: headerBytes
         );
 
         Assert.Equal(
-            expected: "sealed by BindingCarriage under puck.carriage.sealed.v1",
+            expected: "sealed by Puck.Attestation under puck.attestation.sealed.v1",
             actual: Encoding.UTF8.GetString(bytes: plaintext)
         );
     }

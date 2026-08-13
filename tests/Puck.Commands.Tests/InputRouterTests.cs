@@ -138,6 +138,66 @@ public sealed class InputRouterTests {
         Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
     }
 
+    [Fact]
+    public void ScaledControlsKeepIndependentChannelOwnershipAndCancellationSources() {
+        const string channelCommand = "test.channel";
+        var registry = new CommandRegistry(modules: [new AxisModule(channelCommand)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(new CommandBinding(
+                Command: channelCommand,
+                ChannelScale: 1f
+            )),
+            principalResolver: new ConsolePrincipal()
+        );
+        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Press(source: "key.up", deviceId: device));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Release(source: "key.up", deviceId: device));
+        _ = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
+
+        Assert.True(condition: router.IsCommandHeld(slot: 0, command: channelCommand));
+
+        router.ReleaseHeld();
+        var cancellation = Assert.Single(
+            Assert.Single(router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes).Entries,
+            predicate: static entry => entry.Phase == CommandPhase.Canceled
+        );
+
+        Assert.Equal(expected: "key.w", actual: cancellation.Source);
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: channelCommand));
+    }
+
+    [Fact]
+    public void DeactivatingAMapCannotSwallowTheReleaseOfAnExistingHold() {
+        var phases = new List<CommandPhase>();
+        var registry = new CommandRegistry(modules: [new MappedModule(phases: phases)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(new CommandBinding(
+                Command: "mapped.hold",
+                ChannelScale: 1f
+            )),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.ActivateMap(map: "play");
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        var press = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in press);
+
+        registry.DeactivateMap(map: "play");
+        router.Capture(signal: InputSignal.Release(source: "key.a"));
+        var release = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in release);
+
+        Assert.Equal(expected: [CommandPhase.Started, CommandPhase.Completed], actual: phases);
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: "mapped.hold"));
+    }
+
     private static InputRouter Router(out CommandRegistry registry) {
         registry = new CommandRegistry(modules: [new DigitalModule(Command)]);
 
@@ -178,6 +238,35 @@ public sealed class InputRouterTests {
                 valueKind: CommandValueKind.Digital,
                 handler: static _ => CommandResult.None,
                 bindability: CommandBindability.Bindable
+            );
+        }
+    }
+
+    private sealed class AxisModule(string command) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: command,
+                description: "Axis held probe.",
+                valueKind: CommandValueKind.Axis1D,
+                handler: static _ => CommandResult.None,
+                bindability: CommandBindability.Bindable
+            );
+        }
+    }
+
+    private sealed class MappedModule(List<CommandPhase> phases) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: "mapped.hold",
+                description: "Map release probe.",
+                valueKind: CommandValueKind.Axis1D,
+                handler: context => {
+                    phases.Add(item: context.Phase);
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable,
+                map: "play"
             );
         }
     }

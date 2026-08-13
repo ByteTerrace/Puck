@@ -53,13 +53,11 @@ public sealed class CommandRegistry {
     // the verb token never materializes as a string. StringComparer.Ordinal supplies the IAlternateEqualityComparer that
     // makes this legal; built once, reused every dispatch.
     private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_fastPathAlt;
-    // The Digital impulse every fast-path verb carries (a WithWireArgs command is always Digital), hoisted to
-    // a constant so a fast-path dispatch neither recomputes it nor rebuilds the CommandContext around it.
+    // The Digital impulse most fast-path verbs carry, hoisted so those contexts do not recompute it.
     private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
-    // The ONE reused context for every fast-path dispatch: Parse/Phase/Registry are constant on this path and Value is
-    // always DigitalImpulse, so a single immutable instance serves every wire-native and trailing-args fast dispatch —
-    // no per-line context construction. (CommandContext is a readonly record struct, so reusing it is safe.)
-    private readonly CommandContext m_fastContext;
+    // One immutable, reused context per CommandValueKind. WithWireArgs permits non-digital binding values, and the
+    // fast path must expose the same declared kind as the full System.CommandLine fallback without per-line work.
+    private readonly CommandContext[] m_fastContexts;
     // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
     // quiet`) drops the SUCCESS acks of wire-native verbs, so a flood of accepted commands costs no echo bytes. Errors
     // and answer-bearing verbs (anything not AcknowledgementOnly) are never suppressed. Toggled by the built-in `wire.ack` verb.
@@ -97,6 +95,7 @@ public sealed class CommandRegistry {
     /// <summary>The cap on whitespace-delimited tokens the fast path handles from a <see langword="stackalloc"/> buffer;
     /// a line with more falls through to the full parse. Far above any real console verb's token count.</summary>
     private const int MaxFastPathTokens = 16;
+    private const int MaxCommandCount = ushort.MaxValue + 1;
     // The attributed owner name for the registry's own built-in command names (help, wire.ack, wire.errors) in the
     // ClaimName ledger — so a colliding module's error message names the true owner rather than an empty module list.
     private const string BuiltInOwnerName = "CommandRegistry";
@@ -140,15 +139,31 @@ public sealed class CommandRegistry {
             claimedBy: claimedBy
         );
 
+        var commandCount = 0;
+
         foreach (var module in modules) {
             var moduleName = module.GetType().Name;
 
             foreach (var definition in module.GetCommands()) {
+                if (commandCount == MaxCommandCount) {
+                    throw new InvalidOperationException(message: $"A command registry supports at most {MaxCommandCount} distinct commands because snapshot command ids are 16-bit.");
+                }
+
+                commandCount++;
+
                 // The loud-completeness gate for the bindability axis: a registration that declared nothing would
                 // otherwise land on whichever member sits at 0, silently deciding whether an authority verb is
                 // reachable from a binding page. Refuse it BY NAME instead — this is a composition-root error.
                 if (definition.Bindability == CommandBindability.Unspecified) {
                     throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares no bindability. Every registration must pass CommandBindability.Bindable or CommandBindability.Unbindable.");
+                }
+
+                if (
+                    !Enum.IsDefined(value: definition.Bindability) ||
+                    !Enum.IsDefined(value: definition.Routing) ||
+                    !Enum.IsDefined(value: definition.ValueKind)
+                ) {
+                    throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {moduleName}) declares an invalid bindability, routing, or value kind.");
                 }
 
                 m_root.Subcommands.Add(item: definition.TextCommand);
@@ -230,14 +245,19 @@ public sealed class CommandRegistry {
         m_fastPath = fastPath.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         m_fastPathAlt = m_fastPath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
-        // The fast path is the TEXT door, so its one reused context is stamped Console like every other text dispatch.
-        m_fastContext = new CommandContext(
-            parse: null,
-            phase: CommandPhase.Completed,
-            principal: CommandPrincipal.Console,
-            registry: this,
-            value: DigitalImpulse
-        );
+        // The fast path is the TEXT door, so every reused kind-specific context is stamped Console like every other
+        // text dispatch. Enum validation above makes the direct indexed lookup safe.
+        m_fastContexts = new CommandContext[Enum.GetValues<CommandValueKind>().Length];
+
+        foreach (var kind in Enum.GetValues<CommandValueKind>()) {
+            m_fastContexts[(int)kind] = new CommandContext(
+                parse: null,
+                phase: CommandPhase.Completed,
+                principal: CommandPrincipal.Console,
+                registry: this,
+                value: ImpulseValue(kind: kind)
+            );
+        }
 
         m_metadata = m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
@@ -322,10 +342,9 @@ public sealed class CommandRegistry {
     /// <returns>The command's canonical name.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is not a valid interned id.</exception>
     public string GetName(ushort id) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: id,
-            other: (ushort)m_nameById.Length
-        );
+        if ((int)id >= m_nameById.Length) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(id));
+        }
 
         return m_nameById[id];
     }
@@ -567,13 +586,28 @@ public sealed class CommandRegistry {
     /// mixer built. Narrowing this method instead would leave the forgeable value type in a caller's hands.</para>
     /// </summary>
     /// <param name="snapshot">The tick's input snapshot to apply.</param>
+    /// <exception cref="ArgumentException"><paramref name="snapshot"/> was produced for a different registry.</exception>
     public void ApplySnapshot(in CommandSnapshot snapshot) {
         if (snapshot.Lanes.IsDefaultOrEmpty) {
             return;
         }
 
+        if (!ReferenceEquals(
+            objA: snapshot.Registry,
+            objB: this
+        )) {
+            throw new ArgumentException(
+                message: "The snapshot was produced for a different command registry.",
+                paramName: nameof(snapshot)
+            );
+        }
+
         foreach (var lane in snapshot.Lanes) {
             foreach (var entry in lane.Entries) {
+                if ((int)entry.CommandId >= m_nameById.Length) {
+                    continue;
+                }
+
                 var name = m_nameById[entry.CommandId];
 
                 // A submitted text entry owns a FIFO-barrier count. Always route it through the completion helper first:
@@ -603,7 +637,10 @@ public sealed class CommandRegistry {
                     continue;
                 }
 
-                if (!m_activeMaps.Contains(item: definition.Map)) {
+                if (
+                    !m_activeMaps.Contains(item: definition.Map) &&
+                    !entry.DispatchWhenMapInactive
+                ) {
                     continue;
                 }
 
@@ -788,11 +825,11 @@ public sealed class CommandRegistry {
         //
         // ZERO-COPY: the line is tokenized into a stackalloc Span<Range> (Tokenize reproduces
         // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
-        // the frozen alternate lookup (so the verb token never materializes), and the reused m_fastContext is handed to
+        // the frozen alternate lookup (so the verb token never materializes), and the reused kind-specific context is handed to
         // the handler, which receives a zero-copy WireArgs over the trailing token ranges — no substrings, no argument
-        // array, nothing heap-allocated by the dispatch itself. The context's Parse is null: no fast-path handler reads
-        // context.Parse/Value/Phase/DeviceId (they read only their args) — a Verb like the movement keys does, but a
-        // Verb never enters this path.
+        // array, nothing heap-allocated by the dispatch itself. The context's Parse is null; Value is the command's
+        // declared-kind impulse so the few wire-native verbs that also serve value-sensitive bindings observe the
+        // same kind on this path and the full parser fallback.
         if (
             (line.IndexOf(value: '"') < 0) &&
             (line.IndexOf(value: '@') < 0)
@@ -815,7 +852,7 @@ public sealed class CommandRegistry {
                 // suppression itself is SuppressAckIfQuiet's, so the rule stays defined in exactly one place.
                 var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
                 var result = fast.WireArgsHandler!(
-                    arg1: m_fastContext,
+                    arg1: m_fastContexts[(int)fast.ValueKind],
                     arg2: new WireArgs(
                         line: line,
                         ranges: argRanges,

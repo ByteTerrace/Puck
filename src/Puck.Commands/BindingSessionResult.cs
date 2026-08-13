@@ -53,7 +53,7 @@ public sealed record BindingSessionResult(
             );
         }
 
-        var captureByCommand = new Dictionary<string, BindingSessionCapture>(comparer: StringComparer.Ordinal);
+        var captureByCommand = new Dictionary<string, BindingSessionCapture>(comparer: StringComparer.OrdinalIgnoreCase);
         var capturedSources = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var capture in Captures) {
@@ -79,7 +79,7 @@ public sealed record BindingSessionResult(
             }
 
             var entries = new List<BindingPageEntryDefinition>(capacity: page.Entries.Count);
-            var appliedCommands = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var appliedCommands = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
             foreach (var entry in page.Entries) {
                 var effectiveCommand = ((entry.Channel is { } channel)

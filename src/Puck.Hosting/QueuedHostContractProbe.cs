@@ -368,6 +368,18 @@ public static class QueuedHostContractProbe {
             return rewind.Value;
         }
 
+        var fastForwardSubsteps = VerifyFastForwardSubsteps(withContent: withContent, observe: observe, budget: budget);
+
+        if (fastForwardSubsteps is not null) {
+            return fastForwardSubsteps.Value;
+        }
+
+        var landingPreference = VerifyRewindLandingPreference();
+
+        if (landingPreference is not null) {
+            return landingPreference.Value;
+        }
+
         var runahead = VerifyRunaheadLead(withContent: withContent, observe: observe, budget: budget);
 
         if (runahead is not null) {
@@ -389,7 +401,7 @@ public static class QueuedHostContractProbe {
         var audio = VerifyRewindClearsAudio(withAudio: withAudio, budget: budget);
 
         return (audio ?? QueuedHostProbeResult.Pass(
-            detail: $"rewind lands the true past frame and restores accumulator phase (identical future ticks → identical state); runahead held its {RunaheadFrames}-frame lead over {LongHorizon} mismatched-cadence frames and under x{FastForwardFactor} fast-forward without perturbing the authority; over-cap fast-forward clamped to x{MachineTimeTravel<MachinePadState>.MaxFastForwardFactor} without faulting; a below-two-span budget retained one span (over-reported footprint) and a below-one-span budget was rejected; rewind cleared the abandoned-future audio"
+            detail: $"rewind lands the true past frame and restores accumulator phase (identical future ticks → identical state); x{FastForwardFactor} sub-steps matched the 1x trajectory and retained a one-native-frame rewind landing; younger-side lookup stayed inside the requested window; runahead held its {RunaheadFrames}-frame lead over {LongHorizon} mismatched-cadence frames and under x{FastForwardFactor} fast-forward without perturbing the authority; over-cap fast-forward clamped to x{MachineTimeTravel<MachinePadState>.MaxFastForwardFactor} without faulting; rewind capacity rebuilt under snapshot growth, a below-two-span budget retained one span, and a below-one-span budget was rejected; rewind cleared the abandoned-future audio"
         ));
     }
 
@@ -472,6 +484,68 @@ public static class QueuedHostContractProbe {
 
         return QueuedHostProbeResult.Fail(detail: "a rewound-then-replayed run never re-traced the original timeline — the restored accumulator phase or recorded input did not reproduce the recorded budgets");
     }
+    private static QueuedHostProbeResult? VerifyFastForwardSubsteps<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
+        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
+        using var accelerated = withContent();
+        using var baseline = withContent();
+
+        accelerated.SetRewindEnabled(enabled: true);
+        accelerated.SetFastForward(factor: FastForwardFactor);
+
+        for (var frame = 0; (frame < RewindDriveFrames); ++frame) {
+            var input = ScheduledInput(frame: frame);
+
+            _ = accelerated.Step(deltaTicks: budget, input: in input);
+
+            for (var repeat = 0; (repeat < FastForwardFactor); ++repeat) {
+                _ = baseline.Step(deltaTicks: budget, input: in input);
+            }
+
+            if (observe(accelerated) != observe(baseline)) {
+                return QueuedHostProbeResult.Fail(
+                    detail: $"x{FastForwardFactor} fast-forward diverged from {FastForwardFactor} ordered 1x segments at submission {frame}"
+                );
+            }
+        }
+
+        var rewound = accelerated.RewindBy(frames: 1);
+
+        if (rewound != 1) {
+            return QueuedHostProbeResult.Fail(
+                detail: $"x{FastForwardFactor} history rewound {rewound} native frames for RewindBy(1) instead of retaining a one-frame landing"
+            );
+        }
+
+        return ((accelerated.QueueFault is { } fault)
+            ? QueuedHostProbeResult.Fail(detail: $"the fast-forward sub-step host faulted: {fault}")
+            : null);
+    }
+    private static QueuedHostProbeResult? VerifyRewindLandingPreference() {
+        var core = new FixedStateCore(stateBytes: BudgetProbeStateBytes);
+
+        using var travel = new MachineTimeTravel<byte>(
+            core: core,
+            keyframeIntervalFrames: BudgetProbeInterval,
+            memoryBudgetBytes: (BudgetProbeStateBytes * 4L)
+        );
+        var input = (byte)0;
+
+        travel.SetRewindEnabled(enabled: true);
+        core.Advance(frames: 4L);
+        travel.Record(input: in input, budget: 4L, hostAccumulator: 0UL);
+        core.Advance(frames: 2L);
+        travel.Record(input: in input, budget: 2L, hostAccumulator: 0UL);
+        core.Advance(frames: 2L);
+        travel.Record(input: in input, budget: 2L, hostAccumulator: 0UL);
+
+        var rewound = travel.RewindBy(frames: 3, hostAccumulator: out _);
+
+        return ((rewound == 2)
+            ? null
+            : QueuedHostProbeResult.Fail(
+                detail: $"younger-side lookup rewound {rewound} frames from captures at 4/6/8 for RewindBy(3), expected the in-window frame 6 (distance 2)"
+            ));
+    }
     private static QueuedHostProbeResult? VerifyRunaheadLead<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
         where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IFeedbackMachine {
         // Held input over a long horizon (60 Hz submissions vs the ~59.73 Hz native cadence, so the authority completes
@@ -538,8 +612,8 @@ public static class QueuedHostContractProbe {
         var input = MachinePadState.Neutral;
         var cap = MachineTimeTravel<MachinePadState>.MaxFastForwardFactor;
 
-        // An extreme factor must clamp to the cap (never overflow the checked per-frame multiply into the worker-loop
-        // catch that stops the queue): set int.MaxValue, then step and confirm the worker kept running (H-07).
+        // An extreme factor must clamp to the workload cap: set int.MaxValue, then step and confirm the worker kept
+        // running rather than attempting an unbounded number of exact sub-steps (H-07).
         host.SetFastForward(factor: int.MaxValue);
 
         if (host.TimeTravelStatus.FastForwardFactor != cap) {
@@ -558,10 +632,11 @@ public static class QueuedHostContractProbe {
     private const int BudgetProbeInterval = 8;
     private const int BudgetProbeStateBytes = 512;
 
-    // M-07: the rewind ring must honor its memory ceiling. Driven directly against a fixed-size fake core (so perSpan is
-    // known exactly), machine-neutral so both batteries prove it. Two documented behaviors: a budget below two spans but
-    // holding one retains exactly ONE span (never the old forced-minimum two) and over-reports its footprint against the
-    // truly retained bytes; a budget too small for even one span is rejected loudly at the first capture.
+    // M-07: the rewind ring must honor its memory ceiling. Driven directly against a controlled-size fake core (so
+    // perSpan is known exactly), machine-neutral so both batteries prove it. Three behaviors: a budget below two spans
+    // but holding one retains exactly ONE span (never the old forced-minimum two) and over-reports its footprint against
+    // the truly retained bytes; a budget too small for even one span is rejected loudly at the first capture; and a
+    // growing state image rebuilds capacity before larger keyframes can exceed the ceiling.
     private static QueuedHostProbeResult? VerifyRewindBudgetCeiling() {
         // TInput = byte, so PerFrameRecordBytes = (interval-1) * (32 + sizeof(byte)); perSpan = state image + that.
         var perFrameBytes = ((long)(BudgetProbeInterval - 1) * (32L + 1L));
@@ -608,6 +683,34 @@ public static class QueuedHostContractProbe {
                 impossibleRing.Record(input: in input, budget: 1L, hostAccumulator: 0UL);
             } catch (InvalidOperationException) {
                 rejected = true;
+            }
+        }
+
+        // (3) A core may grow its state image. The next keyframe must rebuild capacity for that image rather than retain
+        // the first image's larger slot count and let the recycled Base buffers exceed the configured ceiling.
+        var growthBudget = 2048L;
+        var growingCore = new FixedStateCore(stateBytes: 128);
+
+        using (var growingRing = new MachineTimeTravel<byte>(core: growingCore, keyframeIntervalFrames: BudgetProbeInterval, memoryBudgetBytes: growthBudget)) {
+            growingRing.SetRewindEnabled(enabled: true);
+
+            for (var frame = 0; (frame <= BudgetProbeInterval); ++frame) {
+                if (frame == BudgetProbeInterval) {
+                    growingCore.StateBytes = BudgetProbeStateBytes;
+                }
+
+                var input = (byte)frame;
+
+                growingCore.Advance();
+                growingRing.Record(input: in input, budget: 1L, hostAccumulator: 0UL);
+            }
+
+            var footprint = growingRing.GetStatus().ByteFootprint;
+
+            if (footprint > growthBudget) {
+                return QueuedHostProbeResult.Fail(
+                    detail: $"a state image growing from 128 B to {BudgetProbeStateBytes} B retained {footprint} B against a {growthBudget} B rewind ceiling"
+                );
             }
         }
 
@@ -889,32 +992,39 @@ public static class QueuedHostContractProbe {
         return null;
     }
 
-    // A minimal deterministic core with a fixed-size state image — just enough for the rewind budget-ceiling check to run
-    // the ring at a known per-span cost. Only Record's read surface is exercised (capture length, cycle, native frame);
-    // the restore/input/run/lookahead surface is never driven by that check.
+    // A minimal deterministic core with a controlled-size state image — enough for the rewind budget and sparse-landing
+    // checks to capture, restore, and replay exact frame distances. The lookahead surface is intentionally unused.
     private sealed class FixedStateCore(int stateBytes) : ITimeTravelMachineCore<byte> {
         private long m_cycle;
         private long m_frame;
+
+        public int StateBytes { get; set; } = stateBytes;
 
         public long CycleCount => m_cycle;
         public ReadOnlySpan<uint> Framebuffer => default;
         public long NativeFrameIndex => m_frame;
 
-        // Advance one frame so successive keyframes carry distinct cycle/native-frame stamps.
-        public void Advance() {
-            m_cycle += 100L;
-            ++m_frame;
+        // Advances a known native-frame distance so the host-layer probes can construct exact sparse histories.
+        public void Advance(long frames = 1L) {
+            m_cycle += frames;
+            m_frame += frames;
         }
         public int CaptureState(ref byte[] buffer) {
-            if (buffer.Length < stateBytes) {
-                buffer = new byte[stateBytes];
+            if (buffer.Length < StateBytes) {
+                buffer = new byte[StateBytes];
             }
 
-            return stateBytes;
+            BitConverter.TryWriteBytes(destination: buffer, value: m_cycle);
+            BitConverter.TryWriteBytes(destination: buffer.AsSpan(start: sizeof(long)), value: m_frame);
+
+            return StateBytes;
         }
-        public void RestoreState(byte[] buffer, int length) { }
+        public void RestoreState(byte[] buffer, int length) {
+            m_cycle = BitConverter.ToInt64(value: buffer);
+            m_frame = BitConverter.ToInt64(value: buffer, startIndex: sizeof(long));
+        }
         public void ApplyInput(in byte input) { }
-        public void RunCycles(long cycles) { }
+        public void RunCycles(long cycles) => Advance(frames: cycles);
         public ITimeTravelLookahead<byte> CreateLookahead() => throw new NotSupportedException();
     }
     private sealed class BlockingSurfaceUpload(bool blockFirstCall = true) : IGpuSurfaceUpload {

@@ -16,6 +16,7 @@ public interface IHostContext {
 
     /// <summary>Returns whether this context <em>holds</em> the given capability — one granted to a single
     /// holder and, unlike an inherited capability, not propagated to children: a host withholds it by default
-    /// and re-grants it explicitly. Yields the capability when held; returns <see langword="false"/> when not.</summary>
+    /// and re-grants it explicitly through <see cref="HeldCapabilityGrants.Grant{TCapability}"/>, preserving ancestor
+    /// revocation. Yields the capability when held; returns <see langword="false"/> when not.</summary>
     bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class;
 }

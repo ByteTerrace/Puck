@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -16,8 +18,8 @@ namespace Puck.Commands;
 public sealed class CompiledBindingProfile {
     private readonly int[][] m_commandRowsByGroup;
     private readonly Dictionary<string, int> m_groupIndexByName;
-    private readonly string[] m_groups;
-    private readonly IReadOnlyList<BindingModifierDefinition> m_modifiers;
+    private readonly ImmutableArray<string> m_groups;
+    private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
     private readonly Dictionary<string, int> m_modifierIndexBySource;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
@@ -78,9 +80,9 @@ public sealed class CompiledBindingProfile {
     ) {
         m_commandRowsByGroup = commandRowsByGroup;
         m_groupIndexByName = groupIndexByName;
-        m_groups = groups;
+        m_groups = ImmutableArray.CreateRange(items: groups);
         m_modifierIndexBySource = modifierIndexBySource;
-        m_modifiers = modifiers;
+        m_modifiers = ImmutableArray.CreateRange(items: modifiers);
         m_restingRowByGroup = restingRowByGroup;
         m_rows = rows;
         m_wheelViewByRow = wheelViewByRow;

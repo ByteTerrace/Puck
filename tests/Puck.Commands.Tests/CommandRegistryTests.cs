@@ -118,6 +118,47 @@ public sealed class CommandRegistryTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new UnspecifiedBindabilityModule()]));
     }
 
+    [Fact]
+    public void SnapshotCannotBeAppliedThroughAnotherRegistrysCommandIdNamespace() {
+        var sourceRegistry = new CommandRegistry(modules: [new SingleCommandModule(name: "harmless")]);
+        var invoked = false;
+        var targetRegistry = new CommandRegistry(modules: [new SingleCommandModule(
+            name: "privileged",
+            onInvoke: () => invoked = true
+        )]);
+        var router = new InputRouter(
+            registry: sourceRegistry,
+            bindings: new FixedBindings(command: "harmless"),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => targetRegistry.ApplySnapshot(snapshot: in snapshot));
+        Assert.False(condition: invoked);
+    }
+
+    [Fact]
+    public void WireNativeFastPathUsesTheCommandsDeclaredValueKind() {
+        var registry = new CommandRegistry(modules: [new KindProbeModule()]);
+
+        Assert.Equal(expected: "Axis1D", actual: registry.Submit(line: "kind").Output);
+        Assert.Equal(expected: "Axis1D", actual: registry.Submit(line: "kind \"\"").Output);
+    }
+
+    [Fact]
+    public void MoreCommandsThanTheSnapshotIdSpaceCanRepresentAreRefused() {
+        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: ushort.MaxValue + 2)]));
+    }
+
+    [Fact]
+    public void TheFinalRepresentableCommandIdStillResolves() {
+        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: ushort.MaxValue + 1)]);
+
+        Assert.NotEmpty(registry.GetName(id: ushort.MaxValue));
+    }
+
     private sealed class CoreModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
@@ -181,6 +222,54 @@ public sealed class CommandRegistryTests {
 
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
+    }
+
+    private sealed class FixedBindings(string command) : IInputBindings {
+        private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command)];
+
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
+    }
+
+    private sealed class SingleCommandModule(string name, Action? onInvoke = null) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                name: name,
+                description: "Snapshot provenance probe.",
+                valueKind: CommandValueKind.Digital,
+                handler: _ => {
+                    onInvoke?.Invoke();
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Bindable
+            );
+        }
+    }
+
+    private sealed class KindProbeModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "kind",
+                description: "Reports the context value kind.",
+                handler: static (context, _) => new CommandResult(Output: context.Value.Kind.ToString()),
+                bindability: CommandBindability.Unbindable,
+                valueKind: CommandValueKind.Axis1D
+            );
+        }
+    }
+
+    private sealed class ManyCommandsModule(int count) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            for (var index = 0; index < count; index++) {
+                yield return CommandDefinition.Verb(
+                    name: $"command.{index}",
+                    description: "Capacity probe.",
+                    valueKind: CommandValueKind.Digital,
+                    handler: static _ => CommandResult.None,
+                    bindability: CommandBindability.Bindable
+                );
+            }
+        }
     }
 
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {

@@ -26,7 +26,10 @@ public readonly struct OsTimeCorrelator {
     /// <param name="osReference">The backend's OS timestamp (32-bit units) at the pin.</param>
     /// <param name="engineReference">The <see cref="InputClock.NowTicks"/> captured at the pin.</param>
     /// <param name="osFrequency">The OS counter's units per second (1000 for a millisecond counter).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="osFrequency"/> is zero.</exception>
     public static OsTimeCorrelator Pin(uint osReference, ulong engineReference, ulong osFrequency) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: osFrequency);
+
         return new OsTimeCorrelator(
             engineReference: engineReference,
             osFrequency: osFrequency,
@@ -37,7 +40,12 @@ public readonly struct OsTimeCorrelator {
     /// <summary>Converts an OS stamp to engine ticks, clamped to <c>[reference, ceiling]</c>.</summary>
     /// <param name="osStamp">The event's OS timestamp (same 32-bit base as the pin).</param>
     /// <param name="engineCeiling">The current <see cref="InputClock.NowTicks"/>; the result never exceeds it.</param>
+    /// <exception cref="InvalidOperationException">The correlator is the uninitialized default value.</exception>
     public ulong ToEngineTicks(uint osStamp, ulong engineCeiling) {
+        if (m_osFrequency == 0UL) {
+            throw new InvalidOperationException(message: "The OS time correlator must be created with OsTimeCorrelator.Pin before use.");
+        }
+
         var osDelta = (ulong)unchecked((osStamp - m_osReference));
 
         // floor(osDelta × PerSecond ÷ osFrequency), overflow-safe (split whole/fraction), exact.

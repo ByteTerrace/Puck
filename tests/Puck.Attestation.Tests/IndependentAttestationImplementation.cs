@@ -18,8 +18,8 @@ internal static class IndependentAttestationImplementation {
     internal const ulong KeyBindingPayloadKind = 2UL;
     internal const ulong SealedPayloadKind = 3UL;
 
-    private static readonly byte[] AeadLabel = "puck.carriage.sealed.aad.v1"u8.ToArray();
-    private static readonly byte[] HkdfLabel = "puck.carriage.sealed.v1"u8.ToArray();
+    private static readonly byte[] AeadLabel = "puck.attestation.sealed.aad.v1"u8.ToArray();
+    private static readonly byte[] HkdfLabel = "puck.attestation.sealed.v1"u8.ToArray();
 
     internal static IndependentId RootId(ReadOnlySpan<byte> subjectPublicKeyInfo) {
         var fingerprint = Fingerprint(bytes: subjectPublicKeyInfo);

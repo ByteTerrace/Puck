@@ -15,7 +15,7 @@ namespace Puck.Abstractions.Machines;
 /// lookahead until its own index reaches the authority's plus N, so the lead never drifts under a mismatched host/native
 /// cadence or fast-forward; it reads N+1 only in the instant an instruction's overshoot carries the boundary-reaching
 /// frame one past the target, self-correcting the next submission); 0 when runahead is off or not yet primed.</param>
-/// <param name="FastForwardFactor">The host-level cycle-budget multiplier (1 = realtime).</param>
+/// <param name="FastForwardFactor">The host-level exact-segment repeat count (1 = realtime).</param>
 public readonly record struct TimeTravelStatus(
     bool RewindEnabled,
     int DepthFrames,
@@ -33,8 +33,8 @@ public readonly record struct TimeTravelStatus(
 /// <see cref="IQueuedScreenMachine"/>'s and <see cref="IAudioMachine"/>'s optional-capability precedent. Rewind restores
 /// the nearest keyframe and deterministically replays recorded input to land on any frame in a bounded ring; runahead
 /// keeps one persistent lookahead fork advanced ahead of the authoritative machine on predicted input; fast-forward
-/// multiplies the per-frame cycle budget with presentation frames skipped — a host-level knob, never a timing hack
-/// inside the core. Every member is host-facing and single-producer: a machine that runs an internal worker marshals
+/// repeats each exact tick segment while skipping intermediate presentation frames — a host-level knob, never a timing
+/// hack inside the core. Every member is host-facing and single-producer: a machine that runs an internal worker marshals
 /// these onto it, so rewind/runahead never manipulate machine state cross-thread.
 /// </summary>
 public interface ITimeTravelMachine {
@@ -43,10 +43,12 @@ public interface ITimeTravelMachine {
     /// <param name="enabled">Whether to capture rewind history.</param>
     void SetRewindEnabled(bool enabled);
 
-    /// <summary>Rewinds the authoritative machine backward by up to <paramref name="frames"/> native frames, clamped to
-    /// the oldest captured frame, then resumes forward from there. A no-op when the ring is empty or disarmed.</summary>
+    /// <summary>Rewinds the authoritative machine to the oldest captured instant within the requested native-frame
+    /// window. When the history has no instant in that window, lands on the nearest older instant instead, then resumes
+    /// forward from there. A no-op when the ring is empty or disarmed.</summary>
     /// <param name="frames">The number of native frames to move backward.</param>
-    /// <returns>The number of native frames actually rewound (0 when nothing was captured).</returns>
+    /// <returns>The number of native frames actually rewound, which may exceed <paramref name="frames"/> only when the
+    /// history has no captured instant inside the requested window; 0 when nothing was captured.</returns>
     int RewindBy(int frames);
 
     /// <summary>Arms (or, with 0, disarms) runahead: a persistent lookahead fork kept <paramref name="frames"/> frames
@@ -55,9 +57,9 @@ public interface ITimeTravelMachine {
     /// <param name="frames">The number of frames to run ahead (clamped), or 0 to disarm.</param>
     void SetRunahead(int frames);
 
-    /// <summary>Sets the fast-forward factor — the per-presented-frame cycle-budget multiplier, clamped to at least 1.
-    /// A factor of N advances the machine N times faster in emulated time while presenting one frame per submit.</summary>
-    /// <param name="factor">The cycle-budget multiplier (1 = realtime).</param>
+    /// <summary>Sets the fast-forward factor — the number of exact tick segments run per submission, clamped to at least
+    /// 1. A factor of N advances the machine N times faster in emulated time while presenting one frame per submit.</summary>
+    /// <param name="factor">The exact-segment repeat count (1 = realtime).</param>
     void SetFastForward(int factor);
 
     /// <summary>Gets a one-instant read of the ring depth/footprint and the live runahead/fast-forward settings.</summary>

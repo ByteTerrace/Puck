@@ -4,7 +4,7 @@ namespace Puck.Hosting;
 /// held capabilities from a set of leases a host builds for its children. Held capabilities may be permanent
 /// (the origin holder) or granted revocably via <see cref="HeldCapabilityGrants"/> (a passed baton the
 /// grantor can force-reclaim). <see cref="Empty"/> publishes nothing.</summary>
-public sealed class HostContext : IHostContext {
+public sealed class HostContext : IHostContext, IHeldCapabilityLeaseSource {
     private static readonly IReadOnlyDictionary<Type, object> None = new Dictionary<Type, object>();
     private static readonly IReadOnlyDictionary<Type, HeldCapabilityLease> NoneHeld = new Dictionary<Type, HeldCapabilityLease>();
     private readonly IReadOnlyDictionary<Type, object> m_capabilities;
@@ -73,6 +73,24 @@ public sealed class HostContext : IHostContext {
         }
 
         capability = null!;
+
+        return false;
+    }
+
+    bool IHeldCapabilityLeaseSource.TryResolveHeldLease(Type capabilityType, out HeldCapabilityLease lease) {
+        if (
+            m_heldLeases.TryGetValue(
+                key: capabilityType,
+                value: out var resolved
+            ) &&
+            (resolved.Resolve() is not null)
+        ) {
+            lease = resolved;
+
+            return true;
+        }
+
+        lease = null!;
 
         return false;
     }

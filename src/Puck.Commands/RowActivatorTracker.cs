@@ -35,11 +35,25 @@ public sealed class RowActivatorTracker {
 
     /// <summary>Initializes a new instance of the <see cref="RowActivatorTracker"/> class.</summary>
     /// <param name="activator">The activator definition this tracker resolves.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="activator"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="activator"/> carries an invalid mode, sequence, or timeout.</exception>
     public RowActivatorTracker(BindingActivatorDefinition activator) {
         ArgumentNullException.ThrowIfNull(argument: activator);
 
+        if (
+            !Enum.IsDefined(value: activator.Mode) ||
+            (activator.Sequence is not { Count: > 0 }) ||
+            ((activator.Mode == BindingActivatorMode.Held) && (activator.TimeoutTicks is not null)) ||
+            ((activator.Mode == BindingActivatorMode.Tapped) && (activator.TimeoutTicks is <= 0))
+        ) {
+            throw new ArgumentException(
+                message: "The activator must declare a valid mode, a non-empty sequence, and a timeout valid for that mode.",
+                paramName: nameof(activator)
+            );
+        }
+
         m_mode = activator.Mode;
-        m_sequence = activator.Sequence;
+        m_sequence = [.. activator.Sequence];
         m_timeoutTicks = ((activator.TimeoutTicks is { } ticks)
             ? (ulong)ticks
             : null);

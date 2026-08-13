@@ -10,7 +10,7 @@ public sealed class CaptureOptions {
     /// <summary>Gets or sets the capture output cadence, in frames per second.</summary>
     public int FrameRate { get; set; } = 30;
     /// <summary>Gets or sets the rate frames arrive from the source, in frames per second; with
-    /// <see cref="FrameRate"/> it sets the keep-one-in-N frame step.</summary>
+    /// <see cref="FrameRate"/> it defines the exact rational capture cadence.</summary>
     public int SourceFrameRate { get; set; } = 60;
     /// <summary>Gets or sets the maximum number of frames to capture; zero means unbounded.</summary>
     public int MaxFrames { get; set; }

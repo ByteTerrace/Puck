@@ -95,6 +95,29 @@ public sealed class BindingSessionTests {
         Assert.Equal(expected: "pad.leftTrigger", actual: Assert.Single(plan.ReservedSources!));
     }
 
+    [Fact]
+    public void ResultMatchesCommandIdentityCaseInsensitively() {
+        var document = Document(entries: [new BindingPageEntryDefinition(
+            Source: "key.old",
+            Command: "jump"
+        )]);
+        var result = new BindingSessionResult(Captures: [new BindingSessionCapture(
+            Command: "JUMP",
+            Source: "key.new",
+            MatchedSuggestion: false
+        )]);
+
+        var rewritten = result.Apply(
+            document: document,
+            pageId: "base",
+            displaced: out _
+        );
+        var entry = Assert.Single(Assert.Single(rewritten.Chords).Page!.Entries);
+
+        Assert.Equal(expected: "jump", actual: entry.Command);
+        Assert.Equal(expected: "key.new", actual: entry.Source);
+    }
+
     private static (IReadOnlyList<BindingSessionEvent> Events, IReadOnlyList<BindingSessionCapture> Captures) RunProtocol() {
         var session = new BindingSession(plan: new BindingSessionPlan(
             Steps: [

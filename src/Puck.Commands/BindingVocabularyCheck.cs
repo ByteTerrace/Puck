@@ -62,7 +62,17 @@ public static class BindingVocabularyCheck {
             }
 
             if (row.Page is { } page) {
-                foreach (var entry in (page.Entries ?? [])) {
+                var entries = (page.Entries ?? []);
+
+                for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++) {
+                    var entry = entries[entryIndex];
+
+                    if (entry is null) {
+                        errors.Add(item: $"page \"{page.Id}\" entry {entryIndex} is null");
+
+                        continue;
+                    }
+
                     if (
                         (entry.Source is null) &&
                         (entry.Activator is null)
@@ -149,9 +159,14 @@ public static class BindingVocabularyCheck {
                         continue;
                     }
 
-                    var dispatched = (entry.Value?.Kind ?? ((entry.Source is { } sourceForKind)
+                    var dispatched = (entry.Value?.Kind ?? ((entry.Activator is not null)
+                        ? CompiledBindingProfile.PressValue(
+                        channelScale: null,
+                        explicitValue: null
+                    ).Kind
+                        : ((entry.Source is { } sourceForKind)
                         ? sourceKind?.Invoke(arg: sourceForKind)
-                        : null));
+                        : null)));
 
                     if (
                         (dispatched is { } kind) &&
@@ -230,6 +245,12 @@ public static class BindingVocabularyCheck {
         foreach (var wheel in (document.Wheels ?? [])) {
             foreach (var ring in (wheel?.Rings ?? [])) {
                 foreach (var sector in (ring?.Entries ?? [])) {
+                    if (sector is null) {
+                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" carries a null sector");
+
+                        continue;
+                    }
+
                     if (string.IsNullOrEmpty(value: sector.Command)) {
                         continue;
                     }

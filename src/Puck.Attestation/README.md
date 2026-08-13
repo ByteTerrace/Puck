@@ -896,15 +896,14 @@ construction MUST then use exactly these inputs:
 |---|---|
 | HKDF input keying material | the **raw** secret agreement — the shared point's X coordinate, exactly as the curve produces it, **not** hashed first |
 | HKDF salt | **absent** (zero-length; the all-zero default of RFC 5869) |
-| HKDF info | the ASCII bytes `puck.carriage.sealed.v1`, 23 bytes with no terminator, immediately followed by `recipientContext` |
+| HKDF info | the ASCII bytes `puck.attestation.sealed.v1`, 26 bytes with no terminator, immediately followed by `recipientContext` |
 | Output length | **32** bytes — the AES-256-GCM key |
 | AEAD tag length | **16** bytes. Wherever the AEAD construction takes a tag length — `AesGcm(key, tagSizeInBytes)` and its equivalents — 16 is what MUST be passed |
-| AEAD associated data | ASCII `puck.carriage.sealed.aad.v1` (27 bytes, no terminator), then the header-byte length as an unsigned 64-bit big-endian integer, then the header bytes, then `recipientContext` |
+| AEAD associated data | ASCII `puck.attestation.sealed.aad.v1` (30 bytes, no terminator), then the header-byte length as an unsigned 64-bit big-endian integer, then the header bytes, then `recipientContext` |
 
-Those two ASCII labels are v1 wire constants and deliberately retain their
-original spelling after the project and API became Puck.Attestation. Renaming
-either label would make existing ciphertext impossible to decrypt; a future
-label requires a new sealing protocol version.
+Those two ASCII labels are v1 wire constants. Changing either after release
+would make existing ciphertext impossible to decrypt and would require a new
+sealing protocol version.
 
 The AEAD tag-length row is derivable from §2's "tag: exactly 16 bytes" but is
 also stated as a construction input because cryptographic APIs commonly require

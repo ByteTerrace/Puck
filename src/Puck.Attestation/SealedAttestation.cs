@@ -30,10 +30,9 @@ public static class SealedAttestation {
     private const int DerivedKeyLength = 32;
     private const int NonceLength = 12;
     private const int TagLength = 16;
-    // These v1 domain-separation labels are wire constants. They retain their original spelling across the
-    // project/API rename so existing sealed payloads remain decryptable; changing either label requires a new
-    // sealing protocol version and new known-answer vectors.
-    private static readonly byte[] AeadContextLabel = "puck.carriage.sealed.aad.v1"u8.ToArray();
+    // These v1 domain-separation labels are wire constants. They use the package's release name so the
+    // protocol has one vocabulary from its first published version onward.
+    private static readonly byte[] AeadContextLabel = "puck.attestation.sealed.aad.v1"u8.ToArray();
 
     /// <summary>
     /// Imports exactly one agreement public key from SPKI bytes, refusing trailing data and anything that is
@@ -210,13 +209,13 @@ public static class SealedAttestation {
     }
 
     /// <summary>The fixed ASCII prefix of HKDF info. The codec-independent recipient-id context follows it, binding the derived key to the named sealing key.</summary>
-    private static readonly byte[] HkdfInfoLabel = "puck.carriage.sealed.v1"u8.ToArray();
+    private static readonly byte[] HkdfInfoLabel = "puck.attestation.sealed.v1"u8.ToArray();
 
     /// <summary>
     /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
     /// README.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
     /// unhashed) as HKDF input keying material, HKDF-SHA256 with an absent salt, the ASCII info-label prefix
-    /// <c>puck.carriage.sealed.v1</c> followed by recipient-id context, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
+    /// <c>puck.attestation.sealed.v1</c> followed by recipient-id context, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
     /// length — is a construction input to <see cref="AesGcm"/> rather than to the derivation, and lives at
     /// both call sites as <see cref="TagLength"/>.
     /// </summary>
