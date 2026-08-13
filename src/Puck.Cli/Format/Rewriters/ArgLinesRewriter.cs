@@ -73,7 +73,12 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
         || RewriteShaping.IsAnnotated(list: list.Arguments));
 
     // The indent this call's wrapped body hangs from: the enclosing statement's indent plus one level per
-    // ENCLOSING multi-argument call, since every such call is itself wrapped and pushes this one deeper.
+    // ENCLOSING multi-argument call (every such call is itself wrapped and pushes this one deeper), plus
+    // one level per enclosing ternary whose BRANCH holds this call — ternary-lines lays each branch out
+    // one level past its condition, so a call opening on a branch line hangs from that deeper line.
     private static int WrappedIndent(ArgumentListSyntax node) =>
-        RewriteShaping.StructuralIndent(node: node, addsLevel: static (ancestor, _) => (ancestor is ArgumentListSyntax { Arguments.Count: > 1 }));
+        RewriteShaping.StructuralIndent(
+            node: node,
+            addsLevel: static (ancestor, child) => ((ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
+                || ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child)))));
 }

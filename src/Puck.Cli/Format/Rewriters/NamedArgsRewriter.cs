@@ -7,11 +7,16 @@ namespace Puck.Cli.Format.Rewriters;
 // The named-argument normalizer (the `named-args` pass). SEMANTIC: it resolves each call's method symbol
 // to read parameter names, so it runs against a Compilation (NamedArgsPhase) rather than the syntactic
 // pipeline. Every real method/ctor call gets its arguments named (`name: value`) and sorted
-// alphabetically by parameter name — the house convention. Left positional (skipped) when there is no
-// resolvable method symbol (function-pointer / delegate invokes have none), an out/ref/in or
-// already-named argument, a `params` parameter, an omitted optional argument, a comment or #directive on
-// any argument or separator, or when the reorder would move a side-effecting argument (see
-// ExpressionSafety) — the cases where naming-and-reordering is unsafe or ambiguous.
+// alphabetically by parameter name — the house convention. A call written fully named is already past
+// the naming half and still gets the sort. Left as written (skipped) when there is no resolvable method
+// symbol (function-pointer / delegate invokes have none), a mix of named and positional arguments, a
+// `params` parameter, an omitted optional argument, a comment or #directive on any argument or
+// separator, or when the sort would move a side-effecting argument (see ExpressionSafety) — the cases
+// where naming-and-reordering is unsafe or ambiguous. An out/ref/in keyword rides with its argument
+// (named arguments allow it: `value: out x`). A call whose target has a [DynamicallyAccessedMembers]
+// parameter is named but NEVER sorted: ILLink's trim dataflow binds arguments to parameters by
+// POSITION even when they are named, so moving the annotated argument out of its declared slot turns
+// a clean build into IL2072 under IsAotCompatible.
 internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
     private readonly SemanticModel m_model;
 
@@ -52,10 +57,13 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
 
         var arguments = visitedList.Arguments;
         var parameters = method.Parameters;
+        var namedCount = arguments.Count(predicate: static argument => (argument.NameColon is not null));
 
+        // A partly named call is declined: naming its positional remainder needs the argument-to-
+        // parameter mapping the mix obscures. A FULLY named call is only sorted, never renamed.
         if ((arguments.Count != parameters.Length)
             || parameters.Any(predicate: static parameter => parameter.IsParams)
-            || arguments.Any(predicate: static argument => (argument.NameColon is not null))) {
+            || ((namedCount != 0) && (namedCount != arguments.Count))) {
             return null;
         }
 
@@ -66,12 +74,21 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
             return null;
         }
 
-        // Naming preserves written positions, but the alphabetical SORT moves them. When that move is
-        // real AND any argument is side-effecting, leave the call positional — C# evaluates arguments
-        // left-to-right, so reordering would change evaluation order.
-        var parameterNames = parameters.Select(selector: static parameter => parameter.Name);
+        // A target with a [DynamicallyAccessedMembers] parameter keeps its written argument order:
+        // ILLink's trim dataflow binds arguments positionally, named or not, so a sort would move the
+        // annotated argument out of its declared slot and fail the build with IL2072. Naming in place
+        // is still safe — the positions do not move.
+        var sortable = !parameters.Any(predicate: static parameter => HasTrimAnnotation(parameter: parameter));
 
-        if (!parameterNames.SequenceEqual(second: parameterNames.OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal))
+        // Naming preserves written positions, but the alphabetical SORT moves them. When that move is
+        // real AND any argument is side-effecting, leave the call as written — C# evaluates arguments
+        // left-to-right in WRITTEN order (named or not), so reordering would change evaluation order.
+        // The written name is the argument's own name colon when it has one (a fully named call may
+        // already sit in any order), else the parameter at its position.
+        var writtenNames = arguments.Select(selector: (argument, index) => (argument.NameColon?.Name.Identifier.ValueText ?? parameters[index].Name)).ToArray();
+
+        if (sortable
+            && !writtenNames.SequenceEqual(second: writtenNames.OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal))
             && arguments.Any(predicate: static argument => ExpressionSafety.HasSideEffect(expression: argument.Expression))) {
             return null;
         }
@@ -84,6 +101,15 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
 
         for (var index = 0; (index < arguments.Count); index++) {
             var argument = arguments[index];
+
+            // An already-named argument is carried as written — its name colon and expression are
+            // already in house shape; only its slot (and that slot's trivia) may move.
+            if (argument.NameColon is not null) {
+                entries[index] = (writtenNames[index], argument);
+
+                continue;
+            }
+
             var nameColon = SyntaxFactory
                 .NameColon(name: SyntaxFactory.IdentifierName(name: parameters[index].Name))
                 .WithColonToken(colonToken: SyntaxFactory.Token(kind: SyntaxKind.ColonToken).WithTrailingTrivia(trivia: SyntaxFactory.Space));
@@ -95,11 +121,19 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
             entries[index] = (parameters[index].Name, SyntaxFactory.Argument(nameColon: nameColon, refKindKeyword: refKind, expression: bareExpression));
         }
 
-        var ordered = entries
-            .OrderBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal)
-            .Select(selector: static entry => entry.Argument)
-            .ToArray();
+        var ordered = (sortable
+            ? entries
+                .OrderBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal)
+                .Select(selector: static entry => entry.Argument)
+                .ToArray()
+            : Array.ConvertAll(array: entries, converter: static entry => entry.Argument));
 
         return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(original: arguments, ordered: ordered));
     }
+
+    // True when the parameter carries System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute
+    // — the trim/AOT dataflow annotation that pins its argument to the declared position.
+    private static bool HasTrimAnnotation(IParameterSymbol parameter) => parameter.GetAttributes().Any(predicate: static attribute =>
+        ((attribute.AttributeClass is { Name: "DynamicallyAccessedMembersAttribute" } attributeClass)
+        && (attributeClass.ContainingNamespace.ToDisplayString() == "System.Diagnostics.CodeAnalysis")));
 }
