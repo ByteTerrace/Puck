@@ -13,7 +13,7 @@
         ],
         "globalMetadata": {
             "_appFaviconPath": "/favicon.ico",
-            "_appFooter": "Puck — Abstractions · Assets · Commands · Input · Maths · Text · Vulkan",
+            "_appFooter": "Puck — Abstractions · Assets · Attestation · Commands · Input · Maths · Text · Vulkan",
             "_appLogoPath": "/_theme/logo.png",
             "_appName": "Puck",
             "_appTitle": "Puck API Reference",
@@ -47,6 +47,7 @@
                     "files": [
                         "Puck.Abstractions/Puck.Abstractions.csproj",
                         "Puck.Assets/Puck.Assets.csproj",
+                        "Puck.Attestation/Puck.Attestation.csproj",
                         "Puck.Commands/Puck.Commands.csproj",
                         "Puck.Input/Puck.Input.csproj",
                         "Puck.Maths/Puck.Maths.csproj",
