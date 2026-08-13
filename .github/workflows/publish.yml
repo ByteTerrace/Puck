@@ -1,0 +1,128 @@
+name: Release & publish
+
+# The version in build/Packaging.targets is the single source of truth. Bump
+# <Version> there and merge to main; this workflow reads it, and if no GitHub
+# Release exists for it yet, packs (via pack.yml), pushes the packages to
+# NuGet.org, then generates the tag + release. Unchanged version => the release
+# already exists => the run is a no-op. A failed run is safe to retry because
+# duplicate NuGet packages are skipped and the release is the completion marker.
+#
+# Everything happens in one run on purpose: a release created by the Actions
+# token does NOT trigger a separate "release" workflow, so tag/release and the
+# push cannot be split across workflows without a stored PAT — which would
+# defeat the point of Trusted Publishing.
+#
+# Authentication is NuGet Trusted Publishing (OIDC) — no stored API key. The
+# push is gated by the 'NuGet' environment the policy is bound to. This file
+# must stay named publish.yml: the trusted-publishing policy matches on it.
+
+on:
+  push:
+    branches: [main]
+    paths: [build/Packaging.targets]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-publish
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      release: ${{ steps.read.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' build/Packaging.targets | head -n1 | tr -d '\r')
+          if [ -z "$version" ]; then
+            echo "::error::No <Version> found in build/Packaging.targets" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — nothing to publish."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+  pack:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    uses: ./.github/workflows/pack.yml
+
+  publish:
+    needs: [gate, pack]
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    # id-token: write lets NuGet/login exchange the run's OIDC token for a
+    # short-lived key. The environment name MUST match the trusted-publishing
+    # policy ('NuGet'); add protection rules there to gate publishes on
+    # approval.
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: NuGet
+      url: https://www.nuget.org/profiles/ByteTerrace
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: packages
+
+      - name: NuGet login (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ByteTerrace
+
+      - name: Push to NuGet.org
+        run: >
+          dotnet nuget push "packages/*.nupkg"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+  release:
+    needs: [gate, publish]
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse an incomplete run's tag if one already exists
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --generate-notes \
+            "${prerelease[@]}"
+          echo "Created release $tag"

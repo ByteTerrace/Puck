@@ -7,9 +7,9 @@ namespace Puck.Commands;
 /// <see cref="InputRouter"/>'s per-tick <see cref="CommandSnapshot"/>.
 /// </summary>
 /// <remarks>
-/// The type is the guarantee: the principal is a constructor argument the injecting code never sees again, so a
-/// second producer that wants to inject gets its own sink bound to its own identity, and there is no shape that
-/// lets either one speak as the other.
+/// The public instance is <see cref="InputRouter.ConsoleTextSink"/>. Construction and injection are internal, so a
+/// caller may route simulation-class submitted text through the console-bound sink but cannot create a sink carrying
+/// a principal of its own choosing.
 /// </remarks>
 public sealed class CommandInjectionSink {
     private readonly CommandPrincipal m_principal;

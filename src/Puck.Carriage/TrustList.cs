@@ -16,8 +16,7 @@ public enum CarriageTrustMode {
 
     /// <summary>
     /// The pinned key is a domain's root and vouches for an issuing key, which vouches for subjects — the
-    /// chain, always exactly two bindings deep (README.md: "A chain is at most two hops, because
-    /// one cannot hold").
+    /// chain is always exactly two bindings deep (README.md §10, "Chain depth").
     /// </summary>
     Vouches,
 }
@@ -25,16 +24,15 @@ public enum CarriageTrustMode {
 /// <summary>
 /// One trust list entry: a pinned id, the actual key bytes it names (needed for offline verification — a
 /// hash alone cannot verify a signature), whether it signs directly or vouches, and which slots it reaches.
-/// "Trusting a domain and pinning a key are one act" (README.md) — a
-/// <see cref="CarriageTrustMode.Vouches"/> entry pins the domain's root id, which is what makes the whole
-/// chain beneath it trusted.
+/// A <see cref="CarriageTrustMode.Vouches"/> entry pins the domain's root id, which is what makes the whole
+/// chain beneath it trusted (README.md §7, "Trust entries").
 /// </summary>
 /// <param name="PinnedId">The trusted key's id. For <see cref="CarriageTrustMode.Vouches"/> this must be a root id (<see cref="KeyId.IsRoot"/>); for <see cref="CarriageTrustMode.SignsDirectly"/> it must carry a subject, since only a subject key signs claims.</param>
 /// <param name="PublicKeySubjectPublicKeyInfo">The pinned key's actual SPKI bytes, authored alongside the id (never fetched).</param>
 /// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
 /// <param name="Reach">
-/// The slot names claims admitted by this entry may reach (README.md: a trust entry says "which
-/// slots it reaches"). Deny by default — an empty set admits a claim that reaches nothing, and there is
+/// The slot names claims admitted by this entry may reach (README.md §7, "Trust entries"). Deny by default —
+/// an empty set admits a claim that reaches nothing, and there is
 /// deliberately no wildcard, because a wildcard is how a scope silently widens when a game adds a slot.
 /// The verification result keeps this set encapsulated and answers only slot-scoped
 /// <see cref="CarriageVerifyResult.Admits"/> or <see cref="CarriageVerifyResult.TryGetReplayCommit"/>

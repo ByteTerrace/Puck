@@ -11,13 +11,13 @@ from source declarations and XML documentation.
 
 | Library | What it is | Manual |
 |---------|-----------|--------|
-| [Puck.Maths](xref:Puck.Maths) | Signed and unsigned deterministic fixed-point math, spatial primitives, reproducible randomness, and integer algorithms. | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Maths/README.md) |
-| [Puck.Commands](xref:Puck.Commands) | The engine-wide command system: typed, named, modality-aware input. | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Commands/README.md) |
-| [Puck.Input](xref:Puck.Input) | Cross-platform game-controller input — Nintendo Switch Pro, Sony DualSense, and Xbox pads normalized through the command system. | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Input/README.md) |
-| [Puck.Text](xref:Puck.Text) | Render-agnostic font atlas generation and text layout (MSDF/MTSDF). | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Text/README.md) |
+| [Puck.Maths](xref:Puck.Maths) | Signed and unsigned deterministic fixed-point math, spatial primitives, reproducible randomness, and integer algorithms. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Maths/README.md) |
+| [Puck.Commands](xref:Puck.Commands) | Typed, named input for simulations that advance in fixed steps. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Commands/README.md) |
+| [Puck.Input](xref:Puck.Input) | Cross-platform game-controller input — Nintendo Switch Pro, Sony DualSense, and Xbox pads normalized through the command system. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Input/README.md) |
+| [Puck.Text](xref:Puck.Text) | Render-agnostic font atlas generation and text layout (MSDF/MTSDF). | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Text/README.md) |
 | [Puck.Abstractions](xref:Puck.Abstractions) | Backend-neutral GPU, surface, and allocator abstractions shared across the rendering backends. | — |
-| [Puck.Vulkan](xref:Puck.Vulkan) | A from-scratch, interface-driven Vulkan layer. | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Vulkan/README.md) |
-| [Puck.Assets](xref:Puck.Assets) | Content-addressed asset loading and caching: a byte-source abstraction, SHA-256 content hashing, and an LRU cache. | [README](https://github.com/ByteTerrace/ByteTerrace.Puck/blob/main/src/Puck.Assets/README.md) |
+| [Puck.Vulkan](xref:Puck.Vulkan) | A from-scratch, interface-driven Vulkan layer. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Vulkan/README.md) |
+| [Puck.Assets](xref:Puck.Assets) | Content-addressed asset loading and caching: a byte-source abstraction, SHA-256 content hashing, and an LRU cache. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Assets/README.md) |
 
 Use the **API** link in the top navigation, or the search box, to browse types and members.
 

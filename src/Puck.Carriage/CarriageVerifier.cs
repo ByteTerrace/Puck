@@ -783,7 +783,7 @@ internal static class CarriageVerifier {
     }
 
     /// <summary>
-    /// Applies both ends of the validity rule (README.md: "Validity is authored at both ends").
+    /// Applies both ends of the validity rule (README.md §9, "The validity window").
     /// There is deliberately no clock-skew tolerance: an issuer that wants slack backdates
     /// <see cref="CarriageEnvelopeHeader.NotBefore"/>, which is authored, auditable and travels signed —
     /// unlike a verifier-side grace window, which every verifier would size differently and which would

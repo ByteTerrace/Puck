@@ -16,10 +16,11 @@ namespace Puck.Commands;
 /// sample clears them. Digital handlers dispatch only on their bound edges; analog handlers re-dispatch their carried
 /// sample each tick so route-style consumers receive the continuous value. Text is transient. Dispatch is
 /// <em>not</em> performed here — the router only produces the deterministic per-tick state; the consumer runs
-/// handlers from the snapshot. Pre-resolved commands (a console/STDIN line, a peer, an AI) enter through a
-/// <see cref="CommandInjectionSink"/> — one per producer, each bound to its own principal at construction — and fold
-/// into the same lanes as captured signals, in one deterministic capture order, so command-line input is recorded and
-/// replayed by the same machinery with no separate path.
+/// handlers from the snapshot. A <see cref="CommandRouting.Simulation"/> console/STDIN line enters through
+/// <see cref="ConsoleTextSink"/>, which is bound to <see cref="CommandPrincipal.Console"/> at construction. Authored
+/// interface controls enter through <see cref="Activate"/>; other producers provide ordinary timestamped
+/// <see cref="InputSignal"/> values through <see cref="Capture"/>. All three forms join one deterministic capture
+/// order before snapshot construction.
 /// <para>The mixer is also the principal door: every entry leaves this type carrying a <see cref="CommandPrincipal"/>.
 /// An injected entry keeps the one its sink was constructed with; every captured entry is stamped from
 /// <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is never turned into a
@@ -417,8 +418,8 @@ public sealed class InputRouter {
         // An injection's effect mutates the simulation, so it must attribute to a fixed-step tick. An explicit
         // capture tick (a deterministic script / replay harness) is honored; otherwise the shared capture clock
         // stamps it now, exactly as a backend stamps a physical signal — making console input share one timeline
-        // with controllers. Determinism comes from recording the resulting snapshot, not from reproducing the
-        // live arrival time (the same guarantee a gamepad press already has).
+        // with controllers. Replay records the server input stream and restores its order rather than trying to
+        // reproduce live arrival time (the same guarantee a gamepad press already has).
         var captureTick = ((injection.CaptureTick != 0UL)
             ? injection.CaptureTick
             : (m_clock?.NowTicks ?? 0UL));

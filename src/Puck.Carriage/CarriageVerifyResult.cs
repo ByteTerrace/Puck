@@ -14,9 +14,9 @@ namespace Puck.Carriage;
 /// as a decision already made.</para>
 /// <para>Ask <see cref="Admits"/> for an unsequenced claim, or <see cref="TryGetReplayCommit"/> for a
 /// sequenced claim, whenever the question is "may this claim do X". The result keeps reach encapsulated
-/// and exposes only slot-scoped queries: "a trust entry pins an id and says whether that key signs directly
-/// or may vouch for others, plus which slots it reaches" (README.md) is an authored scope, while the
-/// receiving world's policy chooses which slot a proposed effect would touch (invariant 5).</para>
+/// and exposes only slot-scoped queries: the trust entry's reach (README.md §7, "Trust entries") is an
+/// authored scope, while the receiving world's policy chooses which slot a proposed effect would touch
+/// (invariant 5).</para>
 /// </remarks>
 public sealed class CarriageVerifyResult {
     private CarriageVerifyResult(

@@ -2,7 +2,7 @@ namespace Puck.Commands;
 
 /// <summary>
 /// A pre-resolved command queued for the deterministic input path: a command that is already bound to its interned
-/// id and value (a console / STDIN line, a network peer, or an AI driver), as opposed to a physical
+/// id and value (a console / STDIN line or a compiler-produced interface activation), as opposed to a physical
 /// <see cref="InputSignal"/> that still needs a binding-table lookup. The <see cref="InputRouter"/> folds it into a
 /// per-tick <see cref="CommandSnapshot"/> alongside captured signals — so once injected, it is tick-aligned and
 /// applied like any other deterministic input; a world tape records the server's input stream that produced it,
