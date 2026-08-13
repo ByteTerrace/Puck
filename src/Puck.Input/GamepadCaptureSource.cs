@@ -8,7 +8,7 @@ namespace Puck.Input;
 
 /// <summary>
 /// The snapshot input path's capture step: turns one frame's already-drained per-device state (an
-/// <see cref="IInputArbiter"/>'s <see cref="IInputArbiter.DrainedDevices"/>) into provider-neutral, timestamped
+/// <see cref="IInputArbiter"/>'s <see cref="IInputArbiter.CopyDrainedDevices"/>) into provider-neutral, timestamped
 /// <see cref="InputSignal"/>s — button press/release edges, stick/trigger/touch/gyro/accel axes, and the fused
 /// orientation — appending each to an <see cref="InputRouter"/>. The destructive <see cref="GamepadManager.Drain"/>
 /// itself lives one layer up, in the arbiter: this type never drains — its caller drains once
@@ -64,6 +64,7 @@ public sealed class GamepadCaptureSource {
     private readonly IInputClock m_clock;
     private readonly Func<InputDeviceId, bool> m_isActiveFor;
     private readonly InputRouter m_router;
+    private readonly List<InputDeviceId> m_staleDeviceIds = [];
     // Which analog controls each device last reported active, so the first return-to-rest emits an explicit zero
     // without streaming redundant zeroes forever. The edge clears InputRouter's carried sample while ensuring a newly
     // connected, untouched pad does not reserve/join a player lane merely because its sticks are centered.
@@ -74,6 +75,8 @@ public sealed class GamepadCaptureSource {
         public bool RightStick;
         public bool LeftTrigger;
         public bool RightTrigger;
+        public bool Touch0;
+        public bool Touch1;
     }
 
     /// <summary>Initializes a new instance of the <see cref="GamepadCaptureSource"/> class.</summary>
@@ -91,7 +94,7 @@ public sealed class GamepadCaptureSource {
     }
 
     /// <summary>Captures every already-drained device's signals into the router. Call once per frame with the same
-    /// frame's <see cref="IInputArbiter.DrainedDevices"/> (after that frame's <see cref="IInputArbiter.DrainFrame"/>
+    /// frame's copied drain (after that frame's <see cref="IInputArbiter.DrainFrame"/>
     /// has run) — this type performs no drain of its own.</summary>
     /// <param name="drains">This frame's per-device drain, from the arbiter.</param>
     /// <exception cref="ArgumentNullException"><paramref name="drains"/> is <see langword="null"/>.</exception>
@@ -110,6 +113,8 @@ public sealed class GamepadCaptureSource {
 
             EmitSignals(drain: in drain, frameTick: frameTick);
         }
+
+        RemoveDisconnectedLatches(drains: drains);
     }
 
     private void EmitSignals(in GamepadDrain drain, ulong frameTick) {
@@ -142,13 +147,8 @@ public sealed class GamepadCaptureSource {
         analogLatch.LeftStick = EmitStick(deviceId: deviceId, source: InputSources.Gamepad.LeftStick, tick: latestTick, value: latest.LeftStick, wasActive: analogLatch.LeftStick);
         analogLatch.RightStick = EmitStick(deviceId: deviceId, source: InputSources.Gamepad.RightStick, tick: latestTick, value: latest.RightStick, wasActive: analogLatch.RightStick);
 
-        if (latest.Touch0.IsActive) {
-            m_router.Capture(signal: InputSignal.Axis(captureTick: latestTick, deviceId: deviceId, source: InputSources.Gamepad.Touchpad0, value: latest.Touch0.Position));
-        }
-
-        if (latest.Touch1.IsActive) {
-            m_router.Capture(signal: InputSignal.Axis(captureTick: latestTick, deviceId: deviceId, source: InputSources.Gamepad.Touchpad1, value: latest.Touch1.Position));
-        }
+        analogLatch.Touch0 = EmitTouch(deviceId: deviceId, source: InputSources.Gamepad.Touchpad0, tick: latestTick, touch: latest.Touch0, wasActive: analogLatch.Touch0);
+        analogLatch.Touch1 = EmitTouch(deviceId: deviceId, source: InputSources.Gamepad.Touchpad1, tick: latestTick, touch: latest.Touch1, wasActive: analogLatch.Touch1);
 
         analogLatch.LeftTrigger = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.LeftTrigger, tick: latestTick, value: latest.LeftTrigger, wasActive: analogLatch.LeftTrigger);
         analogLatch.RightTrigger = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.RightTrigger, tick: latestTick, value: latest.RightTrigger, wasActive: analogLatch.RightTrigger);
@@ -172,6 +172,44 @@ public sealed class GamepadCaptureSource {
         }
 
         return false;
+    }
+
+    private bool EmitTouch(InputDeviceId deviceId, string source, ulong tick, GamepadTouchPoint touch, bool wasActive) {
+        if (touch.IsActive) {
+            m_router.Capture(signal: InputSignal.Axis(captureTick: tick, deviceId: deviceId, source: source, value: touch.Position));
+
+            return true;
+        }
+
+        if (wasActive) {
+            m_router.Capture(signal: InputSignal.Axis(captureTick: tick, deviceId: deviceId, source: source, value: Vector2.Zero));
+        }
+
+        return false;
+    }
+
+    private void RemoveDisconnectedLatches(IReadOnlyList<GamepadDrain> drains) {
+        m_staleDeviceIds.Clear();
+
+        foreach (var deviceId in m_analogLatches.Keys) {
+            var present = false;
+
+            foreach (var drain in drains) {
+                if (drain.DeviceId == deviceId) {
+                    present = true;
+
+                    break;
+                }
+            }
+
+            if (!present) {
+                m_staleDeviceIds.Add(item: deviceId);
+            }
+        }
+
+        foreach (var deviceId in m_staleDeviceIds) {
+            _ = m_analogLatches.Remove(key: deviceId);
+        }
     }
 
     // An active trigger streams its analog value; the first rest report after activity emits one explicit release

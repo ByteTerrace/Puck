@@ -661,7 +661,7 @@ for what was withheld, so no receiving consumer changed type.
 
 `WorldCounterpartAttestation` is a neighbour's signed statement of its seam
 edges plus the five `WorldOverlapTerms` the overlap derivation reads from its
-side. `WorldCounterpartCarriage` signs and verifies it against the reading
+side. `WorldCounterpartAttestationProtocol` signs and verifies it against the reading
 world's own `admission` keys, and `WorldNeighbourResolution.Attested` is how a
 resolver hands one to `WorldDefinitionValidator`.
 

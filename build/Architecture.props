@@ -139,9 +139,9 @@
         <!-- The headless P1 split (docs/project-map.md's Puck.World.Data row). The exact-equality closure is wider
              than Puck.World.Data's own direct references because Puck.Forge already needed
              Puck.HumbleGamingBrick and Puck.SdfVm before this split existed, and Puck.SdfVm in turn already needed
-             Puck.Hosting/Puck.Recording/Puck.Shaders/Puck.Text — none of that is new here. Puck.Carriage joined
+             Puck.Hosting/Puck.Recording/Puck.Shaders/Puck.Text — none of that is new here. Puck.Attestation joined
              2026-08-09: the admission handshake's identity door (Protocol/WorldAdmissionDoor.cs) verifies a
-             connecting peer's signed-carriage claim through it — Leaf contracts and data, same row as
+             connecting peer's signed-attestation claim through it — Leaf contracts and data, same row as
              Puck.Maths/Puck.Storage, so no layer boundary moves. What this profile
              actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.Overlays,
              no Puck.Input, no Puck.World.Server. A member that would need one of those (the engine-default binding
@@ -151,14 +151,14 @@
              landing): WorldAddonRow no longer carries AddonLane, so nothing in this project names a Puck.Scripting
              type any more — Puck.World.Server (below) is the one row that still needs it, for the addon host
              itself. -->
-        <PuckArchitectureProfile Include="Puck.World.Data" Closure="Puck.Abstractions;Puck.Assets;Puck.Carriage;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Recording;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Text" />
+        <PuckArchitectureProfile Include="Puck.World.Data" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Recording;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Text" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Data's profile carries (Server references Data), plus Puck.Scripting.Simulation's own
              closure (Puck.Input, Puck.Scripting.Simulation itself) and Puck.Storage (the owned-world cloud sync
-             substrate WorldOwnedWorldSync reads through). Puck.Carriage also arrives directly (WorldTcpHost/
-             WorldTcpWireFormat frame the admission handshake's envelope bytes). Same absence this profile actually
+             substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives directly (WorldTcpHost/
+             WorldTcpWireFormat frame the admission handshake's attestation bytes). Same absence this profile actually
              enforces: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.Assets;Puck.Carriage;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Input;Puck.Maths;Puck.Recording;Puck.Scripting;Puck.Scripting.Simulation;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Storage;Puck.Text;Puck.World.Data" />
+        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Input;Puck.Maths;Puck.Recording;Puck.Scripting;Puck.Scripting.Simulation;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Storage;Puck.Text;Puck.World.Data" />
     </ItemGroup>
 
     <!--
@@ -199,7 +199,8 @@
         neither project appears below at all.
     -->
     <ItemGroup>
-        <PuckArchitectureFriends Include="Puck.Carriage" Friends="Puck.Carriage.Tests" />
+        <PuckArchitectureFriends Include="Puck.Attestation" Friends="Puck.Attestation.Tests" />
+        <PuckArchitectureFriends Include="Puck.Input" Friends="Puck.Input.Tests" />
         <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
     </ItemGroup>
 

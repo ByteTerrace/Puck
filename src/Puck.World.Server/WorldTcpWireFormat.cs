@@ -153,19 +153,19 @@ public static class WorldTcpWireFormat {
         WriteDownstreamAsync(stream: stream, kind: DownstreamKind.HelloChallenge, body: challenge, ct: ct);
 
     /// <summary>The hard cap on the upstream HelloIdentity frame's total bytes — generous for two chain envelopes
-    /// plus one claim envelope (all small P-256 payloads), while still refusing an absurd length before allocating
+    /// plus one claim attestation (all small P-256 payloads), while still refusing an absurd length before allocating
     /// for it.</summary>
     public const int MaxHelloIdentityBytes = (64 * 1024);
 
     /// <summary>Writes the upstream HelloIdentity frame the peer sends in direct response to a HelloChallenge,
-    /// before the ordinary submission frame loop begins: its carriage chain (0-2 bindings, root-to-subject order —
-    /// empty for a <c>signsDirectly</c> identity), then its claim, each an already carriage-codec-encoded envelope.
+    /// before the ordinary submission frame loop begins: its attestation chain (0-2 bindings, root-to-subject order —
+    /// empty for a <c>signsDirectly</c> identity), then its claim, each an already encoded attestation.
     /// This is part of the handshake, not a <see cref="WorldFrameCodec"/>-decoded submission — it carries no kind
     /// byte, exactly like the initial Hello key, because the protocol state machine already knows what must follow
     /// a HelloChallenge.</summary>
     /// <param name="stream">The connection stream.</param>
-    /// <param name="chain">The 0-2 carriage-codec-encoded binding envelopes, root-to-subject order.</param>
-    /// <param name="claim">The carriage-codec-encoded claim envelope.</param>
+    /// <param name="chain">The 0-2 encoded binding attestations, root-to-subject order.</param>
+    /// <param name="claim">The encoded attestation carrying the claim.</param>
     /// <param name="ct">Cancellation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="stream"/>, <paramref name="chain"/>, or <paramref name="claim"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="chain"/> carries more than two entries.</exception>
@@ -175,7 +175,7 @@ public static class WorldTcpWireFormat {
         ArgumentNullException.ThrowIfNull(argument: claim);
 
         if ((uint)chain.Count > 2) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(chain), actualValue: chain.Count, message: "a carriage chain is at most two bindings deep.");
+            throw new ArgumentOutOfRangeException(paramName: nameof(chain), actualValue: chain.Count, message: "a attestation chain is at most two bindings deep.");
         }
 
         using var body = new MemoryStream();
@@ -217,9 +217,9 @@ public static class WorldTcpWireFormat {
         private HelloIdentityReadResult() {
         }
 
-        /// <summary>The frame decoded to a well-formed carriage chain and claim, with no bytes left over.</summary>
-        /// <param name="Chain">The 0-2 carriage-codec-encoded binding envelopes, root-to-subject order.</param>
-        /// <param name="Claim">The carriage-codec-encoded claim envelope.</param>
+        /// <summary>The frame decoded to a well-formed attestation chain and claim, with no bytes left over.</summary>
+        /// <param name="Chain">The 0-2 encoded binding attestations, root-to-subject order.</param>
+        /// <param name="Claim">The encoded attestation carrying the claim.</param>
         public sealed record Ok(IReadOnlyList<byte[]> Chain, byte[] Claim) : HelloIdentityReadResult;
 
         /// <summary>The peer disconnected before a length prefix declared a frame.</summary>
@@ -272,7 +272,7 @@ public static class WorldTcpWireFormat {
         var chainCount = body[offset++];
 
         if (chainCount > 2) {
-            return new HelloIdentityReadResult.Malformed(Reason: "the chain-count byte exceeds the two-binding carriage limit");
+            return new HelloIdentityReadResult.Malformed(Reason: "the chain-count byte exceeds the two-binding attestation limit");
         }
 
         var chain = new byte[chainCount][];
@@ -286,11 +286,11 @@ public static class WorldTcpWireFormat {
         }
 
         if (!TryReadLengthPrefixedFrom(bytes: body, offset: ref offset, value: out var claim)) {
-            return new HelloIdentityReadResult.Malformed(Reason: "the claim envelope's length prefix or body is truncated");
+            return new HelloIdentityReadResult.Malformed(Reason: "the claim attestation's length prefix or body is truncated");
         }
 
         if (offset != body.Length) {
-            return new HelloIdentityReadResult.Malformed(Reason: "the frame carries trailing bytes after the claim envelope");
+            return new HelloIdentityReadResult.Malformed(Reason: "the frame carries trailing bytes after the claim attestation");
         }
 
         return new HelloIdentityReadResult.Ok(Chain: chain, Claim: claim);

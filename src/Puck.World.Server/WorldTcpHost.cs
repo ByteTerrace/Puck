@@ -287,14 +287,14 @@ public sealed class WorldTcpHost : IDisposable {
             var admissionEntriesAtVerify = m_server.Definition.Admission;
 
             try {
-                var claimEnvelope = WorldAdmissionDoor.DecodeEnvelope(wire: identity.Claim);
-                var chainEnvelopes = identity.Chain.Select(selector: bytes => WorldAdmissionDoor.DecodeEnvelope(wire: bytes)).ToArray();
+                var claimAttestation = WorldAdmissionDoor.DecodeAttestation(wire: identity.Claim);
+                var chainAttestations = identity.Chain.Select(selector: bytes => WorldAdmissionDoor.DecodeAttestation(wire: bytes)).ToArray();
                 // Definition is read fresh, off the tick thread — an admission decision consulting a document that
                 // moves mid-handshake (a concurrent world.reset/load/reload) is eventual-consistency the same way
                 // any other cross-thread document read here would be. This is a presentation/networking admission
                 // decision, never simulation state, so it is not a determinism concern; the commit below still
                 // proves the policy this verdict rests on is the one the tick thread ultimately sees.
-                outcome = WorldAdmissionDoor.TryAdmit(entries: admissionEntriesAtVerify, challenge: challenge, claim: claimEnvelope, chain: chainEnvelopes, now: DateTimeOffset.UtcNow);
+                outcome = WorldAdmissionDoor.TryAdmit(entries: admissionEntriesAtVerify, challenge: challenge, claim: claimAttestation, chain: chainAttestations, now: DateTimeOffset.UtcNow);
             } catch (FormatException exception) {
                 await WorldTcpWireFormat.WriteHelloRefusedAsync(stream: stream, reason: $"identity-refused: the presented claim or chain bytes do not decode — {exception.Message}", ct: handshakeCt).ConfigureAwait(continueOnCapturedContext: false);
 

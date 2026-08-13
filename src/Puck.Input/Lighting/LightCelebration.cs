@@ -21,14 +21,13 @@ public sealed class LightCelebration {
 
     private readonly ILampArrayDevice m_device;
     private readonly LampColor[] m_frame;
+    private readonly object m_gate = new();
     private readonly int[] m_lampIds;
     private readonly float[] m_lampX;
     private readonly double m_updateIntervalSeconds;
     private double m_accumulator;
     private double m_elapsedSeconds;
-    // Volatile: Begin (arming) is called from the render thread while Tick / IsPlaying run on the ~30 Hz ticker thread,
-    // so the play flag crosses threads and must not be cached.
-    private volatile bool m_isPlaying;
+    private bool m_isPlaying;
     private LampColor m_tint;
 
     /// <summary>Initializes a celebration over a device, snapshotting each lamp's normalized X position once.</summary>
@@ -39,7 +38,7 @@ public sealed class LightCelebration {
 
         m_device = device;
 
-        var count = Math.Max(val1: device.LampCount, val2: 1);
+        var count = Math.Max(val1: device.LampCount, val2: 0);
 
         m_frame = new LampColor[count];
         m_lampIds = new int[count];
@@ -54,7 +53,13 @@ public sealed class LightCelebration {
     }
 
     /// <summary>Gets whether a celebration is currently playing.</summary>
-    public bool IsPlaying => m_isPlaying;
+    public bool IsPlaying {
+        get {
+            lock (m_gate) {
+                return m_isPlaying;
+            }
+        }
+    }
 
     /// <summary>
     /// Arms the celebration for a score (restarting it if one is already playing). The tier color is graded
@@ -63,11 +68,13 @@ public sealed class LightCelebration {
     /// <param name="score">The score being celebrated.</param>
     /// <param name="referenceScore">The reference the score is graded against; defaults to the bench's 10000.</param>
     public void Begin(int score, int referenceScore = 10_000) {
-        m_tint = TintFor(referenceScore: referenceScore, score: score);
-        m_elapsedSeconds = 0.0;
-        // Prime the accumulator so the first Tick paints immediately instead of waiting one interval.
-        m_accumulator = m_updateIntervalSeconds;
-        m_isPlaying = true;
+        lock (m_gate) {
+            m_tint = TintFor(referenceScore: referenceScore, score: score);
+            m_elapsedSeconds = 0.0;
+            // Prime the accumulator so the first Tick paints immediately instead of waiting one interval.
+            m_accumulator = m_updateIntervalSeconds;
+            m_isPlaying = (m_frame.Length != 0);
+        }
     }
 
     /// <summary>
@@ -77,40 +84,45 @@ public sealed class LightCelebration {
     /// </summary>
     /// <param name="elapsedSeconds">The wall/render time since the previous call, in seconds.</param>
     /// <returns><see langword="true"/> while playing; <see langword="false"/> when finished (or never started).</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="elapsedSeconds"/> is negative or not finite.</exception>
     public bool Tick(double elapsedSeconds) {
-        if (!m_isPlaying) {
-            return false;
+        if (!double.IsFinite(d: elapsedSeconds) || (elapsedSeconds < 0.0)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(elapsedSeconds), actualValue: elapsedSeconds, message: "Elapsed time must be finite and non-negative.");
         }
 
-        var step = Math.Max(val1: 0.0, val2: elapsedSeconds);
+        lock (m_gate) {
+            if (!m_isPlaying) {
+                return false;
+            }
 
-        m_accumulator += step;
-        m_elapsedSeconds += step;
+            m_accumulator += elapsedSeconds;
+            m_elapsedSeconds += elapsedSeconds;
 
-        if (m_accumulator < m_updateIntervalSeconds) {
+            if (m_accumulator < m_updateIntervalSeconds) {
+                return true;
+            }
+
+            m_accumulator = 0.0;
+
+            var seconds = m_elapsedSeconds;
+
+            if (seconds < SweepSeconds) {
+                ComposeSweep(seconds: ((float)seconds));
+            } else if (seconds < (SweepSeconds + GlowSeconds)) {
+                ComposeGlow(seconds: ((float)(seconds - SweepSeconds)));
+            } else if (seconds < ((SweepSeconds + GlowSeconds) + FadeSeconds)) {
+                ComposeFade(seconds: ((float)(seconds - (SweepSeconds + GlowSeconds))));
+            } else {
+                m_isPlaying = false;
+                m_device.UpdateAllLamps(color: LampColor.Off);
+
+                return false;
+            }
+
+            m_device.UpdateLamps(colors: m_frame, lampIds: m_lampIds);
+
             return true;
         }
-
-        m_accumulator = 0.0;
-
-        var seconds = m_elapsedSeconds;
-
-        if (seconds < SweepSeconds) {
-            ComposeSweep(seconds: ((float)seconds));
-        } else if (seconds < (SweepSeconds + GlowSeconds)) {
-            ComposeGlow(seconds: ((float)(seconds - SweepSeconds)));
-        } else if (seconds < ((SweepSeconds + GlowSeconds) + FadeSeconds)) {
-            ComposeFade(seconds: ((float)(seconds - (SweepSeconds + GlowSeconds))));
-        } else {
-            m_isPlaying = false;
-            m_device.UpdateAllLamps(color: LampColor.Off);
-
-            return false;
-        }
-
-        m_device.UpdateLamps(colors: m_frame, lampIds: m_lampIds);
-
-        return true;
     }
 
     // Phase 1: a wavefront crosses the array once per pass (two passes), with a faint trail that brightens as the

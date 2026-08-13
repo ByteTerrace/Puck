@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 using Xunit;
 
-using Puck.Carriage;
+using Puck.Attestation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -24,7 +24,7 @@ public sealed class CounterpartAttestationLawTests {
             Domain: domain,
             Subject: "counterpart",
             Mode: WorldAdmissionTrustMode.SignsDirectly,
-            Algorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
             PublicKey: Convert.ToBase64String(inArray: spki),
             Grants: []);
 
@@ -33,7 +33,7 @@ public sealed class CounterpartAttestationLawTests {
 
         Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out var composeReason), composeReason);
 
-        var codec = new CborCarriageCodec();
+        var codec = new CborAttestationCodec();
 
         Assert.True(TryVerifySigned(codec: codec, key: key, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out var verified, reason: out var verifyReason), verifyReason);
         Assert.True(WorldDefinitionValidator.TryValidate(definition: west, reason: out var accepted, neighbours: new StubResolver(attestation: verified!)), accepted);
@@ -63,14 +63,14 @@ public sealed class CounterpartAttestationLawTests {
             Domain: domain,
             Subject: "counterpart",
             Mode: WorldAdmissionTrustMode.SignsDirectly,
-            Algorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
             PublicKey: Convert.ToBase64String(inArray: spki),
             Grants: []);
         var east = Quilt(name: "east", counterpart: "west", document: "west.world.json", center: new Vector3(x: -10f, y: 0f, z: 0f), yaw: -90f, admission: [trust]);
 
         Assert.True(WorldCounterpartAttestation.TryCompose(definition: east, document: "east.world.json", attestation: out var attested, reason: out _));
 
-        var codec = new CborCarriageCodec();
+        var codec = new CborAttestationCodec();
 
         Assert.False(TryVerifySigned(codec: codec, key: stranger, domain: domain, subject: "counterpart", entries: [trust], attestation: attested!, verified: out _, reason: out var strangerReason));
         Assert.NotEmpty(strangerReason);
@@ -84,7 +84,7 @@ public sealed class CounterpartAttestationLawTests {
     }
 
     private static bool TryVerifySigned(
-        ICarriageCodec codec,
+        IAttestationCodec codec,
         ECDsa key,
         string domain,
         string subject,
@@ -95,20 +95,20 @@ public sealed class CounterpartAttestationLawTests {
     ) {
         var now = DateTimeOffset.UtcNow;
         var seconds = now.ToUnixTimeSeconds();
-        var claim = CarriageSigner.SignClaim(
+        var claim = AttestationSigner.SignClaim(
             codec: codec,
             domain: domain,
             subject: subject,
             signerKey: key,
-            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
-            purpose: WorldCounterpartCarriage.Purpose,
+            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            purpose: WorldCounterpartAttestationProtocol.Purpose,
             notBefore: (seconds - 60L),
             notAfter: (seconds + 60L),
-            audience: WorldCounterpartCarriage.Audience,
+            audience: WorldCounterpartAttestationProtocol.Audience,
             sequence: null,
-            claimBytes: WorldCounterpartCarriage.Payload(attestation: attestation));
+            claimBytes: WorldCounterpartAttestationProtocol.Payload(attestation: attestation));
 
-        return WorldCounterpartCarriage.TryVerify(entries: entries, codec: codec, claim: claim, chain: [], now: now, attestation: out verified, reason: out reason);
+        return WorldCounterpartAttestationProtocol.TryVerify(entries: entries, codec: codec, claim: claim, chain: [], now: now, attestation: out verified, reason: out reason);
     }
 
     private static WorldDefinition Quilt(string name, string counterpart, string document, Vector3 center, float yaw, IReadOnlyList<WorldAdmissionEntry> admission) {

@@ -9,9 +9,9 @@ namespace Puck.Input.Devices;
 /// <summary>
 /// Parses the Sony DualSense (PlayStation 5) controller and drives its rumble + lightbar over HID. The USB input report
 /// 0x01 (and the Bluetooth full report 0x31) carry sticks, analog triggers, buttons, and the gyro/accel IMU; the
-/// USB output report 0x02 drives the two "compatible vibration" motors and the lightbar / player LEDs. USB needs
-/// no handshake — it streams the full report immediately. Bluetooth output (report 0x31 with a trailing CRC32)
-/// and the Bluetooth full-mode request are not implemented, so rumble is USB-only.
+/// USB output report 0x02 drives the two "compatible vibration" motors, adaptive triggers, lightbar, and player
+/// LEDs. USB streams the full report immediately. Bluetooth uses output report 0x31 with a trailing seeded CRC32;
+/// reading calibration feature report 0x05 during initialization also selects the full Bluetooth input mode.
 /// </summary>
 internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedParser, ITriggerEffectParser {
     private const byte BluetoothInputReportId = 0x31;
@@ -111,7 +111,9 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
         var outputLength = device.OutputReportByteLength;
 
         m_device = device;
-        m_outputBuffer = new byte[((outputLength > 0) ? outputLength : 64)];
+        var minimumOutputLength = ((device.Transport == HidTransport.Bluetooth) ? BluetoothOutputReportLength : 48);
+
+        m_outputBuffer = new byte[Math.Max(val1: outputLength, val2: minimumOutputLength)];
         // The first Bluetooth output write must clear the boot light-bar animation, or later RGB writes are
         // ignored by the firmware. USB has no such gate.
         m_lightbarSetupPending = (device.Transport == HidTransport.Bluetooth);
@@ -204,11 +206,7 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
 
     /// <inheritdoc />
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
-        var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
-        var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
-        var intensity = MathF.Max(x: low, y: high);
-
-        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+        if (!m_rumbleThrottle.TryPrepare(lowFrequency: lowFrequency, highFrequency: highFrequency, low: out var low, high: out var high)) {
             return ValueTask.CompletedTask;
         }
         m_lastHigh = ((byte)(high * 255f));
@@ -304,6 +302,10 @@ internal sealed class DualSenseController : IGamepadParser, IRumbleParser, ILedP
     /// <inheritdoc />
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
+
+        if (report.IsEmpty) {
+            return false;
+        }
 
         // USB carries the full report as 0x01 (common block at offset 1); the Bluetooth full report is 0x31
         // (block at offset 2, after a sequence tag). The block layout is identical past that point.

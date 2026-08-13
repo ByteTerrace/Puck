@@ -3609,7 +3609,7 @@ public sealed record WorldHostDefaults(
 /// world authored before this section existed.</param>
 /// <param name="State">The <c>state</c> section (default empty) — genre-neutral named cells (see
 /// <see cref="WorldStateRow"/>): score, rounds, inventory, flags, or a keyed table (a slot is a table with one key —
-/// the primitive threat tables and the signed-carriage bearer high-water mark both want). It is simulation state: every
+/// the primitive threat tables and the signed-attestation bearer high-water mark both want). It is simulation state: every
 /// row's whole shape mutates only through
 /// <see cref="Protocol.WorldMutation.UpsertStateRow"/>/<see cref="Protocol.WorldMutation.RemoveStateRow"/>, or — for
 /// a per-cell write only —
@@ -3751,7 +3751,7 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDestination>? Destinations = null,
     // OPTIONAL, exactly like Destinations above — a null section names no admission entries, which is DENY BY
     // DEFAULT for the TCP door: no remote peer can ever verify against an absent/empty section, matching an empty
-    // Puck.Carriage.TrustList's own posture. Trailing by design, for the identical reason Destinations is.
+    // Puck.Attestation.TrustList's own posture. Trailing by design, for the identical reason Destinations is.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdmissionEntry>? Admission = null,
     // OPTIONAL, exactly like Admission above — a null section IS today's no-market behavior, no fallback object
     // needed beyond `current.Market ?? WorldMarketSection.Empty`. Trailing by design, for the identical reason

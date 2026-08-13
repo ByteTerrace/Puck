@@ -26,6 +26,13 @@ internal sealed class ImuOrientationTracker {
     /// <summary>The current fused orientation.</summary>
     public Quaternion Orientation => m_orientation;
 
+    /// <summary>Returns the tracker to its first-sample state for a new physical controller stream.</summary>
+    public void Reset() {
+        m_gyroBias = Vector3.Zero;
+        m_hasSample = false;
+        m_orientation = Quaternion.Identity;
+    }
+
     /// <summary>Advances the orientation by one IMU sample (gyro in rad/s, accel in g, both right-handed).</summary>
     /// <param name="gyroRadiansPerSecond">Body-frame angular velocity, right-handed.</param>
     /// <param name="accelerometerG">Accelerometer reading, right-handed.</param>

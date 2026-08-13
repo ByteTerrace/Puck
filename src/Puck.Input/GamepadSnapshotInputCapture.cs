@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Input.Devices;
 
 namespace Puck.Input;
 
@@ -7,6 +8,7 @@ namespace Puck.Input;
 public sealed class GamepadSnapshotInputCapture : ISnapshotInputCapture {
     private readonly IInputArbiter m_arbiter;
     private readonly GamepadCaptureSource m_capture;
+    private readonly List<GamepadDrain> m_drains = [];
 
     /// <summary>Initializes the contribution over the process's one gamepad arbiter and capture clock.</summary>
     public GamepadSnapshotInputCapture(IInputArbiter arbiter, InputRouter router, IInputClock clock, Func<InputDeviceId, bool>? isActiveFor = null) {
@@ -21,6 +23,7 @@ public sealed class GamepadSnapshotInputCapture : ISnapshotInputCapture {
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
         m_arbiter.DrainFrame(frameKey: frameKey);
-        m_capture.Capture(drains: m_arbiter.DrainedDevices);
+        m_arbiter.CopyDrainedDevices(destination: m_drains);
+        m_capture.Capture(drains: m_drains);
     }
 }

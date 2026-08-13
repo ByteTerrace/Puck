@@ -22,7 +22,7 @@ namespace Puck.Input.Devices;
 /// <see cref="IWirelessSlotParser"/> so an empty slot parks dormant instead of being mistaken for a dead device.
 /// The IMU axis mapping and sensor scales are nominal (uncalibrated); gravity anchors pitch and roll regardless.
 /// </remarks>
-internal sealed class SteamController : IGamepadParser, IRumbleParser, IWirelessSlotParser, IDisposable {
+internal sealed class SteamController : IGamepadParser, IRumbleParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     // Feature-report command ids (FeatureReportMessageIDs). A feature report is [reportId=0, command, payloadLen,
     // payload...] written at the device's declared feature-report length.
     private const byte ClearDigitalMappingsCommand = 0x81;      // drop the keyboard emulation mappings
@@ -93,7 +93,7 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         m_device = device;
         // Feature reports must be written at the device's declared feature length (the HID stack rejects a
         // mismatched length); fall back to the documented 65-byte report if the device declares none.
-        m_featureBuffer = new byte[((featureLength > 0) ? featureLength : 65)];
+        m_featureBuffer = new byte[Math.Max(val1: featureLength, val2: 65)];
     }
 
     /// <inheritdoc />
@@ -149,11 +149,7 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
 
     /// <inheritdoc />
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
-        var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
-        var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
-        var intensity = MathF.Max(x: low, y: high);
-
-        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+        if (!m_rumbleThrottle.TryPrepare(lowFrequency: lowFrequency, highFrequency: highFrequency, low: out var low, high: out var high)) {
             return ValueTask.CompletedTask;
         }
 
@@ -168,6 +164,11 @@ internal sealed class SteamController : IGamepadParser, IRumbleParser, IWireless
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    void IGamepadStreamReset.ResetStreamState() {
+        m_rumbleThrottle.Reset();
+        m_tracker.Reset();
     }
 
     private bool FireHaptic(byte side, float intensity, ushort period) {

@@ -43,7 +43,7 @@ param(
         'src/Puck.World/Audio/README.md',
         'src/Puck.World.Data/README.md',
         'src/Puck.World.Server/README.md',
-        'src/Puck.Carriage/README.md',
+        'src/Puck.Attestation/README.md',
         'README.md',
         'docs/agent-guide.md',
         'docs/project-map.md',

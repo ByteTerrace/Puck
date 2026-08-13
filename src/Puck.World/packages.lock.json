@@ -401,7 +401,7 @@
         "resolved": "44.0.0",
         "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
       },
-      "ByteTerrace.Puck.Carriage": {
+      "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
           "System.Formats.Cbor": "[9.*, )"
@@ -593,7 +593,7 @@
       "puck.world.data": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Carriage": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Abstractions": "[1.0.0, )",
@@ -603,7 +603,7 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Carriage": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Scripting.Simulation": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",

@@ -23,11 +23,11 @@
     -->
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <!-- The signed-carriage envelope/trust-list/verifier machinery (docs/vision.md, "Signed carriage") —
+        <!-- The signed-attestation/trust-list/verifier machinery (docs/vision.md, "Signed attestation") —
              the admission section's WorldAdmissionDoor verifies a connecting peer's claim against the document's
              own admission trust list through this, off the tick thread, at the TCP hello boundary. Leaf contracts
              and data, so this edge introduces no new layer dependency. -->
-        <ProjectReference Include="..\Puck.Carriage\Puck.Carriage.csproj" />
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <!-- The puck.creation.v1/puck.audio.v1/puck.synth.v1 document families WorldDefinition embeds (creations,
              speakers, tunes) and their canonicalize boundary. -->

@@ -125,7 +125,12 @@ public readonly record struct TriggerEffectSpec {
     /// <summary>Gets the strength (<c>0..8</c>) of a <see cref="TriggerEffectKind.ContinuousCurve"/> zone.</summary>
     /// <param name="zone">The zone index, <c>0</c> to <see cref="ZoneCount"/> − 1.</param>
     /// <returns>The zone's strength.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="zone"/> is outside the valid zone range.</exception>
     public byte ZoneStrength(int zone) {
+        if ((uint)zone >= ZoneCount) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(zone), actualValue: zone, message: $"The zone must be in the range 0 to {(ZoneCount - 1)}.");
+        }
+
         return ((byte)((Curve >> (zone * 4)) & 0xFUL));
     }
 }

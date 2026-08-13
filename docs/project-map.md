@@ -62,11 +62,13 @@ Backends                 Puck.DirectX  Puck.Vulkan
 Shared substrate         Puck.Commands  Puck.Hosting  Puck.Input  Puck.Platform
                          Puck.Scripting  Puck.Scripting.Simulation
                          Puck.Shaders
-Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Carriage
+Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.Maths  Puck.Snapshots  Puck.Storage
-(Test)                   Puck.Analyzers.Tests  Puck.Dynamics.Spike.Tests
-                         Puck.Launcher.Tests  Puck.Maths.Tests
-                         Puck.Recording.Tests  Puck.World.Tests
+(Test)                   Puck.Analyzers.Tests  Puck.Attestation.Tests
+                         Puck.Commands.Tests  Puck.Dynamics.Spike.Tests
+                         Puck.Input.Tests  Puck.Launcher.Tests
+                         Puck.Maths.Tests  Puck.Recording.Tests
+                         Puck.World.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```

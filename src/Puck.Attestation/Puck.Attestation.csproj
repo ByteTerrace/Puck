@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Attestation</AssemblyName>
+        <Description>The signed attestation: issuer-signed claims that travel between federated worlds and verify offline against an authored trust list. Canonical CBOR byte layout, chain walk with depth and window enforcement, purpose and domain binding, replay marks, and sealed attestations with bound encryption.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Attestation</PackageId>
+        <PackageTags>cbor;claims;federation;offline-verification;signing</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Attestation</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="System.Formats.Cbor" Version="[9.*, )" />
+    </ItemGroup>
+</Project>

@@ -86,9 +86,9 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
 
         m_device = device;
         m_packetId = byte.MinValue;
-        m_requestBuffer = new byte[((outputLength > 0) ? outputLength : ReportSizeInBytes)];
-        m_responseBuffer = new byte[((inputLength > 0) ? inputLength : ReportSizeInBytes)];
-        m_rumbleBuffer = new byte[((outputLength > 0) ? outputLength : ReportSizeInBytes)];
+        m_requestBuffer = new byte[Math.Max(val1: outputLength, val2: ReportSizeInBytes)];
+        m_responseBuffer = new byte[Math.Max(val1: inputLength, val2: ReportSizeInBytes)];
+        m_rumbleBuffer = new byte[Math.Max(val1: outputLength, val2: ReportSizeInBytes)];
     }
 
     private async ValueTask<bool> SendInitCommand(
@@ -185,7 +185,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
                 timeoutInMilliseconds: 60
             );
 
-            if ((0 < numberOfBytesRead) && (SubcommandReplyInputReportId == responseBuffer[0]) && (command == responseBuffer[SubcommandReplyAckOffset])) {
+            if ((numberOfBytesRead > SubcommandReplyAckOffset) && (SubcommandReplyInputReportId == responseBuffer[0]) && (command == responseBuffer[SubcommandReplyAckOffset])) {
                 result = true;
 
                 break;
@@ -447,11 +447,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
         float highFrequency,
         CancellationToken cancellationToken = default
     ) {
-        var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
-        var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
-        var intensity = MathF.Max(x: low, y: high);
-
-        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+        if (!m_rumbleThrottle.TryPrepare(lowFrequency: lowFrequency, highFrequency: highFrequency, low: out var low, high: out var high)) {
             return ValueTask.CompletedTask;
         }
 
@@ -526,7 +522,7 @@ internal sealed class NintendoSwitchController : IGamepadParser, IRumbleParser {
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
 
-        if ((report.Length <= (ImuOffset + (ImuSampleSize * ImuSampleCount))) || (StandardInputReportId != report[0])) {
+        if ((report.Length < (ImuOffset + (ImuSampleSize * ImuSampleCount))) || (StandardInputReportId != report[0])) {
             return false;
         }
 

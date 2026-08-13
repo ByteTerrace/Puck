@@ -41,7 +41,7 @@ Both are zero by default (no socket ever opens). A connection
 crosses TWO doors before either side sees a submission: `WorldHelloDoor`
 (protocol-version compatibility) and, once that passes, `WorldAdmissionDoor`
 (`Puck.World.Data`'s `Protocol/WorldAdmissionDoor.cs`) — a challenge-response
-identity check over `Puck.Carriage`'s signed-carriage envelopes against the
+identity check over `Puck.Attestation`'s signed attestations against the
 world document's own `admission` section. A world authoring no `admission`
 entries admits no remote peer at all, and no traveller from another authority
 either (deny by default — a transfer's own arrival verdict comes from the same

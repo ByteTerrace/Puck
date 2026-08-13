@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using Puck.Carriage;
+using Puck.Attestation;
 
 namespace Puck.World.Protocol;
 
@@ -33,26 +33,26 @@ public enum WorldAdmissionRefusal : byte {
 
 /// <summary>
 /// The identity door a remote TCP peer crosses after <see cref="WorldHelloDoor"/>'s protocol-version check succeeds
-/// — a challenge-response over <c>Puck.Carriage</c>'s signed-carriage envelopes. <c>Server.WorldTcpHost</c> is the
+/// — a challenge-response over <c>Puck.Attestation</c>'s signed attestations. <c>Server.WorldTcpHost</c> is the
 /// one caller: it mints a fresh challenge per connection attempt, reads back a claim (and, for a
 /// <see cref="WorldAdmissionTrustMode.Vouches"/> entry, its two-hop chain) over the socket, and calls
 /// <see cref="TryAdmit"/> off the tick thread — this door touches no server state beyond a snapshot of the current
 /// document's <see cref="WorldAdmissionEntry"/> rows, which is why it is safe to run there (mirrors
 /// <see cref="WorldHelloDoor"/>'s own off-tick-thread reasoning; see <c>WorldTcpHost</c>'s class remarks).
-/// <para><b>Freshness is the challenge nonce, not carriage's own audience/sequence machinery.</b> The claim is
-/// directed (<see cref="Audience"/>-bound) and carries no sequence, which <see cref="CarriageConformanceProfile"/>'s
+/// <para><b>Freshness is the challenge nonce, not attestation's own audience/sequence machinery.</b> The claim is
+/// directed (<see cref="Audience"/>-bound) and carries no sequence, which <see cref="AttestationProfile"/>'s
 /// own docs call "replayable at its own audience" for a durable carried claim. That is fine here because this is
 /// not a durable carried claim: <see cref="NewChallenge"/> mints a fresh cryptographically random nonce per
 /// connection attempt, and this door additionally requires the claim's own payload bytes to equal that exact nonce
-/// (<see cref="TryAdmit"/>'s own check below — carriage's verifier does not interpret payload content at all, so
+/// (<see cref="TryAdmit"/>'s own check below — attestation's verifier does not interpret payload content at all, so
 /// this is this door's own responsibility, not a gap in the library). A captured claim only ever verifies against
 /// the one nonce it was signed over, and a nonce is never reused, so replay against this door is defeated by nonce
-/// uniqueness rather than by the audience/sequence story carriage carries for other purposes (durable cross-world
+/// uniqueness rather than by the audience/sequence story attestation carries for other purposes (durable cross-world
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
-    private static readonly ICarriageCodec s_codec = new CborCarriageCodec();
-    private static readonly CarriageConformanceProfile s_profile = CarriageConformanceProfile.Base;
+    private static readonly IAttestationCodec s_codec = new CborAttestationCodec();
+    private static readonly AttestationProfile s_profile = AttestationProfile.Base;
 
     /// <summary>The fixed purpose every admission claim must declare — stops a claim minted for anything else (a
     /// different game, a different purpose within this one) being replayed here as an admission proof.</summary>
@@ -66,7 +66,7 @@ public static class WorldAdmissionDoor {
     public const string Audience = "puck.world";
 
     /// <summary>The challenge nonce's byte width — generous against a birthday collision across any realistic
-    /// connection volume, and small enough to stay a rounding error against the envelope bytes around it.</summary>
+    /// connection volume, and small enough to stay a rounding error against the attestation bytes around it.</summary>
     public const int ChallengeBytes = 32;
 
     /// <summary>The outcome of one identity-door decision.</summary>
@@ -100,22 +100,22 @@ public static class WorldAdmissionDoor {
     /// <summary>Mints a fresh, cryptographically random challenge nonce.</summary>
     public static byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: ChallengeBytes);
 
-    /// <summary>Decodes one admission envelope under the door-owned mandatory base CBOR profile.</summary>
-    public static SignedCarriageEnvelope DecodeEnvelope(ReadOnlySpan<byte> wire) => s_profile.DecodeEnvelope(codec: s_codec, wire: wire);
+    /// <summary>Decodes one admission attestation under the door-owned mandatory base CBOR profile.</summary>
+    public static SignedAttestation DecodeAttestation(ReadOnlySpan<byte> wire) => s_profile.DecodeAttestation(codec: s_codec, wire: wire);
 
     /// <summary>Verifies one connecting peer's presented identity against this world's authored admission entries.</summary>
     /// <param name="entries">The document's current <c>admission</c> rows (a snapshot; see this class's remarks).</param>
     /// <param name="challenge">The exact nonce <see cref="NewChallenge"/> minted for this connection attempt.</param>
-    /// <param name="claim">The peer's signed claim envelope.</param>
-    /// <param name="chain">The peer's presented chain (0, 1, or 2 bindings — carriage's own depth rule governs which
+    /// <param name="claim">The peer's signed attestation carrying the claim.</param>
+    /// <param name="chain">The peer's presented chain (0, 1, or 2 bindings — attestation's own depth rule governs which
     /// counts are even reachable for a given trust entry).</param>
     /// <param name="now">The verification instant — an admission-boundary read, never a mid-tick one; see
-    /// carriage verification contract's own remarks on why that is legitimate here.</param>
+    /// attestation verification contract's own remarks on why that is legitimate here.</param>
     public static AdmissionOutcome TryAdmit(
         IReadOnlyList<WorldAdmissionEntry>? entries,
         ReadOnlySpan<byte> challenge,
-        SignedCarriageEnvelope claim,
-        IReadOnlyList<SignedCarriageEnvelope> chain,
+        SignedAttestation claim,
+        IReadOnlyList<SignedAttestation> chain,
         DateTimeOffset now
     ) {
         ArgumentNullException.ThrowIfNull(argument: claim);
@@ -146,7 +146,7 @@ public static class WorldAdmissionDoor {
             return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChainRefused, (result.RefusalReason ?? "refused"));
         }
 
-        if ((claim.PayloadKind != CarriagePayloadKind.Opaque) || !challenge.SequenceEqual(other: claim.PayloadBytes.Span)) {
+        if ((claim.PayloadKind != AttestationPayloadKind.Opaque) || !challenge.SequenceEqual(other: claim.PayloadBytes.Span)) {
             return AdmissionOutcome.Refuse(WorldAdmissionRefusal.ChallengeMismatch, "the signed claim does not carry the exact challenge this connection was issued");
         }
 
@@ -235,7 +235,7 @@ public static class WorldAdmissionDoor {
         return false;
     }
 
-    // Reach is deliberately empty for every entry: this door never consults Puck.Carriage's own slot-reach
+    // Reach is deliberately empty for every entry: this door never consults Puck.Attestation's own slot-reach
     // mechanism (that vocabulary is for a carried CLAIM's downstream authorization — see TrustListEntry.Reach's own
     // remarks), because this door already carries its OWN, more specific authorization vocabulary —
     // WorldAdmissionEntry.Grants, resolved directly into WorldGrant rows once a peer is admitted. Reusing Reach for
@@ -277,7 +277,7 @@ public static class WorldAdmissionDoor {
         foreach (var entry in entries) {
             if (entry.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
                 // Keyless by construction: an arrival row authorizes a namespace the federation handshake already
-                // authenticated, so it can never verify a carriage claim.
+                // authenticated, so it can never verify a attestation claim.
                 continue;
             }
 
@@ -297,7 +297,7 @@ public static class WorldAdmissionDoor {
             list.Add(item: new TrustListEntry(
                 PinnedId: pinnedId,
                 PublicKeySubjectPublicKeyInfo: spki,
-                Mode: ((entry.Mode == WorldAdmissionTrustMode.Vouches) ? CarriageTrustMode.Vouches : CarriageTrustMode.SignsDirectly),
+                Mode: ((entry.Mode == WorldAdmissionTrustMode.Vouches) ? AttestationTrustMode.Vouches : AttestationTrustMode.SignsDirectly),
                 Reach: s_noReach,
                 MaximumAge: null
             ));

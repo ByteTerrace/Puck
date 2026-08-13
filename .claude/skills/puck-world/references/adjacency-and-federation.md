@@ -58,7 +58,7 @@ wrapped yaw delta to the traveler's own unbounded accumulator.
 
 An `IWorldNeighbourResolver` may answer `Resolved` (the whole document),
 `Attested` (a `WorldCounterpartAttestation` — the neighbour's seam edges plus
-its overlap terms, signed through `WorldCounterpartCarriage` and verified
+its overlap terms, signed through `WorldCounterpartAttestationProtocol` and verified
 against the reading world's own `admission` keys), or `Unavailable`. The
 attested arm proves the same four per-fact refusals the document arm does:
 missing reverse edge, non-reciprocal counterpart, mismatched extents, and a

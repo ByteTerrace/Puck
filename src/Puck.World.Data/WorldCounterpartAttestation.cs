@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Puck.Carriage;
+using Puck.Attestation;
 using Puck.Maths;
 
 using Puck.World.Protocol;
@@ -148,11 +148,11 @@ public sealed record WorldCounterpartAttestation(string Document, IReadOnlyList<
 }
 
 /// <summary>
-/// The signed-carriage envelope a counterpart attestation travels in. The claim's payload is the attestation's own
+/// The signed attestation a counterpart claim travels in. The claim's payload is the attestation's own
 /// canonical JSON, and the trust list is built from the reading world's <c>admission</c> entries — the same keys that
 /// decide who may connect decide whose border claim is worth believing.
 /// </summary>
-public static class WorldCounterpartCarriage {
+public static class WorldCounterpartAttestationProtocol {
     /// <summary>The fixed purpose every counterpart attestation claim declares.</summary>
     public const string Purpose = "puck.world.counterpart-attestation";
 
@@ -176,7 +176,7 @@ public static class WorldCounterpartCarriage {
     /// attests.</summary>
     /// <param name="entries">The reading world's <c>admission</c> rows — the trust list this claim is checked
     /// against.</param>
-    /// <param name="codec">The carriage serialisation the claim/chain bytes were decoded with.</param>
+    /// <param name="codec">The attestation serialisation the claim/chain bytes were decoded with.</param>
     /// <param name="claim">The counterpart's signed claim.</param>
     /// <param name="chain">The presented chain (0, 1, or 2 bindings).</param>
     /// <param name="now">The verification instant — a validation-boundary read, never a mid-tick one.</param>
@@ -187,9 +187,9 @@ public static class WorldCounterpartCarriage {
     /// <paramref name="chain"/> is <see langword="null"/>.</exception>
     public static bool TryVerify(
         IReadOnlyList<WorldAdmissionEntry>? entries,
-        ICarriageCodec codec,
-        SignedCarriageEnvelope claim,
-        IReadOnlyList<SignedCarriageEnvelope> chain,
+        IAttestationCodec codec,
+        SignedAttestation claim,
+        IReadOnlyList<SignedAttestation> chain,
         DateTimeOffset now,
         out WorldCounterpartAttestation? attestation,
         out string reason
@@ -204,7 +204,7 @@ public static class WorldCounterpartCarriage {
             return false;
         }
 
-        var result = CarriageConformanceProfile.Base.VerifyChain(
+        var result = AttestationProfile.Base.VerifyChain(
             codec: codec,
             claim: claim,
             chain: chain,
@@ -219,7 +219,7 @@ public static class WorldCounterpartCarriage {
             return false;
         }
 
-        if (claim.PayloadKind != CarriagePayloadKind.Opaque) {
+        if (claim.PayloadKind != AttestationPayloadKind.Opaque) {
             reason = "the counterpart attestation claim carries no opaque payload";
 
             return false;

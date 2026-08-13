@@ -20,6 +20,20 @@ public sealed class GamepadCoalescer {
     private GamepadButtons m_released;
     private GamepadButtons m_previousButtons;
 
+    /// <summary>Clears every retained sample and edge before a receiver slot begins carrying another controller.</summary>
+    internal void Reset() {
+        lock (m_gate) {
+            m_gyro = Vector3.Zero;
+            m_gyroSamples = 0;
+            m_hasSample = false;
+            m_latest = GamepadState.Neutral;
+            m_pressed = GamepadButtons.None;
+            m_pressEdges = default;
+            m_released = GamepadButtons.None;
+            m_previousButtons = GamepadButtons.None;
+        }
+    }
+
     /// <summary>Records a freshly parsed report (called on the device I/O loop).</summary>
     /// <param name="state">The normalized state decoded from the report.</param>
     public void Update(in GamepadState state) {

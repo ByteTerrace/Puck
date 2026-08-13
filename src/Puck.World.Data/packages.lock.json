@@ -30,7 +30,7 @@
         "resolved": "9.0.19",
         "contentHash": "+88ti2cmdOOLVnoSVCudarqrAXbNCmIp2nNp9fPzrvamTm2II33RP3dsAsXGnsc3JdDsXTudLMjQc7NjJEjJYQ=="
       },
-      "ByteTerrace.Puck.Carriage": {
+      "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
           "System.Formats.Cbor": "[9.*, )"

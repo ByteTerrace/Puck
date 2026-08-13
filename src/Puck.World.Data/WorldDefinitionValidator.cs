@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
-using Puck.Carriage;
+using Puck.Attestation;
 using Puck.Commands;
 using Puck.Abstractions.Documents;
 using Puck.Forge.Authoring;
@@ -2133,7 +2133,7 @@ public static class WorldDefinitionValidator {
     }
 
     // The admission section: which identities/issuers the TCP door admits (WorldAdmissionDoor, Puck.World.Server's
-    // WorldTcpHost), and what each is minted. Crypto-shape rules reuse Puck.Carriage's TrustListEntry.Validate()
+    // WorldTcpHost), and what each is minted. Crypto-shape rules reuse Puck.Attestation's TrustListEntry.Validate()
     // directly rather than re-deriving them. Grant TEMPLATE rows are checked against the same subject-bounds/
     // exclusive-over-all rules ValidateGrants applies; Budget/exclusivity legitimacy is WorldServer.Grant's decision
     // at admission time, not this pass's.
@@ -2160,17 +2160,17 @@ public static class WorldDefinitionValidator {
 
             if (
                 (row.Subject is not null) &&
-                (Encoding.UTF8.GetByteCount(s: row.Subject) > CarriageResourceLimits.TextStringUtf8Bytes)
+                (Encoding.UTF8.GetByteCount(s: row.Subject) > AttestationResourceLimits.TextStringUtf8Bytes)
             ) {
-                errors.Add(item: $"{path}.subject exceeds the carriage-v1-base limit of {CarriageResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
+                errors.Add(item: $"{path}.subject exceeds the attestation-v1-base limit of {AttestationResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
             }
 
-            // The carriage-profile crypto shape governs rows that verify carriage claims. A 'federatedAuthority'
+            // The attestation-profile crypto shape governs rows that verify attestation claims. A 'federatedAuthority'
             // row is keyless by rule (below) and its domain is an authority namespace or the any-authority
             // wildcard, never a key fingerprint — the profile's algorithm/domain constraints cannot apply to it.
             if (row.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
-                if (!CarriageConformanceProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
-                    errors.Add(item: $"{path}.algorithm must be '{CarriageAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory carriage-v1-base profile.");
+                if (!AttestationProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
+                    errors.Add(item: $"{path}.algorithm must be '{AttestationAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory attestation-v1-base profile.");
                 }
 
                 try {
@@ -2210,8 +2210,8 @@ public static class WorldDefinitionValidator {
             }
 
             if (spki is { Length: > 0 }) {
-                if (spki.Length > CarriageResourceLimits.SubjectPublicKeyInfoBytes) {
-                    errors.Add(item: $"{path}.publicKey is {spki.Length} bytes; carriage-v1-base permits at most {CarriageResourceLimits.SubjectPublicKeyInfoBytes} DER SPKI bytes.");
+                if (spki.Length > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
+                    errors.Add(item: $"{path}.publicKey is {spki.Length} bytes; attestation-v1-base permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes} DER SPKI bytes.");
                 }
 
                 try {
@@ -2224,7 +2224,7 @@ public static class WorldDefinitionValidator {
                     var entry = new TrustListEntry(
                         PinnedId: pinnedId,
                         PublicKeySubjectPublicKeyInfo: spki,
-                        Mode: ((row.Mode == WorldAdmissionTrustMode.Vouches) ? CarriageTrustMode.Vouches : CarriageTrustMode.SignsDirectly),
+                        Mode: ((row.Mode == WorldAdmissionTrustMode.Vouches) ? AttestationTrustMode.Vouches : AttestationTrustMode.SignsDirectly),
                         Reach: WorldAdmissionEmptyReach,
                         MaximumAge: null
                     );
@@ -2280,7 +2280,7 @@ public static class WorldDefinitionValidator {
     }
 
     // Mirrors WorldAdmissionDoor's own s_noReach: this section's authorization vocabulary is
-    // WorldAdmissionEntry.Grants, never Puck.Carriage's slot-reach mechanism, so every entry validates against an
+    // WorldAdmissionEntry.Grants, never Puck.Attestation's slot-reach mechanism, so every entry validates against an
     // empty reach set here too.
     private static readonly IReadOnlySet<string> WorldAdmissionEmptyReach = new HashSet<string>(comparer: StringComparer.Ordinal);
 

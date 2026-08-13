@@ -5,7 +5,7 @@
     "null"
   ],
   "items": {
-    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Carriage.TrustList already carries.",
+    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Attestation.TrustList already carries.",
     "type": [
       "object",
       "null"
@@ -31,12 +31,12 @@
         ]
       },
       "algorithm": {
-        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory carriage-v1-base profile.",
+        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory attestation-v1-base profile.",
         "const": "ecdsa-p256-sha256",
         "type": "string"
       },
       "publicKey": {
-        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, \u0022Signed carriage\u0022: consulting the issuer at verification time is a ruled-out design).",
+        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, \u0022Signed attestation\u0022: consulting the issuer at verification time is a ruled-out design).",
         "type": "string"
       },
       "grants": {

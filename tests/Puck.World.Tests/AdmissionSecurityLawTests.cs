@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 
 using Xunit;
 
-using Puck.Carriage;
+using Puck.Attestation;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -19,7 +19,7 @@ namespace Puck.World.Tests;
 /// <see cref="TrustListEntry.Validate"/>). Three of the four land here as executable laws (the fourth, Finding 3's
 /// concurrent-handshake CEILING, is proven by code review + the deadline law below exercising the same accounting
 /// fields — a dedicated ceiling law was judged not worth 64 additional live sockets per run). These drive the REAL
-/// wire door (<see cref="WorldTcpHost"/>, a genuine <see cref="TcpClient"/>, a genuine signed carriage claim) rather
+/// wire door (<see cref="WorldTcpHost"/>, a genuine <see cref="TcpClient"/>, a genuine signed attestation claim) rather
 /// than poking server-internal state directly — <c>WorldServer.TryAdmitPeerConnection</c> is <c>internal</c>
 /// and deliberately has no test-only public seam (CLAUDE.md's IVT ruling: widen the member or don't reach it, and
 /// this member should NOT be public — it is a security-relevant door, not a utility), so the only faithful way to
@@ -230,7 +230,7 @@ public sealed class AdmissionSecurityLawTests {
         }
     }
 
-    /// <summary>A HelloIdentity frame that decodes cleanly — a zero-length chain and a well-formed claim envelope —
+    /// <summary>A HelloIdentity frame that decodes cleanly — a zero-length chain and a well-formed claim attestation —
     /// but carries extra bytes after the claim must draw the same named "identity-refused: …" reply as any other
     /// grammar violation, never reach identity verification with the trailing bytes silently ignored.</summary>
     [Fact]
@@ -249,7 +249,7 @@ public sealed class AdmissionSecurityLawTests {
         claim.CopyTo(array: claimEnvelope, index: sizeof(uint));
 
         var trailing = new byte[] { 0xAA, 0xBB, 0xCC };
-        // chainCount = 0, then the length-prefixed claim envelope — a well-formed frame on its own — followed by
+        // chainCount = 0, then the length-prefixed claim attestation — a well-formed frame on its own — followed by
         // bytes the grammar never accounts for.
         var body = new byte[] { 0 }.Concat(second: claimEnvelope).Concat(second: trailing).ToArray();
 
@@ -258,7 +258,7 @@ public sealed class AdmissionSecurityLawTests {
         var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
 
         Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloRefused, actual: reply.Kind);
-        Assert.Contains(expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim envelope", actualString: text, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim attestation", actualString: text, comparisonType: StringComparison.Ordinal);
     }
 
     /// <summary>A length prefix that declares a HelloIdentity frame, followed by a half-close before the body
@@ -607,7 +607,7 @@ public sealed class AdmissionSecurityLawTests {
             Domain: identity.Domain,
             Subject: identity.Subject,
             Mode: WorldAdmissionTrustMode.SignsDirectly,
-            Algorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
             PublicKey: Convert.ToBase64String(inArray: identity.Spki),
             Grants: grants
         );
@@ -637,7 +637,7 @@ public sealed class AdmissionSecurityLawTests {
             Domain: domain,
             Subject: "attacker",
             Mode: WorldAdmissionTrustMode.SignsDirectly,
-            Algorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
             PublicKey: Convert.ToBase64String(inArray: garbage),
             Grants: []
         );
@@ -737,7 +737,7 @@ public sealed class AdmissionSecurityLawTests {
 
     /// <summary>Drives the REAL wire door end to end: connects a raw <see cref="TcpClient"/> to
     /// <paramref name="host"/>, completes <see cref="WorldHelloDoor"/>'s version check, answers
-    /// <see cref="WorldAdmissionDoor"/>'s challenge with a genuine <see cref="CarriageSigner.SignClaim"/> claim
+    /// <see cref="WorldAdmissionDoor"/>'s challenge with a genuine <see cref="AttestationSigner.SignClaim"/> claim
     /// signed by <paramref name="identity"/>'s own key, and returns the admitted peer's body index and generation.
     /// Throws <see cref="InvalidOperationException"/> naming the refusal on anything other than a clean admit — this
     /// helper is the "ordinary positive outcome" path, never itself a refusal probe.</summary>
@@ -784,14 +784,14 @@ public sealed class AdmissionSecurityLawTests {
     }
 
     private static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, byte[] challenge, CancellationToken ct) {
-        var codec = new CborCarriageCodec();
+        var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var claim = CarriageSigner.SignClaim(
+        var claim = AttestationSigner.SignClaim(
             codec: codec,
             domain: identity.Domain,
             subject: identity.Subject,
             signerKey: identity.Key,
-            signerAlgorithm: CarriageAlgorithms.EcdsaP256Sha256,
+            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
             purpose: WorldAdmissionDoor.Purpose,
             notBefore: (now - 60L),
             notAfter: (now + 60L),
@@ -800,6 +800,6 @@ public sealed class AdmissionSecurityLawTests {
             claimBytes: challenge
         );
 
-        return WorldTcpWireFormat.WriteHelloIdentityAsync(stream: stream, chain: [], claim: codec.EncodeEnvelope(envelope: claim), ct: ct);
+        return WorldTcpWireFormat.WriteHelloIdentityAsync(stream: stream, chain: [], claim: codec.EncodeAttestation(attestation: claim), ct: ct);
     }
 }

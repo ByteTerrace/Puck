@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -25,7 +24,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     private readonly GamepadCoalescer m_coalescer = new();
     private readonly GameInputHaptics? m_haptics;
     private readonly GamepadOutput m_output;
-    private readonly ConcurrentQueue<GamepadOutputCommand> m_outputQueue = new();
+    private readonly GamepadOutputQueue m_outputQueue = new();
     private readonly uint m_slot;
     private int m_correlationCountdown;
     private volatile bool m_faulted;
@@ -168,7 +167,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     public bool TryTakeRumble(out GameInputRumbleParams rumble) {
         var changed = false;
 
-        while (m_outputQueue.TryDequeue(result: out var command)) {
+        while (m_outputQueue.TryDequeue(command: out var command)) {
             switch (command.Kind) {
                 case GamepadOutputKind.Rumble:
                     ApplyRumble(effect: command.Rumble);
@@ -186,12 +185,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
         }
 
         if (m_rumbleActive && (Stopwatch.GetTimestamp() >= m_rumbleExpiry)) {
-            m_highFrequency = 0f;
-            m_leftTrigger = 0f;
-            m_lowFrequency = 0f;
-            m_rightTrigger = 0f;
-            m_rumbleActive = false;
-            m_rumbleExpiry = long.MaxValue;
+            StopRumble();
             changed = true;
         }
 
@@ -206,14 +200,36 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     }
 
     private void ApplyRumble(RumbleEffect effect) {
-        m_highFrequency = Math.Clamp(value: effect.HighFrequency, max: 1f, min: 0f);
-        m_lowFrequency = Math.Clamp(value: effect.LowFrequency, max: 1f, min: 0f);
+        if (effect.DurationMilliseconds == 0u) {
+            StopRumble();
+
+            return;
+        }
+
+        m_highFrequency = NormalizeIntensity(intensity: effect.HighFrequency);
+        m_lowFrequency = NormalizeIntensity(intensity: effect.LowFrequency);
         ScheduleExpiry(durationMilliseconds: effect.DurationMilliseconds);
     }
     private void ApplyTriggerRumble(TriggerRumbleEffect effect) {
-        m_leftTrigger = Math.Clamp(value: effect.Left, max: 1f, min: 0f);
-        m_rightTrigger = Math.Clamp(value: effect.Right, max: 1f, min: 0f);
+        if (effect.DurationMilliseconds == 0u) {
+            StopRumble();
+
+            return;
+        }
+
+        m_leftTrigger = NormalizeIntensity(intensity: effect.Left);
+        m_rightTrigger = NormalizeIntensity(intensity: effect.Right);
         ScheduleExpiry(durationMilliseconds: effect.DurationMilliseconds);
+    }
+    private static float NormalizeIntensity(float intensity) =>
+        (float.IsFinite(f: intensity) ? Math.Clamp(value: intensity, max: 1f, min: 0f) : 0f);
+    private void StopRumble() {
+        m_highFrequency = 0f;
+        m_leftTrigger = 0f;
+        m_lowFrequency = 0f;
+        m_rightTrigger = 0f;
+        m_rumbleActive = false;
+        m_rumbleExpiry = long.MaxValue;
     }
     private void ScheduleExpiry(uint durationMilliseconds) {
         if ((0f >= m_lowFrequency) && (0f >= m_highFrequency) && (0f >= m_leftTrigger) && (0f >= m_rightTrigger)) {
@@ -221,9 +237,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
             m_rumbleExpiry = long.MaxValue;
         } else {
             m_rumbleActive = true;
-            m_rumbleExpiry = ((0u < durationMilliseconds)
-                ? (Stopwatch.GetTimestamp() + ((long)(durationMilliseconds * (Stopwatch.Frequency / 1000.0))))
-                : long.MaxValue);
+            m_rumbleExpiry = (Stopwatch.GetTimestamp() + ((long)(durationMilliseconds * (Stopwatch.Frequency / 1000.0))));
         }
     }
     private static GamepadState Convert(in XInputGamepad pad) {

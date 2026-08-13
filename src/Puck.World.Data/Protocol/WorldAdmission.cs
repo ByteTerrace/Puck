@@ -4,7 +4,7 @@ using Puck.Abstractions.Documents;
 namespace Puck.World.Protocol;
 
 /// <summary>Whether an admission entry pins one individual's own signing key, or a domain root that vouches for a
-/// two-hop chain beneath it — <c>Puck.Carriage.CarriageTrustMode</c>'s own two members, mirrored here as an authored
+/// two-hop chain beneath it — <c>Puck.Attestation.AttestationTrustMode</c>'s own two members, mirrored here as an authored
 /// document token so this project need not reference a leaf project's internal enum shape directly from JSON: a
 /// document field is a closed, versioned vocabulary of its own, never a re-export.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldAdmissionTrustMode>))]
@@ -20,7 +20,7 @@ public enum WorldAdmissionTrustMode : byte {
     /// <summary><see cref="WorldAdmissionEntry.Domain"/> names an authenticated federation authority namespace (or
     /// <see cref="WorldAdmissionEntry.AnyAuthority"/>), and the row says what a traveler that authority hands over is
     /// minted. The proof behind it is <c>Server.WorldFederationSecurity</c>'s shared-secret handshake rather than a
-    /// carriage claim, so such a row carries no <see cref="WorldAdmissionEntry.Algorithm"/> and no
+    /// attestation claim, so such a row carries no <see cref="WorldAdmissionEntry.Algorithm"/> and no
     /// <see cref="WorldAdmissionEntry.PublicKey"/>, and <see cref="WorldAdmissionDoor"/> skips it when building its
     /// trust list. An arriving traveler's body index, profile id, and display name are all supplied by the handing
     /// authority; which authority is speaking is the only verified fact, so it is the only one trust is authored
@@ -75,7 +75,7 @@ public readonly record struct WorldAdmissionGrant(WorldCapability Capability, Gr
 }
 
 /// <summary>What one admission decision authorizes. Only <see cref="WorldAdmissionDoor"/> produces one — from a
-/// verified carriage claim, from an already-verified identity re-matched against a candidate document, or from an
+/// verified attestation claim, from an already-verified identity re-matched against a candidate document, or from an
 /// authenticated federation authority's namespace — so no ingress can mint authority by assembling grant rows of its
 /// own.</summary>
 public sealed record WorldAdmissionVerdict {
@@ -104,7 +104,7 @@ public sealed record WorldAdmissionVerdict {
 /// grant row itself: <see cref="WorldAdmissionDoor"/> is the only consumer, and only at the pre-population Hello
 /// handshake, off the tick thread — this section carries no <see cref="WorldSection"/> axis and nothing mutates it
 /// live, exactly like <see cref="WorldReference"/>/<see cref="WorldPortalsSection"/>. Absent (the default) admits no
-/// remote peer at all — deny by default, the same posture an empty <c>Puck.Carriage.TrustList</c> already carries.</summary>
+/// remote peer at all — deny by default, the same posture an empty <c>Puck.Attestation.TrustList</c> already carries.</summary>
 /// <param name="Domain">The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For
 /// <see cref="WorldAdmissionTrustMode.Vouches"/> this must be <see cref="PublicKey"/>'s own fingerprint (a root is
 /// self-certifying). For <see cref="WorldAdmissionTrustMode.SignsDirectly"/> it names the domain namespace this
@@ -117,11 +117,11 @@ public sealed record WorldAdmissionVerdict {
 /// resolves, never one named here).</param>
 /// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
 /// <param name="Algorithm">Exactly <c>ecdsa-p256-sha256</c>, the only signing algorithm enabled by the
-/// admission door's mandatory <c>carriage-v1-base</c> profile. Sealing algorithms and optional signing
+/// admission door's mandatory <c>attestation-v1-base</c> profile. Sealing algorithms and optional signing
 /// extensions are refused by document validation.</param>
 /// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
 /// alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed
-/// carriage": consulting the issuer at verification time is a ruled-out design).</param>
+/// attestation": consulting the issuer at verification time is a ruled-out design).</param>
 /// <param name="Grants">What a peer verified under this entry is minted, INSTEAD OF the blanket
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate
 /// authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a

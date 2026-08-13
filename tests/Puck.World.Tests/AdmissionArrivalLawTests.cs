@@ -81,10 +81,10 @@ public sealed class AdmissionArrivalLawTests {
         }
     }
 
-    /// <summary>A carriage claim can never verify against a keyless arrival row: a document authoring arrivals alone
+    /// <summary>A attestation claim can never verify against a keyless arrival row: a document authoring arrivals alone
     /// still admits no connecting peer.</summary>
     [Fact]
-    public void ArrivalRows_AreInvisibleToTheCarriageClaimArm() {
+    public void ArrivalRows_AreInvisibleToTheAttestationClaimArm() {
         Assert.False(condition: WorldAdmissionDoor.TryMatchEntry(entries: [Arrivals(domain: SourceAuthority)], domain: SourceAuthority, subject: null, verdict: out _));
     }
 

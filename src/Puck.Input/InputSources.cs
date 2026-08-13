@@ -86,13 +86,26 @@ public static class InputSources {
         public const string Text = "keyboard.text";
 
         /// <summary>The source for function key F<paramref name="number"/> (F1, F2, …).</summary>
+        /// <param name="number">The function-key number, from 1 through 12.</param>
+        /// <returns>The physical source identifier for the function key.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="number"/> is outside the range 1 through 12.</exception>
         public static string Function(int number) {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value: number, other: 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: number, other: 12);
+
             return $"keyboard.f{number}";
         }
         /// <summary>The source for a letter key. A chord like <c>Ctrl+C</c> is a <see cref="Puck.Commands.BindingModifierDefinition"/>
         /// declaring <see cref="ControlLeft"/> (or <see cref="ControlRight"/>) alongside this source — modifiers are ordinary
         /// declared sources, not a mechanism this key pairs with.</summary>
+        /// <param name="letter">The ASCII letter, A through Z in either case.</param>
+        /// <returns>The lowercase physical source identifier for the letter.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="letter"/> is not an ASCII letter.</exception>
         public static string Letter(char letter) {
+            if (letter is not (>= 'A' and <= 'Z') and not (>= 'a' and <= 'z')) {
+                throw new ArgumentOutOfRangeException(paramName: nameof(letter), actualValue: letter, message: "The key must be an ASCII letter from A through Z.");
+            }
+
             return $"keyboard.{char.ToLowerInvariant(c: letter)}";
         }
     }

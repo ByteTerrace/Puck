@@ -93,7 +93,7 @@ unfamiliar, read that section first.)
 | **Embodiment** | you have a *body* in it — strictly separate from joining | population entry |
 | **Reference** | a world names another definition/address without asserting reachability | document row |
 | **Destination** | a world selects a scoped identity/generation over one reference | document row |
-| **Carriage** | a world signs a claim another world carries | issuer-signed slot |
+| **Attestation** | a world signs a claim another world carries | issuer-signed slot |
 | **Transfer** | a body moves from one world's authority to another's | submission |
 | **Display** | a surface shows what a camera produces, in this world or a joined one | placement facet |
 
@@ -568,11 +568,11 @@ cluster, reserving headroom and co-hosting neighbours are work rather than polis
 authoring guidance is not "put a world wherever people fight", which is reactive topology, but "do
 not run an authority boundary through a place designed to be contested".
 
-### Signed carriage
+### Signed attestation
 
-*Issuer-signed slots* and *an authored trust list* both rest on one mechanism: a signed envelope
+*Issuer-signed slots* and *an authored trust list* both rest on one mechanism: a signed attestation
 whose design rationale, normative wire specification, and reference implementation all live with the
-project that implements them — [src/Puck.Carriage](../src/Puck.Carriage/README.md). What this model
+project that implements them — [src/Puck.Attestation](../src/Puck.Attestation/README.md). What this model
 keeps is the seam: the engine carries proof and enforces capabilities, while whether a claim *counts*
 stays the receiving world's policy (invariant 5); minting is randomised and happens outside the tick,
 while verification is offline, far too slow for a tick, and therefore happens at the admission
@@ -653,7 +653,7 @@ or it silently outlives its own reason.
 | **Video as the default screen source** | *Contingent.* Submissions are smaller, allow a free camera, and render natively. Video remains correct wherever hidden information forbids handing over the tape |
 | **Embedding ROMs in the world file** | creations are embedded because they are small and authored in-engine; a cartridge is large and externally produced, so an address plus a hash gives verifiability and travel without the weight |
 
-#### Trust and carriage
+#### Trust and attestation
 
-Carriage's rejected shapes live with the project:
-[src/Puck.Carriage/README.md, "Ruled out"](../src/Puck.Carriage/README.md#ruled-out).
+Attestation's rejected shapes live with the project:
+[src/Puck.Attestation/README.md, "Ruled out"](../src/Puck.Attestation/README.md#ruled-out).

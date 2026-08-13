@@ -252,7 +252,7 @@ clear authored ceilings.
 `WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows, and it takes a `WorldAdmissionVerdict` — never
 raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
-`TryAdmit` (a verified carriage claim at the TCP hello), `TryMatchEntry` (an
+`TryAdmit` (a verified attestation claim at the TCP hello), `TryMatchEntry` (an
 already-verified identity re-matched against a rebuild candidate), and
 `TryAdmitArrival` (an authenticated federation authority's namespace). No
 verdict means a named refusal, never a default seed.
@@ -263,7 +263,7 @@ is the authenticated source-authority namespace, or
 `WorldAdmissionEntry.AnyAuthority` (`*`) for any authority that completes
 `WorldFederationSecurity`'s shared-secret handshake; a named row beats the
 wildcard in either authored order. The door skips such rows when building its
-carriage trust list, so a document authoring arrivals alone still admits no
+attestation trust list, so a document authoring arrivals alone still admits no
 connecting peer, and `TryAdmit` answers `NoAdmissionEntries` there.
 `WorldAdmissionRefusal.NoArrivalAuthority` names the arrival-side miss. Every
 shipped world authors a `*` arrivals row, because an authority is addressed

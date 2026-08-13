@@ -43,8 +43,8 @@
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <!-- WorldRemoteClient's connect harness signs its identity claim with this directly (ECDsa key import,
-             CarriageSigner, mandatory-base CborCarriageCodec) to answer the TCP door's admission challenge. -->
-        <ProjectReference Include="..\Puck.Carriage\Puck.Carriage.csproj" />
+             AttestationSigner, mandatory-base CborAttestationCodec) to answer the TCP door's admission challenge. -->
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <!-- The D3D12-host GPU capture transport (WorldScreenBinder) constructs DirectXGpuSurfaceExportFactory and reads
              the render adapter LUID off IDirectXDeviceContext; the concrete simultaneous-access opener is not on a

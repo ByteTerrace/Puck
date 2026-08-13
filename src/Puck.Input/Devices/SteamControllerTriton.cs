@@ -25,7 +25,7 @@ namespace Puck.Input.Devices;
 /// at-rest IMU are hardware-proven on this receiver, while the IMU axis mapping is nominal (gravity anchors
 /// pitch/roll regardless — only gyro-only yaw depends on the exact mapping).
 /// </remarks>
-internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDisposable {
+internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGamepadStreamReset, IDisposable {
     // Report ids. The vendor collection carries a fixed 54-byte state report (0x42); rumble is written as an
     // output report (0x80); every control write is a feature report under report id 1 (the classic pad's id-0
     // framing is rejected by the Triton firmware with Win32 error 87).
@@ -152,8 +152,8 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
         m_device = device;
         // Feature and output reports must be written at the device's declared length (the HID stack rejects a
         // mismatched length); fall back to the documented sizes if the device declares none.
-        m_featureBuffer = new byte[((featureLength > 0) ? featureLength : HidFeatureReportBytes)];
-        m_outputBuffer = new byte[((outputLength > 0) ? outputLength : HidRumbleOutputReportBytes)];
+        m_featureBuffer = new byte[Math.Max(val1: featureLength, val2: HidFeatureReportBytes)];
+        m_outputBuffer = new byte[Math.Max(val1: outputLength, val2: HidRumbleOutputReportBytes)];
     }
 
     /// <inheritdoc />
@@ -212,11 +212,7 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
 
     /// <inheritdoc />
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
-        var high = Math.Clamp(value: highFrequency, max: 1f, min: 0f);
-        var low = Math.Clamp(value: lowFrequency, max: 1f, min: 0f);
-        var intensity = MathF.Max(x: low, y: high);
-
-        if (!m_rumbleThrottle.ShouldSend(intensity: intensity)) {
+        if (!m_rumbleThrottle.TryPrepare(lowFrequency: lowFrequency, highFrequency: highFrequency, low: out var low, high: out var high)) {
             return ValueTask.CompletedTask;
         }
 
@@ -241,6 +237,14 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IDi
         buffer[RumbleRightGainOffset] = 0;
 
         return m_device.WriteAsync(buffer: buffer, cancellationToken: cancellationToken);
+    }
+
+    void IGamepadStreamReset.ResetStreamState() {
+        m_hasSensorTimestamp = false;
+        m_lastSensorTimestamp = 0u;
+        m_nextLizardWatchdogTicks = 0L;
+        m_rumbleThrottle.Reset();
+        m_tracker.Reset();
     }
 
     /// <inheritdoc />

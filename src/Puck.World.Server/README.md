@@ -130,7 +130,7 @@ door 1 is the raw protocol-version handshake (`WorldProtocol.WireProtocolKey`
 via `WorldHelloDoor.TryAccept`, `Puck.World.Data`); door 2, once door 1
 passes, is the IDENTITY challenge-response
 (`Puck.World.Data.Protocol.WorldAdmissionDoor`) — the host mints a fresh
-nonce, the peer answers with a signed `Puck.Carriage` claim (and, for a
+nonce, the peer answers with a signed `Puck.Attestation` claim (and, for a
 vouching root, its two-hop chain), and the door verifies it against the world
 document's own authored `admission` section, mapping the verified identity to
 that entry's own authored grant templates. Each door refuses by its OWN named
@@ -177,7 +177,7 @@ the runtime and document halves of the admission decision, respectively.
 `WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows. It takes a `WorldAdmissionVerdict` and nothing
 else — no arm accepts raw `WorldGrant` rows — and only
-`WorldAdmissionDoor` produces one: from a verified carriage claim
+`WorldAdmissionDoor` produces one: from a verified attestation claim
 (`TryAdmit`), from an already-verified identity re-matched against a candidate
 document (`TryMatchEntry`, the whole-document rebuild's re-authorization), or
 from an authenticated federation authority's namespace (`TryAdmitArrival`).
@@ -203,7 +203,7 @@ the authenticated authority namespace, or `*` for any authority that completes
 the handshake. An authority is addressed `<machineId>/<instance>` and the
 machine id is minted per installation, so `*` is what a document authors when
 it cannot know its neighbours' machine ids in advance. Such a row is skipped
-when the door builds its carriage trust list — it can never verify a claim —
+when the door builds its attestation trust list — it can never verify a claim —
 and a document authoring arrivals alone still admits no connecting peer.
 ## Federation transport (`WorldFederationCodec.cs`)
 
