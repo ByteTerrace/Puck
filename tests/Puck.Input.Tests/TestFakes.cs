@@ -17,6 +17,7 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
 }
 
 internal sealed class TestHidDevice : IHidDevice {
+    private readonly TaskCompletionSource m_disposedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentQueue<byte[]> m_reports = new();
     private int m_activeReads;
     private bool m_disposed;
@@ -30,6 +31,7 @@ internal sealed class TestHidDevice : IHidDevice {
     public int InputReportByteLength { get; init; }
     public int OutputReportByteLength { get; init; }
     public int FeatureReportByteLength { get; init; }
+    public bool BlockReadUntilDisposed { get; init; }
     public bool DisposedWhileReading { get; private set; }
     public TaskCompletionSource ReadEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public List<byte[]> Writes { get; } = [];
@@ -52,6 +54,12 @@ internal sealed class TestHidDevice : IHidDevice {
         _ = ReadEntered.TrySetResult();
 
         try {
+            if (BlockReadUntilDisposed) {
+                await m_disposedSignal.Task;
+
+                return 0;
+            }
+
             if (m_reports.TryDequeue(result: out var report)) {
                 report.CopyTo(destination: buffer);
 
@@ -91,20 +99,26 @@ internal sealed class TestHidDevice : IHidDevice {
     }
 
     public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
         DisposedWhileReading = (Volatile.Read(location: ref m_activeReads) != 0);
         m_disposed = true;
+        _ = m_disposedSignal.TrySetResult();
     }
 
     public bool IsDisposed => m_disposed;
 }
 
-internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset {
+internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffectParser, IWirelessSlotParser, IGamepadStreamReset, IDisposable {
     private readonly object m_gate = new();
 
     public GamepadType Type => GamepadType.Unknown;
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.None;
     public int InitializeCount { get; private set; }
     public int ResetCount { get; private set; }
+    public int DisposeCount { get; private set; }
     public List<(float Low, float High)> RumbleWrites { get; } = [];
     public List<(TriggerEffectSpec Left, TriggerEffectSpec Right)> TriggerWrites { get; } = [];
 
@@ -154,6 +168,12 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
     public void ResetStreamState() {
         lock (m_gate) {
             ++ResetCount;
+        }
+    }
+
+    public void Dispose() {
+        lock (m_gate) {
+            ++DisposeCount;
         }
     }
 }

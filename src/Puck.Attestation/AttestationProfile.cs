@@ -119,6 +119,7 @@ public sealed class AttestationProfile {
     /// <param name="now">The taped verification instant.</param>
     /// <param name="expectedPurpose">The receiver-authored purpose.</param>
     /// <param name="expectedAudience">The receiver-authored audience.</param>
+    /// <returns>The verification result, including any slot-scoped replay commitment requirement.</returns>
     public AttestationVerifyResult VerifyChain(
         IAttestationCodec codec,
         SignedAttestation claim,
@@ -128,6 +129,10 @@ public sealed class AttestationProfile {
         string expectedPurpose,
         string? expectedAudience
     ) {
+        if (chain is { Count: > 2 }) {
+            return AttestationVerifyResult.Refuse(reason: $"broken chain: expected at most two bindings, found {chain.Count}");
+        }
+
         // Validate only the entry this claim can actually select. A disabled entry for some unrelated peer
         // must not poison every otherwise-valid claim in the trust list.
         var selectedEntry = (

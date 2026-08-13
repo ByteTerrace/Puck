@@ -732,8 +732,8 @@ internal static class AttestationVerifier {
     /// header — is the only thing that selects the hash algorithm this method verifies with. The caller has
     /// already checked <c>attestation.Header.Algorithm == pinnedAlgorithm</c> as a separate consistency check;
     /// this method does not re-read the header's algorithm at all. The imported key's own curve is checked
-    /// against the pinned algorithm's curve too, so a key on some other curve cannot be smuggled in behind
-    /// a name that promises P-256.
+    /// against the pinned algorithm's curve too, and the import must consume every supplied SPKI byte, so
+    /// trailing identity bytes or a key on some other curve cannot be smuggled in behind a name that promises P-256.
     /// </summary>
     /// <remarks>
     /// The signing input is <see cref="SignedAttestation.SignedPortion"/> — the bytes that arrived —
@@ -757,8 +757,12 @@ internal static class AttestationVerifier {
         try {
             ecdsa.ImportSubjectPublicKeyInfo(
                 source: publicKeySubjectPublicKeyInfo,
-                bytesRead: out _
+                bytesRead: out var bytesRead
             );
+
+            if (bytesRead != publicKeySubjectPublicKeyInfo.Length) {
+                return false;
+            }
         } catch (CryptographicException) {
             return false;
         }

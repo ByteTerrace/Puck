@@ -9,19 +9,19 @@ namespace Puck.Attestation;
 /// </summary>
 public static class AttestationSigner {
     /// <summary>
-    /// Signs an attestation. <paramref name="signingAlgorithm"/> drives the actual cryptographic operation and
-    /// is independent of <paramref name="header"/>'s own <see cref="AttestationHeader.Algorithm"/>
-    /// field — in honest minting code the two are always equal, but keeping them as separate parameters is
-    /// what lets the adversarial tests construct the algorithm-confusion attack (an attestation that claims one
-    /// algorithm while a different, correctly-pinned one actually produced the signature).
+    /// Signs an attestation after requiring the declared algorithm and signing key to match the selected
+    /// signing algorithm. The algorithm fixes both the signature hash and the key curve.
     /// </summary>
     /// <param name="codec">The serialisation that produces the exact signed-portion bytes passed to <paramref name="signingKey"/>.</param>
-    /// <param name="header">The context header to sign. Its own <see cref="AttestationHeader.Algorithm"/> is written as-is, never derived from <paramref name="signingAlgorithm"/>.</param>
+    /// <param name="header">The context header to sign; its declared algorithm must equal <paramref name="signingAlgorithm"/>.</param>
     /// <param name="payloadKind">Which shape <paramref name="payloadBytes"/> is.</param>
     /// <param name="payloadBytes">The already-encoded payload bytes.</param>
     /// <param name="signingKey">The private key that actually signs.</param>
     /// <param name="signingAlgorithm">The algorithm actually used for the cryptographic operation (must resolve to a <see cref="AttestationKeyRole.Signing"/> descriptor).</param>
-    /// <exception cref="ArgumentException"><paramref name="signingAlgorithm"/> does not resolve to a signing algorithm.</exception>
+    /// <returns>The signed attestation carrying the exact bytes passed to the signing operation.</returns>
+    /// <exception cref="ArgumentException"><paramref name="signingAlgorithm"/> does not resolve to a signing algorithm, <paramref name="header"/> declares another algorithm, or <paramref name="signingKey"/> is on another curve.</exception>
+    /// <exception cref="CryptographicException">The signing operation fails or produces a signature outside the registered algorithm's fixed width.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="signingAlgorithm"/> is not registered.</exception>
     public static SignedAttestation Sign(
         IAttestationCodec codec,
         AttestationHeader header,
@@ -39,6 +39,27 @@ public static class AttestationSigner {
             );
         }
 
+        if (!string.Equals(
+            a: header.Algorithm,
+            b: descriptor.Name,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ArgumentException(
+                message: $"The attestation header declares algorithm '{header.Algorithm}', but the signer was asked to use '{descriptor.Name}'.",
+                paramName: nameof(header)
+            );
+        }
+
+        if (!AttestationCurves.Matches(
+            key: signingKey.ExportParameters(includePrivateParameters: false).Curve,
+            expected: descriptor.Curve
+        )) {
+            throw new ArgumentException(
+                message: $"The signing key is not on the curve algorithm '{descriptor.Name}' names.",
+                paramName: nameof(signingKey)
+            );
+        }
+
         var signedPortion = codec.EncodeSignedPortion(
             header: header,
             payloadKind: payloadKind,
@@ -49,6 +70,10 @@ public static class AttestationSigner {
             hashAlgorithm: descriptor.SignatureHash!.Value,
             signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
         );
+
+        if (signature.Length != AttestationResourceLimits.SignatureBytes) {
+            throw new CryptographicException(message: $"Algorithm '{descriptor.Name}' produced a {signature.Length}-byte signature; the attestation profile requires exactly {AttestationResourceLimits.SignatureBytes} bytes.");
+        }
 
         // The attestation carries the bytes that were just signed rather than a promise that they could be
         // re-derived — the same bytes a verifier will check the signature against (see the remarks on
@@ -76,11 +101,10 @@ public static class AttestationSigner {
     /// <param name="targetSubjectPublicKeyInfo">The vouched-for key's actual SPKI bytes.</param>
     /// <param name="notBefore">The issuer-authored window start, Unix seconds.</param>
     /// <param name="notAfter">The issuer-authored window end, Unix seconds.</param>
-    /// <param name="declaredAlgorithm">
-    /// What <see cref="AttestationHeader.Algorithm"/> is actually written as. Defaults to
-    /// <paramref name="signerAlgorithm"/>; a test may override this to construct an algorithm-confusion
-    /// attestation (a header that lies about which algorithm signed it).
-    /// </param>
+    /// <returns>The signed key-binding attestation.</returns>
+    /// <exception cref="ArgumentException"><paramref name="signerAlgorithm"/> does not resolve to a signing algorithm, or <paramref name="signerKey"/> is on another curve.</exception>
+    /// <exception cref="CryptographicException">The signing operation fails or produces a signature outside the registered algorithm's fixed width.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="signerAlgorithm"/> is not registered.</exception>
     public static SignedAttestation SignKeyBinding(
         IAttestationCodec codec,
         string domain,
@@ -89,8 +113,7 @@ public static class AttestationSigner {
         KeyId targetId,
         ReadOnlyMemory<byte> targetSubjectPublicKeyInfo,
         long notBefore,
-        long notAfter,
-        string? declaredAlgorithm = null
+        long notAfter
     ) {
         var payload = new KeyBindingPayload(
             TargetId: targetId,
@@ -100,7 +123,7 @@ public static class AttestationSigner {
         var header = new AttestationHeader(
             Domain: domain,
             Subject: null,
-            Algorithm: (declaredAlgorithm ?? signerAlgorithm),
+            Algorithm: signerAlgorithm,
             Purpose: AttestationPurposes.KeyBinding,
             NotBefore: notBefore,
             NotAfter: notAfter,
@@ -130,8 +153,10 @@ public static class AttestationSigner {
     /// <param name="audience">The one world this claim is valid at, or <see langword="null"/> for a bearer claim.</param>
     /// <param name="sequence">The optional replay-protection sequence number. It is required for a bearer claim and may also appear on a directed claim.</param>
     /// <param name="claimBytes">The opaque claim payload.</param>
-    /// <param name="declaredAlgorithm">What the header actually declares; defaults to <paramref name="signerAlgorithm"/> (see <see cref="SignKeyBinding"/> for why this can be overridden).</param>
-    /// <exception cref="ArgumentException"><paramref name="purpose"/> is <see cref="AttestationPurposes.KeyBinding"/>.</exception>
+    /// <returns>The signed opaque claim.</returns>
+    /// <exception cref="ArgumentException"><paramref name="purpose"/> is <see cref="AttestationPurposes.KeyBinding"/>, <paramref name="signerAlgorithm"/> does not resolve to a signing algorithm, or <paramref name="signerKey"/> is on another curve.</exception>
+    /// <exception cref="CryptographicException">The signing operation fails or produces a signature outside the registered algorithm's fixed width.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="signerAlgorithm"/> is not registered.</exception>
     public static SignedAttestation SignClaim(
         IAttestationCodec codec,
         string domain,
@@ -143,8 +168,7 @@ public static class AttestationSigner {
         long notAfter,
         string? audience,
         ulong? sequence,
-        ReadOnlyMemory<byte> claimBytes,
-        string? declaredAlgorithm = null
+        ReadOnlyMemory<byte> claimBytes
     ) {
         if (string.Equals(
             a: purpose,
@@ -160,7 +184,7 @@ public static class AttestationSigner {
         var header = new AttestationHeader(
             Domain: domain,
             Subject: subject,
-            Algorithm: (declaredAlgorithm ?? signerAlgorithm),
+            Algorithm: signerAlgorithm,
             Purpose: purpose,
             NotBefore: notBefore,
             NotAfter: notAfter,

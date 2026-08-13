@@ -366,6 +366,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     private readonly HidTransport m_transport;
     private uint m_isDisposed = DISPOSED_FALSE;
     private PHIDP_PREPARSED_DATA m_preparsedData = ((PHIDP_PREPARSED_DATA)nint.Zero);
+    private CancellationTokenSource? m_readTimeoutSource;
 
     /// <inheritdoc />
     public string DevicePath { get => m_devicePath; }
@@ -412,6 +413,8 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         )) {
             if (disposing) {
                 m_fileStream?.Dispose();
+                m_readTimeoutSource?.Dispose();
+                m_readTimeoutSource = null;
             }
 
             if (nint.Zero != m_preparsedData) {
@@ -463,21 +466,38 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         var numberOfBytesRead = 0;
 
         if (fileStream is not null) {
-            using var limitCancellationTokenSource = new CancellationTokenSource(millisecondsDelay: timeoutInMilliseconds);
+            // Reads are serialized on the device's single I/O loop, so one resettable timeout source is reused per
+            // device instead of creating one for every timed read. An elapsed timeout retires the source and the
+            // next timed read replaces it.
+            var timeoutSource = (m_readTimeoutSource ??= new CancellationTokenSource());
+
+            timeoutSource.CancelAfter(millisecondsDelay: timeoutInMilliseconds);
 
             try {
-                using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-                    token1: cancellationToken,
-                    token2: limitCancellationTokenSource.Token
+                using var callerRegistration = cancellationToken.UnsafeRegister(
+                    callback: static state => ((CancellationTokenSource)state!).Cancel(),
+                    state: timeoutSource
                 );
 
                 numberOfBytesRead = await fileStream.ReadAsync(
                     buffer: buffer,
-                    cancellationToken: linkedCancellationTokenSource.Token
+                    cancellationToken: timeoutSource.Token
                 );
-            } catch (OperationCanceledException) when (limitCancellationTokenSource.IsCancellationRequested) {
+            } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
                 if (throwOnTimeout) {
                     throw;
+                }
+            } finally {
+                try {
+                    if (!timeoutSource.TryReset()) {
+                        timeoutSource.Dispose();
+                        m_readTimeoutSource = null;
+                    }
+                } catch (ObjectDisposedException) {
+                    // A forced device close may dispose the timeout source to break a stuck HID read. The handle
+                    // owner deliberately wins that race; this read is already ending and must not turn cleanup into
+                    // a second fault.
+                    m_readTimeoutSource = null;
                 }
             }
         }

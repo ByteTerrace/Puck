@@ -64,10 +64,13 @@ public sealed class GamepadCaptureSource {
     private readonly IInputClock m_clock;
     private readonly Func<InputDeviceId, bool> m_isActiveFor;
     private readonly InputRouter m_router;
-    private readonly List<InputDeviceId> m_staleDeviceIds = [];
+    private readonly HashSet<InputDeviceId> m_capturedDeviceIds = [];
     // Which analog controls each device last reported active, so the first return-to-rest emits an explicit zero
     // without streaming redundant zeroes forever. The edge clears InputRouter's carried sample while ensuring a newly
     // connected, untouched pad does not reserve/join a player lane merely because its sticks are centered.
+    // HeldButtons mirrors the presses this source has emitted and not yet released, so a device that leaves the
+    // captured set (unplug, fault, receiver park, or focus-predicate rejection) can be given the release edges
+    // it can no longer deliver through this path.
     private readonly Dictionary<InputDeviceId, AnalogLatch> m_analogLatches = [];
 
     private struct AnalogLatch {
@@ -77,6 +80,7 @@ public sealed class GamepadCaptureSource {
         public bool RightTrigger;
         public bool Touch0;
         public bool Touch1;
+        public GamepadButtons HeldButtons;
     }
 
     /// <summary>Initializes a new instance of the <see cref="GamepadCaptureSource"/> class.</summary>
@@ -106,15 +110,18 @@ public sealed class GamepadCaptureSource {
         // arrival time and each press its own first-press edge time (B2), so most signals stamp sub-frame.
         var frameTick = m_clock.NowTicks;
 
+        m_capturedDeviceIds.Clear();
+
         foreach (var drain in drains) {
             if (!m_isActiveFor(arg: drain.DeviceId)) {
                 continue;
             }
 
+            _ = m_capturedDeviceIds.Add(item: drain.DeviceId);
             EmitSignals(drain: in drain, frameTick: frameTick);
         }
 
-        RemoveDisconnectedLatches(drains: drains);
+        ClearDepartedDevices(frameTick: frameTick);
     }
 
     private void EmitSignals(in GamepadDrain drain, ulong frameTick) {
@@ -152,6 +159,7 @@ public sealed class GamepadCaptureSource {
 
         analogLatch.LeftTrigger = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.LeftTrigger, tick: latestTick, value: latest.LeftTrigger, wasActive: analogLatch.LeftTrigger);
         analogLatch.RightTrigger = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.RightTrigger, tick: latestTick, value: latest.RightTrigger, wasActive: analogLatch.RightTrigger);
+        analogLatch.HeldButtons = ((analogLatch.HeldButtons | drain.Pressed) & ~drain.Released);
         m_analogLatches[deviceId] = analogLatch;
 
         if (Vector3.Zero != drain.Gyro) {
@@ -188,26 +196,46 @@ public sealed class GamepadCaptureSource {
         return false;
     }
 
-    private void RemoveDisconnectedLatches(IReadOnlyList<GamepadDrain> drains) {
-        m_staleDeviceIds.Clear();
+    // A device absent from this frame's accepted set — disconnected OR rejected by the focus predicate — can no
+    // longer deliver a return-to-rest through this capture path. InputRouter carries samples until an explicit
+    // zero/release, so the latch pays every edge it still owes before it is dropped. Removing during enumeration
+    // is supported by Dictionary on the repository's net10.0 target.
+    private void ClearDepartedDevices(ulong frameTick) {
+        foreach (var (deviceId, latch) in m_analogLatches) {
+            if (m_capturedDeviceIds.Contains(item: deviceId)) {
+                continue;
+            }
 
-        foreach (var deviceId in m_analogLatches.Keys) {
-            var present = false;
-
-            foreach (var drain in drains) {
-                if (drain.DeviceId == deviceId) {
-                    present = true;
-
-                    break;
+            foreach (var (flag, source) in ButtonSources) {
+                if (0 != (latch.HeldButtons & flag)) {
+                    m_router.Capture(signal: InputSignal.Release(captureTick: frameTick, deviceId: deviceId, source: source));
                 }
             }
 
-            if (!present) {
-                m_staleDeviceIds.Add(item: deviceId);
+            if (latch.LeftStick) {
+                _ = EmitStick(deviceId: deviceId, source: InputSources.Gamepad.LeftStick, tick: frameTick, value: Vector2.Zero, wasActive: true);
             }
-        }
 
-        foreach (var deviceId in m_staleDeviceIds) {
+            if (latch.RightStick) {
+                _ = EmitStick(deviceId: deviceId, source: InputSources.Gamepad.RightStick, tick: frameTick, value: Vector2.Zero, wasActive: true);
+            }
+
+            if (latch.Touch0) {
+                _ = EmitTouch(deviceId: deviceId, source: InputSources.Gamepad.Touchpad0, tick: frameTick, touch: default, wasActive: true);
+            }
+
+            if (latch.Touch1) {
+                _ = EmitTouch(deviceId: deviceId, source: InputSources.Gamepad.Touchpad1, tick: frameTick, touch: default, wasActive: true);
+            }
+
+            if (latch.LeftTrigger) {
+                _ = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.LeftTrigger, tick: frameTick, value: 0f, wasActive: true);
+            }
+
+            if (latch.RightTrigger) {
+                _ = EmitTrigger(deviceId: deviceId, source: InputSources.Gamepad.RightTrigger, tick: frameTick, value: 0f, wasActive: true);
+            }
+
             _ = m_analogLatches.Remove(key: deviceId);
         }
     }

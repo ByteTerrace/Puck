@@ -151,6 +151,57 @@ public sealed class ChainTests {
     }
 
     [Fact]
+    public void DepthAboveTwo_IsRefusedBeforeAnyBindingIsProfileValidated() {
+        var (codec, _, chain, trust, claim) = BuildFixture();
+        var bindingWithInvalidSignatureWidth = chain[0] with { Signature = ReadOnlyMemory<byte>.Empty };
+
+        var result = AttestationProfile.Base.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: [bindingWithInvalidSignatureWidth, bindingWithInvalidSignatureWidth, bindingWithInvalidSignatureWidth],
+            trustList: trust,
+            now: Now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home"
+        );
+
+        AssertRefused(result: result, reasonMustContain: "broken chain");
+    }
+
+    [Fact]
+    public void BindingTargetSpki_TrailingBytesAreRefusedAtTheFollowingSignatureHop() {
+        var (codec, keys, chain, trust, claim) = BuildFixture();
+        var tailedIssuingSpki = (byte[])[.. keys.IssuingSpki, 0x00];
+        var tailedIssuingId = KeyId.ForIssuing(
+            domain: keys.Domain,
+            subjectPublicKeyInfo: tailedIssuingSpki,
+            algorithm: AttestationAlgorithms.EcdsaP256Sha256
+        );
+        var rootToTailedIssuing = AttestationSigner.SignKeyBinding(
+            codec: codec,
+            domain: keys.Domain,
+            signerKey: keys.RootKey,
+            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            targetId: tailedIssuingId,
+            targetSubjectPublicKeyInfo: tailedIssuingSpki,
+            notBefore: (Epoch - 30),
+            notAfter: (Epoch + (86_400L * 30))
+        );
+
+        var result = AttestationVerifier.VerifyChain(
+            codec: codec,
+            claim: claim,
+            chain: [rootToTailedIssuing, chain[1]],
+            trustList: trust,
+            now: Now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home"
+        );
+
+        AssertRefused(result: result, reasonMustContain: "issuing-vouches-subject binding signature");
+    }
+
+    [Fact]
     public void DepthOneInDisguise_RootVouchesForItselfAsTheIssuingKey_IsRefused() {
         var (codec, keys, _, trust, claim) = BuildFixture();
         var rootAsIssuingId = KeyId.ForIssuing(domain: keys.Domain, subjectPublicKeyInfo: keys.RootSpki, algorithm: AttestationAlgorithms.EcdsaP256Sha256);
@@ -221,6 +272,29 @@ public sealed class ChainTests {
         ));
 
         Assert.Contains(expectedSubstring: "not self-certifying", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TrustListShape_SpkiWithTrailingBytes_ThrowsInsteadOfCreatingAKeyAlias() {
+        var (_, keys, _, _, _) = BuildFixture();
+        var tailedRootSpki = (byte[])[.. keys.RootSpki, 0x00];
+        var tailedRootId = KeyId.ForRoot(
+            subjectPublicKeyInfo: tailedRootSpki,
+            algorithm: AttestationAlgorithms.EcdsaP256Sha256
+        );
+
+        var exception = Assert.Throws<ArgumentException>(testCode: () => _ = new TrustList(
+            entries: [new TrustListEntry(
+                PinnedId: tailedRootId,
+                PublicKeySubjectPublicKeyInfo: tailedRootSpki,
+                Mode: AttestationTrustMode.Vouches,
+                Reach: DefaultReach,
+                MaximumAge: null
+            )],
+            defaultMaximumAge: null
+        ));
+
+        Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

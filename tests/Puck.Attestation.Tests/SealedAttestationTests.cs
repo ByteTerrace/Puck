@@ -104,6 +104,27 @@ public sealed class SealedAttestationTests {
     }
 
     [Fact]
+    public void RecipientSpki_TrailingBytesAreRefusedBeforeSealing() {
+        var (_, keys, _, headerBytes, plaintext, _) = BuildFixture();
+        var tailedRecipientSpki = (byte[])[.. keys.SubjectSealingSpki, 0x00];
+        var tailedRecipientId = KeyId.ForSubject(
+            domain: keys.Domain,
+            subject: keys.Subject,
+            subjectPublicKeyInfo: tailedRecipientSpki,
+            algorithm: AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm
+        );
+
+        var exception = Assert.Throws<FormatException>(testCode: () => _ = SealedAttestation.Seal(
+            recipientId: tailedRecipientId,
+            recipientPublicKeySubjectPublicKeyInfo: tailedRecipientSpki,
+            associatedData: headerBytes,
+            plaintext: plaintext
+        ));
+
+        Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RoleSeparation_ASigningAlgorithmIdCannotBePresentedAsARecipientSealingKey() {
         var (_, keys, _, headerBytes, plaintext, _) = BuildFixture();
 
@@ -130,6 +151,20 @@ public sealed class SealedAttestationTests {
         var exception = Assert.Throws<FormatException>(testCode: () => _ = SealedAttestation.Unseal(recipientPrivateKey: keys.SubjectSealingKey, payload: (sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = wrongCurveKey.ExportSubjectPublicKeyInfo() }), associatedData: headerBytes));
 
         Assert.Contains(expectedSubstring: "not on P-256", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EphemeralSpki_TrailingBytesAreRefusedBeforeAgreement() {
+        var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
+        var tailedEphemeralSpki = (byte[])[.. sealedPayload.EphemeralPublicKeySubjectPublicKeyInfo.Span, 0x00];
+
+        var exception = Assert.Throws<FormatException>(testCode: () => _ = SealedAttestation.Unseal(
+            recipientPrivateKey: keys.SubjectSealingKey,
+            payload: sealedPayload with { EphemeralPublicKeySubjectPublicKeyInfo = tailedEphemeralSpki },
+            associatedData: headerBytes
+        ));
+
+        Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     // An SPKI names a key TYPE before it names a curve; an RSA SPKI has no curve to ask about at all, so

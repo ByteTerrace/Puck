@@ -540,9 +540,12 @@ public sealed class GamepadManager : IDisposable {
         cancellation?.Cancel();
 
         try {
-            loop?.GetAwaiter().GetResult();
-        } catch (OperationCanceledException) {
-            // The loop normally catches cancellation itself; tolerate a timer implementation that propagates it.
+            // Bounded: a wedged rescan (e.g. an enumeration stuck in the OS) must not hang shutdown. Wait wraps
+            // a loop fault in AggregateException; nothing is actionable at teardown.
+            if (loop?.Wait(timeout: TimeSpan.FromMilliseconds(value: 500)) == false) {
+                m_diagnostics?.Invoke("[gamepad] rescan loop did not stop within its teardown bound; continuing shutdown");
+            }
+        } catch (AggregateException) {
         }
 
         acquisitionSource?.Dispose();

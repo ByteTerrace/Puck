@@ -20,16 +20,20 @@ public sealed class GamepadCoalescer {
     private GamepadButtons m_released;
     private GamepadButtons m_previousButtons;
 
-    /// <summary>Clears every retained sample and edge before a receiver slot begins carrying another controller.</summary>
+    /// <summary>Clears every retained sample before a receiver slot begins carrying another controller,
+    /// converting any still-held button into a pending release edge.</summary>
     internal void Reset() {
         lock (m_gate) {
+            // A button still down when the stream ends can never report its own let-go; without the converted
+            // edge, a command dispatched from its press stays held downstream. A release for a button the
+            // consumer never saw pressed is inert at the binding.
+            m_released |= (m_previousButtons | m_pressed);
             m_gyro = Vector3.Zero;
             m_gyroSamples = 0;
             m_hasSample = false;
             m_latest = GamepadState.Neutral;
             m_pressed = GamepadButtons.None;
             m_pressEdges = default;
-            m_released = GamepadButtons.None;
             m_previousButtons = GamepadButtons.None;
         }
     }

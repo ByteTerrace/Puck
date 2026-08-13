@@ -8,24 +8,16 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
-      "Microsoft.Extensions.DependencyInjection.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "/a1aJz4m7ylhEDf25ugQChLQoN5XwoGjWw/BoR/ZWWKsO1v4DdJElS1uyngahz4B/eOzjFk1KNTkarRLE5wsIg=="
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project"
       },
       "puck.abstractions": {
         "type": "Project"
       },
-      "puck.assets": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
-      },
       "puck.shaders": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       }
     }

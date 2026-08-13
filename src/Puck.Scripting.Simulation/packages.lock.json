@@ -8,11 +8,6 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
-      "Microsoft.Extensions.DependencyInjection.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "/a1aJz4m7ylhEDf25ugQChLQoN5XwoGjWw/BoR/ZWWKsO1v4DdJElS1uyngahz4B/eOzjFk1KNTkarRLE5wsIg=="
-      },
       "System.CommandLine": {
         "type": "Transitive",
         "resolved": "2.0.11",
@@ -28,6 +23,9 @@
         "resolved": "44.0.0",
         "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
       },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
@@ -41,12 +39,6 @@
       "puck.abstractions": {
         "type": "Project"
       },
-      "puck.assets": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
-      },
       "puck.input": {
         "type": "Project",
         "dependencies": {
@@ -58,8 +50,8 @@
       "puck.scripting": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Assets": "[1.0.0, )",
           "Wasmtime": "[44.0.0, 44.0.0]"
         }
       }

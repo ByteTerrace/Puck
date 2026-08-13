@@ -12,6 +12,7 @@ namespace Puck.Input.Devices;
 /// handle.
 /// </summary>
 internal sealed class GamepadDevice : IGamepadConnection {
+    private const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
     private const int MaximumOutputCommandsPerIteration = 32;
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
@@ -30,7 +31,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private readonly GamepadOutputQueue m_outputQueue = new();
     private readonly IGamepadParser m_parser;
     private readonly byte[] m_readBuffer;
-    private readonly int m_receiverSilenceTimeoutMilliseconds;
+    private readonly long m_receiverSilenceTimeoutTicks;
     private bool m_disposed;
     private volatile bool m_faulted;
     private volatile bool m_hasStream;
@@ -74,7 +75,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
             accepting: !activateOnStream
         );
         m_parser = parser;
-        m_receiverSilenceTimeoutMilliseconds = receiverSilenceTimeoutMilliseconds;
+        m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * Stopwatch.Frequency) / 1000L);
         // Size the read buffer from the device's declared input report length (Bluetooth reports exceed 64);
         // over-sizing is harmless since ReadAsync returns the actual byte count.
         m_readBuffer = new byte[Math.Max(val1: inputLength, val2: ReportBufferSize)];
@@ -180,8 +181,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 await DrainOutputAsync(cancellationToken: cancellationToken);
 
                 // Poll while streaming so output, scheduled effects, rumble expiry, and receiver-silence detection
-                // continue to make progress even when input reports pause. The transport's timed-read overload
-                // reuses its cancellation resources, so this does not add a per-read allocation.
+                // continue to make progress even when input reports pause. The Windows transport reuses its timeout
+                // source across reads that complete before the deadline instead of creating one for every read.
                 int read;
 
                 if (!firstParsed) {
@@ -246,14 +247,18 @@ internal sealed class GamepadDevice : IGamepadConnection {
                             // then claims a player slot (via HasStream, reconciled by the manager).
                             m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot paired; initializing the controller");
 
-                            ParkReceiverSlotAndRestartWatchdog(firstParsed: ref firstParsed, streamingDeadline: ref streamingDeadline);
+                            await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
+                            firstParsed = false;
+                            streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
 
                             await m_parser.InitializeAsync(playerIndex: PlayerIndex, cancellationToken: cancellationToken);
                         } else if (WirelessSlotEvent.Disconnected == slotEvent) {
                             // The controller left the slot: back to dormant. The manager releases the player slot
                             // when it sees HasStream drop; resetting firstParsed returns the loop to bounded reads
                             // (and the refreshed deadline keeps a non-deferred device's watchdog honest).
-                            ParkReceiverSlotAndRestartWatchdog(firstParsed: ref firstParsed, streamingDeadline: ref streamingDeadline);
+                            await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
+                            firstParsed = false;
+                            streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
                             m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot unpaired; parking");
                         } else if (!loggedUnparsed) {
                             // Data is arriving but not in the expected report shape — e.g. the report-mode
@@ -265,8 +270,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 }
 
                 if (firstParsed && m_activateOnStream
-                    && ((Stopwatch.GetTimestamp() - lastParsedTimestamp) >= ((long)m_receiverSilenceTimeoutMilliseconds * Stopwatch.Frequency / 1000L))) {
-                    ParkReceiverSlotAndRestartWatchdog(firstParsed: ref firstParsed, streamingDeadline: ref streamingDeadline);
+                    && ((Stopwatch.GetTimestamp() - lastParsedTimestamp) >= m_receiverSilenceTimeoutTicks)) {
+                    await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
+                    firstParsed = false;
+                    streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
                     m_diagnostics?.Invoke($"[gamepad] {Type} receiver stream silent; releasing slot and parking");
                 }
 
@@ -293,7 +300,14 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 : $"[gamepad] {Type} read error: {exception}"));
         }
     }
-    private void ParkReceiverSlot() {
+    private async ValueTask ParkReceiverSlotAsync(CancellationToken cancellationToken) {
+        // The pad may still be reachable with its motors running on the last written speed, and the tracked
+        // expiry is about to be discarded — return the motors to rest first. When the pad is truly gone the
+        // write lands on the receiver and is harmless.
+        if (m_rumbleActive) {
+            await ApplyRumbleAsync(effect: RumbleEffect.Off, cancellationToken: cancellationToken);
+        }
+
         m_hasStream = false;
         m_sequence = 0UL;
         m_rumbleActive = false;
@@ -305,11 +319,6 @@ internal sealed class GamepadDevice : IGamepadConnection {
         if (m_parser is IGamepadStreamReset resettable) {
             resettable.ResetStreamState();
         }
-    }
-    private void ParkReceiverSlotAndRestartWatchdog(ref bool firstParsed, ref long streamingDeadline) {
-        ParkReceiverSlot();
-        firstParsed = false;
-        streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
     }
     private static int RemainingMilliseconds(long expiryTimestamp) {
         var remaining = (expiryTimestamp - Stopwatch.GetTimestamp());
@@ -409,21 +418,54 @@ internal sealed class GamepadDevice : IGamepadConnection {
             loop = m_loop;
         }
 
-        try {
-            loop?.GetAwaiter().GetResult();
-        } catch (OperationCanceledException) {
-            // The loop observes the disposal token and normally catches it itself; tolerate a transport that
-            // propagates cancellation directly.
+        var loopCompleted = TryJoinLoop(loop: loop);
+        var hidForceClosed = false;
+
+        if (!loopCompleted) {
+            // Cancellation normally completes the timed read. If the underlying HID IRP is wedged, closing its
+            // handle is the remaining cancellation mechanism. Do that before touching parser or CTS state, then
+            // give the loop one final bounded opportunity to observe the close and exit.
+            m_diagnostics?.Invoke($"[gamepad] {Type} I/O loop did not stop after cancellation; forcing HID close");
+            m_hid.Dispose();
+            hidForceClosed = true;
+            loopCompleted = TryJoinLoop(loop: loop);
+        }
+
+        if (!loopCompleted) {
+            // The handle is closed, but an uncooperative transport still owns the loop's parser/CTS references.
+            // Leave those objects intact rather than reintroducing dispose-under-use; process teardown can reclaim
+            // them, and the diagnostic makes the exceptional leak observable.
+            m_diagnostics?.Invoke($"[gamepad] {Type} I/O loop remained live after forced HID close; parser and cancellation resources retained");
+
+            return;
+        }
+
+        if (!hidForceClosed) {
+            try {
+                // Give a parser that holds device state a chance to restore it (e.g. a controller switched out of
+                // its built-in keyboard/mouse emulation) while the live handle is no longer owned by the loop.
+                (m_parser as IDisposable)?.Dispose();
+            } finally {
+                try {
+                    m_hid.Dispose();
+                } finally {
+                    m_cancellation.Dispose();
+                }
+            }
+        } else {
+            m_cancellation.Dispose();
+        }
+    }
+    private static bool TryJoinLoop(Task? loop) {
+        if (loop is null) {
+            return true;
         }
 
         try {
-            // Give a parser that holds device state a chance to restore it (e.g. a controller that was switched out
-            // of its built-in keyboard/mouse emulation on open) while the handle is still open. The completed loop
-            // owns no read or write now, so restoration cannot race the transport.
-            (m_parser as IDisposable)?.Dispose();
-        } finally {
-            m_hid.Dispose();
-            m_cancellation.Dispose();
+            return loop.Wait(timeout: TimeSpan.FromMilliseconds(value: DisposeJoinTimeoutMilliseconds));
+        } catch (AggregateException) {
+            // Wait wraps a canceled or faulted loop. Either state is terminal, so teardown may continue.
+            return true;
         }
     }
 }

@@ -298,6 +298,9 @@
         "resolved": "10.0.11",
         "contentHash": "QTXEoQBzz00SFWbo7nAg1Ogd4f99lwqcO9uAJ7MYSLEUR28f6As32QktrqG2Fr9cfAfd1GjLyGYspE7Ipj7P6w=="
       },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
@@ -311,12 +314,6 @@
       "puck.abstractions": {
         "type": "Project"
       },
-      "puck.assets": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
-      },
       "puck.hosting": {
         "type": "Project",
         "dependencies": {
@@ -327,7 +324,7 @@
       "puck.shaders": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       },
       "puck.vulkan": {

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 using Xunit;
 
 using static Puck.Attestation.Tests.AttestationTestSupport;
@@ -28,6 +30,43 @@ public sealed class SignatureLevelTests {
         var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: claim.Signature);
 
         AssertAccepted(result: result);
+    }
+
+    [Fact]
+    public void SigningKeyCurve_AP384KeyNamedP256_IsRefusedAtTheMintingBoundary() {
+        var (codec, _, _, claim) = BuildFixture();
+
+        using var wrongCurveKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP384);
+
+        var exception = Assert.Throws<ArgumentException>(testCode: () => _ = AttestationSigner.Sign(
+            codec: codec,
+            header: claim.Header,
+            payloadKind: claim.PayloadKind,
+            payloadBytes: claim.PayloadBytes,
+            signingKey: wrongCurveKey,
+            signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
+        ));
+
+        Assert.Equal(expected: "signingKey", actual: exception.ParamName);
+        Assert.Contains(expectedSubstring: "curve", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DeclaredAlgorithm_DifferentFromSigningAlgorithm_IsRefusedAtTheMintingBoundary() {
+        var (codec, _, _, claim) = BuildFixture();
+        var keys = MintDomainKeys(subject: "user:minting-boundary");
+
+        var exception = Assert.Throws<ArgumentException>(testCode: () => _ = AttestationSigner.Sign(
+            codec: codec,
+            header: claim.Header with { Algorithm = AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm },
+            payloadKind: claim.PayloadKind,
+            payloadBytes: claim.PayloadBytes,
+            signingKey: keys.SubjectSigningKey,
+            signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
+        ));
+
+        Assert.Equal(expected: "header", actual: exception.ParamName);
+        Assert.Contains(expectedSubstring: "declares algorithm", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
     // ECDSA malleability: (r, s) and (r, n-s) are both valid signatures over the same message, and .NET's

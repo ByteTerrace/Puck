@@ -169,7 +169,8 @@ internal static class IndependentAttestationImplementation {
         using var recipient = ECDiffieHellman.Create();
         using var ephemeral = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
 
-        recipient.ImportSubjectPublicKeyInfo(source: recipientSubjectPublicKeyInfo, bytesRead: out _);
+        recipient.ImportSubjectPublicKeyInfo(source: recipientSubjectPublicKeyInfo, bytesRead: out var recipientBytesRead);
+        RequireEntireSubjectPublicKeyInfo(bytesRead: recipientBytesRead, encodedLength: recipientSubjectPublicKeyInfo.Length);
 
         var context = EncodeRecipientContext(recipientId: recipientId);
         var key = DeriveKey(privateKey: ephemeral, publicKey: recipient.PublicKey, recipientContext: context);
@@ -210,7 +211,8 @@ internal static class IndependentAttestationImplementation {
 
         using var ephemeral = ECDiffieHellman.Create();
 
-        ephemeral.ImportSubjectPublicKeyInfo(source: payload.EphemeralSubjectPublicKeyInfo, bytesRead: out _);
+        ephemeral.ImportSubjectPublicKeyInfo(source: payload.EphemeralSubjectPublicKeyInfo, bytesRead: out var ephemeralBytesRead);
+        RequireEntireSubjectPublicKeyInfo(bytesRead: ephemeralBytesRead, encodedLength: payload.EphemeralSubjectPublicKeyInfo.Length);
 
         var context = EncodeRecipientContext(recipientId: payload.RecipientId);
         var key = DeriveKey(privateKey: recipientPrivateKey, publicKey: ephemeral.PublicKey, recipientContext: context);
@@ -375,7 +377,8 @@ internal static class IndependentAttestationImplementation {
 
         using var verifier = ECDsa.Create();
 
-        verifier.ImportSubjectPublicKeyInfo(source: pinnedSubjectPublicKeyInfo, bytesRead: out _);
+        verifier.ImportSubjectPublicKeyInfo(source: pinnedSubjectPublicKeyInfo, bytesRead: out var verifierBytesRead);
+        RequireEntireSubjectPublicKeyInfo(bytesRead: verifierBytesRead, encodedLength: pinnedSubjectPublicKeyInfo.Length);
 
         if (!verifier.VerifyData(
             data: attestation.SignedPortion,
@@ -390,6 +393,12 @@ internal static class IndependentAttestationImplementation {
     private static void RequireSelfCertifying(IndependentBinding binding) {
         if (!string.Equals(Fingerprint(bytes: binding.SubjectPublicKeyInfo), binding.TargetId.KeyHash, StringComparison.Ordinal)) {
             throw new CryptographicException(message: "An independent attestation binding is not self-certifying.");
+        }
+    }
+
+    private static void RequireEntireSubjectPublicKeyInfo(int bytesRead, int encodedLength) {
+        if (bytesRead != encodedLength) {
+            throw new CryptographicException(message: $"The independent implementation found {encodedLength - bytesRead} trailing byte(s) after a SubjectPublicKeyInfo value.");
         }
     }
 

@@ -56,10 +56,10 @@ public sealed record TrustListEntry(
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
     /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
-    /// the bytes actually import as a key on the curve that algorithm names, and that the id's shape matches
-    /// <see cref="Mode"/>. <see cref="TrustList"/> calls this for every entry at construction, so an unvalidated
-    /// list cannot reach the verifier — without that, an entry whose key bytes disagree with its pinned id would
-    /// verify against the bytes while the pin sat there decorative.
+    /// the bytes contain exactly one SPKI value that imports as a key on the curve that algorithm names, and
+    /// that the id's shape matches <see cref="Mode"/>. <see cref="TrustList"/> calls this for every entry at
+    /// construction, so an unvalidated list cannot reach the verifier — without that, an entry whose key bytes
+    /// disagree with its pinned id would verify against the bytes while the pin sat there decorative.
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void Validate() {
@@ -84,7 +84,8 @@ public sealed record TrustListEntry(
 
         // The two checks above only prove the bytes are self-consistent (they hash to the pinned id) and that the
         // pinned name is a known signing algorithm — neither ever imports the bytes as an actual key. Malformed SPKI
-        // bytes (or a well-formed key on the wrong curve for the named algorithm) would otherwise pass this
+        // bytes, a valid SPKI with trailing data, or a well-formed key on the wrong curve for the named algorithm
+        // would otherwise pass this
         // validation and fail only the first time a live connection tried to verify a signature against them — at
         // every runtime connection attempt, forever, rather than once. Import it now, the same way
         // AttestationVerifier.VerifySignature does at actual verification time, and require its curve to match — so a
@@ -97,8 +98,12 @@ public sealed record TrustListEntry(
         try {
             ecdsa.ImportSubjectPublicKeyInfo(
                 source: PublicKeySubjectPublicKeyInfo.Span,
-                bytesRead: out _
+                bytesRead: out var bytesRead
             );
+
+            if (bytesRead != PublicKeySubjectPublicKeyInfo.Length) {
+                throw new CryptographicException(message: $"The SubjectPublicKeyInfo contains {PublicKeySubjectPublicKeyInfo.Length - bytesRead} trailing byte(s).");
+            }
         } catch (CryptographicException exception) {
             throw new ArgumentException(
                 message: $"A trust list entry's public key bytes do not decode as a SubjectPublicKeyInfo usable with algorithm '{PinnedId.Algorithm}' — {exception.Message}",

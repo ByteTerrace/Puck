@@ -337,6 +337,9 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
@@ -356,16 +359,10 @@
       "puck.abstractions": {
         "type": "Project"
       },
-      "puck.assets": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
-      },
       "puck.forge": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "Puck.HumbleGamingBrick": "[1.0.0, )",
           "Puck.SdfVm": "[1.0.0, )"
         }
@@ -406,8 +403,8 @@
       "puck.scripting": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Assets": "[1.0.0, )",
           "Wasmtime": "[44.0.0, 44.0.0]"
         }
       },
@@ -422,9 +419,9 @@
       "puck.sdfvm": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Assets": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Recording": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )",
@@ -434,7 +431,7 @@
       "puck.shaders": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )"
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       },
       "puck.snapshots": {
@@ -451,8 +448,8 @@
       "puck.text": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Assets": "[1.0.0, )"
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
       "puck.world.data": {

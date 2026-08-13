@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Puck.Commands;
 using Puck.Input.Devices;
 using Puck.Input.Output;
@@ -63,6 +64,42 @@ public sealed class GamepadDeviceTests {
     }
 
     [Fact]
+    public async Task Silent_park_returns_running_motors_to_rest() {
+        using var hid = new TestHidDevice();
+        var parser = new TestParser();
+        hid.EnqueueReport(1);
+        using var device = CreateDevice(
+            activateOnStream: true,
+            hid: hid,
+            parser: parser,
+            receiverSilenceTimeoutMilliseconds: 25
+        );
+
+        device.Start();
+        await TestWait.UntilAsync(condition: () => device.HasStream);
+
+        // A rumble outlasting the silence window would otherwise leave the pad's motors running on the last
+        // written speed after the park discards the tracked expiry.
+        var effect = new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 60_000u);
+        Assert.True(condition: device.Output.Rumble(effect: in effect));
+
+        // Feed reports until the write lands so the silence park cannot race the enqueued command; then let
+        // the stream go silent.
+        await TestWait.UntilAsync(condition: () => {
+            if (parser.RumbleWrites.Count != 0) {
+                return true;
+            }
+
+            hid.EnqueueReport(1);
+
+            return false;
+        });
+        await TestWait.UntilAsync(condition: () => !device.HasStream);
+
+        Assert.Equal(expected: (0f, 0f), actual: parser.RumbleWrites[^1]);
+    }
+
+    [Fact]
     public async Task Dispose_waits_for_the_pending_read_before_closing_the_handle() {
         var hid = new TestHidDevice();
         var parser = new TestParser();
@@ -74,6 +111,31 @@ public sealed class GamepadDeviceTests {
 
         Assert.True(condition: hid.IsDisposed);
         Assert.False(condition: hid.DisposedWhileReading);
+        Assert.Equal(expected: 1, actual: parser.DisposeCount);
+    }
+
+    [Fact]
+    public async Task Dispose_force_closes_an_uncooperative_read_before_releasing_loop_resources() {
+        var diagnostics = new ConcurrentQueue<string>();
+        var hid = new TestHidDevice { BlockReadUntilDisposed = true, };
+        var parser = new TestParser();
+        var device = CreateDevice(
+            diagnostics: diagnostics.Enqueue,
+            hid: hid,
+            parser: parser
+        );
+
+        device.Start();
+        await hid.ReadEntered.Task.WaitAsync(timeout: TimeSpan.FromSeconds(value: 2), cancellationToken: TestContext.Current.CancellationToken);
+        device.Dispose();
+
+        Assert.True(condition: hid.IsDisposed);
+        Assert.True(condition: hid.DisposedWhileReading);
+        Assert.Equal(expected: 0, actual: parser.DisposeCount);
+        Assert.Contains(
+            collection: diagnostics,
+            filter: static message => message.Contains(value: "forcing HID close", comparisonType: StringComparison.Ordinal)
+        );
     }
 
     private static GamepadDevice CreateDevice(
@@ -81,11 +143,13 @@ public sealed class GamepadDeviceTests {
         TestParser parser,
         ManualInputClock? clock = null,
         bool activateOnStream = false,
-        int receiverSilenceTimeoutMilliseconds = 1000
+        int receiverSilenceTimeoutMilliseconds = 1000,
+        Action<string>? diagnostics = null
     ) => new(
         activateOnStream: activateOnStream,
         clock: (clock ?? new ManualInputClock()),
         deviceId: InputDeviceId.New(),
+        diagnostics: diagnostics,
         hid: hid,
         parser: parser,
         playerIndex: (activateOnStream ? -1 : 0),

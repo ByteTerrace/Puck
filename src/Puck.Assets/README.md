@@ -1,154 +1,262 @@
 # Puck.Assets
 
-**Content-addressed asset loading and caching primitives.** Puck.Assets is the small,
-shared foundation the rest of the engine builds asset pipelines on: an abstraction over a
-raw byte store (`IAssetSource`), a compact content identity derived from those bytes
-(`AssetContentHash`), and a fixed-capacity LRU cache keyed by that identity
-(`ContentAddressedLruCache<T>`).
+Puck.Assets gives asset pipelines a small place to agree on bytes and identity
+before format-specific code takes over. An **asset source** turns a path into a
+complete byte payload. A compact content hash identifies that payload during a
+process, and a bounded cache lets a loader reuse the decoded object when the
+same bytes appear again under the same or a different path.
 
-It is deliberately **minimal**. It moves and identifies *bytes* — it does **not** decode
-them (turning bytes into a texture, font, or shader is the caller's job), it does **not**
-normalize or resolve paths (a source consumes the path it is given), and it is **not** a
-virtual file system (no mounts, no layering). Those concerns belong to the consumers
-(Puck.Text, Puck.Shaders, Puck.SdfVm, …) until a third one genuinely needs them shared.
+The library also carries the persistent form of the same idea. A
+`ContentAddressedStore` writes immutable objects under their full SHA-256
+digest, while named **refs**—small text files that point to an object—give
+people and tools stable names for content that may change. `ContentPetname`
+turns a hash into a short label such as `Willow-Lantern-Nine` when raw hex would
+be awkward to read aloud.
 
-```text
-namespace Puck.Assets
-target     net10.0
-deps       none — BCL only
+Nothing here decodes an image, font, shader, or document. Puck.Assets does not
+mount archives, layer sources, or normalize paths. It supplies the byte and
+identity layer; each consumer owns the meaning of those bytes.
+
+`dotnet pack` produces `ByteTerrace.Puck.Assets`; the first NuGet.org release
+has not been published yet. The package targets .NET 10 and has no package or
+project dependencies.
+
+This README is the human entry point. The
+[generated API reference](../../docs/api) owns complete member signatures,
+parameters, return values, and exceptions.
+
+## ✨ Key features
+
+- *Source-independent loading:* `IAssetSource` lets a loader consume a path
+  without knowing whether the bytes came from the local file system, an
+  archive, an embedded resource, or another source.
+- *Identity by content:* `AssetContentHash` gives equal payloads the same small
+  key even when their paths differ.
+- *Bounded reuse:* `ContentAddressedLruCache<TValue>` retains recently used
+  decoded values and evicts the least recently used value at a fixed capacity.
+- *Persistent deduplication:* `ContentAddressedStore` writes one immutable
+  object for each full SHA-256 digest and avoids rewriting bytes already held.
+- *Stable names and derivations:* named refs point to stored objects, while
+  derived refs remember the output produced from a particular input hash.
+- *Readable diagnostics:* `ContentPetname` maps a hash to a deterministic
+  three-word label for logs and operator-facing output.
+- *A small dependency surface:* the package depends only on the .NET base
+  class library and does not perform decoding or dependency-injection wiring.
+
+## 📐 How bytes move through the library
+
+The in-process path and the persistent path begin with the same bytes but use
+different identities. A process-lifetime cache wants a small, cheap key; a
+store that may accumulate objects for years keeps the complete digest.
+
+```mermaid
+flowchart LR
+    Path(["📄 Asset path"]) --> Source["📥 IAssetSource"]
+    Source --> Bytes["🧱 ReadOnlyMemory&lt;byte&gt;"]
+    Bytes --> SessionHash["🔎 AssetContentHash<br/>64-bit session identity"]
+    SessionHash --> Cache["🧠 ContentAddressedLruCache&lt;T&gt;<br/>caller-decoded value"]
+    Bytes --> Store["💾 ContentAddressedStore<br/>full SHA-256 object"]
+    Store --> Ref["🔖 Named or derived ref"]
+    Store --> Petname["🏷️ ContentPetname<br/>human-readable label"]
 ```
 
----
+The cache never decodes a value itself. Its `valueFactory` belongs to the
+consumer, so a shader loader can cache bytecode while a font loader caches a
+font atlas without adding either format to this package.
 
-## At a glance
+## 🚀 Quick start
 
-| Type | Kind | Role |
-|------|------|------|
-| `IAssetSource` | interface | A byte store addressed by path: `Exists` + `Read`. |
-| `FileSystemAssetSource` | `sealed class` | An `IAssetSource` backed by the local file system. |
-| `AssetContentHash` | `readonly record struct` | A 64-bit content identity — the leading 64 bits of a payload's SHA-256. |
-| `ContentAddressedLruCache<TValue>` | `sealed class` | A fixed-capacity, least-recently-used cache keyed by `AssetContentHash`. |
+This example reads a UTF-8 asset from disk, hashes its bytes, and decodes it
+only on a cache miss:
 
----
+```csharp
+using System.Text;
+using Puck.Assets;
 
-## Sourcing bytes
+var source = new FileSystemAssetSource();
+var decodedText = new ContentAddressedLruCache<string>(capacity: 128);
 
-`IAssetSource` decouples whatever loads an asset from wherever the bytes actually live — the
-local file system, an archive, an embedded resource, a network blob. The contract is two
-methods:
+var bytes = source.Read(path: "assets/dialogue/intro.txt");
+var hash = AssetContentHash.Compute(content: bytes.Span);
+
+var text = decodedText.GetOrAdd(
+    hash: hash,
+    valueFactory: () => Encoding.UTF8.GetString(bytes.Span));
+
+Console.WriteLine($"{hash}: {text}");
+```
+
+When the bytes must survive the process, put them in a persistent store and
+give the object a ref:
+
+```csharp
+using Puck.Assets;
+
+var store = new ContentAddressedStore(
+    root: Path.Combine(Path.GetTempPath(), "puck-objects"));
+
+var objectHash = store.Put(content: bytes.Span);
+
+store.SetRef(
+    category: "dialogue",
+    name: "intro",
+    hash: objectHash);
+
+if (
+    store.TryResolveRef(category: "dialogue", name: "intro", hash: out var resolvedHash) &&
+    store.TryGet(hash: resolvedHash, content: out var storedBytes)
+) {
+    Console.WriteLine($"{ContentPetname.From(hashHex: resolvedHash)}: {storedBytes.Length} bytes");
+}
+```
+
+`Put` returns a canonical `sha256/{64 lowercase hex characters}` address.
+Writing identical bytes again returns the same address and keeps the existing
+object.
+
+## 📥 Supplying bytes
+
+`IAssetSource` is deliberately small:
 
 ```csharp
 bool Exists(string path);
 ReadOnlyMemory<byte> Read(string path);
 ```
 
-`Read` returns the **full** payload as `ReadOnlyMemory<byte>`; callers slice and decode from
-there. Paths are **opaque** to the source: it resolves them exactly as supplied, so any
-base-path joining or normalization happens *upstream* of this layer.
+`Read` returns the complete payload. The interface is synchronous, so it is a
+good boundary for local assets that a loader needs in full before decoding.
+Implementations for remote or streamed data should usually perform that work
+outside the loading hot path and expose the resulting local bytes through this
+contract.
 
-`FileSystemAssetSource` is the built-in implementation, a thin pass-through to
-`System.IO.File`:
+Paths are opaque. An asset source receives exactly the string the caller
+supplies; joining a base directory, choosing search roots, and normalizing
+separators are caller responsibilities. `FileSystemAssetSource` follows this
+rule by passing the path directly to `System.IO.File`.
 
-```csharp
-using Puck.Assets;
+Both `FileSystemAssetSource` methods reject a null, empty, or whitespace path.
+`Exists` reports whether a file is present, while `Read` returns its bytes or
+lets the file-system exception describe why it could not be read.
 
-IAssetSource source = new FileSystemAssetSource();
+## 🔎 Choosing a content identity
 
-if (source.Exists(path: "assets/sprites/hero.png")) {
-    ReadOnlyMemory<byte> bytes = source.Read(path: "assets/sprites/hero.png");
-    // ... hand the bytes to a decoder ...
-}
-```
+Puck.Assets has two SHA-256 representations because they solve different
+problems:
 
-Both methods reject a `null`, empty, or whitespace `path` with `ArgumentException`; `Read`
-throws `FileNotFoundException` when nothing exists at the path (`Exists` simply returns
-`false`). Implement `IAssetSource` yourself to read from any other backing store.
+| Representation | Text form | Use it for |
+|---|---|---|
+| `AssetContentHash` | `sha256-64/{16 lowercase hex characters}` | Compact in-memory identities, cache keys, and diagnostics within a running process. |
+| `ContentAddressedStore` address | `sha256/{64 lowercase hex characters}` | Persistent objects, named refs, derived artifacts, and interchange between runs. |
 
----
+`AssetContentHash.Compute` hashes the payload and stores the first eight digest
+bytes in a `ulong`. The 64-bit result is intentionally compact: it is suitable
+for deduplication and caching, but collisions become plausible around 2³²
+distinct payloads. It is not an authentication or tamper-evidence mechanism.
 
-## Content addressing
+The persistent store keeps all 256 bits. That makes accidental collisions
+negligible for a store that grows over time, but the digest alone still does
+not say who supplied the bytes. When authenticity matters, the expected digest
+must arrive through a trusted or signed channel.
 
-`AssetContentHash` is a value's *identity by its content*: hash the bytes, key everything by
-the hash, and identical payloads collapse to one entry no matter how they were named or
-where they came from.
+## 🧠 Caching decoded values
 
-```csharp
-using Puck.Assets;
-
-AssetContentHash hash = AssetContentHash.Compute(content: bytes.Span);
-
-ulong  key  = hash.Value;        // the raw 64-bit identity
-string text = hash.ToString();   // "sha256-64/1f3a9c0b7e5d2148"  (canonical form)
-```
-
-`Compute` takes the SHA-256 of the payload and keeps its **leading 64 bits**. That makes the
-hash a cheap, fixed-size key to compare, store, and pass around. The trade-off is explicit:
-truncating to 64 bits is an **identity and de-duplication** mechanism, **not** a security or
-tamper-evidence guarantee — at 64 bits a collision becomes likely around ~2³² distinct
-payloads (the birthday bound). Use it to key caches and dedupe loads; do not use it to
-authenticate untrusted content.
-
-`ToString` renders the canonical `sha256-64/{value}` form (lowercase, zero-padded 16-digit
-hex) for logs and diagnostics.
-
----
-
-## Caching
-
-`ContentAddressedLruCache<TValue>` is a fixed-capacity cache that maps an `AssetContentHash`
-to a decoded value (a parsed atlas, an uploaded texture handle, a compiled shader — whatever
-`TValue` is). When it is full, the **least-recently-used** entry is evicted; reading or
-writing an entry marks it most-recently-used.
-
-```csharp
-using Puck.Assets;
-
-// Capacity 256; the optional callback fires for every value leaving the cache.
-var cache = new ContentAddressedLruCache<Texture>(
-    capacity: 256,
-    onEvicted: texture => texture.Dispose()
-);
-
-AssetContentHash key = AssetContentHash.Compute(content: bytes.Span);
-
-// Decode-on-miss; subsequent hits return the cached value and refresh its recency.
-Texture texture = cache.GetOrAdd(
-    hash: key,
-    valueFactory: () => DecodeTexture(bytes)
-);
-```
+`ContentAddressedLruCache<TValue>` maps `AssetContentHash` values to whatever a
+consumer produced from the bytes. Reading, adding, or replacing an entry marks
+it most recently used. When the cache exceeds its fixed capacity, it removes
+the least recently used entry.
 
 | Member | Behavior |
-|--------|----------|
-| `GetOrAdd(hash, valueFactory)` | Returns the cached value, or invokes `valueFactory`, caches the result, and returns it on a miss. |
-| `TryGet(hash, out value)` | Returns whether the entry exists; on a hit, marks it most-recently-used. |
-| `Set(hash, value)` | Caches a value, evicting the least-recently-used entry if capacity is exceeded. |
-| `Clear()` | Removes every entry, invoking the eviction callback for each. |
-| `Capacity` / `Count` | The eviction threshold (fixed at construction, `> 0`) and the current entry count. |
+|---|---|
+| `GetOrAdd(hash, valueFactory)` | Returns an existing value or invokes the factory, stores its result, and returns it. |
+| `TryGet(hash, out value)` | Reports a hit and refreshes that entry's recency. |
+| `Set(hash, value)` | Adds or replaces a value and evicts from the oldest end when necessary. |
+| `Clear()` | Removes every entry. |
+| `Capacity` / `Count` | Report the fixed limit and current number of entries. |
 
-The `onEvicted` callback runs whenever a value **leaves** the cache — on capacity eviction,
-on `Clear`, **and** when `Set` replaces the value already stored under a key. That makes it
-the single place to release whatever the cached value owns (native handles, pooled buffers,
-`IDisposable`s). Construction rejects a non-positive `capacity` with
-`ArgumentOutOfRangeException`.
+The optional eviction callback runs whenever a value leaves the cache: capacity
+eviction, replacement under an existing hash, and `Clear` all use the same
+path. It is the natural place to dispose native handles or return pooled
+buffers. The cache is not thread-safe; a caller that shares one instance across
+threads must synchronize access.
 
-The cache is **not thread-safe**: keep one instance per thread, or guard access with your
-own synchronization.
+## 💾 Persisting objects and refs
 
----
+A `ContentAddressedStore` creates three directories beneath its root:
 
-## Notes for agents
+```text
+objects/sha256/ab/ab…   immutable object bytes, fanned out by the first two hex digits
+refs/<category>/<name>  a one-line sha256/<hex> pointer
+tmp/                    write staging before an object or ref is promoted
+```
 
-- **Bytes in, bytes out.** This library never decodes or deserializes. Convert
-  `ReadOnlyMemory<byte>` into typed assets in the consumer; key the decoded result on the
-  content hash if you want to cache it.
-- **Paths are opaque.** `IAssetSource` resolves a path exactly as given. Do base-path
-  joining and normalization *before* calling in — don't push it down here.
-- **The hash identifies, it doesn't authenticate.** 64 bits of SHA-256 is a fast dedup /
-  cache key, not a collision-resistant or tamper-evident digest. Don't use it on untrusted
-  input as a security check.
-- **The cache is not thread-safe** and the eviction callback runs on the calling thread; do
-  resource cleanup (`Dispose`, pool returns) inside `onEvicted` rather than scattering it.
-- **Keep this library small.** No virtual file system, no decoders, no DI wiring belong here
-  until a third consumer needs them shared — route those into the consuming library instead.
-- See the [generated API reference](../../docs/api) for the full member-by-member docs.
+Object writes are staged in `tmp/` and moved into place. If another writer has
+already stored the same object, the duplicate temporary file is discarded.
+Objects are never overwritten because their address is derived from their
+bytes.
+
+Refs provide mutable names over those immutable objects. `SetRef` replaces a
+ref atomically, `TryResolveRef` reads it, and `ListRefs` returns the names in a
+category in ordinal sort order. A category may itself contain path segments,
+which is how the derived-cache helpers use `derived/<kind>`.
+
+`SetDerived(kind, inputHash, outputHash)` records the output produced from one
+input. `TryResolveDerived` performs the inverse lookup, allowing a build tool
+to skip work while the input content remains unchanged.
+
+## 🏷️ Naming content for people
+
+`ContentPetname.From` turns the leading bytes of a hexadecimal hash into three
+words selected from fixed lists:
+
+```csharp
+string label = ContentPetname.From(
+    hashHex: "sha256/00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff");
+
+// "Willow-Bucket-Three"
+```
+
+The same hash always gets the same label on every machine and build. A petname
+is only a compact aid for conversation and logs: many hashes share one, so it
+must always remain paired with the real content hash when identity matters.
+
+## 📋 Core types
+
+This table is the conceptual map. The
+[generated API reference](../../docs/api) owns the complete member-by-member
+surface.
+
+| Type | Role |
+|---|---|
+| `IAssetSource` | Supplies complete byte payloads by opaque path. |
+| `FileSystemAssetSource` | Reads an `IAssetSource` from the local file system. |
+| `AssetContentHash` | Holds the compact 64-bit SHA-256-derived identity used for process-lifetime caching. |
+| `ContentAddressedLruCache<TValue>` | Retains a fixed number of decoded values by content identity. |
+| `ContentAddressedStore` | Persists immutable objects under full SHA-256 addresses and manages named and derived refs. |
+| `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
+
+## 📌 Design notes
+
+- **Bytes stay untyped.** Decoders, serializers, GPU uploaders, and format
+  validation belong to consumers.
+- **Paths stay with the caller.** There is no virtual file system, mount table,
+  fallback search, or normalization policy in this package.
+- **The two hash widths are deliberate.** A process cache uses the compact
+  `AssetContentHash`; durable storage uses the full digest returned by
+  `ContentAddressedStore`.
+- **Cache eviction is synchronous.** The callback runs on the thread that
+  caused the removal, so it should perform bounded cleanup.
+- **Storage operations are local and synchronous.** The object store is a
+  file-system building block, not a remote object-store client.
+- **Atomic files do not make a transaction.** Object promotion and individual
+  ref replacement are atomic, but a caller coordinating several refs or other
+  state must supply its own transaction boundary.
+
+## 🧪 Building the package
+
+```text
+dotnet build src/Puck.Assets/Puck.Assets.csproj -c Release
+dotnet pack src/Puck.Assets/Puck.Assets.csproj -c Release
+```
+
+The package includes this README, the repository's licensing files, symbols,
+and XML API documentation through the shared packaging policy.

@@ -36,14 +36,14 @@ public static class SealedAttestation {
     private static readonly byte[] AeadContextLabel = "puck.carriage.sealed.aad.v1"u8.ToArray();
 
     /// <summary>
-    /// Imports an agreement public key from SPKI bytes, refusing anything that is not an EC public key on
-    /// the curve the sealing algorithm names. The ephemeral key travels on the wire and is therefore
-    /// attacker-chosen, so this is the invalid-curve check: without it, a static recipient key can be made
-    /// to agree against a key on a curve the attacker picked, which leaks the private scalar over repeated
-    /// attempts.
+    /// Imports exactly one agreement public key from SPKI bytes, refusing trailing data and anything that is
+    /// not an EC public key on the curve the sealing algorithm names. The ephemeral key travels on the wire
+    /// and is therefore attacker-chosen, so this is the invalid-curve check: without it, a static recipient key
+    /// can be made to agree against a key on a curve the attacker picked, which leaks the private scalar over
+    /// repeated attempts.
     /// </summary>
     /// <remarks>
-    /// <b>Key type first, curve second</b> (README.md §14). The import is what enforces
+    /// <b>Key type first, complete encoding second, curve third</b> (README.md §14). The import is what enforces
     /// the type: <c>ECDiffieHellman.ImportSubjectPublicKeyInfo</c> refuses an SPKI whose
     /// <c>AlgorithmIdentifier</c> is not <c>id-ecPublicKey</c> (1.2.840.10045.2.1), and it has to come first
     /// because a non-EC SPKI — an RSA key, say — has no curve to ask about at all. What there is no check
@@ -53,15 +53,19 @@ public static class SealedAttestation {
     /// </remarks>
     /// <param name="subjectPublicKeyInfo">The SPKI bytes to import.</param>
     /// <param name="what">What is being imported, for the refusal message.</param>
-    /// <exception cref="FormatException">The bytes do not import, or import a key on some other curve.</exception>
+    /// <exception cref="FormatException">The bytes do not contain exactly one SPKI value, or import a key on some other curve.</exception>
     private static ECDiffieHellman ImportAgreementKey(ReadOnlySpan<byte> subjectPublicKeyInfo, string what) {
         var key = ECDiffieHellman.Create();
 
         try {
             key.ImportSubjectPublicKeyInfo(
                 source: subjectPublicKeyInfo,
-                bytesRead: out _
+                bytesRead: out var bytesRead
             );
+
+            if (bytesRead != subjectPublicKeyInfo.Length) {
+                throw new FormatException(message: $"The sealed attestation {what} contains {subjectPublicKeyInfo.Length - bytesRead} trailing byte(s) after its SubjectPublicKeyInfo value.");
+            }
 
             if (!AttestationCurves.IsNistP256(curve: key.ExportParameters(includePrivateParameters: false).Curve)) {
                 throw new FormatException(message: $"The sealed attestation {what} is not on P-256, which is the only curve the sealing algorithm names.");
@@ -88,7 +92,7 @@ public static class SealedAttestation {
     /// <param name="associatedData">The serialized context header — tampering any byte of it must fail decryption.</param>
     /// <param name="plaintext">The payload to encrypt.</param>
     /// <returns>The ephemeral sender public key, nonce, tag, and ciphertext needed to unseal.</returns>
-    /// <exception cref="FormatException"><paramref name="recipientPublicKeySubjectPublicKeyInfo"/> is not an importable P-256 public key.</exception>
+    /// <exception cref="FormatException"><paramref name="recipientPublicKeySubjectPublicKeyInfo"/> is not exactly one importable P-256 public key.</exception>
     public static SealedPayload Seal(KeyId recipientId, ReadOnlySpan<byte> recipientPublicKeySubjectPublicKeyInfo, ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> plaintext) {
         ValidateRecipientId(
             recipientId: recipientId,

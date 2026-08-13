@@ -251,6 +251,28 @@ public sealed class IndependentInteroperabilityTests {
         Assert.Equal(expected: "production sealed and signed", actual: Encoding.UTF8.GetString(bytes: plaintext));
     }
 
+    [Fact]
+    public void IndependentSpkiImporter_TrailingBytesAreRefused() {
+        using var recipientKey = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
+
+        var tailedRecipientSpki = (byte[])[.. recipientKey.ExportSubjectPublicKeyInfo(), 0x00];
+        var recipientId = IndependentAttestationImplementation.SubjectId(
+            domain: new string(c: '0', count: 64),
+            subject: "user:tailed-independent-key",
+            subjectPublicKeyInfo: tailedRecipientSpki,
+            algorithm: IndependentAttestationImplementation.SealingAlgorithm
+        );
+
+        var exception = Assert.Throws<CryptographicException>(testCode: () => _ = IndependentAttestationImplementation.Seal(
+            recipientId: recipientId,
+            recipientSubjectPublicKeyInfo: tailedRecipientSpki,
+            headerBytes: [],
+            plaintext: []
+        ));
+
+        Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
     private static TrustList BuildProductionTrust(IndependentId rootId, byte[] rootSpki, TimeSpan? replayHorizon) => new(
         entries: [
             new TrustListEntry(

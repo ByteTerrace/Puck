@@ -152,21 +152,56 @@ internal static class AttestationTestSupport {
         ulong? sequence,
         string text,
         string? declaredAlgorithm = null
-    ) =>
-        AttestationSigner.SignClaim(
-        codec: codec,
-        domain: keys.Domain,
-        subject: keys.Subject,
-        signerKey: keys.SubjectSigningKey,
-        signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
-        purpose: purpose,
-        notBefore: notBefore,
-        notAfter: notAfter,
-        audience: audience,
-        sequence: sequence,
-        claimBytes: System.Text.Encoding.UTF8.GetBytes(s: text),
-        declaredAlgorithm: declaredAlgorithm
-    );
+    ) {
+        var claimBytes = System.Text.Encoding.UTF8.GetBytes(s: text);
+
+        if (declaredAlgorithm is null) {
+            return AttestationSigner.SignClaim(
+                codec: codec,
+                domain: keys.Domain,
+                subject: keys.Subject,
+                signerKey: keys.SubjectSigningKey,
+                signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+                purpose: purpose,
+                notBefore: notBefore,
+                notAfter: notAfter,
+                audience: audience,
+                sequence: sequence,
+                claimBytes: claimBytes
+            );
+        }
+
+        // The production signer refuses this mismatch. Build the hostile arrived bytes inside the test
+        // assembly so the verifier's algorithm-confusion refusal remains independently exercised.
+        var header = new AttestationHeader(
+            Domain: keys.Domain,
+            Subject: keys.Subject,
+            Algorithm: declaredAlgorithm,
+            Purpose: purpose,
+            NotBefore: notBefore,
+            NotAfter: notAfter,
+            Audience: audience,
+            Sequence: sequence
+        );
+        var signedPortion = codec.EncodeSignedPortion(
+            header: header,
+            payloadKind: AttestationPayloadKind.Opaque,
+            payloadBytes: claimBytes
+        );
+        var signature = keys.SubjectSigningKey.SignData(
+            data: signedPortion,
+            hashAlgorithm: HashAlgorithmName.SHA256,
+            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
+        );
+
+        return SignedAttestation.FromSignedPortion(
+            header: header,
+            payloadKind: AttestationPayloadKind.Opaque,
+            payloadBytes: claimBytes,
+            signature: signature,
+            signedPortion: signedPortion
+        );
+    }
 
     internal static void AssertAccepted(AttestationVerifyResult result) =>
         Assert.True(condition: result.Verified, userMessage: $"unexpectedly refused: {result.RefusalReason}");

@@ -377,6 +377,9 @@ An **id** is `(domain, subject, algorithm, keyHash)`.
   independent claim. Identity is intentionally over the exact DER bytes, not
   over an abstract EC point: two byte-distinct SPKI encodings are two distinct
   `KeyId` values even if a crypto library imports them to the same public point.
+  The byte string MUST contain exactly one complete SPKI value: a valid DER SPKI
+  followed by trailing data REFUSES, because the trailing bytes would otherwise
+  affect the identity hash without affecting the key the cryptographic API uses.
 
 A **root** id satisfies `domain == keyHash` and has no subject — no flag records
 this, the shape proves it. An **issuing** id shares its root's domain and has no
@@ -762,7 +765,8 @@ caller's expectations:
 5. Check `purpose` equals what the caller expects. REFUSE on inequality.
 6. Check `payloadKind` is what that purpose requires (§8). REFUSE otherwise.
 7. Resolve the pinned algorithm to curve and hash (§4). Import the pinned SPKI;
-   REFUSE if the key's curve is not the algorithm's (§5).
+   REFUSE if the import does not consume every SPKI byte or the key's curve is
+   not the algorithm's (§5).
 8. Verify the signature over the signed-portion bytes **as they arrived** (§5).
    REFUSE on failure.
 9. Apply the window (§9), unless the caller requested the re-attestation
@@ -931,6 +935,9 @@ private scalar.
   RSA key, an Ed25519 or X25519 key, anything under a different OID — MUST
   REFUSE, and MUST be refused *before* the curve is consulted, because a non-EC
   SPKI has no curve to consult.
+- **Complete encoding.** The import MUST consume the complete SPKI byte string.
+  A valid key followed by trailing bytes REFUSES rather than creating another
+  identity for the same cryptographic key.
 - **Curve.** The named curve MUST be P-256, the only curve the sealing algorithm
   names.
 
@@ -977,7 +984,7 @@ insufficient. The conditions that MUST refuse, gathered:
 | 4 | `payloadKind` outside {1, 2, 3}; a claim outside {1, 3}; a binding not 2 |
 | 5 | `algorithm`, `targetAlgorithm`, or `recipientAlgorithm` outside the §4 registry or selected profile; a recipient algorithm that is not the sealing algorithm |
 | 6 | `algorithm` not equal to the pinned key's algorithm (§6) |
-| 7 | An imported key whose curve is not the pinned algorithm's |
+| 7 | An imported key whose SPKI is not consumed completely, or whose curve is not the pinned algorithm's |
 | 8 | A signature that is not exactly `2 × fieldWidth` bytes, or does not verify |
 | 9 | `purpose` = `key-binding` presented as a claim, or any purpose mismatch |
 | 10 | `domain` mismatch against the expected domain; `subject` mismatch against the pin |
@@ -991,8 +998,8 @@ insufficient. The conditions that MUST refuse, gathered:
 | 18 | `sequence` present with no finite verifier-wide horizon, or carrying a signed window longer than that horizon |
 | 19 | Bearer claim (no audience) with no `sequence` |
 | 20 | Directed claim whose `audience` is not the verifier's |
-| 21 | A trust entry whose key bytes do not hash to its pinned id, whose mode does not match its id's shape, or that pins a sealing algorithm |
-| 22 | Sealed payload with a recipient id/key mismatch, a non-sealing recipient role, a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not an `id-ecPublicKey` key on P-256 — key type and curve are separate checks in that order (§14) |
+| 21 | A trust entry whose key bytes do not hash to its pinned id, whose SPKI is not consumed completely, whose mode does not match its id's shape, or that pins a sealing algorithm |
+| 22 | Sealed payload with a recipient id/key mismatch, a non-sealing recipient role, a nonce that is not 12 bytes, a tag that is not 16, or an ephemeral key whose SPKI is not consumed completely or is not an `id-ecPublicKey` key on P-256 — complete encoding, key type, and curve are separate checks (§14) |
 | 23 | A receiver cannot atomically and durably commit the replay requirement together with the semantic effect (§8); verification itself remains pure |
 | 24 | An attestation, signed portion, payload, text field, SPKI, or signature outside the selected profile's §0.1 resource ceilings |
 | 25 | A sealing algorithm or sealed payload when the verifier did not enable `sealed-attestation-v1` |
