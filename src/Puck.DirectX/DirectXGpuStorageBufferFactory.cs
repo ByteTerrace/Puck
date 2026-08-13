@@ -54,7 +54,7 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
     }
 
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
+    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
         // A default-heap buffer that allows unordered access: the GPU writes it (the beam prepass UAV); D3D12 forbids
         // UAVs on the upload heap that Create uses, so the GPU-written cull buffer needs its own default-heap resource.
@@ -89,21 +89,22 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
             &buffer
         );
 
-        return new DirectXGpuStorageBuffer(
+        return new DirectXGpuDeviceBuffer(
             bufferHandle: (nint)buffer,
-            mapped: null,
             sizeBytes: sizeBytes
         );
     }
 
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes, bool deviceLocal = false) {
+    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         // Device-local: a default-heap ALLOW_UNORDERED_ACCESS buffer a compute shader writes (then the caller barriers
         // UAV -> INDIRECT_ARGUMENT before ExecuteIndirect). Host-visible (default): an upload-heap buffer, already a
         // legal ExecuteIndirect source — its GENERIC_READ creation state includes INDIRECT_ARGUMENT and upload
         // resources never leave it, so no buffer-state transition is needed. Neither needs an extra D3D12 buffer flag.
-        return (deviceLocal
-            ? CreateDeviceLocal(deviceContext: deviceContext, sizeBytes: sizeBytes)
-            : Create(deviceContext: deviceContext, sizeBytes: sizeBytes));
+        return Create(deviceContext: deviceContext, sizeBytes: sizeBytes);
     }
+
+    /// <inheritdoc/>
+    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+        CreateDeviceLocal(deviceContext: deviceContext, sizeBytes: sizeBytes);
 }

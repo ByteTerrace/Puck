@@ -31,7 +31,8 @@ public static class UnicodeCodePointRangeExpander {
             throw new ArgumentException(message: $"Unsupported allowed code point token '{token}'. Use U+XXXX or U+XXXX-U+YYYY, or '*' to probe all BMP code points (U+0000-U+FFFF).");
         }
 
-        if (codePoint > 0x10FFFF) {
+        if ((codePoint < 0) || (codePoint > 0x10FFFF)) {
+            // Eight hex digits with the high bit set parse to a negative int.
             throw new ArgumentException(message: $"Code point '{token}' exceeded the Unicode maximum U+10FFFF.");
         }
 
@@ -88,14 +89,9 @@ public static class UnicodeCodePointRangeExpander {
                     continue;
                 }
 
-                if (token.Contains(
-                    comparisonType: StringComparison.Ordinal,
-                    value: '-'
-                )) {
-                    var separatorIndex = token.IndexOf(
-                        comparisonType: StringComparison.Ordinal,
-                        value: '-'
-                    );
+                var separatorIndex = token.IndexOf(value: '-');
+
+                if (separatorIndex >= 0) {
                     var startCodePoint = ParseCodePoint(token: token[..separatorIndex]);
                     var endCodePoint = ParseCodePoint(token: token[(separatorIndex + 1)..]);
 

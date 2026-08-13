@@ -1,49 +1,107 @@
 namespace Puck.Abstractions.Presentation;
 
+/// <summary>Identifies the single payload carried by a <see cref="Surface"/>.</summary>
+public enum SurfaceKind : byte {
+    /// <summary>No content is present.</summary>
+    Empty,
+    /// <summary>A shader-readable image view owned by the consumer's GPU device chain.</summary>
+    SameDeviceImage,
+    /// <summary>Tightly packed pixels in host memory.</summary>
+    CpuPixels,
+    /// <summary>An external texture handle that the consumer must import.</summary>
+    SharedHandle,
+}
+
 /// <summary>
-/// The rendered pixels a node hands its host to composite, in one of three variants. At most one of
-/// <see cref="ImageViewHandle"/>, <see cref="Pixels"/>, and <see cref="SharedHandle"/> is populated — the
-/// consumer discriminates via <see cref="IsCpuPixels"/> and <see cref="IsSharedHandle"/> (else same-device GPU),
-/// with <see cref="IsEmpty"/> meaning "no content this frame".
-/// <para>
-/// The <em>same-device GPU</em> variant carries an image-view handle (<see cref="ImageViewHandle"/>) — valid only
-/// while producer and consumer share one device chain, already in a shader-readable layout — so the consumer
-/// may sample it immediately.
-/// </para>
-/// <para>
-/// The <em>CPU-pixel</em> variant carries a tightly packed readback buffer (<see cref="Pixels"/>) instead of a
-/// device handle. It is the serialize-/remote-able payload that lets a surface cross a device (or process)
-/// boundary: a producer on one backend reads its result back to host memory, and the consumer uploads those
-/// pixels onto its own device before sampling. Rows are packed with no padding, in <see cref="Format"/> order.
-/// </para>
-/// <para>
-/// The <em>shared-handle</em> variant carries an external shareable handle (<see cref="SharedHandle"/>) to a
-/// texture the producer allocated in shared GPU memory, so a consumer on a DIFFERENT backend/device can import
-/// and sample it zero-copy — no host-memory round trip.
-/// </para>
-/// In all variants the producer has serialized its work before returning.
+/// The rendered pixels a node hands its host to composite. Factory methods enforce that exactly one payload is
+/// populated and that CPU storage exactly matches the declared extent and four-byte pixel format. The default value is
+/// the valid empty surface.
 /// </summary>
-/// <param name="ImageViewHandle">The native image-view handle of the same-device GPU variant, or zero otherwise.</param>
-/// <param name="Width">The width, in pixels, of the surface.</param>
-/// <param name="Height">The height, in pixels, of the surface.</param>
-/// <param name="Format">The backend-neutral pixel format the texels are laid out in.</param>
-/// <param name="Pixels">The tightly packed pixels of the CPU-pixel variant, or empty otherwise.</param>
-/// <param name="SharedHandle">The shared external handle (a Windows NT handle, or a POSIX file descriptor on other platforms) of the zero-copy cross-device variant — a texture another backend produced in shared GPU memory — or zero otherwise.</param>
-public readonly record struct Surface(
-    nint ImageViewHandle,
-    uint Width,
-    uint Height,
-    SurfaceFormat Format,
-    ReadOnlyMemory<byte> Pixels = default,
-    nint SharedHandle = 0
-) {
-    /// <summary>Gets a value indicating whether the surface carries no content (no GPU handle, CPU pixels, or shared handle).</summary>
-    public bool IsEmpty =>
-        ((0 == ImageViewHandle) && Pixels.IsEmpty && (0 == SharedHandle));
-    /// <summary>Gets a value indicating whether the surface is the CPU-pixel variant — a host-memory readback rather than a device handle.</summary>
-    public bool IsCpuPixels =>
-        !Pixels.IsEmpty;
-    /// <summary>Gets a value indicating whether the surface is the zero-copy shared-handle variant — an external texture in shared GPU memory.</summary>
-    public bool IsSharedHandle =>
-        (0 != SharedHandle);
+public readonly record struct Surface {
+    private Surface(
+        SurfaceKind kind,
+        nint imageViewHandle,
+        uint width,
+        uint height,
+        SurfaceFormat format,
+        ReadOnlyMemory<byte> pixels,
+        nint sharedHandle
+    ) {
+        Kind = kind;
+        ImageViewHandle = imageViewHandle;
+        Width = width;
+        Height = height;
+        Format = format;
+        Pixels = pixels;
+        SharedHandle = sharedHandle;
+    }
+
+    /// <summary>Gets the payload variant.</summary>
+    public SurfaceKind Kind { get; }
+    /// <summary>Gets the same-device image-view handle, or zero for another variant.</summary>
+    public nint ImageViewHandle { get; }
+    /// <summary>Gets the surface width in pixels.</summary>
+    public uint Width { get; }
+    /// <summary>Gets the surface height in pixels.</summary>
+    public uint Height { get; }
+    /// <summary>Gets the texel format.</summary>
+    public SurfaceFormat Format { get; }
+    /// <summary>Gets the tightly packed CPU pixels, or empty memory for another variant.</summary>
+    public ReadOnlyMemory<byte> Pixels { get; }
+    /// <summary>Gets the external shared texture handle, or zero for another variant.</summary>
+    public nint SharedHandle { get; }
+
+    /// <summary>Gets whether this is the empty variant.</summary>
+    public bool IsEmpty => SurfaceKind.Empty == Kind;
+    /// <summary>Gets whether this is the same-device image variant.</summary>
+    public bool IsSameDeviceImage => SurfaceKind.SameDeviceImage == Kind;
+    /// <summary>Gets whether this is the CPU-pixel variant.</summary>
+    public bool IsCpuPixels => SurfaceKind.CpuPixels == Kind;
+    /// <summary>Gets whether this is the external shared-handle variant.</summary>
+    public bool IsSharedHandle => SurfaceKind.SharedHandle == Kind;
+
+    /// <summary>Creates a surface whose image view belongs to the consumer's device chain.</summary>
+    public static Surface SameDeviceImage(nint imageViewHandle, uint width, uint height, SurfaceFormat format) {
+        ValidateCommon(width: width, height: height, format: format);
+        ArgumentOutOfRangeException.ThrowIfZero(value: imageViewHandle);
+
+        return new Surface(SurfaceKind.SameDeviceImage, imageViewHandle, width, height, format, default, 0);
+    }
+
+    /// <summary>Creates a surface backed by exactly one tightly packed four-byte texel for every declared pixel.</summary>
+    public static Surface CpuPixels(ReadOnlyMemory<byte> pixels, uint width, uint height, SurfaceFormat format) {
+        ValidateCommon(width: width, height: height, format: format);
+        var requiredByteLength = RequiredByteLength(width: width, height: height);
+
+        if (pixels.Length != requiredByteLength) {
+            throw new ArgumentException(
+                message: $"The CPU surface requires exactly {requiredByteLength} tightly packed bytes for its declared extent.",
+                paramName: nameof(pixels)
+            );
+        }
+
+        return new Surface(SurfaceKind.CpuPixels, 0, width, height, format, pixels, 0);
+    }
+
+    /// <summary>Creates a surface backed by an external shareable texture handle.</summary>
+    public static Surface SharedTexture(nint sharedHandle, uint width, uint height, SurfaceFormat format) {
+        ValidateCommon(width: width, height: height, format: format);
+        ArgumentOutOfRangeException.ThrowIfZero(value: sharedHandle);
+
+        return new Surface(SurfaceKind.SharedHandle, 0, width, height, format, default, sharedHandle);
+    }
+
+    /// <summary>Returns the byte length required by a tightly packed supported surface extent.</summary>
+    public static int RequiredByteLength(uint width, uint height) => checked((int)(checked((ulong)width * height) * 4UL));
+
+    private static void ValidateCommon(uint width, uint height, SurfaceFormat format) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+
+        if (!Enum.IsDefined(value: format) || SurfaceFormat.Unknown == format) {
+            throw new ArgumentOutOfRangeException(nameof(format), format, "The surface format must be a supported four-byte texel format.");
+        }
+
+        _ = RequiredByteLength(width: width, height: height);
+    }
 }

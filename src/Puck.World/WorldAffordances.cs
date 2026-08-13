@@ -84,7 +84,8 @@ internal static class WorldAffordances {
             sourceKind: SourceKind,
             errors: errors,
             channel: reference => channels.TryGetOrdinal(reference: reference, ordinal: out _),
-            channelBinary: reference => (channels.TryGetOrdinal(reference: reference, ordinal: out var ordinal) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary))
+            channelBinary: reference => (channels.TryGetOrdinal(reference: reference, ordinal: out var ordinal) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
+            sourceAddressable: source => !AddonSourceCatalog.IsUnaddressable(sourceId: source)
         );
     }
 

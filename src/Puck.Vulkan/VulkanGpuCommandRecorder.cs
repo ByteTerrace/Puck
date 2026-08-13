@@ -81,6 +81,7 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
     }
     /// <inheritdoc/>
     public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
         commandBufferRecordingApi.PushConstants(
             commandBufferHandle: commandBufferHandle,
             data: data,
@@ -102,14 +103,14 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         );
     }
     /// <inheritdoc/>
-    public void Draw(nint deviceHandle, nint commandBufferHandle, uint vertexCount, uint instanceCount, uint firstVertex, uint firstInstance) {
+    public void Draw(nint deviceHandle, nint commandBufferHandle, in GpuDrawParameters parameters) {
         commandBufferRecordingApi.Draw(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
-            firstInstance: firstInstance,
-            firstVertex: firstVertex,
-            instanceCount: instanceCount,
-            vertexCount: vertexCount
+            firstInstance: parameters.FirstInstance,
+            firstVertex: parameters.FirstVertex,
+            instanceCount: parameters.InstanceCount,
+            vertexCount: parameters.VertexCount
         );
     }
 }

@@ -10,7 +10,7 @@ namespace Puck.Text;
 /// <remarks>
 /// This is the pre-baked counterpart to <see cref="IFontAtlasGenerator"/>: instead of rasterizing a font at
 /// runtime, it loads an atlas image and JSON metadata produced ahead of time by the font-atlas bake
-/// pipeline (<c>tools/font-atlas</c>). The metadata schema is extended with two non-standard conventions this loader honors: a
+/// pipeline (<c>experimental/tools/font-atlas</c>). The metadata schema is extended with two non-standard conventions this loader honors: a
 /// top-level <c>variants[]</c> array, whose first entry's <c>metrics</c>/<c>glyphs</c>/<c>kerning</c>
 /// sections take precedence over the document-level ones when present; and per-glyph <c>emRange</c> /
 /// <c>pxRange</c> / <c>distanceRange</c> distance-field overrides (see
@@ -40,9 +40,10 @@ public sealed partial class FontAtlasLoader {
             throw new FileNotFoundException(fileName: jsonPath, message: "Font atlas metadata file was not found.");
         }
 
-        var jsonContent = File.ReadAllBytes(path: jsonPath);
-        var document = (JsonSerializer.Deserialize(utf8Json: jsonContent, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
-            ?? throw new InvalidDataException(message: "Font atlas metadata is empty or invalid JSON."));
+        var document = DeserializeDocument(
+            atlasIdentifier: jsonPath,
+            jsonContent: File.ReadAllBytes(path: jsonPath)
+        );
         var resolvedImagePath = ResolveImagePath(
             jsonPath: jsonPath,
             imagePath: imagePath
@@ -85,16 +86,59 @@ public sealed partial class FontAtlasLoader {
 
         ArgumentNullException.ThrowIfNull(imageData);
 
-        var document = (JsonSerializer.Deserialize(utf8Json: jsonContent.Span, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
-            ?? throw new InvalidDataException(message: $"Font atlas metadata '{atlasIdentifier}' is empty or invalid JSON."));
-
         return CreateAtlas(
-            document: document,
+            document: DeserializeDocument(
+                atlasIdentifier: atlasIdentifier,
+                jsonContent: jsonContent.Span
+            ),
             imagePath: imageIdentifier,
             imageData: imageData
         );
     }
 
+    /// <summary>Loads a font atlas from in-memory JSON metadata bytes, recording <paramref name="imagePath"/> as the atlas image without decoding any pixels.</summary>
+    /// <param name="atlasIdentifier">A stable identifier for the metadata, used only in error messages.</param>
+    /// <param name="jsonContent">The font-atlas bake pipeline's JSON metadata bytes.</param>
+    /// <param name="imagePath">The path or identifier recorded as the loaded atlas's <see cref="FontAtlas.ImagePath"/>.</param>
+    /// <returns>The loaded <see cref="FontAtlas"/>. No image pixels are decoded (see <see cref="IFontAtlasImageDataLoader"/> for that).</returns>
+    /// <exception cref="ArgumentException"><paramref name="atlasIdentifier"/> or <paramref name="imagePath"/> is <see langword="null"/>, empty, or whitespace.</exception>
+    /// <exception cref="InvalidDataException">The metadata is empty, malformed, or missing a required section.</exception>
+    public FontAtlas Load(string atlasIdentifier, ReadOnlyMemory<byte> jsonContent, string imagePath) {
+        if (string.IsNullOrWhiteSpace(value: atlasIdentifier)) {
+            throw new ArgumentException(
+                message: "Font atlas metadata identifier must be provided.",
+                paramName: nameof(atlasIdentifier)
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(value: imagePath)) {
+            throw new ArgumentException(
+                message: "Font atlas image path must be provided.",
+                paramName: nameof(imagePath)
+            );
+        }
+
+        return CreateAtlas(
+            document: DeserializeDocument(
+                atlasIdentifier: atlasIdentifier,
+                jsonContent: jsonContent.Span
+            ),
+            imagePath: imagePath,
+            imageData: null
+        );
+    }
+
+    private static FontAtlasDocument DeserializeDocument(string atlasIdentifier, ReadOnlySpan<byte> jsonContent) {
+        try {
+            return (JsonSerializer.Deserialize(utf8Json: jsonContent, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
+                ?? throw new InvalidDataException(message: $"Font atlas metadata '{atlasIdentifier}' is empty or invalid JSON."));
+        } catch (JsonException exception) {
+            throw new InvalidDataException(
+                message: $"Font atlas metadata '{atlasIdentifier}' is malformed JSON.",
+                innerException: exception
+            );
+        }
+    }
     private static FontAtlas CreateAtlas(
         FontAtlasDocument document,
         string imagePath,

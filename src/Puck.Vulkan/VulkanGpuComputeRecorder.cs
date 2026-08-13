@@ -27,8 +27,10 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) =>
         recordingApi.BindComputeDescriptorSets(commandBufferHandle: commandBufferHandle, descriptorSetHandles: [descriptorSetHandle], deviceHandle: deviceHandle, pipelineLayoutHandle: pipelineLayoutHandle);
     /// <inheritdoc/>
-    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) =>
+    public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
         recordingApi.PushConstants(commandBufferHandle: commandBufferHandle, data: data, deviceHandle: deviceHandle, offset: offset, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: (uint)stageFlags);
+    }
     /// <inheritdoc/>
     public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>
         recordingApi.Dispatch(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, groupCountX: groupCountX, groupCountY: groupCountY, groupCountZ: groupCountZ);

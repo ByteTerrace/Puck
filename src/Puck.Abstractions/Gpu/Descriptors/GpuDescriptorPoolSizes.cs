@@ -33,34 +33,34 @@ public readonly record struct GpuDescriptorPoolSizes(
         var accelerationStructureCount = 0u;
 
         foreach (var set in sets) {
+            ArgumentNullException.ThrowIfNull(set);
+            GpuComputeBinding.ValidateSet(bindings: set);
+
             foreach (var binding in set) {
-                var count = ((binding.Count > 0)
-                    ? binding.Count
-                    : 1
-                );
+                var count = binding.Count;
 
                 switch (binding.Kind) {
                     case GpuComputeBindingKind.StorageImage:
-                        storageImageCount += count;
+                        storageImageCount = checked(storageImageCount + count);
 
                         break;
                     case GpuComputeBindingKind.StorageBufferRead:
                     case GpuComputeBindingKind.StorageBufferReadWrite:
-                        storageBufferCount += count;
+                        storageBufferCount = checked(storageBufferCount + count);
 
                         break;
                     case GpuComputeBindingKind.AccelerationStructure:
-                        accelerationStructureCount += count;
+                        accelerationStructureCount = checked(accelerationStructureCount + count);
 
                         break;
                     case GpuComputeBindingKind.SampledImage:
                         // A sampled image is a combined-image-sampler descriptor on Vulkan; on Direct3D 12 it is one
                         // SRV heap slot. Either way it must be provisioned, or the pool/heap under-counts.
-                        combinedImageSamplerCount += count;
+                        combinedImageSamplerCount = checked(combinedImageSamplerCount + count);
 
                         break;
                     default:
-                        break;
+                        throw new InvalidOperationException(message: $"Descriptor binding kind '{binding.Kind}' has no pool-size classification.");
                 }
             }
         }

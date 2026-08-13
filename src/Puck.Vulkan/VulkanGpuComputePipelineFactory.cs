@@ -20,6 +20,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(bindings);
+        GpuComputeBinding.ValidateSet(bindings: bindings);
 
         var deviceHandle = ((IVulkanDeviceContext)deviceContext).LogicalDevice.Handle;
         var descriptorBindings = new VkDescriptorSetLayoutBinding[bindings.Count];
@@ -27,7 +28,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
         for (var index = 0; (index < bindings.Count); index++) {
             descriptorBindings[index] = new VkDescriptorSetLayoutBinding {
                 Binding = bindings[index].Binding,
-                DescriptorCount = ((bindings[index].Count > 0) ? bindings[index].Count : 1),
+                DescriptorCount = bindings[index].Count,
                 // A storage image and an acceleration structure are each their own type; both storage-buffer kinds
                 // (read and read-write) are a Vulkan storage buffer — the read/write distinction only matters to the
                 // Direct3D 12 SRV/UAV split.

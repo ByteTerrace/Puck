@@ -289,12 +289,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             m_consumedRevision = m_publishedRevision;
         }
 
-        surface = new Surface(
-            ImageViewHandle: 0,
-            Width: checked((uint)m_targetWidth),
-            Height: checked((uint)m_targetHeight),
-            Format: SurfaceFormat.B8G8R8A8Unorm,
-            Pixels: m_consumerPixels
+        surface = Surface.CpuPixels(
+            pixels: m_consumerPixels,
+            width: checked((uint)m_targetWidth),
+            height: checked((uint)m_targetHeight),
+            format: SurfaceFormat.B8G8R8A8Unorm
         );
         return true;
     }

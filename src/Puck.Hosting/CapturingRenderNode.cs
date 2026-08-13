@@ -135,13 +135,7 @@ public sealed class CapturingRenderNode : IRenderNode {
             var pixels = m_cpuReadback();
 
             if (!pixels.IsEmpty) {
-                captured = new Surface(
-                    ImageViewHandle: 0,
-                    Width: produced.Width,
-                    Height: produced.Height,
-                    Format: produced.Format,
-                    Pixels: pixels
-                );
+                captured = Surface.CpuPixels(pixels: pixels, width: produced.Width, height: produced.Height, format: produced.Format);
 
                 return true;
             }

@@ -35,6 +35,7 @@
         <Project Path="src/Puck.World/Puck.World.csproj" />
     </Folder>
     <Folder Name="/tests/">
+        <Project Path="tests/Puck.Abstractions.Tests/Puck.Abstractions.Tests.csproj" />
         <Project Path="tests/Puck.Analyzers.Tests/Puck.Analyzers.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
@@ -44,6 +45,7 @@
         <Project Path="tests/Puck.Launcher.Tests/Puck.Launcher.Tests.csproj" />
         <Project Path="tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj" />
         <Project Path="tests/Puck.Recording.Tests/Puck.Recording.Tests.csproj" />
+        <Project Path="tests/Puck.Text.Tests/Puck.Text.Tests.csproj" />
         <Project Path="tests/Puck.World.Tests/Puck.World.Tests.csproj" />
     </Folder>
 </Solution>

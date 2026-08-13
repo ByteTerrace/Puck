@@ -2054,12 +2054,11 @@ internal sealed class WorldScreenBinder : IDisposable {
             }
         }
 
-        return new Surface(
-            ImageViewHandle: 0,
-            Width: targetWidth,
-            Height: targetHeight,
-            Format: surface.Format,
-            Pixels: feed.PanelPixels
+        return Surface.CpuPixels(
+            pixels: feed.PanelPixels,
+            width: targetWidth,
+            height: targetHeight,
+            format: surface.Format
         );
     }
 

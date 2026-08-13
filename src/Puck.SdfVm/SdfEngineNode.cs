@@ -516,18 +516,17 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         // Export mode hands the host a shared NT handle (zero-copy cross-backend present); same-device mode hands it
         // an image view to sample directly.
         return (m_engine.ExportMode
-            ? new Surface(
-                ImageViewHandle: 0,
-                Width: m_width,
-                Height: m_height,
-                Format: SurfaceFormat.R8G8B8A8Unorm,
-                SharedHandle: m_engine.ExportSharedHandle
+            ? Surface.SharedTexture(
+                sharedHandle: m_engine.ExportSharedHandle,
+                width: m_width,
+                height: m_height,
+                format: SurfaceFormat.R8G8B8A8Unorm
             )
-            : new Surface(
-                ImageViewHandle: m_engine.OutputImageViewHandle,
-                Width: m_width,
-                Height: m_height,
-                Format: SurfaceFormat.R8G8B8A8Unorm
+            : Surface.SameDeviceImage(
+                imageViewHandle: m_engine.OutputImageViewHandle,
+                width: m_width,
+                height: m_height,
+                format: SurfaceFormat.R8G8B8A8Unorm
             ));
     }
 

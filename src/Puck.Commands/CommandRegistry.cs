@@ -55,9 +55,6 @@ public sealed class CommandRegistry {
     private readonly FrozenDictionary<string, CommandDefinition>.AlternateLookup<ReadOnlySpan<char>> m_fastPathAlt;
     // The Digital impulse most fast-path verbs carry, hoisted so those contexts do not recompute it.
     private static readonly CommandValue DigitalImpulse = CommandValue.Digital(active: true);
-    // One immutable, reused context per CommandValueKind. WithWireArgs permits non-digital binding values, and the
-    // fast path must expose the same declared kind as the full System.CommandLine fallback without per-line work.
-    private readonly CommandContext[] m_fastContexts;
     // The wire acknowledgement mode: false (the default) echoes every accepted line exactly as before; true (`wire.ack
     // quiet`) drops the SUCCESS acks of wire-native verbs, so a flood of accepted commands costs no echo bytes. Errors
     // and answer-bearing verbs (anything not AcknowledgementOnly) are never suppressed. Toggled by the built-in `wire.ack` verb.
@@ -245,20 +242,6 @@ public sealed class CommandRegistry {
         m_fastPath = fastPath.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         m_fastPathAlt = m_fastPath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
-        // The fast path is the TEXT door, so every reused kind-specific context is stamped Console like every other
-        // text dispatch. Enum validation above makes the direct indexed lookup safe.
-        m_fastContexts = new CommandContext[Enum.GetValues<CommandValueKind>().Length];
-
-        foreach (var kind in Enum.GetValues<CommandValueKind>()) {
-            m_fastContexts[(int)kind] = new CommandContext(
-                parse: null,
-                phase: CommandPhase.Completed,
-                principal: CommandPrincipal.Console,
-                registry: this,
-                value: ImpulseValue(kind: kind)
-            );
-        }
-
         m_metadata = m_byTextCommand.Values
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
@@ -619,7 +602,8 @@ public sealed class CommandRegistry {
                             expectedCommandId: entry.CommandId,
                             principal: entry.Principal,
                             slot: lane.Slot,
-                            completesTextSubmission: entry.CompletesTextSubmission
+                            completesTextSubmission: entry.CompletesTextSubmission,
+                            submissionBarrier: entry.SubmissionBarrier
                         );
                     } else if (
                         entry.CompletesTextSubmission
@@ -671,7 +655,7 @@ public sealed class CommandRegistry {
     // Executes a simulation-routed text command from its tick snapshot. Submit already parsed and identified the line
     // before injection; parsing again here recreates the handler's ordinary text context without re-routing it. The
     // principal rides the entry rather than being re-derived: the door that queued the line already stamped it.
-    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPrincipal principal, int slot, bool completesTextSubmission) {
+    private void ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPrincipal principal, int slot, bool completesTextSubmission, TextSubmissionBarrier? submissionBarrier) {
         try {
             var parseResult = m_root.Parse(commandLine: line);
 
@@ -716,7 +700,11 @@ public sealed class CommandRegistry {
                 m_rejections++;
             }
         } finally {
-            ReleaseSubmissionBarrier(completesTextSubmission: completesTextSubmission);
+            if (submissionBarrier is not null) {
+                submissionBarrier.Complete();
+            } else {
+                ReleaseSubmissionBarrier(completesTextSubmission: completesTextSubmission);
+            }
         }
     }
     // Releases one submitted simulation line's FIFO barrier exactly once. The defensive non-zero guard keeps a
@@ -758,7 +746,9 @@ public sealed class CommandRegistry {
                 Name: definition.Name,
                 Phase: context.Phase,
                 Result: result,
-                Text: context.Text
+                Text: context.Text,
+                Principal: context.Principal,
+                Slot: context.Slot
             );
 
             for (var index = 0; (index < m_observers.Length); index++) {
@@ -798,7 +788,24 @@ public sealed class CommandRegistry {
     public CommandResult Submit(string line) {
         ArgumentNullException.ThrowIfNull(line);
 
-        var result = SubmitCore(line: line);
+        return SubmitStamped(line: line, session: null);
+    }
+
+    /// <summary>Determines whether an interned command belongs to the host's focus-exempt control plane.</summary>
+    internal bool IsFocusExemptCommand(ushort commandId) =>
+        (commandId < m_nameById.Length) &&
+        m_metadataByName.TryGetValue(key: m_nameById[commandId], value: out var metadata) &&
+        (metadata.InputScope == CommandInputScope.FocusExempt);
+
+    internal CommandResult SubmitSession(string line, TextCommandSession session) {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(session);
+
+        return SubmitStamped(line: line, session: session);
+    }
+
+    private CommandResult SubmitStamped(string line, TextCommandSession? session) {
+        var result = SubmitCore(line: line, session: session);
 
         // The one place every text-path outcome is visible: count each failure so `wire.errors` can report it. This
         // covers the registry's own refusals AND a module handler's IsError result on either dispatch path.
@@ -810,10 +817,13 @@ public sealed class CommandRegistry {
     }
 
     // Submit's body. Submit itself owns the rejection accounting so no return path here has to remember to count.
-    private CommandResult SubmitCore(string line) {
+    private CommandResult SubmitCore(string line, TextCommandSession? session) {
         if (string.IsNullOrWhiteSpace(value: line)) {
             return CommandResult.None;
         }
+
+        var principal = (session?.Principal ?? CommandPrincipal.Console);
+        var slot = (session?.Slot ?? 0);
 
         // FAST PATH for the plain `verb arg arg…` line shape — skips the System.CommandLine parse (measured ~5.2 µs +
         // ~8.6 KB per line at the World's ~34-verb surface), the measured cause of the stdin proof's worst-frame dips
@@ -825,7 +835,7 @@ public sealed class CommandRegistry {
         //
         // ZERO-COPY: the line is tokenized into a stackalloc Span<Range> (Tokenize reproduces
         // Split((char[])null, RemoveEmptyEntries) whitespace semantics exactly), the verb is looked up by its SPAN via
-        // the frozen alternate lookup (so the verb token never materializes), and the reused kind-specific context is handed to
+        // the frozen alternate lookup (so the verb token never materializes), and a principal-stamped context is handed to
         // the handler, which receives a zero-copy WireArgs over the trailing token ranges — no substrings, no argument
         // array, nothing heap-allocated by the dispatch itself. The context's Parse is null; Value is the command's
         // declared-kind impulse so the few wire-native verbs that also serve value-sensitive bindings observe the
@@ -852,7 +862,14 @@ public sealed class CommandRegistry {
                 // suppression itself is SuppressAckIfQuiet's, so the rule stays defined in exactly one place.
                 var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
                 var result = fast.WireArgsHandler!(
-                    arg1: m_fastContexts[(int)fast.ValueKind],
+                    arg1: new CommandContext(
+                        parse: null,
+                        phase: CommandPhase.Completed,
+                        principal: principal,
+                        registry: this,
+                        slot: slot,
+                        value: ImpulseValue(kind: fast.ValueKind)
+                    ),
                     arg2: new WireArgs(
                         line: line,
                         ranges: argRanges,
@@ -902,13 +919,17 @@ public sealed class CommandRegistry {
             // edge (the press the snapshot dispatch fires on) on the local slot.
             if (
                 (definition.Routing == CommandRouting.Simulation) &&
-                (m_injectionSink is { } sink) &&
+                ((session?.SimulationSink ?? m_injectionSink) is { } sink) &&
                 TryGetId(
                 name: definition.Name,
                 id: out var commandId
             )
             ) {
-                m_pendingSimulationSubmissions++;
+                if (session is null) {
+                    m_pendingSimulationSubmissions++;
+                } else {
+                    session.Barrier.Begin();
+                }
 
                 try {
                     sink.Inject(
@@ -916,10 +937,15 @@ public sealed class CommandRegistry {
                         value: value,
                         phase: CommandPhase.Started,
                         text: line,
-                        completesTextSubmission: true
+                        completesTextSubmission: true,
+                        submissionBarrier: session?.Barrier
                     );
                 } catch {
-                    m_pendingSimulationSubmissions--;
+                    if (session is null) {
+                        m_pendingSimulationSubmissions--;
+                    } else {
+                        session.Barrier.Complete();
+                    }
 
                     throw;
                 }
@@ -932,8 +958,9 @@ public sealed class CommandRegistry {
             var result = definition.Handler(arg: new CommandContext(
                 parse: parseResult,
                 phase: CommandPhase.Completed,
-                principal: CommandPrincipal.Console,
+                principal: principal,
                 registry: this,
+                slot: slot,
                 value: value
             ));
 

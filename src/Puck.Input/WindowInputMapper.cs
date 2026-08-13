@@ -7,7 +7,7 @@ namespace Puck.Input;
 /// consumes, applying the <see cref="InputSources.Keyboard"/> vocabulary through <see cref="KeyboardSourceMap"/>.
 /// The native windows produce only raw-key → neutral-key translation, while the shared map is the single place the
 /// keyboard seam names a control, mirroring how <see cref="GamepadCaptureSource"/> owns the gamepad vocabulary. The
-/// keyboard <see cref="InputDeviceId"/> stays <see langword="default"/>, as the windows never set one.
+/// keyboard <see cref="InputDeviceId"/> is preserved so plural-keyboard backends route each device independently.
 /// </summary>
 /// <remarks>The pointer has no vocabulary here at all. Browsing state — cursor motion, absolute position, held
 /// buttons, wheel rotation — is presentation/session-only and reaches its consumers through
@@ -27,10 +27,10 @@ public static class WindowInputMapper {
                 }
 
                 return ((inputEvent.Phase == CommandPhase.Completed)
-                    ? InputSignal.Release(source: source)
-                    : InputSignal.Press(source: source));
+                    ? InputSignal.Release(source: source, deviceId: inputEvent.DeviceId)
+                    : InputSignal.Press(source: source, deviceId: inputEvent.DeviceId));
             case WindowInputKind.Text:
-                return InputSignal.Typed(source: InputSources.Keyboard.Text, text: (inputEvent.Text ?? string.Empty));
+                return InputSignal.Typed(source: InputSources.Keyboard.Text, text: (inputEvent.Text ?? string.Empty), deviceId: inputEvent.DeviceId);
             default:
                 throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent));
         }

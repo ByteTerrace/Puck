@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Launcher;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -347,8 +346,8 @@ internal static class WorldSessionCapture {
 
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
-    // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives in Puck.Abstractions (out of this
-    // scope), so the reverse mapping is computed here against its forward table.
+    // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives with the document model, so the
+    // reverse mapping is computed here against its forward table.
     private static WorldRenderScaleTier NearestRenderScaleTier(float scale) {
         var best = WorldRenderScaleTier.Native;
         var bestDelta = float.MaxValue;

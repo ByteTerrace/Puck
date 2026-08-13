@@ -11,7 +11,7 @@ namespace Puck.Text;
 /// of that encoded band in em units; multiplying it by the on-screen pixels-per-em gives the
 /// <em>screen pixel range</em>, the band width in destination pixels, which sets the slope of the
 /// anti-aliasing ramp. The naming follows the committed atlas metadata's own convention (see the
-/// font-atlas bake pipeline, <c>tools/font-atlas</c>).
+/// font-atlas bake pipeline, <c>experimental/tools/font-atlas</c>).
 /// </remarks>
 public static class MtsdfSampling {
     /// <summary>

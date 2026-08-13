@@ -1,4 +1,4 @@
-world.console off
+console off 1
 player.pose -8 0 6 0 0 0 1
 world.wait 15
 player.press strafe -1 2 1

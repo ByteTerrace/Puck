@@ -26,8 +26,9 @@ has not been published yet. The project depends on `ByteTerrace.Puck.Maths` and
   `CommandSnapshot` per logical step. Replaying the same ordered stream rebuilds
   the same snapshot.
 - *Host-owned identity:* a `CommandPrincipal` identifies the actor — a local
-  seat, the console, an addon, or a network peer. The router or text path stamps
-  that identity before dispatch, and handlers read it from `context.Principal`.
+  seat, the administrative console, an addon, or a network peer. The router or
+  a host-minted `TextCommandSession` stamps that identity before dispatch, and
+  handlers read it from `context.Principal`.
 - *Maps for application modes:* commands group into named maps such as gameplay
   or menus. A mode switch activates or deactivates a map without rebuilding the
   binding table.
@@ -49,9 +50,10 @@ text. Both choose the acting principal before anything dispatches:
 graph LR
     Signals(["⌨️🖱️🎮 Device signals"]) --> Router
     Presentation(["🧭 Authored interface activation"]) --> Router
-    Console(["⌨️ Console text"]) --> Submit
-    Submit(["Submit(line)"]) -->|"Immediate: parse + run as Console"| Handler
-    Submit -->|"Simulation: queue through the console sink"| Router
+    Console(["⌨️ Administrative stdin"]) --> Submit
+    SeatText(["⌨️ Seat text session"]) --> Submit
+    Submit(["submitted line"]) -->|"Immediate: parse + run as stamped principal"| Handler
+    Submit -->|"Simulation: queue through that principal's sink"| Router
     Router(["🎚️ InputRouter<br/>orders commands per slot and<br/>stamps the host-resolved principal"]) --> Snapshot(["📋 CommandSnapshot"])
     Snapshot --> Pump(["⏱️ Host fixed-step pump"])
     Pump -->|"ApplySnapshot"| Apply(["🗄️ CommandRegistry<br/>map-gated dispatch"])

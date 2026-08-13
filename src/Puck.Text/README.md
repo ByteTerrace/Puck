@@ -97,11 +97,13 @@ distances rather than rasterized coverage. `MtsdfSampling.UsesDistanceField(kind
 ## Laying out text
 
 ```csharp
+using Puck.Assets;
 using Puck.Text;
 
 // 1. Resolve an atlas (your generator does the rasterization).
 IFontAtlasSourceResolver resolver = new FontAtlasSourceResolver(
-    fontAtlasGenerator: myGenerator   // your IFontAtlasGenerator
+    fontAtlasGenerator: myGenerator,             // your IFontAtlasGenerator
+    assetSource: new FileSystemAssetSource()     // Puck.Assets; supplies the font bytes
 );
 FontAtlas atlas = resolver.Resolve(
     fontPath: "fonts/Inter.ttf",
@@ -203,7 +205,7 @@ foreach (TextGlyphPlacement p in layout.Placements) {
 
 | Type | Role |
 |------|------|
-| `TextEnrichmentTags` | The control-char grammar + single-pass `Stack<TextEffect>` scan (start pushes, end pops, `reset` clears, innermost **shadows**; malformed/unknown → literal). |
+| `TextEnrichmentTags` | The control-char grammar + single-pass `Stack<TextEffect>` scan (start pushes, a matching end pops, `reset` clears, innermost **shadows**; malformed or unknown tags are dropped). |
 | `BbCodeTextMarkup` | The human front-end: compiles `[wave]…[/wave]` / `[color=#f00]…[/color]` BBCode down to the control-char stream. |
 | `TextEffect` / `TextEffectKind` | An effect kind + its (late-bindable) parameters. Motion: `Shake`/`Wave`/`Pulse`/`Jitter`/`Dissolve`; static delight: `Color`/`Weight`; pacing: `Reveal`. `IsMotion` classifies. |
 | `TextEffectParameter` / `TextEnrichmentVariable` | Numeric params that may late-bind a named **content-time channel** (additive/multiplicative/replacement) — no wall clock, no RNG. |
@@ -249,8 +251,8 @@ up to 256 of the most recently used atlases.
 ## Plugging in a generator
 
 Puck.Text deliberately ships **no rasterizer**. Implement `IFontAtlasGenerator` to wrap your
-backend (e.g. the font-atlas bake pipeline, `tools/font-atlas` — the naming here follows its
-conventions):
+backend (e.g. the font-atlas bake pipeline, `experimental/tools/font-atlas` — the naming here
+follows its conventions):
 
 ```csharp
 public sealed class MyGenerator : IFontAtlasGenerator {

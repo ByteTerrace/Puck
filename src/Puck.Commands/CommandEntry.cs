@@ -103,4 +103,6 @@ public readonly record struct CommandEntry {
     /// <summary>Whether applying this local live entry releases <see cref="TextCommandSource"/>'s deferred-mutation
     /// drain barrier. Local-only like <see cref="Device"/>; a re-driven entry reconstructs it as <see langword="false"/>.</summary>
     internal bool CompletesTextSubmission { get; init; }
+
+    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
 }

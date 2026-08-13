@@ -1,50 +1,47 @@
 using Puck.Commands;
-using Puck.Overlays;
 
-namespace Puck.World;
+namespace Puck.Hosting;
 
 /// <summary>
-/// The on-screen mirror of the World console: every submitted stdin/console line and its result echo append into a
-/// bounded scrollback ring, published as a <see cref="ConsolePanelFrame"/> for the unified overlay's console-panel
-/// writer — the unification contract's "on-screen panel AND stdin" made literal (the pipe and the panel show the
-/// same exchange). Event-driven: it publishes on each recorded line and on visibility flips, never per frame.
+/// One terminal-session tape: every submitted line and its result echo append into a bounded scrollback ring,
+/// published as a <see cref="ConsoleTapeFrame"/> for whatever renders that session's console panel.
+/// Event-driven: it publishes on each recorded line and on visibility flips, never per frame.
 /// </summary>
 /// <remarks>Single-threaded by contract: <see cref="Record"/> runs inside the command pump's drain and
 /// <see cref="SetVisible"/> inside a verb handler — both on the window-pump thread. Only the published immutable
 /// snapshot crosses to the render thread (through the store's lock-free buffer).</remarks>
-internal sealed class WorldConsoleMirror : ICommandObserver {
+public sealed class ConsoleTape : ICommandObserver {
     private const string EchoPrefix = "> ";
     private const int MaxLines = 64;
 
     private string m_input = string.Empty;
-    private readonly ConsolePanelLine[] m_ring = new ConsolePanelLine[MaxLines];
+    private readonly ConsoleTapeLine[] m_ring = new ConsoleTapeLine[MaxLines];
     private bool m_selected;
-    private readonly ConsolePanelStore m_store;
+    private readonly ConsoleTapeStore m_store;
     private int m_count;
     private int m_head;
     private bool m_visible;
 
-    /// <summary>Initializes a new instance of the <see cref="WorldConsoleMirror"/> class — HIDDEN by default.</summary>
-    /// <remarks>The pipe is the control plane and carries it whether or not this panel draws, so drawing it by
-    /// default only covered the top half of the frame. Backtick, <c>world.console</c>, and the play wheel's Console
-    /// sector open it on demand.</remarks>
-    /// <param name="store">The console-panel store the overlay reads.</param>
+    /// <summary>Initializes a new instance of the <see cref="ConsoleTape"/> class — hidden by default.</summary>
+    /// <remarks>The pipe is the control plane and carries it whether or not the panel draws, so drawing it by
+    /// default only covered the top half of the frame. The composition root's toggle key, console verb, and menu
+    /// sectors open it on demand.</remarks>
+    /// <param name="store">The console-tape store a renderer reads.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> is <see langword="null"/>.</exception>
-    public WorldConsoleMirror(ConsolePanelStore store) {
+    public ConsoleTape(ConsoleTapeStore store) {
         ArgumentNullException.ThrowIfNull(argument: store);
 
         m_store = store;
         Publish();
     }
 
-    /// <summary>Whether the panel is currently shown.</summary>
+    /// <summary>Gets a value indicating whether the panel is currently shown.</summary>
     public bool Visible => m_visible;
 
-    /// <summary>Gets or sets the callback invoked once each time the panel's visibility CHANGES, carrying the new
-    /// state — wired in <see cref="WorldBootComposition"/> to <see cref="Puck.Hosting.IInputFocus.Release"/>/
-    /// <see cref="Puck.Hosting.IInputFocus.Claim"/> for the keyboard device (so typing suppresses gameplay input for
-    /// exactly as long as the panel is on screen) and, on the hide edge, to the line editor's reset so a reopened
-    /// console never resurrects a half-typed line.</summary>
+    /// <summary>Gets or sets the callback invoked once each time the panel's visibility changes, carrying the new
+    /// state — the session bank wires it to <see cref="IInputFocus.Release"/>/<see cref="IInputFocus.Claim"/> for
+    /// that seat's tracked text devices, and resets the line editor on the hide edge so a reopened console never
+    /// resurrects a half-typed line.</summary>
     public Action<bool>? VisibilityChanged { get; set; }
 
     /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
@@ -86,7 +83,7 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
         Publish();
     }
 
-    /// <summary>Records one UNSOLICITED edit-boundary echo — a tick-boundary mutation outcome has no submitted line
+    /// <summary>Records one unsolicited edit-boundary echo — a tick-boundary mutation outcome has no submitted line
     /// to hang off, so without this the panel would never show it and only the (wrapped, still bounded) toast and
     /// stderr would carry the reason.</summary>
     /// <param name="message">The echo text.</param>
@@ -98,7 +95,7 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
         Publish();
     }
 
-    /// <summary>Shows or hides the panel (the <c>world.console</c> verb's seam and <c>Escape</c>'s close).</summary>
+    /// <summary>Shows or hides the panel (the console verb's seam and <c>Escape</c>'s close).</summary>
     /// <param name="visible">Whether the panel is shown.</param>
     public void SetVisible(bool visible) {
         var wasVisible = m_visible;
@@ -113,7 +110,7 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
 
         Publish();
 
-        // Fire on a real transition only (never a same-state SetVisible(true) while already shown) — the mirror
+        // Fire on a real transition only (never a same-state SetVisible(true) while already shown) — the tape
         // only clears its own display echo above; the line editor holds the authoritative buffer/caret and is reset
         // through its own home on the hide edge (see the VisibilityChanged hook).
         if (wasVisible != visible) {
@@ -121,7 +118,7 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
         }
     }
 
-    /// <summary>Sets the prompt row's live input echo — <see cref="WorldConsoleInput"/>'s republish seam.</summary>
+    /// <summary>Sets the prompt row's live input echo — <see cref="ConsoleLineEditor"/>'s republish seam.</summary>
     /// <param name="input">The input line to display: caret marker included when <paramref name="selected"/> is
     /// <see langword="false"/>, the raw line otherwise (the highlight rect stands in for the caret).</param>
     /// <param name="selected">Whether the whole input line is selected (Ctrl+A).</param>
@@ -132,7 +129,7 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
     }
 
     private void Append(string line, bool refused) {
-        m_ring[((m_head + m_count) % MaxLines)] = new ConsolePanelLine(Text: line, Refused: refused);
+        m_ring[((m_head + m_count) % MaxLines)] = new ConsoleTapeLine(Text: line, Refused: refused);
 
         if (m_count < MaxLines) {
             m_count++;
@@ -144,12 +141,12 @@ internal sealed class WorldConsoleMirror : ICommandObserver {
     // Snapshot allocation is event-scoped (per recorded exchange), never per frame — the render thread only ever
     // reads the immutable array the frame carries.
     private void Publish() {
-        var lines = new ConsolePanelLine[m_count];
+        var lines = new ConsoleTapeLine[m_count];
 
         for (var index = 0; (index < m_count); index++) {
             lines[index] = m_ring[((m_head + index) % MaxLines)];
         }
 
-        m_store.Publish(frame: new ConsolePanelFrame(Input: m_input, Lines: lines, Selected: m_selected, Visible: m_visible));
+        m_store.Publish(frame: new ConsoleTapeFrame(Input: m_input, Lines: lines, Selected: m_selected, Visible: m_visible));
     }
 }

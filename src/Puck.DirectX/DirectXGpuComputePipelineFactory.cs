@@ -29,6 +29,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(computeShaderModule);
         ArgumentNullException.ThrowIfNull(bindings);
+        GpuComputeBinding.ValidateSet(bindings: bindings);
 
         var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
         var cs = (DirectXGpuShaderModule)computeShaderModule;
@@ -82,7 +83,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             var binding = bindings[index];
 
             slotByBinding[binding.Binding] = nextSlot;
-            nextSlot += ((binding.Count > 0) ? binding.Count : 1);
+            nextSlot = checked(nextSlot + binding.Count);
         }
 
         slotCount = nextSlot;
@@ -115,7 +116,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             // image or a read-write buffer binds as a UAV (u#). On Direct3D 12 a RaytracingAccelerationStructure IS an
             // SRV, and a sampled image is an SRV read through the static sampler added to the root signature below.
             var isSrv = ((binding.Kind == GpuComputeBindingKind.StorageBufferRead) || (binding.Kind == GpuComputeBindingKind.AccelerationStructure) || (binding.Kind == GpuComputeBindingKind.SampledImage));
-            var count = ((binding.Count > 0) ? binding.Count : 1);
+            var count = binding.Count;
             var rangeType = (isSrv
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
                 : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV);

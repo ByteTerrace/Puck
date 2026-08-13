@@ -31,9 +31,6 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
     /// <param name="memoryHandle">The native <c>VkDeviceMemory</c> handle backing the buffer.</param>
     /// <param name="sizeBytes">The size, in bytes, of the buffer.</param>
     /// <param name="storageBufferApi">The API used to destroy the buffer and map its memory.</param>
-    /// <param name="deviceLocal">Whether the backing memory is device-local (GPU-only, never host-mapped) rather
-    /// than host-visible. When <see langword="false"/> (the default), the buffer maps its memory immediately and
-    /// keeps it mapped for the buffer's lifetime.</param>
     /// <exception cref="ArgumentNullException"><paramref name="storageBufferApi"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="bufferHandle"/>, <paramref name="deviceHandle"/>, or <paramref name="memoryHandle"/> is zero.</exception>
     public VulkanStorageBuffer(
@@ -41,8 +38,7 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
         nint deviceHandle,
         nint memoryHandle,
         ulong sizeBytes,
-        IVulkanStorageBufferApi storageBufferApi,
-        bool deviceLocal = false
+        IVulkanStorageBufferApi storageBufferApi
     ) {
         ArgumentNullException.ThrowIfNull(argument: storageBufferApi);
 
@@ -70,13 +66,11 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
         SizeBytes = sizeBytes;
         m_storageBufferApi = storageBufferApi;
 
-        if (!deviceLocal) {
-            m_mappedPointer = m_storageBufferApi.MapMemory(
-                deviceHandle: DeviceHandle,
-                memoryHandle: MemoryHandle,
-                size: SizeBytes
-            );
-        }
+        m_mappedPointer = m_storageBufferApi.MapMemory(
+            deviceHandle: DeviceHandle,
+            memoryHandle: MemoryHandle,
+            size: SizeBytes
+        );
     }
 
     /// <summary>Destroys the owned buffer and frees its backing memory. Safe to call more than once.</summary>
@@ -179,5 +173,49 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
                 sourceBytesToCopy: size
             );
         }
+    }
+}
+
+/// <summary>Owns a Vulkan device-local storage buffer without exposing mapping or host writes.</summary>
+public sealed class VulkanDeviceStorageBuffer : IGpuBuffer {
+    private readonly IVulkanStorageBufferApi m_storageBufferApi;
+    private bool m_disposed;
+
+    /// <summary>Initializes an owner for existing Vulkan buffer and memory handles.</summary>
+    public VulkanDeviceStorageBuffer(nint bufferHandle, nint deviceHandle, nint memoryHandle, ulong sizeBytes, IVulkanStorageBufferApi storageBufferApi) {
+        ArgumentNullException.ThrowIfNull(storageBufferApi);
+        VulkanArgument.RequireHandle(bufferHandle, "storage-buffer", nameof(bufferHandle));
+        VulkanArgument.RequireHandle(deviceHandle, "logical-device", nameof(deviceHandle));
+        VulkanArgument.RequireHandle(memoryHandle, "device-memory", nameof(memoryHandle));
+        BufferHandle = bufferHandle;
+        DeviceHandle = deviceHandle;
+        MemoryHandle = memoryHandle;
+        SizeBytes = sizeBytes;
+        m_storageBufferApi = storageBufferApi;
+    }
+
+    /// <inheritdoc/>
+    public nint BufferHandle { get; private set; }
+    /// <summary>Gets the owning Vulkan device handle.</summary>
+    public nint DeviceHandle { get; }
+    /// <summary>Gets the backing Vulkan device-memory handle.</summary>
+    public nint MemoryHandle { get; private set; }
+    /// <inheritdoc/>
+    public ulong SizeBytes { get; }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_storageBufferApi.DestroyStorageBuffer(new(
+            BufferHandle: BufferHandle,
+            DeviceHandle: DeviceHandle,
+            MemoryHandle: MemoryHandle
+        ));
+        BufferHandle = 0;
+        MemoryHandle = 0;
+        m_disposed = true;
     }
 }

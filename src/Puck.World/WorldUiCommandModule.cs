@@ -5,8 +5,7 @@ namespace Puck.World;
 /// <summary>
 /// The overlay-UI verb surface: <c>world.screenshot</c> (arm a one-shot PNG capture of the next composed frame,
 /// through the outermost render decorator, so the readback shows exactly what the player sees — overlay included)
-/// <c>world.console</c> (show/hide the on-screen console mirror panel), and <c>world.binding-bar</c> (read or override
-/// a seat's authored binding-bar policy). A separate module from
+/// and <c>world.binding-bar</c> (read or override a seat's authored binding-bar policy). A separate module from
 /// <see cref="WorldCommandModule"/> to keep every class under its analyzer ceilings. The drawn cursor's live
 /// read-back is <c>world.view.pointer</c> (<see cref="WorldViewCommandModule"/> — the <c>world.view.camera</c>
 /// family, per-seat live presentation state).
@@ -20,20 +19,9 @@ namespace Puck.World;
 /// <see cref="WorldPostBuildWiring"/> reports anything still outstanding when the run ends. A caller reading either
 /// stream can always tell "written" from "never happened" — which is the whole point, since a scripted caller that
 /// cannot is a caller being lied to.
-/// <para>Registered in every boot shape for command-vocabulary parity (the document validators must see the same
-/// committed vocabulary in every boot shape — <c>world.console</c> is a stock play-wheel sector every shipped world
-/// commits, and Play's own overlay is what every dungeon's copies it from). This one matters beyond ordinary parity:
-/// the console is the control plane (process stdin drives it; the on-screen panel is only a mirror of that pipe), so
-/// a headless boot that left <c>world.console</c> unregistered would refuse a world for authoring a wheel sector
-/// that opens the very mirror of the pipe driving it — an absurd refusal for a boot shape that has no on-screen
-/// panel to toggle in the first place. Both dependencies are optional (default <see langword="null"/> — DI supplies
-/// the default rather than throwing when <see cref="WorldBootComposition.AddWorldPresentation"/> never ran) and
-/// every handler refuses by name at use, never at registration or validation, when the dependency it needs is
-/// absent.</para></remarks>
-internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldConsoleMirror? consoleMirror = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
-    /// <summary>The console-mirror toggle verb name — bound to the backtick key by
-    /// <see cref="WorldDefaultBindings"/>.</summary>
-    public const string ConsoleCommand = "world.console";
+/// <para>Registered in every boot shape so the command vocabulary stays stable; its presentation dependencies are
+/// optional and handlers refuse by name when unavailable.</para></remarks>
+internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
     /// <summary>The binding-bar visibility and read-back verb.</summary>
     public const string BindingBarCommand = "world.binding-bar";
 
@@ -78,34 +66,6 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.
                 return new CommandResult(Output: $"[world.screenshot: pending {path} — lands on the next composed frame]");
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
-            name: ConsoleCommand,
-            description: "Shows/hides the on-screen console mirror panel: world.console [on|off] — no argument TOGGLES the panel; on|off force a side. Bound to the backtick key by default (the console toggle), so it dispatches with no argument and flips visibility each press. Every form echoes the resulting state. The pipe keeps working either way; the panel is its visible twin.",
-            handler: (_, args) => {
-                if (consoleMirror is null) {
-                    return CommandResult.Error(output: "[world.console: requires a windowed boot — headless registers this verb for vocabulary parity only]");
-                }
-
-                // A bound key dispatches with no argument, so the no-arg form must ACT, not query: it toggles and
-                // echoes the resulting state (which is also the state read a bare query would have wanted).
-                bool resolved;
-
-                if (args.Count == 0) {
-                    resolved = !consoleMirror.Visible;
-                } else if (args.Is(index: 0, value: "on")) {
-                    resolved = true;
-                } else if (args.Is(index: 0, value: "off")) {
-                    resolved = false;
-                } else {
-                    return CommandResult.Error(output: $"[world.console: unknown state '{args[0].ToString()}' — on|off, or no argument to toggle]");
-                }
-
-                consoleMirror.SetVisible(visible: resolved);
-
-                return new CommandResult(Output: $"[world.console: {(resolved ? "on" : "off")}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(

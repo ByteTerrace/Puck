@@ -2328,7 +2328,7 @@ public abstract record WorldScreenSource {
     /// <summary>A screen showing the developer console as an object in the world — the diegetic half of the control plane
     /// the unification contract names ("the on-screen panel and process stdin"). The frame is CPU-composed into a
     /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
-    /// nothing about it is a render-graph node. Complementary to — never a duplicate of — <c>WorldConsoleMirror</c>,
+    /// nothing about it is a render-graph node. Complementary to — never a duplicate of — <c>ConsoleTape</c>,
     /// which publishes the same content to the screen-space overlay. At most one <c>console</c> source may be live
     /// (declared) at a time; an unselected console entry sitting in a magazine is legal.</summary>
     /// <param name="Rows">Console text rows the framebuffer composes, 1..120. Sizes the CPU buffer.</param>
@@ -3453,8 +3453,8 @@ public enum WorldHostPresentation : byte {
 /// <see cref="ExitAfterSeconds"/>, <see cref="RayQuery"/>, <see cref="Genlock"/>): read once at composition; a live
 /// edit is journaled and validated immediately but takes effect next boot.</description></item>
 /// <item><description><b>Boot-default with a live lever</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
-/// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on; <c>Puck.World.WorldSessionCapture</c>
-/// folds the live values back at <c>world.save</c>.</description></item>
+/// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on;
+/// <c>Puck.World.WorldSessionCapture</c> folds the live values back at <c>world.save</c>.</description></item>
 /// </list>
 /// <see cref="Default"/> reproduces World's current boot exactly.
 /// </summary>

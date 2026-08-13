@@ -83,11 +83,12 @@ wheels/editor/sculpt pages, which every world compiles in unconditionally)
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
 UNKNOWN over headless stdin, while `editor.*`/`sculpt.*` are CORE-registered
-(nothing in their dependency chain is GPU-typed) and `world.console`/
-`world.screenshot`/`player.wheel.*` are CORE-registered too but resolve their
-presentation dependency as OPTIONAL and refuse BY NAME at use instead of going
-unregistered — a headless boot that left a stock wheel sector unregistered
-would refuse the SAME boot document a windowed boot admits. `screen.*` is
+(nothing in their dependency chain is GPU-typed), terminal-owned `console` is
+registered beside `quit`, and `world.screenshot`/`player.wheel.*` are
+CORE-registered too but resolve their presentation dependency as OPTIONAL and
+refuse BY NAME at use instead of going unregistered — a headless boot that
+left a stock wheel sector unregistered would refuse the SAME boot document a
+windowed boot admits. `screen.*` is
 registered in EVERY shape (owner ruling, 2026-08-03: the machine host is core
 state, not presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/
 `.link`/`.unlink` apply through the ordered domain headless exactly as
@@ -111,9 +112,18 @@ local/travel renderers use. The old mixed seat-look shape is not accepted.
 
 The console is the control plane: process stdin in, results on stdout,
 refusals and server narration on stderr, all mirrored onto the in-game panel
-(`WorldConsoleMirror.cs`). Every capability is a verb. **Type `help` for the
+(the terminal's `ConsoleTape` in `Puck.Hosting`, drawn by `Puck.Overlays`'
+console-panel writer). Every capability is a verb. **Type `help` for the
 live, self-documenting verb list** — it is generated from the registered
 commands, so this README does not catalog verbs.
+
+Each local seat has its own text session, editor, history, tape, and allowed
+command surface. Backtick is a terminal-owned, always-active binding rather
+than a world-page row. Seated `console [on|off]` invocations affect their own
+seat; stdin uses `console [on|off] <player>` and must name the target. Until
+there is a separate operator panel, stdin exchanges and deferred edit echoes
+live on their own operator tape and are mirrored onto the displayed seat-one
+tape.
 
 Facts a script needs:
 
@@ -225,9 +235,9 @@ Facts a script needs:
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`
   and `WorldWheelCommandModule.cs` are core-registered but refuse by name at
-  use when their one presentation dependency is absent (command-vocabulary
-  parity — `world.console`/`player.wheel.*` are stock wheel-hold-page rows the
-  engine-default document commits in every boot shape).
+  use when their presentation dependency is absent. Terminal-owned `console`
+  and world-owned `player.wheel.*` are stock wheel-hold-page rows the
+  engine-default document commits in every boot shape.
 - `WorldDefinitionLoader.cs` — resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
   `puck.recording.v1`.

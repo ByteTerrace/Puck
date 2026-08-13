@@ -24,7 +24,6 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
         VulkanInstance vulkanInstance,
         VulkanLogicalDevice logicalDevice,
         ulong sizeBytes,
-        bool deviceLocal = false,
         bool indirectArgs = false
     ) {
         ArgumentNullException.ThrowIfNull(argument: vulkanInstance);
@@ -32,7 +31,7 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
 
         var handles = m_storageBufferApi.CreateStorageBuffer(request: new(
             DeviceHandle: logicalDevice.Handle,
-            DeviceLocal: deviceLocal,
+            DeviceLocal: false,
             IndirectArgs: indirectArgs,
             InstanceHandle: vulkanInstance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
@@ -44,8 +43,35 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
             deviceHandle: logicalDevice.Handle,
             memoryHandle: handles.MemoryHandle,
             sizeBytes: sizeBytes,
-            storageBufferApi: m_storageBufferApi,
-            deviceLocal: deviceLocal
+            storageBufferApi: m_storageBufferApi
+        );
+    }
+
+    /// <inheritdoc/>
+    public VulkanDeviceStorageBuffer CreateDeviceLocal(
+        VulkanInstance vulkanInstance,
+        VulkanLogicalDevice logicalDevice,
+        ulong sizeBytes,
+        bool indirectArgs = false
+    ) {
+        ArgumentNullException.ThrowIfNull(vulkanInstance);
+        ArgumentNullException.ThrowIfNull(logicalDevice);
+
+        var handles = m_storageBufferApi.CreateStorageBuffer(request: new(
+            DeviceHandle: logicalDevice.Handle,
+            DeviceLocal: true,
+            IndirectArgs: indirectArgs,
+            InstanceHandle: vulkanInstance.Handle,
+            PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
+            SizeBytes: sizeBytes
+        ));
+
+        return new VulkanDeviceStorageBuffer(
+            bufferHandle: handles.BufferHandle,
+            deviceHandle: logicalDevice.Handle,
+            memoryHandle: handles.MemoryHandle,
+            sizeBytes: sizeBytes,
+            storageBufferApi: m_storageBufferApi
         );
     }
 }

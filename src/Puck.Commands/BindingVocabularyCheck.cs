@@ -43,6 +43,8 @@ public static class BindingVocabularyCheck {
     /// scale is always the default (<c>+1</c>, or an omitted <see cref="BindingPageEntryDefinition.Scale"/>) —
     /// <see cref="BindingPageEntryDefinition.Scale"/>'s own doc names this rule; this is where it is enforced. Only
     /// consulted for a channel <paramref name="channel"/> has already confirmed exists.</param>
+    /// <param name="sourceAddressable">Optionally identifies declared sources that cannot be authored as binding
+    /// controls despite carrying a known value kind, such as the text-payload source.</param>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="errors"/> is
     /// <see langword="null"/>.</exception>
     public static void Validate(
@@ -51,7 +53,8 @@ public static class BindingVocabularyCheck {
         Func<string, CommandValueKind?>? sourceKind,
         List<string> errors,
         Func<ChannelRef, bool>? channel = null,
-        Func<ChannelRef, bool>? channelBinary = null
+        Func<ChannelRef, bool>? channelBinary = null,
+        Func<string, bool>? sourceAddressable = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: errors);
@@ -90,10 +93,16 @@ public static class BindingVocabularyCheck {
                         (sourceKind is not null)
                     ) {
                         foreach (var step in (activator.Sequence ?? [])) {
-                            if (
-                                !string.IsNullOrEmpty(value: step) &&
-                                (sourceKind(arg: step) is null)
-                            ) {
+                            if (string.IsNullOrEmpty(value: step)) {
+                                continue;
+                            }
+
+                            if (!(sourceAddressable?.Invoke(arg: step) ?? true)) {
+                                errors.Add(item: $"page \"{page.Id}\" activator [{string.Join(
+                                    separator: ", ",
+                                    values: (activator.Sequence ?? [])
+                                )}] names unaddressable control \"{step}\"");
+                            } else if (sourceKind(arg: step) is null) {
                                 errors.Add(item: $"page \"{page.Id}\" activator [{string.Join(
                                     separator: ", ",
                                     values: (activator.Sequence ?? [])
@@ -103,6 +112,13 @@ public static class BindingVocabularyCheck {
                     }
 
                     var label = entry.TriggerLabel;
+
+                    if (
+                        (entry.Source is { } entrySource) &&
+                        !(sourceAddressable?.Invoke(arg: entrySource) ?? true)
+                    ) {
+                        errors.Add(item: $"page \"{page.Id}\" binds unaddressable control \"{entrySource}\"");
+                    }
 
                     // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix parsed
                     // off — BindingProfile.Compile already refused a malformed suffix structurally) must name a
@@ -174,6 +190,15 @@ public static class BindingVocabularyCheck {
                     ) {
                         errors.Add(item: $"page \"{page.Id}\" sends {Word(kind: kind)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared.ValueKind)}");
                     }
+                }
+            }
+
+            foreach (var chordSource in (row.Chord ?? [])) {
+                if (
+                    !string.IsNullOrEmpty(value: chordSource) &&
+                    !(sourceAddressable?.Invoke(arg: chordSource) ?? true)
+                ) {
+                    errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") names unaddressable control \"{chordSource}\"");
                 }
             }
 

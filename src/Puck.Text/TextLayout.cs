@@ -69,14 +69,17 @@ public sealed class TextLayout {
     }
 
     private static TextLayoutResult LayoutRunes(FontAtlas atlas, IEnumerable<TextEffectRune> runes, float scale, float? maxLineWidth) {
-        if (scale <= 0.0f) {
+        if (!float.IsFinite(f: scale) || (scale <= 0.0f)) {
             throw new ArgumentOutOfRangeException(
                 message: "Text scale must be greater than zero.",
                 paramName: nameof(scale)
             );
         }
 
-        if (maxLineWidth is <= 0.0f) {
+        if (
+            (maxLineWidth is float lineWidth) &&
+            (!float.IsFinite(f: lineWidth) || (lineWidth <= 0.0f))
+        ) {
             throw new ArgumentOutOfRangeException(
                 message: "Text max line width must be greater than zero when provided.",
                 paramName: nameof(maxLineWidth)
@@ -90,6 +93,13 @@ public sealed class TextLayout {
         var lineCount = 1;
         int? previousUnicode = null;
 
+        void StartNewLine() {
+            lineCount++;
+            cursorX = 0.0f;
+            baselineY -= (atlas.Metrics.LineHeight * scale);
+            previousUnicode = null;
+        }
+
         foreach (var enriched in runes) {
             var unicode = enriched.Rune.Value;
 
@@ -98,10 +108,7 @@ public sealed class TextLayout {
             }
 
             if (unicode == '\n') {
-                lineCount++;
-                cursorX = 0.0f;
-                baselineY -= (atlas.Metrics.LineHeight * scale);
-                previousUnicode = null;
+                StartNewLine();
                 continue;
             }
 
@@ -126,10 +133,7 @@ public sealed class TextLayout {
                 maxLineWidth: maxLineWidth,
                 scale: scale
             )) {
-                lineCount++;
-                cursorX = 0.0f;
-                baselineY -= (atlas.Metrics.LineHeight * scale);
-                previousUnicode = null;
+                StartNewLine();
             }
 
             if (

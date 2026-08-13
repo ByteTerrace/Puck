@@ -7,7 +7,7 @@ namespace Puck.Text;
 
 /// <summary>
 /// The self-contained <see cref="IFontAtlasImageDataLoader"/>: a minimal PNG decoder covering the subset
-/// the font-atlas bake pipeline (<c>tools/font-atlas</c>) emits — 8-bit, non-interlaced, color types 0
+/// the font-atlas bake pipeline (<c>experimental/tools/font-atlas</c>) emits — 8-bit, non-interlaced, color types 0
 /// (grayscale), 2 (RGB), 4 (grayscale + alpha), and 6 (RGBA), with all five scanline filters.
 /// </summary>
 /// <remarks>
@@ -16,6 +16,7 @@ namespace Puck.Text;
 /// both sufficient and easy to audit.
 /// </remarks>
 public sealed class FontAtlasImageDataLoader : IFontAtlasImageDataLoader {
+    private static readonly uint[] CrcTable = CreateCrcTable();
     private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
 
     /// <inheritdoc/>
@@ -79,6 +80,44 @@ public sealed class FontAtlasImageDataLoader : IFontAtlasImageDataLoader {
                 message: $"Font atlas image dimensions {imageData.Width}x{imageData.Height} did not match metadata dimensions {expectedWidth}x{expectedHeight} for '{imageIdentifier}'.");
         }
     }
+    private static uint[] CreateCrcTable() {
+        var table = new uint[256];
+
+        for (uint value = 0; (value < table.Length); value++) {
+            var remainder = value;
+
+            for (var bit = 0; (bit < 8); bit++) {
+                remainder = (((remainder & 1u) != 0u)
+                    ? ((remainder >> 1) ^ 0xEDB88320u)
+                    : (remainder >> 1));
+            }
+
+            table[(int)value] = remainder;
+        }
+
+        return table;
+    }
+    private static uint ComputeChunkCrc(ReadOnlySpan<byte> chunkType, ReadOnlySpan<byte> chunkData) {
+        var crc = uint.MaxValue;
+
+        foreach (var value in chunkType) {
+            crc = ((crc >> 8) ^ CrcTable[(byte)(crc ^ value)]);
+        }
+
+        foreach (var value in chunkData) {
+            crc = ((crc >> 8) ^ CrcTable[(byte)(crc ^ value)]);
+        }
+
+        return ~crc;
+    }
+    private static void ValidateChunkCrc(ReadOnlySpan<byte> chunkType, ReadOnlySpan<byte> chunkData, ReadOnlySpan<byte> storedCrc) {
+        if (BinaryPrimitives.ReadUInt32BigEndian(source: storedCrc) != ComputeChunkCrc(
+            chunkType: chunkType,
+            chunkData: chunkData
+        )) {
+            throw new InvalidDataException(message: $"PNG chunk '{Encoding.ASCII.GetString(bytes: chunkType)}' failed its CRC check.");
+        }
+    }
     private static ParsedPngImage ParsePng(ReadOnlySpan<byte> pngBytes) {
         var offset = PngSignature.Length;
         var idatBytes = new MemoryStream();
@@ -89,25 +128,43 @@ public sealed class FontAtlasImageDataLoader : IFontAtlasImageDataLoader {
         var interlaceMethod = (byte)0;
 
         while ((offset + 12) <= pngBytes.Length) {
-            var chunkLength = checked((int)BinaryPrimitives.ReadUInt32BigEndian(source: pngBytes[offset..(offset + 4)]));
+            var chunkLengthValue = BinaryPrimitives.ReadUInt32BigEndian(source: pngBytes[offset..(offset + 4)]);
+
+            if (chunkLengthValue > int.MaxValue) {
+                throw new InvalidDataException(message: "PNG chunk length exceeded the supported size.");
+            }
+
+            var chunkLength = (int)chunkLengthValue;
 
             offset += 4;
 
-            var chunkType = Encoding.ASCII.GetString(bytes: pngBytes[offset..(offset + 4)]);
+            var chunkTypeBytes = pngBytes[offset..(offset + 4)];
+            var chunkType = Encoding.ASCII.GetString(bytes: chunkTypeBytes);
 
             offset += 4;
 
-            if (((offset + chunkLength) + 4) > pngBytes.Length) {
+            if (chunkLength > ((pngBytes.Length - offset) - 4)) {
                 throw new InvalidDataException(message: "PNG chunk length exceeded the file size.");
             }
 
             var chunkData = pngBytes[offset..(offset + chunkLength)];
 
             offset += chunkLength;
-            offset += 4; // CRC
+            var storedCrc = pngBytes[offset..(offset + 4)];
+
+            offset += 4;
+            ValidateChunkCrc(
+                chunkType: chunkTypeBytes,
+                chunkData: chunkData,
+                storedCrc: storedCrc
+            );
 
             switch (chunkType) {
                 case "IHDR":
+                    if (chunkData.Length < 13) {
+                        throw new InvalidDataException(message: "PNG IHDR chunk was truncated.");
+                    }
+
                     width = checked((int)BinaryPrimitives.ReadUInt32BigEndian(source: chunkData[..4]));
                     height = checked((int)BinaryPrimitives.ReadUInt32BigEndian(source: chunkData[4..8]));
                     bitDepth = chunkData[8];

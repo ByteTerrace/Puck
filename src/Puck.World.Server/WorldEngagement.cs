@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Abstractions.Machines;
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -435,7 +436,8 @@ public sealed class WorldEngagement {
     /// <paramref name="screenIndex"/>'s compiled translation table (<see cref="CompileTranslation"/>) — authored data
     /// (<see cref="WorldScreenRoute.Translation"/>) when the screen declares one, otherwise the engine's baked default
     /// (the two movement roles to the left stick only; a route whose machine needs a face button or any other
-    /// element must author that row itself). Digital elements compare against
+    /// element must author that row itself). Analog channels are canonicalized for their destination element:
+    /// stick axes to -1..1 and triggers to 0..1. Digital elements compare against
     /// <see cref="WorldChannelTable.DefaultBinaryThreshold"/>.</summary>
     /// <param name="intent">The resolved (and route-mask-applied) intent to translate.</param>
     /// <param name="screenIndex">The target screen's engine index — selects which compiled table to read.</param>
@@ -459,12 +461,12 @@ public sealed class WorldEngagement {
             var raw = intent[ordinal];
 
             switch (element) {
-                case WorldPadElement.LeftStickX: leftStick.X = (float)(double)raw; break;
-                case WorldPadElement.LeftStickY: leftStick.Y = (float)(double)raw; break;
-                case WorldPadElement.RightStickX: rightStick.X = (float)(double)raw; break;
-                case WorldPadElement.RightStickY: rightStick.Y = (float)(double)raw; break;
-                case WorldPadElement.LeftTrigger: leftTrigger = (float)(double)raw; break;
-                case WorldPadElement.RightTrigger: rightTrigger = (float)(double)raw; break;
+                case WorldPadElement.LeftStickX: leftStick.X = StickValue(raw); break;
+                case WorldPadElement.LeftStickY: leftStick.Y = StickValue(raw); break;
+                case WorldPadElement.RightStickX: rightStick.X = StickValue(raw); break;
+                case WorldPadElement.RightStickY: rightStick.Y = StickValue(raw); break;
+                case WorldPadElement.LeftTrigger: leftTrigger = TriggerValue(raw); break;
+                case WorldPadElement.RightTrigger: rightTrigger = TriggerValue(raw); break;
                 default:
                     // A digital element compares the RAW fixed-point value against the threshold, never a float
                     // round-trip — the same discipline the old hard-wired South check applied.
@@ -484,6 +486,21 @@ public sealed class WorldEngagement {
             RightTrigger: rightTrigger
         );
     }
+
+    // Canonicalize in the deterministic fixed-point domain before narrowing to the presentation-facing pad float.
+    // A channel's authored shape does not constrain which pad element a route may target, and raw programmatic
+    // intents can exceed either normalized domain, so the destination element owns the final bound.
+    private static float StickValue(FixedQ4816 raw) => (float)(double)FixedQ4816.Clamp(
+        value: raw,
+        minimum: -FixedQ4816.One,
+        maximum: FixedQ4816.One
+    );
+
+    private static float TriggerValue(FixedQ4816 raw) => (float)(double)FixedQ4816.Clamp(
+        value: raw,
+        minimum: FixedQ4816.Zero,
+        maximum: FixedQ4816.One
+    );
 
     // The closed WorldPadElement-to-MachineButtons mapping for every non-axis element — a compile-time-exhaustive
     // switch (a new WorldPadElement button member needs an arm here before it can ever be pressed).

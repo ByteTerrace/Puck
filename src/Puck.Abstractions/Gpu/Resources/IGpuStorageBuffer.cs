@@ -3,11 +3,7 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// A backend-neutral storage buffer handle, with host-visible write access.
 /// </summary>
-public interface IGpuStorageBuffer : IDisposable {
-    /// <summary>Gets the native buffer handle.</summary>
-    nint BufferHandle { get; }
-    /// <summary>Gets the size, in bytes, of the buffer.</summary>
-    ulong SizeBytes { get; }
+public interface IGpuStorageBuffer : IGpuBuffer {
 
     /// <summary>Maps the buffer, copies the supplied data into it from the start, and unmaps it.</summary>
     /// <typeparam name="T">The unmanaged element type of the data.</typeparam>

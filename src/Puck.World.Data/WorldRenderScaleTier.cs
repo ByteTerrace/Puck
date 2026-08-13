@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 
-namespace Puck.Abstractions.Presentation;
+namespace Puck.World;
 
 /// <summary>
 /// The SAFE, enumerated world render-scale tiers a run pins for the settled REVEALED room view — the demo/user-facing

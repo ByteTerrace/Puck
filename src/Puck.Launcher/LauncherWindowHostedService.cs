@@ -238,10 +238,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // is one SUBSCRIBER of that hub rather than a private code path — the bench runner is another.
                 var frameTimingSkipFeedback = (m_presenter as IPresentationSkipFeedback);
                 var frameTimingProducedFrames = 0UL;
-                // IInputFocus.IsActiveFor is a LEVEL, not an edge — tracked across iterations so the focus-loss
-                // reset below fires once on the transition into unfocused, never every frame the level stays low.
-                var wasInputUnfocused = false;
-
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
                 // (console pump alone) AND the fallback while the registered simulation reports 0 (an authored
                 // simulation.rateHz durable stop) — the pump's own calling cadence is presentation-adjacent host
@@ -337,24 +333,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // registered with no election, so the resulting silent free-run is visible to the operator.
                     NoteExternalClockContention(observedElectionGeneration: ref observedElectionGeneration);
 
-                    // When the window is not focused, key/button releases are not delivered, so drop any held
-                    // inputs — otherwise a value down at the moment focus was lost would stay stuck. Fires only on
-                    // the transition into unfocused (wasInputUnfocused above): resetting on the level instead of the
-                    // edge would re-run ReleaseHeld() every frame focus stays away, unlatching a trigger resting in
-                    // the hysteresis band for good and re-firing an armed chord command at frame rate. Distinct from
-                    // the FocusLost windowInput kind below, which is OS-level and already edge-shaped on its own.
-                    var isInputUnfocused = (
-                        m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var heldFocus) &&
-                        !heldFocus.IsActiveFor(deviceId: default)
-                    );
-
-                    if (isInputUnfocused && !wasInputUnfocused) {
-                        m_inputRouter?.ReleaseHeld();
-                    }
-
-                    wasInputUnfocused = isInputUnfocused;
-
                     while (inputSource.TryDequeueInput(inputEvent: out var windowInput)) {
+                        var hasInputFocus = m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus);
+                        var wasInputActive = hasInputFocus && inputFocus.IsActiveFor(deviceId: windowInput.DeviceId);
+
                         // Hand the RAW event to the window input observer first, unconditionally (not focus-gated):
                         // it captures presentation/session-only state (pointer drag, a console's typed keystrokes)
                         // that never touches CaptureTick/CommandSnapshot below — the focus gate a few lines down is
@@ -387,17 +369,23 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         var signal = WindowInputMapper.ToInputSignal(inputEvent: in windowInput) with {
                             CaptureTick = m_inputClock.NowTicks,
                         };
+                        var isInputActive = hasInputFocus && inputFocus.IsActiveFor(deviceId: signal.DeviceId);
 
-                        if (
-                            m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var inputFocus) &&
-                            inputFocus.IsActiveFor(deviceId: signal.DeviceId)
-                        ) {
+                        if (wasInputActive && isInputActive) {
                             // The router is the ONLY door physical input has. Its predecessor had a second, frame-driven
                             // branch for a root with no router — that path produced no tick, no recording, and no
                             // stamped principal, so it was deleted with the sources facet rather than secured. A root
                             // without an InputRouter is therefore a root with no bound input at all, BY DESIGN; the
                             // constructor above already refuses a simulation registered without one.
                             m_inputRouter?.Capture(signal: in signal);
+                        } else {
+                            // A released device still reaches the terminal plane containing commands such as
+                            // `console`, which must be able to restore the very focus that ordinary bindings require.
+                            // Requiring focus on BOTH sides of raw observation keeps a close gesture suppressed even
+                            // though that observer restores focus, and suppresses the first event that associates a
+                            // new text device with an already-open seat session. The router filters this path by the
+                            // destination's declared input scope and resolves only the host-owned always-active plane.
+                            m_inputRouter?.CaptureFocusExempt(signal: in signal);
                         }
                     }
 

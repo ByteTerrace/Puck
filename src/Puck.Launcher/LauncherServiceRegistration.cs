@@ -39,10 +39,11 @@ public static class LauncherServiceRegistration {
             // to the seat it displaced. A root that drives a simulation declares who its slots are.
             var principalResolver = sp.GetRequiredService<ICommandPrincipalResolver>();
             var registry = sp.GetRequiredService<CommandRegistry>();
+            var alwaysActiveBindings = sp.GetService<IAlwaysActiveInputBindings>();
 
             return ((slotResolver is null)
-                ? new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry)
-                : new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, slotResolver: slotResolver));
+                ? new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, alwaysActiveBindings: alwaysActiveBindings)
+                : new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, slotResolver: slotResolver, alwaysActiveBindings: alwaysActiveBindings));
         });
 
         return services;
@@ -113,6 +114,9 @@ public static class LauncherServiceRegistration {
         services.TryAddSingleton<TerminalControl>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<IInputFocus>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
+        services.TryAddSingleton<TerminalConsoleSessions>();
+        services.TryAddSingleton<IConsoleSessions>(implementationFactory: static sp => sp.GetRequiredService<TerminalConsoleSessions>());
+        services.TryAddSingleton<IAlwaysActiveInputBindings, TerminalInputBindings>();
 
         // Contribute the terminal's held capabilities (the baton + input focus) to the root host context, and
         // register the aggregator that assembles that context from every module's contributions — the device
@@ -161,6 +165,11 @@ public static class LauncherServiceRegistration {
 
             return new TextCommandSource(
                 onResult: (line, result) => {
+                    // Windowed hosts attach their per-seat bank after registry composition. Mirror every operator
+                    // exchange into the displayed seat-one tape; headless roots simply leave the stable proxy
+                    // unattached while stdout/stderr remain the authoritative script streams.
+                    provider.GetRequiredService<TerminalConsoleSessions>().RecordAdministrative(line: line, result: result);
+
                     if (string.IsNullOrEmpty(value: result.Output)) {
                         return;
                     }

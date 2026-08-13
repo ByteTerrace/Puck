@@ -8,9 +8,13 @@ namespace Puck.Commands;
 /// <param name="Phase">The transition this dispatch represents.</param>
 /// <param name="Result">The result the handler returned.</param>
 /// <param name="Text">The optional text payload that drove the dispatch.</param>
+/// <param name="Principal">The identity stamped by the ingress that dispatched the command.</param>
+/// <param name="Slot">The logical slot the command targeted.</param>
 public readonly record struct CommandActivation(
     string Name,
     CommandPhase Phase,
     CommandResult Result,
-    string? Text = null
+    string? Text = null,
+    CommandPrincipal Principal = default,
+    int Slot = 0
 );

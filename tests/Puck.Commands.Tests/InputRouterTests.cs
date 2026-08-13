@@ -198,6 +198,21 @@ public sealed class InputRouterTests {
         Assert.False(condition: router.IsCommandHeld(slot: 0, command: "mapped.hold"));
     }
 
+    [Fact]
+    public void KeyRepeatRefreshesLastInputWithoutDispatchingASecondPress() {
+        var router = Router(out _);
+        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
+        _ = router.SnapshotForTick(tick: 10UL, windowEndTick: ulong.MaxValue);
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
+        var repeated = router.SnapshotForTick(tick: 20UL, windowEndTick: ulong.MaxValue);
+
+        Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
+        Assert.Equal(expected: 20UL, actual: lastInput);
+        Assert.DoesNotContain(collection: Assert.Single(repeated.Lanes).Entries, filter: static entry => entry.Dispatch);
+    }
+
     private static InputRouter Router(out CommandRegistry registry) {
         registry = new CommandRegistry(modules: [new DigitalModule(Command)]);
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.DirectX.Interfaces;
@@ -68,6 +69,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private static byte[]? s_blitVertexBytecode;
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly IDirectXShaderCompilerApi m_shaderCompiler;
+    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
@@ -76,6 +78,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private nint m_commandAllocator;
     private nint m_commandList;
     private DirectXSurfaceUpload? m_cpuUpload;
+    private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
     private nint m_lastBlitResource;
     // Set when the swap chain is created: the ALLOW_TEARING swap-chain flag (carried into ResizeBuffers too) and the
@@ -103,14 +106,22 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
     /// <param name="presentationOptions">The neutral present-mode and surface-format preferences.</param>
     /// <param name="shaderCompiler">Compiles the blit vertex and pixel shaders to bytecode.</param>
+    /// <param name="surfaceTransferFactory">Creates the shared-texture importer used for cross-device surfaces.</param>
     /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, or <paramref name="shaderCompiler"/> is <see langword="null"/>.</exception>
-    public DirectXSurfaceCompositor(IDirectXCommandListRecorder commandListRecorder, PresentationOptions presentationOptions, IDirectXShaderCompilerApi shaderCompiler) {
+    public DirectXSurfaceCompositor(
+        IDirectXCommandListRecorder commandListRecorder,
+        PresentationOptions presentationOptions,
+        IDirectXShaderCompilerApi shaderCompiler,
+        IGpuSurfaceTransferFactory surfaceTransferFactory
+    ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(shaderCompiler);
+        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_commandListRecorder = commandListRecorder;
         m_shaderCompiler = shaderCompiler;
+        m_surfaceTransferFactory = surfaceTransferFactory;
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
         // Vsync presents with sync interval 1, the other modes with 0.
@@ -214,8 +225,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     /// <summary>
     /// Blits <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
-    /// GPU-resident surfaces (via <see cref="DirectXImageView"/> token) and CPU pixel surfaces (uploaded via
-    /// <see cref="DirectXSurfaceUpload"/>). A no-op when the surface is empty.
+    /// GPU-resident surfaces (via <see cref="DirectXImageView"/> token), imported shared textures, and CPU pixel
+    /// surfaces (uploaded via <see cref="DirectXSurfaceUpload"/>). A no-op when the surface is empty.
     /// </summary>
     public void Blit(DirectXDeviceContext deviceContext, Surface surface) {
         if (surface.IsEmpty) {
@@ -227,7 +238,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         nint sourceResource;
         DXGI_FORMAT sourceFormat;
 
-        if (surface.ImageViewHandle != 0) {
+        if (surface.IsSameDeviceImage) {
             var view = (DirectXImageView)GCHandle.FromIntPtr(value: surface.ImageViewHandle).Target!;
 
             sourceResource = view.ResourceHandle;
@@ -246,8 +257,25 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             );
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
+        } else if (surface.IsSharedHandle) {
+            m_surfaceImport ??= m_surfaceTransferFactory.CreateImport(deviceContext: deviceContext);
+            var importedImageViewHandle = m_surfaceImport.Import(
+                deviceContext: deviceContext,
+                sharedHandle: surface.SharedHandle,
+                format: surface.Format switch {
+                    SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+                    SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+                    _ => throw new InvalidOperationException(message: "The surface format has no DirectX mapping."),
+                },
+                width: surface.Width,
+                height: surface.Height
+            );
+            var view = (DirectXImageView)GCHandle.FromIntPtr(value: importedImageViewHandle).Target!;
+
+            sourceResource = view.ResourceHandle;
+            sourceFormat = view.Format;
         } else {
-            return;
+            throw new InvalidOperationException(message: "The surface has an unsupported payload kind.");
         }
 
         // Skip rewriting the single SRV descriptor when the source resource is unchanged (parity with the
@@ -394,6 +422,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     public void Dispose() {
         m_cpuUpload?.Dispose();
         m_cpuUpload = null;
+        m_surfaceImport?.Dispose();
+        m_surfaceImport = null;
         ReleaseBackBuffers();
         Release(pointer: ref m_commandList);
         Release(pointer: ref m_commandAllocator);

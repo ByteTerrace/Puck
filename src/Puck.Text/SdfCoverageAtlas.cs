@@ -5,7 +5,7 @@ namespace Puck.Text;
 /// or <see cref="FontAtlasKind.SoftMask"/> image, e.g. the GDI+/System.Drawing glyph raster the diegetic terminal
 /// already produces) into a single-channel signed distance field atlas (<see cref="FontAtlasKind.Sdf"/>) an SDF
 /// renderer can march. This is the runtime, no-toolchain fallback source; the higher-fidelity marchable source is a
-/// pre-baked MTSDF atlas (the font-atlas bake pipeline, <c>tools/font-atlas</c>) whose true single-channel distance
+/// pre-baked MTSDF atlas (the font-atlas bake pipeline, <c>experimental/tools/font-atlas</c>) whose true single-channel distance
 /// lives in alpha (loaded, not generated here). Both encode the same convention so a decoder is source-agnostic.
 /// </summary>
 /// <remarks>
@@ -83,15 +83,14 @@ public static class SdfCoverageAtlas {
         );
     }
 
-    // Per-pixel coverage in [0, 1]: alpha when present, else the brightest color channel (a white-on-transparent GDI+
-    // raster stores coverage in alpha; a white-on-black one stores it in the channels). Matches the terminal's raster
-    // convention so either source decodes the same.
-    private static float Coverage(byte[] rgba, int pixelIndex) {
+    // Per-pixel coverage in [0, 1]. A raster with any non-opaque alpha uses alpha throughout; an entirely opaque
+    // raster uses its brightest color channel, which preserves white-on-black coverage images decoded from RGB or
+    // grayscale PNGs.
+    private static float Coverage(byte[] rgba, int pixelIndex, bool usesAlphaCoverage) {
         var offset = (pixelIndex * 4);
-        var alpha = (rgba[(offset + 3)] / 255.0f);
 
-        if (alpha > 0.0f) {
-            return alpha;
+        if (usesAlphaCoverage) {
+            return (rgba[(offset + 3)] / 255.0f);
         }
 
         return MathF.Max(
@@ -102,10 +101,19 @@ public static class SdfCoverageAtlas {
             )
         );
     }
+    private static bool UsesAlphaCoverage(byte[] rgba) {
+        for (var offset = 3; (offset < rgba.Length); offset += 4) {
+            if (rgba[offset] != byte.MaxValue) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     // The exact 1D squared Euclidean distance transform: the lower envelope of the parabolas rooted at each sample.
     // Runs in O(n); called once per row then once per column, which composes into the exact 2D squared-distance
-    // transform. `f` is the input cost per sample
-    // (0 at a feature, +inf elsewhere); `d` receives the squared distance to the nearest feature.
+    // transform. `f` is the input cost per sample (0 at a feature, a sentinel beyond any in-image distance
+    // elsewhere); `d` receives the squared distance to the nearest feature.
     private static void SquaredDistanceTransform1D(float[] f, int length, float[] d, int[] v, float[] z) {
         var k = 0;
 
@@ -143,9 +151,12 @@ public static class SdfCoverageAtlas {
     // outside-of-glyph), returned as a flat row-major squared-distance grid.
     private static float[] SquaredDistanceTransform2D(bool[] features, int width, int height) {
         var distances = new float[features.Length];
+        var noFeatureCost = (((float)width * width) + ((float)height * height) + 1.0f);
 
         for (var index = 0; (index < features.Length); index++) {
-            distances[index] = (features[index] ? 0.0f : float.PositiveInfinity);
+            // The finite sentinel is larger than every possible in-image squared distance. It therefore cannot beat a
+            // real feature, while avoiding the inf - inf envelope arithmetic that has no defined ordering.
+            distances[index] = (features[index] ? 0.0f : noFeatureCost);
         }
 
         var span = Math.Max(val1: width, val2: height);
@@ -187,9 +198,14 @@ public static class SdfCoverageAtlas {
         var pixelCount = checked((imageData.Width * imageData.Height));
         var inside = new bool[pixelCount];
         var outside = new bool[pixelCount];
+        var usesAlphaCoverage = UsesAlphaCoverage(rgba: imageData.RgbaPixels);
 
         for (var index = 0; (index < pixelCount); index++) {
-            inside[index] = (Coverage(rgba: imageData.RgbaPixels, pixelIndex: index) >= 0.5f);
+            inside[index] = (Coverage(
+                rgba: imageData.RgbaPixels,
+                pixelIndex: index,
+                usesAlphaCoverage: usesAlphaCoverage
+            ) >= 0.5f);
             outside[index] = !inside[index];
         }
 

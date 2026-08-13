@@ -19,20 +19,27 @@ public sealed class GpuPushConstantBinding {
     /// <param name="stageFlags">The shader stages that read the range; must name at least one stage.</param>
     /// <param name="data">The push constant data to upload.</param>
     public GpuPushConstantBinding(uint offset, GpuShaderStage stageFlags, ReadOnlyMemory<byte> data) {
-        if (stageFlags == GpuShaderStage.None) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: stageFlags,
-                message: "The push constant range must name at least one shader stage.",
-                paramName: nameof(stageFlags)
-            );
-        }
-        ArgumentOutOfRangeException.ThrowIfZero(
-            value: data.Length,
-            paramName: nameof(data)
-        );
+        ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
 
         Offset = offset;
         StageFlags = stageFlags;
         Data = data;
+    }
+
+    /// <summary>Validates the backend-neutral alignment and stage-mask requirements for a push-constant update.</summary>
+    public static void ValidateRange(GpuShaderStage stageFlags, uint offset, int dataLength) {
+        const GpuShaderStage allStages = GpuShaderStage.Vertex | GpuShaderStage.Fragment | GpuShaderStage.Compute;
+
+        if ((GpuShaderStage.None == stageFlags) || (GpuShaderStage.None != (stageFlags & ~allStages))) {
+            throw new ArgumentOutOfRangeException(nameof(stageFlags), stageFlags, "The push constant range must contain only defined shader-stage flags and name at least one stage.");
+        }
+        if (0 != (offset & 3u)) {
+            throw new ArgumentOutOfRangeException(nameof(offset), offset, "The push constant offset must be four-byte aligned.");
+        }
+        if ((dataLength <= 0) || (0 != (dataLength & 3))) {
+            throw new ArgumentOutOfRangeException(nameof(dataLength), dataLength, "Push constant data must be non-empty and a multiple of four bytes.");
+        }
+
+        _ = checked(offset + (uint)dataLength);
     }
 }

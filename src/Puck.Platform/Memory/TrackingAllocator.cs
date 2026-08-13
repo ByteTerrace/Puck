@@ -44,7 +44,7 @@ public sealed class TrackingAllocator : IAllocator {
             ptr: ptr
         );
 
-        if (ptr is not null) {
+        if ((ptr is not null) && ((newPtr is not null) || (0 == newSize))) {
             m_allocations.TryRemove(
                 key: (nuint)ptr,
                 value: out _

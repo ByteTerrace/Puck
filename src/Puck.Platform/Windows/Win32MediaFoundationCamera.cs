@@ -118,12 +118,11 @@ internal sealed class Win32MediaFoundationCameraSession : ICameraCaptureSession 
             return false;
         }
 
-        surface = new Surface(
-            Format: SurfaceFormat.B8G8R8A8Unorm,
-            Height: (uint)height,
-            ImageViewHandle: 0,
-            Pixels: m_pullBuffer,
-            Width: (uint)width
+        surface = Surface.CpuPixels(
+            pixels: m_pullBuffer,
+            width: (uint)width,
+            height: (uint)height,
+            format: SurfaceFormat.B8G8R8A8Unorm
         );
 
         return true;

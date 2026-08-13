@@ -24,7 +24,7 @@ namespace Puck.World;
 /// conversion (writes the exact declared member name, refuses a numeric token on read) — most at the enum's own
 /// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="BodyMotionOp"/>,
 /// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="ActionFact"/>,
-/// <see cref="ShadowTier"/>, <see cref="Puck.Abstractions.Presentation.WorldRenderScaleTier"/>,
+/// <see cref="ShadowTier"/>, <see cref="WorldRenderScaleTier"/>,
 /// <see cref="Puck.Abstractions.Presentation.PresentMode"/>, <see cref="Puck.World.Protocol.WorldCapability"/>); one —
 /// <see cref="CommandPhase"/> (<c>Puck.Commands</c>) — lives in a project that does not reference
 /// <c>Puck.Abstractions</c>, so its closed <see cref="StrictEnumConverter{TEnum}"/> instance is listed on this

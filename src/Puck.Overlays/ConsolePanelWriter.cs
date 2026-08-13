@@ -1,7 +1,9 @@
+using Puck.Hosting;
+
 namespace Puck.Overlays;
 
 /// <summary>
-/// The console-panel writer: renders an <see cref="IConsolePanelSource"/> snapshot as one titled scrim panel
+/// The console-panel writer: renders an <see cref="IConsoleTapeSource"/> snapshot as one titled scrim panel
 /// (top-left, stage-margin inset) holding the trailing output lines that fit plus the live prompt row — all through
 /// the unified record vocabulary (one panel + one text run per row), no bespoke grid shader. Pure record emission;
 /// no GPU types.
@@ -28,12 +30,12 @@ public sealed class ConsolePanelWriter {
         );
     }
 
-    private readonly IConsolePanelSource m_source;
+    private readonly IConsoleTapeSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="ConsolePanelWriter"/> class.</summary>
-    /// <param name="source">The console snapshot source.</param>
+    /// <param name="source">The console-tape snapshot source.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public ConsolePanelWriter(IConsolePanelSource source) {
+    public ConsolePanelWriter(IConsoleTapeSource source) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_source = source;

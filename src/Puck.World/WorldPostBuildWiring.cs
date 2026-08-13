@@ -144,8 +144,9 @@ internal static class WorldPostBuildWiring {
         services.GetRequiredService<WorldClient>().AttachSessionLevers(levers: services.GetRequiredService<WorldSessionLeverSink>());
 
         // The echo fan-out's halves — resolved ONCE so the tap closure below never queries the container per-echo.
-        // toasts/overlayFeed/consoleMirror are presentation-only (AddWorldPresentation registers all three or none,
-        // so they are null together headless); editorDrag/editorWorkbench are CORE (command-vocabulary parity moved
+        // toasts/overlayFeed are presentation-only (AddWorldPresentation registers both or neither); the stable
+        // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
+        // editorDrag/editorWorkbench are CORE (command-vocabulary parity moved
         // the whole editor/sculpt surface into AddWorldAuthoritativeCore — see WorldBootComposition's remarks), so
         // they are ALWAYS present now — a headless script can grab/drag or open a sculpt bench purely over the
         // console, same as windowed.
@@ -153,7 +154,7 @@ internal static class WorldPostBuildWiring {
         var overlayFeed = services.GetService<WorldOverlayFeed>();
         var editorDrag = services.GetRequiredService<WorldEditorDrag>();
         var editorWorkbench = services.GetRequiredService<WorldWorkbench>();
-        var consoleMirror = services.GetService<WorldConsoleMirror>();
+        var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
 
@@ -171,7 +172,7 @@ internal static class WorldPostBuildWiring {
             toasts?.Publish(message: echo.Message, isError: echo.Rejected);
             // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
             // capacity reason too long for the toast stays readable where the operator is already looking.
-            consoleMirror?.RecordEcho(message: echo.Message, refused: echo.Rejected);
+            consoleSessions.RecordAdministrativeEcho(message: echo.Message, refused: echo.Rejected);
 
             // A world edit is Simulation-routed: the SUBMIT succeeded (the line entered the tick queue) and the
             // server refuses it a tick later, so the registry's own dispatch accounting cannot see it. This tap is

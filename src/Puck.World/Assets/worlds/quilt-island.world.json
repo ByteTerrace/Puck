@@ -681,7 +681,7 @@
                   },
                   {
                     "source": null,
-                    "command": "world.console",
+                    "command": "console",
                     "label": "Console",
                     "icon": "edit.op"
                   },

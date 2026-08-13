@@ -557,7 +557,7 @@
                 "entries": [
                   { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
                   { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
-                  { "source": null, "command": "world.console", "label": "Console", "icon": "edit.op" },
+                  { "source": null, "command": "console", "label": "Console", "icon": "edit.op" },
                   { "source": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
                   { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
                   { "source": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }

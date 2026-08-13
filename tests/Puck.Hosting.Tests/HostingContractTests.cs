@@ -171,13 +171,9 @@ public sealed class HostingContractTests {
 
         public NodeDescriptor Descriptor => new(Name: "test", SurfaceId: default);
 
-        public Surface ProduceFrame(in FrameContext context) => new(
-            ImageViewHandle: (cpuPixels ? 0 : 1),
-            Width: 1U,
-            Height: 1U,
-            Format: SurfaceFormat.R8G8B8A8Unorm,
-            Pixels: (cpuPixels ? m_pixels : default)
-        );
+        public Surface ProduceFrame(in FrameContext context) => (cpuPixels
+            ? Surface.CpuPixels(pixels: m_pixels, width: 1U, height: 1U, format: SurfaceFormat.R8G8B8A8Unorm)
+            : Surface.SameDeviceImage(imageViewHandle: 1, width: 1U, height: 1U, format: SurfaceFormat.R8G8B8A8Unorm));
         public void Dispose() { }
     }
 

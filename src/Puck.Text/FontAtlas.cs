@@ -103,8 +103,6 @@ public sealed class FontAtlas {
         ArgumentNullException.ThrowIfNull(glyphs);
         ArgumentNullException.ThrowIfNull(kerningPairs);
 
-        var glyphArray = glyphs.ToArray();
-
         m_kerningPairs = [.. kerningPairs];
 
         Kind = kind;
@@ -115,7 +113,7 @@ public sealed class FontAtlas {
         Height = height;
         Metrics = metrics;
         ImageData = imageData;
-        m_glyphs = glyphArray.ToDictionary(
+        m_glyphs = glyphs.ToDictionary(
             elementSelector: glyph => glyph,
             keySelector: glyph => glyph.Unicode
         );

@@ -16,11 +16,12 @@ namespace Puck.Commands;
 /// sample clears them. Digital handlers dispatch only on their bound edges; analog handlers re-dispatch their carried
 /// sample each tick so route-style consumers receive the continuous value. Text is transient. Dispatch is
 /// <em>not</em> performed here — the router only produces the deterministic per-tick state; the consumer runs
-/// handlers from the snapshot. A <see cref="CommandRouting.Simulation"/> console/STDIN line enters through
-/// <see cref="ConsoleTextSink"/>, which is bound to <see cref="CommandPrincipal.Console"/> at construction. Authored
-/// interface controls enter through <see cref="Activate"/>; other producers provide ordinary timestamped
-/// <see cref="InputSignal"/> values through <see cref="Capture"/>. All three forms join one deterministic capture
-/// order before snapshot construction.
+/// handlers from the snapshot. A <see cref="CommandRouting.Simulation"/> administrative line enters through
+/// <see cref="ConsoleTextSink"/>, which is bound to <see cref="CommandPrincipal.Console"/> at construction; a
+/// host-minted <see cref="TextCommandSession"/> uses a sink fixed to its seat principal and slot. Authored interface
+/// controls enter through <see cref="Activate"/>; other producers provide ordinary timestamped
+/// <see cref="InputSignal"/> values through <see cref="Capture"/>. All forms join one deterministic capture order
+/// before snapshot construction.
 /// <para>The mixer is also the principal door: every entry leaves this type carrying a <see cref="CommandPrincipal"/>.
 /// An injected entry keeps the one its sink was constructed with; every captured entry is stamped from
 /// <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is never turned into a
@@ -30,6 +31,7 @@ namespace Puck.Commands;
 public sealed class InputRouter {
     private static readonly IComparer<CommandLane> LaneBySlotComparer = Comparer<CommandLane>.Create(comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
 
+    private readonly IAlwaysActiveInputBindings? m_alwaysActiveBindings;
     private readonly IInputBindings m_bindings;
     private readonly IChordEdgeSource? m_chordEdges;
     private readonly Lock m_captureGate = new();
@@ -42,6 +44,10 @@ public sealed class InputRouter {
     private readonly IInputClock? m_clock;
     private readonly Dictionary<int, Dictionary<ushort, HeldCommandState>> m_heldBySlot = [];
     private readonly Dictionary<int, ulong> m_lastInputTickBySlot = [];
+    // Physical first-down truth is shared by focused and focus-exempt capture. A console-opening press can move its
+    // device between those routes before the OS emits repeats or the release; one latch must still recognize them as
+    // the same press.
+    private readonly HashSet<HeldControlId> m_pressedControls = [];
     // A BindingEntryMode.Toggle latch, keyed by (slot, commandId) — the destination's flip state, independent of
     // which physical control (or device) toggled it. Lives here, not in Puck.World.Server: the sim reads a plain
     // held channel either way (see BindingEntryMode's remarks).
@@ -56,7 +62,7 @@ public sealed class InputRouter {
     // One captured item carries EITHER a raw signal (still needs a binding lookup) or a pre-resolved injection
     // (a console/peer command, already bound). Both share the capture tick + sequence, so they sort into one
     // deterministic order regardless of which kind they are.
-    private readonly record struct Captured(ulong Sequence, ulong CaptureTick, InputSignal? Signal, CommandInjection? Injection);
+    private readonly record struct Captured(ulong Sequence, ulong CaptureTick, InputSignal? Signal, CommandInjection? Injection, bool FocusExemptOnly = false);
     private readonly record struct HeldCommand(int Slot, ushort CommandId);
     // One physical control holding a command: the (Device, Source) identity a digital hold is tracked and de-duped
     // by. Slot and command id are the enclosing dictionary keys, so they are not repeated here.
@@ -90,6 +96,7 @@ public sealed class InputRouter {
     /// entry from it and must never synthesize an identity of its own.</param>
     /// <param name="slotResolver">Maps a device to a logical player slot; defaults to a single local slot (<c>0</c>).</param>
     /// <param name="clock">The shared capture clock used to stamp an injected command that arrives without an explicit capture tick; optional.</param>
+    /// <param name="alwaysActiveBindings">Optional host-owned bindings resolved independently of authored pages.</param>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="bindings"/>, or
     /// <paramref name="principalResolver"/> is <see langword="null"/>.</exception>
     public InputRouter(
@@ -97,12 +104,14 @@ public sealed class InputRouter {
         IInputBindings bindings,
         ICommandPrincipalResolver principalResolver,
         Func<InputDeviceId, int>? slotResolver = null,
-        IInputClock? clock = null
+        IInputClock? clock = null,
+        IAlwaysActiveInputBindings? alwaysActiveBindings = null
     ) {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(principalResolver);
         ArgumentNullException.ThrowIfNull(registry);
 
+        m_alwaysActiveBindings = alwaysActiveBindings;
         m_bindings = bindings;
         m_chordEdges = (bindings as IChordEdgeSource);
         m_clock = clock;
@@ -129,18 +138,21 @@ public sealed class InputRouter {
     /// <param name="principalResolver">Answers who is acting through a slot.</param>
     /// <param name="slotResolver">The transactional device-to-slot resolver.</param>
     /// <param name="clock">The shared capture clock; optional.</param>
+    /// <param name="alwaysActiveBindings">Optional host-owned bindings resolved independently of authored pages.</param>
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
         ICommandPrincipalResolver principalResolver,
         IInputSlotResolver slotResolver,
-        IInputClock? clock = null
+        IInputClock? clock = null,
+        IAlwaysActiveInputBindings? alwaysActiveBindings = null
     ) : this(
         registry: registry,
         bindings: bindings,
         principalResolver: principalResolver,
         slotResolver: (slotResolver ?? throw new ArgumentNullException(paramName: nameof(slotResolver))).ResolveSlot,
-        clock: clock
+        clock: clock,
+        alwaysActiveBindings: alwaysActiveBindings
     ) {
         m_inputSlotResolver = slotResolver;
         slotResolver.DeviceSlotChanging += ReleaseHeld;
@@ -151,6 +163,14 @@ public sealed class InputRouter {
     /// construction, so a submitted line acts as the console and cannot be made to act as anything else.</summary>
     public CommandInjectionSink ConsoleTextSink => m_consoleTextSink;
 
+    internal CommandRegistry Registry => m_registry;
+
+    internal CommandInjectionSink CreateSeatTextSink(int slot) => new(
+        router: this,
+        principal: CommandPrincipal.Seat(slot: slot),
+        slot: slot
+    );
+
     /// <summary>Appends a captured input signal. Thread-safe — backends call this from device I/O threads and the window pump.</summary>
     /// <param name="signal">The timestamped input signal to capture.</param>
     public void Capture(in InputSignal signal) {
@@ -160,6 +180,23 @@ public sealed class InputRouter {
                 CaptureTick: signal.CaptureTick,
                 Signal: signal,
                 Injection: null
+            ));
+        }
+    }
+
+    /// <summary>Captures a signal from a device whose ordinary terminal focus is released. Only bindings whose
+    /// destination declares <see cref="CommandInputScope.FocusExempt"/> may dispatch; only the host-owned
+    /// <see cref="IAlwaysActiveInputBindings"/> plane is consulted, so typed keys cannot mutate gameplay pages,
+    /// chords, or press latches while suppressed.</summary>
+    /// <param name="signal">The raw signal to capture.</param>
+    public void CaptureFocusExempt(in InputSignal signal) {
+        lock (m_captureGate) {
+            m_captured.Add(item: new Captured(
+                Sequence: m_sequence++,
+                CaptureTick: signal.CaptureTick,
+                Signal: signal,
+                Injection: null,
+                FocusExemptOnly: true
             ));
         }
     }
@@ -246,6 +283,7 @@ public sealed class InputRouter {
         }
 
         m_heldBySlot.Clear();
+        m_pressedControls.Clear();
         m_toggleLatches.Clear();
         m_bindings.ResetAll();
 
@@ -317,12 +355,30 @@ public sealed class InputRouter {
         return clearedLatches;
     }
 
-    private void ReleaseHeld(InputDeviceId device) {
+    /// <summary>Releases held commands owned by one physical device without disturbing other seats or devices.</summary>
+    /// <param name="device">The device whose held state is being withdrawn.</param>
+    public void ReleaseHeld(InputDeviceId device) => ReleaseHeld(device: device, preservePressedControls: false);
+
+    /// <summary>Releases a device's gameplay holds for a focus handoff while preserving its physical first-down
+    /// latches until the corresponding releases arrive. This prevents an OS repeat of the console opener from
+    /// becoming a second toggle after focus moves.</summary>
+    /// <param name="device">The device being suppressed from ordinary input.</param>
+    public void SuppressHeld(InputDeviceId device) => ReleaseHeld(device: device, preservePressedControls: true);
+
+    private void ReleaseHeld(InputDeviceId device, bool preservePressedControls) {
         var cancellations = new List<CommandInjection>();
         var toDrop = new List<HeldCommand>();
 
+        if (!preservePressedControls) {
+            m_pressedControls.RemoveWhere(match: control => control.Device == device);
+        }
+
         foreach (var (slot, held) in m_heldBySlot) {
             foreach (var (commandId, state) in held) {
+                if (preservePressedControls && m_registry.IsFocusExemptCommand(commandId: commandId)) {
+                    continue;
+                }
+
                 if (state.Contributions is { } contributions) {
                     for (var index = contributions.Count - 1; index >= 0; index--) {
                         var contribution = contributions[index];
@@ -553,7 +609,8 @@ public sealed class InputRouter {
                 ApplySignal(
                     workingBySlot: m_workingBySlot,
                     signal: signal,
-                    tick: tick
+                    tick: tick,
+                    focusExemptOnly: captured.FocusExemptOnly
                 );
             } else if (captured.Injection is CommandInjection injection) {
                 ApplyInjection(
@@ -621,11 +678,12 @@ public sealed class InputRouter {
             dispatchWhenMapInactive: injection.DispatchWhenMapInactive
         ) {
             CompletesTextSubmission = injection.CompletesTextSubmission,
+            SubmissionBarrier = injection.SubmissionBarrier,
         });
     }
-    private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick) {
-        // Resolve the device's slot first, then ask for THAT slot's bindings — so each player's mapping (an
-        // optional override layered over the engine default) drives their own input.
+    private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
+        // Resolve activity before repeat de-duplication: an OS repeat is not a second command edge, but it is still
+        // fresh physical activity for idle/away accounting.
         var slot = m_slotResolver(arg: signal.DeviceId);
 
         if (slot < 0) {
@@ -634,12 +692,27 @@ public sealed class InputRouter {
 
         m_lastInputTickBySlot[slot] = tick;
 
-        var bindings = m_bindings.Resolve(
-            slot: slot,
-            signal: signal
+        var physicalControl = new HeldControlId(
+            Device: signal.DeviceId,
+            Source: signal.Source
         );
 
-        if (m_chordEdges is not null) {
+        if (signal.Phase == CommandPhase.Started) {
+            // OS key repeat is another Started event. It must not re-run an edge command (especially a toggle), and
+            // opening a console between the first event and a repeat must not make that repeat look like a new press.
+            if (!m_pressedControls.Add(item: physicalControl)) {
+                return;
+            }
+        } else if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
+            _ = m_pressedControls.Remove(item: physicalControl);
+        }
+
+        // Focus-exempt capture deliberately never consults the current authored page. Host-owned terminal bindings
+        // live in their own always-active plane, so a page override cannot accidentally remove the escape hatch.
+        var pageBindings = (focusExemptOnly ? null : m_bindings.Resolve(slot: slot, signal: signal));
+        var alwaysActiveBindings = m_alwaysActiveBindings?.Resolve(slot: slot, source: signal.Source);
+
+        if (!focusExemptOnly && (m_chordEdges is not null)) {
             // Chord-command edges synthesized by this signal's resolve fold into the same lane with their OWN
             // phase and value (the physical signal's phase may be a mid-sweep Active) — see IChordEdgeSource.
             foreach (var edge in m_chordEdges.DrainChordEdges(slot: slot)) {
@@ -652,7 +725,10 @@ public sealed class InputRouter {
             }
         }
 
-        if (bindings is null) {
+        var pageBindingCount = (pageBindings?.Count ?? 0);
+        var alwaysActiveBindingCount = (alwaysActiveBindings?.Count ?? 0);
+
+        if ((pageBindingCount + alwaysActiveBindingCount) == 0) {
             return;
         }
 
@@ -665,13 +741,23 @@ public sealed class InputRouter {
         // flipping again (which would net a silent no-op).
         Dictionary<ushort, CommandPhase>? toggleFlipsThisSignal = null;
 
-        for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
-            var binding = bindings[bindingIndex];
+        for (var bindingIndex = 0; (bindingIndex < (pageBindingCount + alwaysActiveBindingCount)); bindingIndex++) {
+            var binding = ((bindingIndex < pageBindingCount)
+                ? pageBindings![bindingIndex]
+                : alwaysActiveBindings![bindingIndex - pageBindingCount]);
 
             if (!m_registry.TryGetId(
                 name: binding.Command,
                 id: out var commandId
             )) {
+                continue;
+            }
+
+            if (
+                focusExemptOnly &&
+                (!m_registry.TryGetMetadata(name: binding.Command, metadata: out var metadata) ||
+                 (metadata.InputScope != CommandInputScope.FocusExempt))
+            ) {
                 continue;
             }
 

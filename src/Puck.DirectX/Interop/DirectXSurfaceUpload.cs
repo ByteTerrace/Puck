@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.Abstractions.Presentation;
 using Puck.DirectX.Interfaces;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -105,13 +106,23 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     /// <param name="height">The image height in pixels.</param>
     /// <param name="format">The byte layout of the pixels, so the texture samples with correct channels.</param>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    /// <exception cref="ArgumentException"><paramref name="pixels"/> is too small, or a dimension is zero.</exception>
+    /// <exception cref="ArgumentException"><paramref name="pixels"/> does not exactly match the tightly packed extent, or a dimension is zero.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
     public void Upload(ReadOnlySpan<byte> pixels, uint width, uint height, DirectXPixelFormat format) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+        var requiredByteLength = Surface.RequiredByteLength(width: width, height: height);
+
+        if (pixels.Length != requiredByteLength) {
+            throw new ArgumentException(
+                message: $"The upload requires exactly {requiredByteLength} tightly packed bytes for its declared extent.",
+                paramName: nameof(pixels)
+            );
+        }
 
         if (
             (0 == width) ||

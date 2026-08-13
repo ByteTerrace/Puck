@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Input;
+using Puck.Launcher;
 
 namespace Puck.World;
 
@@ -266,7 +267,7 @@ internal static class WorldDefaultBindings {
                 Entries: [
                     Sector(command: EditorCommandModule.EnterCommand, label: "Editor", icon: "edit.place"),
                     Sector(command: EditorCommandModule.StatusCommand, label: "Status", icon: "action.target"),
-                    Sector(command: "world.console", label: "Console", icon: "edit.op"),
+                    Sector(command: TerminalCommandNames.Console, label: "Console", icon: "edit.op"),
                     Sector(command: "player.where", label: "Where", icon: "action.target"),
                     Sector(command: "player.channels", label: "Channels", icon: "edit.link"),
                     Sector(command: "player.disengage", label: "Disengage", icon: "edit.exit"),

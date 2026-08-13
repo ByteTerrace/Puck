@@ -2,8 +2,8 @@
 
 The console is the control plane: process stdin drives verbs, results echo
 on stdout, refusals and server narration on stderr, all mirrored onto the
-in-game panel (`WorldConsoleMirror` — a MIRROR only; nothing that draws can
-take the control plane away). Every capability is a verb; `help` is
+in-game panel (`Puck.Hosting`'s `ConsoleTape` — a MIRROR only; nothing that
+draws can take the control plane away). Every capability is a verb; `help` is
 generated from the registered commands. Infrastructure lives in
 `src/Puck.Commands/` (`CommandRegistry.cs`, `CommandDefinition.cs`,
 `CommandRouting.cs`, `TextCommandSource.cs`, `WireArgs.cs`); the modules
@@ -126,14 +126,21 @@ barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
 read-after-write across ticks (e.g. asserting motion after input).
 
-## The mirror
+## The tape
 
-`WorldConsoleMirror` (`ICommandObserver`, 64-line ring): records the echoed
-input line plus each output line with its refusal flag, catches
-tick-deferred verdicts of Simulation lines through `OnCommand`, and records
-unsolicited edit echoes (`RecordEcho`, fed by `EchoTap`). The published
-frame's `Input` is always empty — no on-screen prompt, no keystroke path.
-`world.console [on|off]` toggles visibility.
+Each local seat owns a `ConsoleTape` (`Puck.Hosting`; `ICommandObserver`,
+64-line ring), `ConsoleLineEditor`, history, and principal-bound
+`TextCommandSession`. `ConsoleInputSink` (`Puck.Launcher`) routes a text
+device to its roster seat and feeds only that seat's editor while its session
+is open. Backtick belongs to the terminal's always-active binding plane, not
+to any world page, so a page or chord override cannot remove the way out.
+`console [on|off]` is a terminal verb, like `quit`; a seated activation targets
+its invoking slot. Administrative stdin remains the separate
+`CommandPrincipal.Console` ingress and must name its target explicitly:
+`console [on|off] <player>` (or `console <player>` to toggle). Administrative
+exchanges and deferred edit verdicts live on their own operator tape and mirror
+onto the currently displayed seat-one tape until presentation grows a separate
+operator panel.
 
 `world.binding-bar [on|off|auto] [player]` is the binding bar's parallel live
 control and read-back. `on`/`off` force a side, `auto` returns to the authored

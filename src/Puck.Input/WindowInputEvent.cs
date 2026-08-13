@@ -70,6 +70,8 @@ public enum WindowInputModifiers {
 /// <param name="Vector">The relative delta (<see cref="WindowInputKind.PointerMove"/>), absolute position (<see cref="WindowInputKind.PointerPosition"/>), button index in <c>X</c> (<see cref="WindowInputKind.PointerButton"/>), or wheel notches in <c>Y</c> (<see cref="WindowInputKind.PointerWheel"/>); <see cref="Vector2.Zero"/> otherwise.</param>
 /// <param name="Phase">The transition the event represents: <see cref="CommandPhase.Started"/> for a key-down or pointer button-down, <see cref="CommandPhase.Completed"/> for a key-up or pointer button-up, <see cref="CommandPhase.Active"/> for a pointer move/position/wheel.</param>
 /// <param name="Modifiers">The modifier keys held when the event fired; <see cref="WindowInputModifiers.None"/> unless a platform stamps it (today only the letter-key path — see <see cref="LetterDown"/>).</param>
+/// <param name="DeviceId">The physical keyboard/text device that produced the event. The default value preserves
+/// aggregate-keyboard platforms; Raw Input backends stamp distinct ids.</param>
 public readonly record struct WindowInputEvent(
     WindowInputKind Kind,
     KeyCode Key = KeyCode.None,
@@ -77,29 +79,30 @@ public readonly record struct WindowInputEvent(
     string? Text = null,
     Vector2 Vector = default,
     CommandPhase Phase = CommandPhase.Started,
-    WindowInputModifiers Modifiers = WindowInputModifiers.None
+    WindowInputModifiers Modifiers = WindowInputModifiers.None,
+    InputDeviceId DeviceId = default
 ) {
     /// <summary>A neutral named-key press (<see cref="CommandPhase.Started"/>).</summary>
-    public static WindowInputEvent KeyDown(KeyCode key) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Started);
+    public static WindowInputEvent KeyDown(KeyCode key, InputDeviceId deviceId = default) {
+        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Started, DeviceId: deviceId);
     }
     /// <summary>A neutral named-key release (<see cref="CommandPhase.Completed"/>).</summary>
-    public static WindowInputEvent KeyUp(KeyCode key) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Completed);
+    public static WindowInputEvent KeyUp(KeyCode key, InputDeviceId deviceId = default) {
+        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Completed, DeviceId: deviceId);
     }
     /// <summary>A neutral letter-key press.</summary>
-    public static WindowInputEvent LetterDown(char character) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Started);
+    public static WindowInputEvent LetterDown(char character, InputDeviceId deviceId = default) {
+        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Started, DeviceId: deviceId);
     }
     /// <summary>A neutral letter-key release.</summary>
-    public static WindowInputEvent LetterUp(char character) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Completed);
+    public static WindowInputEvent LetterUp(char character, InputDeviceId deviceId = default) {
+        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Completed, DeviceId: deviceId);
     }
     /// <summary>A neutral typed-text event.</summary>
-    public static WindowInputEvent TypedText(string text) {
+    public static WindowInputEvent TypedText(string text, InputDeviceId deviceId = default) {
         ArgumentNullException.ThrowIfNull(text);
 
-        return new WindowInputEvent(Kind: WindowInputKind.Text, Text: text);
+        return new WindowInputEvent(Kind: WindowInputKind.Text, Text: text, DeviceId: deviceId);
     }
     /// <summary>A neutral relative pointer delta (the frame's summed motion).</summary>
     public static WindowInputEvent PointerDelta(Vector2 delta) {

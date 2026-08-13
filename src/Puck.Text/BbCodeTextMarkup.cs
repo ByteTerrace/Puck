@@ -71,6 +71,8 @@ public static class BbCodeTextMarkup {
     /// <returns>The plain text with every tag removed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
     public static string StripToPlainText(string markup) {
+        ArgumentNullException.ThrowIfNull(markup);
+
         var builder = new StringBuilder(capacity: markup.Length);
 
         foreach (var rune in TextEnrichmentTags.EnumerateVisibleRunes(text: Compile(markup: markup))) {

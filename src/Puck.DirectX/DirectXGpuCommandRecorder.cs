@@ -193,6 +193,7 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
         uint offset,
         ReadOnlySpan<byte> data
     ) {
+        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
         var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;
@@ -228,18 +229,15 @@ public sealed unsafe class DirectXGpuCommandRecorder : IGpuCommandRecorder {
     public void Draw(
         nint deviceHandle,
         nint commandBufferHandle,
-        uint vertexCount,
-        uint instanceCount,
-        uint firstVertex,
-        uint firstInstance
+        in GpuDrawParameters parameters
     ) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
 
         ((ID3D12GraphicsCommandList*)state.CommandList)->DrawInstanced(
-            VertexCountPerInstance: vertexCount,
-            InstanceCount: instanceCount,
-            StartVertexLocation: firstVertex,
-            StartInstanceLocation: firstInstance
+            VertexCountPerInstance: parameters.VertexCount,
+            InstanceCount: parameters.InstanceCount,
+            StartVertexLocation: parameters.FirstVertex,
+            StartInstanceLocation: parameters.FirstInstance
         );
     }
 

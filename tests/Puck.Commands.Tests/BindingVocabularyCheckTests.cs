@@ -82,6 +82,27 @@ public sealed class BindingVocabularyCheckTests {
         Assert.Contains(expectedSubstring: "sends digital", actualString: Assert.Single(errors));
     }
 
+    [Fact]
+    public void AnUnaddressableTextSourceIsRefusedEvenWhenItsKindIsKnown() {
+        var document = Document(entry: new BindingPageEntryDefinition(Source: "keyboard.text", Command: "type"));
+        var errors = new List<string>();
+
+        BindingVocabularyCheck.Validate(
+            document: document,
+            command: static name => new CommandMetadata(
+                Name: name,
+                ValueKind: CommandValueKind.Digital,
+                Routing: CommandRouting.Immediate,
+                Bindability: CommandBindability.Bindable
+            ),
+            sourceKind: static _ => CommandValueKind.Digital,
+            sourceAddressable: static source => source != "keyboard.text",
+            errors: errors
+        );
+
+        Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(errors));
+    }
+
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,

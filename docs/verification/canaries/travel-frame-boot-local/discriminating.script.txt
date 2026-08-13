@@ -1,4 +1,4 @@
-world.console off
+console off 1
 world.wait 15
 world.screenshot {run}/before.png
 world.wait 30

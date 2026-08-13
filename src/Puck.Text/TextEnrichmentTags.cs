@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using Puck.Maths;
 using System.Numerics;
@@ -12,22 +13,23 @@ namespace Puck.Text;
 /// to this stream, so agents and JSON never embed raw control chars.
 /// <para>
 /// <see cref="EnumerateRichTextRunes"/> is a left-to-right rune scan over a <see cref="Stack{TextEffect}"/>: a start
-/// tag pushes, an end tag pops, <c>reset</c> clears, and each visible rune pairs with the stack top. Nesting is
+/// tag pushes, a matching end tag pops, <c>reset</c> clears, and each visible rune pairs with the stack top. Nesting is
 /// stack-based and the innermost effect <b>shadows</b> (there is no composition of two effects on one rune); malformed
-/// or unknown tags degrade to being dropped, so arbitrary text is safe to pass through.
+/// or unknown tags are dropped, mismatched end tags are ignored, and malformed UTF-16 is replaced with
+/// <see cref="Rune.ReplacementChar"/>, so arbitrary text is safe to pass through.
 /// </para>
 /// </summary>
 public static class TextEnrichmentTags {
     /// <summary>The delimiter between a parameter name and its value (ASCII FS, <c>U+001C</c>).</summary>
-    public const char TagValueSeparator = '';
+    public const char TagValueSeparator = '\u001C';
     /// <summary>The delimiter between the tag command and each parameter field (ASCII GS, <c>U+001D</c>).</summary>
-    public const char TagFieldSeparator = '';
+    public const char TagFieldSeparator = '\u001D';
     /// <summary>The tag opening delimiter (ASCII RS, <c>U+001E</c>).</summary>
-    public const char TagStart = '';
+    public const char TagStart = '\u001E';
     /// <summary>The tag closing delimiter (ASCII US, <c>U+001F</c>).</summary>
-    public const char TagEnd = '';
+    public const char TagEnd = '\u001F';
     /// <summary>The late-binding sigil: a value of <c>base⟨SUB⟩variableName</c> binds a content-time channel (ASCII SUB, <c>U+001A</c>).</summary>
-    public const char BindingSigil = '';
+    public const char BindingSigil = '\u001A';
 
     /// <summary>Builds an end tag that pops the given effect kind.</summary>
     /// <param name="kind">The effect kind to close; must not be <see cref="TextEffectKind.None"/>.</param>
@@ -97,26 +99,12 @@ public static class TextEnrichmentTags {
         ArgumentNullException.ThrowIfNull(argument: text);
 
         var effectStack = new Stack<TextEffect>();
-        var index = 0;
 
-        while (index < text.Length) {
-            if (text[index] == TagStart) {
-                if (TryReadTag(text: text, startIndex: index, tagRecord: out var tagRecord, nextIndex: out var nextIndex)) {
-                    ApplyTag(tagRecord: tagRecord, effectStack: effectStack);
-                    index = nextIndex;
-                } else {
-                    index++;
-                }
-
-                continue;
-            }
-
-            var rune = Rune.GetRuneAt(input: text, index: index);
-
-            index += rune.Utf16SequenceLength;
-
-            if (!IsDelimiter(unicodeScalar: rune.Value)) {
-                yield return new TextEffectRune(Rune: rune, Effect: ((effectStack.Count == 0) ? TextEffect.None : effectStack.Peek()));
+        foreach (var token in Scan(text: text)) {
+            if (token.Tag is TextEnrichmentTagRecord tagRecord) {
+                ApplyTag(tagRecord: tagRecord, effectStack: effectStack);
+            } else {
+                yield return new TextEffectRune(Rune: token.Rune, Effect: ((effectStack.Count == 0) ? TextEffect.None : effectStack.Peek()));
             }
         }
     }
@@ -129,29 +117,13 @@ public static class TextEnrichmentTags {
     public static IEnumerable<TextEnrichmentSegment> EnumerateSanitizableSegments(string text) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
-        var index = 0;
-
-        while (index < text.Length) {
-            if (text[index] == TagStart) {
-                if (TryReadTag(text: text, startIndex: index, tagRecord: out var tagRecord, nextIndex: out var nextIndex)) {
-                    if (tagRecord.IsRecognized) {
-                        yield return TextEnrichmentSegment.Tag(text: text[index..nextIndex]);
-                    }
-
-                    index = nextIndex;
-                } else {
-                    index++;
+        foreach (var token in Scan(text: text)) {
+            if (token.Tag is TextEnrichmentTagRecord tagRecord) {
+                if (tagRecord.IsRecognized) {
+                    yield return TextEnrichmentSegment.Tag(text: text[token.TagStartIndex..token.TagEndIndex]);
                 }
-
-                continue;
-            }
-
-            var rune = Rune.GetRuneAt(input: text, index: index);
-
-            index += rune.Utf16SequenceLength;
-
-            if (!IsDelimiter(unicodeScalar: rune.Value)) {
-                yield return TextEnrichmentSegment.VisibleRune(rune: rune);
+            } else {
+                yield return TextEnrichmentSegment.VisibleRune(rune: token.Rune);
             }
         }
     }
@@ -161,6 +133,44 @@ public static class TextEnrichmentTags {
     /// <returns><see langword="true"/> when the scalar is a tag delimiter.</returns>
     public static bool IsDelimiter(int unicodeScalar) =>
         (unicodeScalar is TagValueSeparator or TagFieldSeparator or TagStart or TagEnd);
+
+    // The one scan both enumerators consume: each token is either a parsed tag (with the raw span it occupied) or a
+    // non-delimiter rune. An unterminated TagStart and stray delimiter runes are dropped, never yielded.
+    private static IEnumerable<TextEnrichmentScanToken> Scan(string text) {
+        var index = 0;
+
+        while (index < text.Length) {
+            if (text[index] == TagStart) {
+                if (TryReadTag(text: text, startIndex: index, tagRecord: out var tagRecord, nextIndex: out var nextIndex)) {
+                    yield return new TextEnrichmentScanToken(Tag: tagRecord, TagStartIndex: index, TagEndIndex: nextIndex, Rune: default);
+                    index = nextIndex;
+                } else {
+                    index++;
+                }
+
+                continue;
+            }
+
+            var status = Rune.DecodeFromUtf16(
+                source: text.AsSpan(start: index),
+                result: out var rune,
+                charsConsumed: out var charsConsumed
+            );
+
+            if (status != OperationStatus.Done) {
+                rune = Rune.ReplacementChar;
+                charsConsumed = 1;
+            }
+
+            index += charsConsumed;
+
+            if (!IsDelimiter(unicodeScalar: rune.Value)) {
+                yield return new TextEnrichmentScanToken(Tag: null, TagStartIndex: 0, TagEndIndex: 0, Rune: rune);
+            }
+        }
+    }
+
+    private readonly record struct TextEnrichmentScanToken(TextEnrichmentTagRecord? Tag, int TagStartIndex, int TagEndIndex, Rune Rune);
 
     private static void ApplyTag(TextEnrichmentTagRecord tagRecord, Stack<TextEffect> effectStack) {
         if (!tagRecord.IsRecognized) {
@@ -174,7 +184,10 @@ public static class TextEnrichmentTags {
         }
 
         if (tagRecord.IsEnd) {
-            if (effectStack.Count > 0) {
+            if (
+                effectStack.TryPeek(result: out var currentEffect) &&
+                (currentEffect.Kind == tagRecord.Kind)
+            ) {
                 _ = effectStack.Pop();
             }
 
@@ -292,7 +305,7 @@ public static class TextEnrichmentTags {
         return (style != TextEffectDissolveStyle.None);
     }
 
-    // Parses #RRGGBB / RRGGBB / #RRGGBBAA into a linear-agnostic 0..1 RGBA vector (alpha defaults to opaque).
+    // Parses RGB/RGBA hex in three-, four-, six-, or eight-digit form into a linear-agnostic 0..1 RGBA vector.
     private static bool TryParseHexColor(string value, out Vector4 color) {
         color = Vector4.One;
 
@@ -302,7 +315,7 @@ public static class TextEnrichmentTags {
             text = text[1..];
         }
 
-        if ((text.Length != 6) && (text.Length != 8)) {
+        if (text.Length is not (3 or 4 or 6 or 8)) {
             return false;
         }
 
@@ -310,8 +323,19 @@ public static class TextEnrichmentTags {
             return false;
         }
 
-        if (text.Length == 6) {
-            packed = (packed << 8) | 0xFFu;
+        if (text.Length is 3 or 4) {
+            var red = ((packed >> ((text.Length - 1) * 4)) & 0xFu);
+            var green = ((packed >> ((text.Length - 2) * 4)) & 0xFu);
+            var blue = ((packed >> ((text.Length - 3) * 4)) & 0xFu);
+            var alpha = ((text.Length == 4) ? (packed & 0xFu) : 0xFu);
+
+            packed =
+                ((red * 0x11u) << 24) |
+                ((green * 0x11u) << 16) |
+                ((blue * 0x11u) << 8) |
+                (alpha * 0x11u);
+        } else if (text.Length == 6) {
+            packed = ((packed << 8) | 0xFFu);
         }
 
         color = new Vector4(

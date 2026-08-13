@@ -12,7 +12,7 @@
     "authorityWorld": "src/Puck.World/Assets/worlds/studio.world.json",
     "script": "positive.script.txt",
     "commands": [
-      { "verb": "world.console", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" }, { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" }, { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
@@ -35,7 +35,7 @@
     "authorityWorld": "src/Puck.World/Assets/worlds/studio.world.json",
     "script": "discriminating.script.txt",
     "commands": [
-      { "verb": "world.console", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" }, { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" }, { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" }, { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },

@@ -10,14 +10,17 @@ namespace Puck.Commands;
 /// Lines are pushed in with <see cref="Enqueue"/> by any producer — for example, a host service that
 /// reads standard input. Every frame, <see cref="Collect"/> drains the queued lines on the calling
 /// thread and submits each non-blank line, surfacing the line and its <see cref="CommandResult"/>
-/// through the optional result callback supplied at construction. The queue is thread-safe, so a
-/// background producer may enqueue while the frame thread collects.
-/// <para>Every line submitted here dispatches as <see cref="CommandPrincipal.Console"/>: the registry's text path is
-/// the console door, and a line's identity is a property of that door rather than of the line.</para>
+/// through its session's result callback. The queue is thread-safe, so background producers may enqueue while the
+/// frame thread collects.
+/// <para><see cref="Enqueue"/> uses the administrative <see cref="CommandPrincipal.Console"/> session. A host can
+/// mint a seat-bound ingress with <see cref="CreateSeatSession"/>; callers can submit through it but cannot alter its
+/// fixed principal or slot.</para>
 /// </remarks>
-public sealed class TextCommandSource {
-    private readonly Action<string, CommandResult>? m_onResult;
-    private readonly ConcurrentQueue<string> m_pending = new();
+public sealed class TextCommandSource : ITextCommandSink {
+    private readonly TextCommandSession m_administrativeSession;
+    // One queue token per submitted line, while the line itself lives in its session's FIFO. Rotating a blocked
+    // session therefore cannot move that session's oldest line behind a concurrently appended later line.
+    private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
 
     /// <summary>Gets or sets an optional per-frame hold gate the drain honors: while it returns <see langword="true"/>,
@@ -37,7 +40,35 @@ public sealed class TextCommandSource {
         ArgumentNullException.ThrowIfNull(registry);
 
         m_registry = registry;
-        m_onResult = onResult;
+        m_administrativeSession = new TextCommandSession(
+            source: this,
+            principal: CommandPrincipal.Console,
+            slot: 0,
+            simulationSink: null,
+            onResult: onResult
+        );
+    }
+
+    /// <summary>Creates a seat-authenticated text session over this source's shared queue and registry.</summary>
+    /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
+    /// <param name="slot">The local seat slot.</param>
+    /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
+    /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
+    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null) {
+        ArgumentNullException.ThrowIfNull(router);
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+
+        if (!ReferenceEquals(objA: router.Registry, objB: m_registry)) {
+            throw new ArgumentException(message: "The router and text source must use the same command registry.", paramName: nameof(router));
+        }
+
+        return new TextCommandSession(
+            source: this,
+            principal: CommandPrincipal.Seat(slot: slot),
+            slot: slot,
+            simulationSink: router.CreateSeatTextSink(slot: slot),
+            onResult: onResult
+        );
     }
 
     /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>
@@ -46,10 +77,16 @@ public sealed class TextCommandSource {
     public void Enqueue(string line) {
         ArgumentNullException.ThrowIfNull(line);
 
-        m_pending.Enqueue(item: line);
+        m_administrativeSession.Enqueue(line: line);
     }
 
-    /// <summary>Submits every line enqueued since the last call, in arrival order.</summary>
+    internal void EnqueueSession(TextCommandSession session, string line) {
+        session.EnqueuePending(line: line);
+        m_pending.Enqueue(item: session);
+    }
+
+    /// <summary>Submits the lines present at entry in per-session arrival order. A session waiting for one of its
+    /// simulation submissions rotates independently, so it cannot stall another seat's ready input.</summary>
     public void Collect() {
         // Honor the HOLD gate BEFORE draining and AGAIN after each submitted line: a line whose handler arms the gate
         // (a step/settle verb) stops the drain for this frame, and the remaining queued lines wait for the gate to
@@ -59,36 +96,58 @@ public sealed class TextCommandSource {
         // inline read-back would observe pre-mutation state, so it waits for the snapshot to apply. Further
         // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order, so a burst
         // of scripted mutations lands in one tick instead of one per frame.
+        // Scan only the lines present at entry. A session whose read-after-write barrier is closed rotates to the
+        // tail as one intact FIFO stream, allowing another seat's independent session to keep draining without
+        // letting later lines from the blocked session overtake its read-back.
+        var scanBudget = m_pending.Count;
+        HashSet<TextCommandSession>? blockedSessions = null;
+
         while (
+            (scanBudget-- > 0) &&
             !(HoldGate?.Invoke() ?? false) &&
-            m_pending.TryPeek(result: out var line)
+            m_pending.TryDequeue(result: out var session)
         ) {
+            if (!session.TryPeekPending(line: out var line) || (line is null)) {
+                continue;
+            }
+
             // Blank lines and '#' COMMENT lines are skipped, so a piped driving SCRIPT can be self-documenting: an
             // agent pipes a commented list of verbs (a "# what this run proves" header, per-step notes) and only the
             // real verbs run. A comment is a line whose first non-whitespace character is '#'.
             var content = line.AsSpan().TrimStart();
             var isComment = (content.IsEmpty || (content[0] == '#'));
 
-            if (
-                !isComment &&
-                m_registry.HasPendingSimulationSubmission &&
-                !m_registry.RoutesToSimulation(line: line)
-            ) {
-                break;
-            }
-
-            // Collect is the queue's only consumer, so the peeked line is the one dequeued.
-            _ = m_pending.TryDequeue(result: out _);
-
-            if (isComment) {
+            if (blockedSessions?.Contains(item: session) ?? false) {
+                m_pending.Enqueue(item: session);
                 continue;
             }
 
-            var result = m_registry.Submit(line: line);
+            if (isComment) {
+                _ = session.TryDequeuePending(line: out _);
+                continue;
+            }
 
-            m_onResult?.Invoke(
-                arg1: line,
-                arg2: result
+            if (
+                session.HasPendingSimulationSubmission &&
+                !m_registry.RoutesToSimulation(line: line)
+            ) {
+                (blockedSessions ??= []).Add(item: session);
+                m_pending.Enqueue(item: session);
+                continue;
+            }
+
+            if (!session.TryDequeuePending(line: out line) || (line is null)) {
+                continue;
+            }
+
+            var result = m_registry.SubmitSession(
+                line: line,
+                session: session
+            );
+
+            session.PublishResult(
+                line: line,
+                result: result
             );
         }
     }

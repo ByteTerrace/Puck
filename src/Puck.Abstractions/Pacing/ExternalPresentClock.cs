@@ -12,6 +12,7 @@ public sealed class ExternalPresentClock {
     private readonly Lock m_gate = new();
     private long m_arrivalTimestamp;
     private long m_frameVersion;
+    private bool m_hasPublished;
 
     /// <summary>Publishes a frame arrival (called from the producer's own thread, or forwarded at a coarser cadence —
     /// the version lets a reader recover the true per-frame period even when forwarding skips frames).</summary>
@@ -21,6 +22,7 @@ public sealed class ExternalPresentClock {
         lock (m_gate) {
             m_arrivalTimestamp = arrivalTimestamp;
             m_frameVersion = frameVersion;
+            m_hasPublished = true;
         }
     }
 
@@ -32,8 +34,7 @@ public sealed class ExternalPresentClock {
         lock (m_gate) {
             arrivalTimestamp = m_arrivalTimestamp;
             frameVersion = m_frameVersion;
+            return m_hasPublished;
         }
-
-        return (0 != arrivalTimestamp);
     }
 }

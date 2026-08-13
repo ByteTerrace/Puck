@@ -355,7 +355,6 @@ internal static class WorldBootComposition {
                         }
                     }
 
-                    sp.GetService<WorldConsoleMirror>()?.Record(line: line, result: result);
                 },
                 registry: sp.GetRequiredService<CommandRegistry>()
             ) {
@@ -499,11 +498,9 @@ internal static class WorldBootComposition {
         // presentation only consumes the resolved layout and visibility when it builds a bar frame.
         services.AddSingleton<WorldBindingBarControl>();
 
-        // The overlay-UI verb surface — world.screenshot (presentation-only: refuses by name with no renderer) and
-        // world.console (the on-screen mirror toggle, also a stock play-wheel sector every shipped world commits, so
-        // it needs command-vocabulary parity the same way the editor group does). CORE-registered: both dependencies
-        // are OPTIONAL (default null), so a headless boot resolves the module with neither and every handler refuses
-        // BY NAME at use instead of the verb going unregistered — see WorldUiCommandModule's own remarks.
+        // The overlay-UI verb surface — world.screenshot. CORE-registered with an optional renderer so headless and
+        // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
+        // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
 
         // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
@@ -608,60 +605,31 @@ internal static class WorldBootComposition {
             services.AddHostedService<GamepadHostedService>();
         }
 
-        // The screen-space overlay UI (Puck.Overlays): the console mirror, the per-seat binding bars, and the
-        // mutation toasts, all drawn by the ONE UnifiedOverlayNode wrapped around the world render below. The stores
-        // are the lock-free read seams; the mirror is stdin/stdout's visible twin. Presentation-only — nothing draws
-        // headless.
-        services.AddSingleton<ConsolePanelStore>();
+        // The terminal's four seat-authenticated console sessions. The bank owns independent tape/editor/history/
+        // text ingress per seat; the overlay still reads seat 1's store until presentation grows per-viewport panels.
+        services.AddSingleton(implementationFactory: static sp => new ConsoleSessionBank(
+            seatCount: PlayerRoster.MaxSlots,
+            source: sp.GetRequiredService<TextCommandSource>(),
+            router: sp.GetRequiredService<InputRouter>(),
+            slotResolver: sp.GetRequiredService<IInputSlotResolver>(),
+            clipboard: sp.GetRequiredService<IClipboardService>(),
+            focus: sp.GetRequiredService<IInputFocus>(),
+            terminalSessions: sp.GetRequiredService<TerminalConsoleSessions>()
+        ));
+        services.AddSingleton<ConsoleTapeStore>(implementationFactory: static sp => sp.GetRequiredService<ConsoleSessionBank>().StoreFor(slot: 0));
+        services.AddSingleton<ICommandObserver>(implementationFactory: static sp => new ConsoleSessionCommandObserver(
+            sessions: () => sp.GetRequiredService<ConsoleSessionBank>(),
+            terminalSessions: sp.GetRequiredService<TerminalConsoleSessions>()
+        ));
         services.AddSingleton<BindingBarStore>();
         services.AddSingleton<EditorHudStore>();
         services.AddSingleton<EditorGizmoStore>();
         services.AddSingleton<OverlayToastStore>();
-        services.AddSingleton<WorldConsoleMirror>();
-        // The mirror also observes the DISPATCH path, so a Simulation-routed verb's tick-deferred verdict — which
-        // the core TextCommandSource's onResult callback never sees (Submit returned None) — paints on the panel
-        // too, a refusal in the danger role.
-        services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleMirror>());
-
-        // The console's line editor and its IWindowInputObserver bridge — presentation-only twins of the mirror
-        // above, so they live in this method exactly as it does: a headless boot never runs AddWorldPresentation,
-        // so it never sees a WorldConsoleMirror to build one against, and no capability gets contributed.
-        services.AddSingleton(implementationFactory: static sp => {
-            var mirror = sp.GetRequiredService<WorldConsoleMirror>();
-            var input = new WorldConsoleInput(
-                source: sp.GetRequiredService<TextCommandSource>(),
-                mirror: mirror,
-                clipboard: sp.GetRequiredService<IClipboardService>()
-            );
-            var focus = sp.GetRequiredService<IInputFocus>();
-
-            // Suppression lives in IInputFocus, not in the sink below: showing the console releases the
-            // KEYBOARD device's focus — PlayerRoster.KeyboardDevice IS InputDeviceId's default, the SAME id the
-            // window pump's unfocus check reads (LauncherWindowHostedService's IsActiveFor(deviceId: default)),
-            // so releasing it also trips the pump's ReleaseHeld() on the transition and any already-held
-            // movement key drops for free — a held W never keeps driving the avatar into typed text. Hiding
-            // claims the device back and resets the line editor through its own home, so a reopened console
-            // never resurrects a half-typed line.
-            mirror.VisibilityChanged = visible => {
-                if (visible) {
-                    focus.Release(deviceId: PlayerRoster.KeyboardDevice);
-                } else {
-                    input.Clear();
-                    focus.Claim(deviceId: PlayerRoster.KeyboardDevice);
-                }
-            };
-
-            // The mirror starts hidden, so this normally does nothing. It stays conditional because
-            // VisibilityChanged fires only on a later TRANSITION: a mirror constructed already-open would otherwise
-            // leave the keyboard driving the avatar into typed text.
-            if (mirror.Visible) {
-                focus.Release(deviceId: PlayerRoster.KeyboardDevice);
-            }
-
-            return input;
-        });
-        services.AddSingleton<WorldConsoleTextSink>();
-        services.AddSingleton<IWindowInputObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleTextSink>());
+        services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
+            sessions: sp.GetRequiredService<ConsoleSessionBank>(),
+            slotResolver: sp.GetRequiredService<IInputSlotResolver>()
+        ));
+        services.AddSingleton<IWindowInputObserver>(implementationFactory: static sp => sp.GetRequiredService<ConsoleInputSink>());
 
         // The pointer: ONE store of live browsing state (cursor position, drainable motion and wheel, held
         // buttons — per seat), ONE IWindowInputObserver that writes it, and any number of consumers that read it.
@@ -778,9 +746,8 @@ internal static class WorldBootComposition {
             audio: sp.GetRequiredService<WorldAudioDirector>(),
             pacing: sp.GetRequiredService<PresentPacingControl>()
         ));
-        // WorldUiCommandModule (world.screenshot + world.console) is CORE-registered — see
-        // AddWorldAuthoritativeCore's tail — for world.console's command-vocabulary parity; both handlers refuse by
-        // name headless.
+        // WorldUiCommandModule (world.screenshot) is CORE-registered — see AddWorldAuthoritativeCore's tail — and
+        // refuses by name headless. The console verb belongs to the terminal composition.
 
         // The render probe the world.gpu/world.debug-view verbs read the live engine's per-pass GPU times through —
         // a mutable holder the render-root factory below fills in once the engine node exists.
@@ -888,7 +855,7 @@ internal static class WorldBootComposition {
                             services: OverlayServices.Build(hostsOnDirectX: hostSettings.HostsOnDirectX, serviceProvider: sp),
                             sources: new UnifiedOverlaySources(
                                 BindingBar: sp.GetRequiredService<BindingBarStore>(),
-                                Console: sp.GetRequiredService<ConsolePanelStore>(),
+                                Console: sp.GetRequiredService<ConsoleTapeStore>(),
                                 EditorHud: sp.GetRequiredService<EditorHudStore>(),
                                 // WorldHudFeed's Tick joins WorldOverlayFeed's in the same per-produced-frame hook —
                                 // it only reconciles HudStore's STRUCTURE on a definition-revision move (cheap on

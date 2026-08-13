@@ -162,9 +162,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   (`[capture] unified overlay -> …`), so **fence a frame (`world.wait`)
   before reading it**, and a second shot armed before the first composes is
   refused by name.
-  The panel starts hidden; if a script opens it (`world.console [on|off]`,
-  bare toggles), it covers the top half of the frame — close it before
-  judging pixels.
+  The terminal console starts hidden; if a script opens its seat session
+  (`console [on|off] <player>` from stdin), it may cover the frame — close it
+  before judging pixels.
 - **Use the repository's content search.** Run `puck search`, never `grep`;
   the published project tool is the repository's supported search surface.
 - **A verification that cannot fail is a lie.** Pair every denial case with

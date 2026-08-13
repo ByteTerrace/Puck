@@ -109,6 +109,7 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IDis
         uint offset,
         ReadOnlySpan<byte> data
     ) {
+        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = (ID3D12GraphicsCommandList*)state.CommandList;
         var layout = (DirectXPipelineLayout)GCHandle.FromIntPtr(value: pipelineLayoutHandle).Target!;

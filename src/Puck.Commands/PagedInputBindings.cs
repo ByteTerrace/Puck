@@ -129,8 +129,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
 
         if (
             (signal.Phase == CommandPhase.Started) &&
-            (resolved is not null)
+            (resolved is not null) &&
+            !state.Latches.ContainsKey(key: signal.Source)
         ) {
+            // Windows repeats key-down while a key is held. The FIRST press owns the release mapping; a repeat after
+            // a page/group flip must not overwrite it with the newly visible row and turn one physical hold into a
+            // different command on release.
             state.Latches[signal.Source] = resolved;
         }
 

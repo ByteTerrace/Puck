@@ -23,7 +23,7 @@ namespace Puck.Overlays;
 /// <param name="Cursor">The per-seat drawn-cursor source, or <see langword="null"/>.</param>
 /// <param name="Wheel">The per-seat radial-action-menu source, or <see langword="null"/>.</param>
 public sealed record UnifiedOverlaySources(
-    IConsolePanelSource? Console,
+    IConsoleTapeSource? Console,
     IBindingBarSource? BindingBar,
     IOverlayToastSource? Toast,
     Action? FeedTick,
@@ -317,7 +317,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         // Removing the last replace panel restores them on the very next produced frame (HasReplace is recomputed
         // from the fresh snapshot every RefreshFrame call above). Console mirror note: the on-screen console panel is
         // one of the five suppressed writers under replace, but the underlying stdin/stdout control plane
-        // (Program.cs / WorldConsoleMirror) is untouched — console verbs keep working exactly as before regardless
+        // (Program.cs / ConsoleTape) is untouched — console verbs keep working exactly as before regardless
         // of what is drawn.
         if (m_hudWriter is { } hudUnder) {
             m_builder.BeginChannel(channel: OverlayChannel.Hud);
@@ -418,11 +418,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
 
         CaptureIfPending();
 
-        return new Surface(
-            Format: SurfaceFormat.R8G8B8A8Unorm,
-            Height: m_height,
-            ImageViewHandle: m_renderTarget!.ImageViewHandle,
-            Width: m_width
+        return Surface.SameDeviceImage(
+            imageViewHandle: m_renderTarget!.ImageViewHandle,
+            width: m_width,
+            height: m_height,
+            format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
 
@@ -530,10 +530,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_commandRecorder.Draw(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
-            firstInstance: 0,
-            firstVertex: 0,
-            instanceCount: 1,
-            vertexCount: VertexCount
+            parameters: new GpuDrawParameters(vertexCount: VertexCount, instanceCount: 1)
         );
         m_commandRecorder.EndRenderPass(
             commandBufferHandle: commandBufferHandle,

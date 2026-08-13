@@ -1,4 +1,4 @@
-world.console off
+console off 1
 world.wait 120
 player.where
 world.screenshot {run}/before.png

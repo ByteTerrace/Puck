@@ -88,9 +88,13 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             instance: this
         );
 
-        if (pixels.IsEmpty) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: width);
+        ArgumentOutOfRangeException.ThrowIfZero(value: height);
+        var requiredByteLength = Surface.RequiredByteLength(width: width, height: height);
+
+        if (pixels.Length != requiredByteLength) {
             throw new ArgumentException(
-                message: "The pixel data must not be empty.",
+                message: $"The upload requires exactly {requiredByteLength} tightly packed bytes for its declared extent.",
                 paramName: nameof(pixels)
             );
         }
@@ -98,7 +102,6 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         EnsureResources(
             deviceContext: deviceContext,
             height: height,
-            pixelsByteLength: pixels.Length,
             vulkanFormat: vulkanFormat,
             width: width
         );
@@ -221,7 +224,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             fenceHandle: m_fence
         ).ThrowIfFailed(operation: "vkResetFences");
     }
-    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat, int pixelsByteLength) {
+    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat) {
         var device = deviceContext.LogicalDevice;
 
         if (
@@ -275,7 +278,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_height = height;
         m_stagingBuffer = m_storageBufferFactory.Create(
             logicalDevice: device,
-            sizeBytes: (ulong)pixelsByteLength,
+            sizeBytes: checked((ulong)Surface.RequiredByteLength(width: width, height: height)),
             vulkanInstance: instance
         );
         m_width = width;

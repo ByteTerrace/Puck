@@ -16,6 +16,12 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
 
     /// <summary>Initializes a new instance taking ownership of an already-created upload-heap buffer.</summary>
     public DirectXGpuStorageBuffer(nint bufferHandle, ulong sizeBytes, void* mapped) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
+
+        if (mapped is null) {
+            throw new ArgumentNullException(paramName: nameof(mapped), message: "A host-visible storage buffer requires a valid persistent mapping.");
+        }
+
         m_buffer = bufferHandle;
         m_mapped = mapped;
         SizeBytes = sizeBytes;
@@ -58,6 +64,32 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         m_disposed = true;
         m_mapped = null;
 
+        if (0 != m_buffer) {
+            _ = ((IUnknown*)m_buffer)->Release();
+            m_buffer = 0;
+        }
+    }
+}
+
+/// <summary>Owns a Direct3D 12 device-local buffer without exposing host-write operations.</summary>
+[SupportedOSPlatform("windows10.0.10240")]
+public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {
+    private nint m_buffer;
+
+    /// <summary>Initializes an owner for a device-local buffer.</summary>
+    public DirectXGpuDeviceBuffer(nint bufferHandle, ulong sizeBytes) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: bufferHandle);
+        m_buffer = bufferHandle;
+        SizeBytes = sizeBytes;
+    }
+
+    /// <inheritdoc/>
+    public nint BufferHandle => m_buffer;
+    /// <inheritdoc/>
+    public ulong SizeBytes { get; }
+
+    /// <inheritdoc/>
+    public void Dispose() {
         if (0 != m_buffer) {
             _ = ((IUnknown*)m_buffer)->Release();
             m_buffer = 0;

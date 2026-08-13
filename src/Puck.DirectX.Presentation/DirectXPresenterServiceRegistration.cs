@@ -60,7 +60,8 @@ public static class DirectXPresenterServiceRegistration {
         services.TryAddSingleton<DirectXSurfaceCompositor>(implementationFactory: static sp => new DirectXSurfaceCompositor(
             commandListRecorder: sp.GetRequiredService<IDirectXCommandListRecorder>(),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
-            shaderCompiler: sp.GetRequiredService<IDirectXShaderCompilerApi>()
+            shaderCompiler: sp.GetRequiredService<IDirectXShaderCompilerApi>(),
+            surfaceTransferFactory: sp.GetRequiredService<IGpuSurfaceTransferFactory>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new DirectXSurfacePresenter(
             compositor: sp.GetRequiredService<DirectXSurfaceCompositor>(),

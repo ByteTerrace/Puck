@@ -58,6 +58,9 @@ public sealed record CommandDefinition {
     /// <summary>Gets the command map that gates snapshot-driven activation.</summary>
     public string Map { get; init; }
 
+    /// <summary>Gets whether source-driven activation requires ordinary terminal focus.</summary>
+    public CommandInputScope InputScope { get; init; } = CommandInputScope.Focused;
+
     /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
     public string Name { get; init; }
 
@@ -106,7 +109,8 @@ public sealed record CommandDefinition {
         Name: Name,
         ValueKind: ValueKind,
         Routing: Routing,
-        Bindability: Bindability
+        Bindability: Bindability,
+        InputScope: InputScope
     );
 
     /// <summary>Creates a definition whose text command is a bare verb with no arguments or options.</summary>
@@ -124,6 +128,7 @@ public sealed record CommandDefinition {
     /// The determinism class for a submitted text line. Defaults to <see cref="CommandRouting.Immediate"/>; pass
     /// <see cref="CommandRouting.Simulation"/> for a command whose effect mutates the deterministic simulation.
     /// </param>
+    /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
@@ -133,7 +138,8 @@ public sealed record CommandDefinition {
         CommandBindability bindability,
         string map = CommandMaps.Global,
         IReadOnlyList<string>? aliases = null,
-        CommandRouting routing = CommandRouting.Immediate
+        CommandRouting routing = CommandRouting.Immediate,
+        CommandInputScope inputScope = CommandInputScope.Focused
     ) {
         return new CommandDefinition(
             Name: name,
@@ -148,6 +154,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             Aliases = (aliases ?? []),
+            InputScope = inputScope,
             Routing = routing,
         };
     }
@@ -183,6 +190,7 @@ public sealed record CommandDefinition {
     /// distinguishing a bound dispatch from a typed one must read <see cref="CommandContext.Source"/> (non-null only
     /// for a bound dispatch), never <see cref="CommandContext.Value"/>'s kind — the text path computes its own
     /// impulse value from this declared kind, so a typed call carries the same kind a bound one would.</param>
+    /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
@@ -192,7 +200,8 @@ public sealed record CommandDefinition {
         string map = CommandMaps.Global,
         CommandRouting routing = CommandRouting.Immediate,
         bool ackOnly = false,
-        CommandValueKind valueKind = CommandValueKind.Digital
+        CommandValueKind valueKind = CommandValueKind.Digital,
+        CommandInputScope inputScope = CommandInputScope.Focused
     ) {
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -223,6 +232,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             AcknowledgementOnly = ackOnly,
+            InputScope = inputScope,
             Routing = routing,
             WireArgsHandler = handler,
         };

@@ -122,7 +122,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private int? m_lastRawAbsoluteX;
     private int? m_lastRawAbsoluteY;
     private ulong m_resizeCount;
-    private bool m_suppressNextCharacterInput;
     private Rectangle m_windowedBounds;
     private nint m_windowedStyle;
     private nint m_windowHandle;
@@ -594,18 +593,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private nint HandleCharacterInput(nint windowHandle, nint wParam, nint lParam) {
         var character = checked((char)wParam.ToInt64());
 
-        // The console-toggle keydown is consumed as a command, but TranslateMessage
-        // still emits its WM_CHAR — swallowing exactly that character keeps the toggle
-        // from typing into the console it just opened. Only the toggle key's own
-        // characters are swallowed, so synthetic toggles posted without a translated
-        // character (the PostMessage verification workflow) never eat real text.
-        if (m_suppressNextCharacterInput) {
-            m_suppressNextCharacterInput = false;
-            if (character is '`' or '~') {
-                return 0;
-            }
-        }
-
         if (!char.IsControl(c: character)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.TypedText(text: character.ToString()));
         }
@@ -613,12 +600,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         return 0;
     }
     private nint HandleKeyDown(nint windowHandle, uint message, nint wParam, nint lParam) {
-        // Any keydown ends the toggle-character suppression window: a key's WM_CHAR
-        // always arrives before the next key's WM_KEYDOWN, so a toggle keydown that
-        // produced no character (other layouts, posted messages) can't swallow an
-        // unrelated character later.
-        m_suppressNextCharacterInput = false;
-
         if (IsAltEnterGesture(
             altKeyState: User32.GetKeyState(virtualKey: VkMenu),
             message: message,
@@ -670,10 +651,6 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         // of the keys Puck owns (F10/bare Alt menu navigation and Tab dialog traversal included).
         if (TryMapNamedKey(virtualKey: virtualKey, lParam: lParam, key: out var key)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: key));
-
-            if (key == KeyCode.Backtick) {
-                m_suppressNextCharacterInput = true;
-            }
 
             return 0;
         }

@@ -12,42 +12,53 @@ namespace Puck.Text;
 /// only by <see cref="FontAtlas.ImagePath"/>. The <see cref="ContentHash"/> enables content-addressed
 /// identity and caching of the image.
 /// </remarks>
-/// <param name="rgbaPixels">
-/// The tightly packed RGBA pixel buffer. Must be non-empty and exactly
-/// <c><paramref name="width"/> * <paramref name="height"/> * 4</c> bytes long.
-/// </param>
-/// <param name="height">The image height in pixels. Must be greater than zero.</param>
-/// <param name="width">The image width in pixels. Must be greater than zero.</param>
-/// <param name="contentHash">
-/// An optional precomputed content hash of <paramref name="rgbaPixels"/>. When omitted, a hash is
-/// computed from the pixel buffer.
-/// </param>
-/// <exception cref="ArgumentException"><paramref name="rgbaPixels"/> is empty.</exception>
-/// <exception cref="ArgumentOutOfRangeException">
-/// <paramref name="height"/> or <paramref name="width"/> is not greater than zero.
-/// </exception>
-public sealed class FontAtlasImageData(byte[] rgbaPixels, int height, int width, AssetContentHash? contentHash = null) {
+public sealed class FontAtlasImageData {
     /// <summary>Gets the image height in pixels.</summary>
-    public int Height { get; } = ((height > 0)
-        ? height
-        : throw new ArgumentOutOfRangeException(
-            message: "Font atlas image height must be greater than zero.",
-            paramName: nameof(height)
-        ));
+    public int Height { get; }
     /// <summary>Gets the content hash of <see cref="RgbaPixels"/>, supplied by the caller or computed from the buffer.</summary>
-    public AssetContentHash ContentHash { get; } = (contentHash ?? AssetContentHash.Compute(content: rgbaPixels));
+    public AssetContentHash ContentHash { get; }
     /// <summary>Gets the tightly packed, row-major, top-down RGBA pixel buffer.</summary>
-    public byte[] RgbaPixels { get; } = ((rgbaPixels?.Length > 0)
-        ? rgbaPixels
-        : throw new ArgumentException(
-            message: "Font atlas image pixels must be provided.",
-            paramName: nameof(rgbaPixels)
-        ));
+    public byte[] RgbaPixels { get; }
     /// <summary>Gets the image width in pixels.</summary>
-    public int Width { get; } = ((width > 0)
-        ? width
-        : throw new ArgumentOutOfRangeException(
-            message: "Font atlas image width must be greater than zero.",
-            paramName: nameof(width)
-        ));
+    public int Width { get; }
+
+    /// <summary>Initializes a new <see cref="FontAtlasImageData"/> from a tightly packed RGBA pixel buffer.</summary>
+    /// <param name="rgbaPixels">The tightly packed RGBA pixel buffer. Must contain exactly <paramref name="width"/> × <paramref name="height"/> × 4 bytes.</param>
+    /// <param name="height">The image height in pixels. Must be greater than zero.</param>
+    /// <param name="width">The image width in pixels. Must be greater than zero.</param>
+    /// <param name="contentHash">An optional precomputed content hash of <paramref name="rgbaPixels"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rgbaPixels"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="rgbaPixels"/> does not contain exactly <paramref name="width"/> × <paramref name="height"/> × 4 bytes.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="height"/> or <paramref name="width"/> is not greater than zero.</exception>
+    public FontAtlasImageData(byte[] rgbaPixels, int height, int width, AssetContentHash? contentHash = null) {
+        ArgumentNullException.ThrowIfNull(rgbaPixels);
+
+        if (height <= 0) {
+            throw new ArgumentOutOfRangeException(
+                message: "Font atlas image height must be greater than zero.",
+                paramName: nameof(height)
+            );
+        }
+
+        if (width <= 0) {
+            throw new ArgumentOutOfRangeException(
+                message: "Font atlas image width must be greater than zero.",
+                paramName: nameof(width)
+            );
+        }
+
+        var expectedLength = (((ulong)(uint)width * (uint)height) * 4u);
+
+        if ((ulong)rgbaPixels.LongLength != expectedLength) {
+            throw new ArgumentException(
+                message: $"Font atlas image pixels must contain exactly {expectedLength} bytes for a {width}x{height} RGBA image.",
+                paramName: nameof(rgbaPixels)
+            );
+        }
+
+        Height = height;
+        ContentHash = (contentHash ?? AssetContentHash.Compute(content: rgbaPixels));
+        RgbaPixels = rgbaPixels;
+        Width = width;
+    }
 }

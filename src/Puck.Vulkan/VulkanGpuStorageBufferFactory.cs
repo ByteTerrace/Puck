@@ -18,26 +18,35 @@ public sealed class VulkanGpuStorageBufferFactory(IVulkanStorageBufferFactory st
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
+    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var vkContext = (IVulkanDeviceContext)deviceContext;
 
         // Back it with device-local (not host-visible) memory — a GPU-only storage buffer (UAV target) that is never
         // host-mapped, matching the Direct3D 12 default-heap UAV buffer.
-        return storageBufferFactory.Create(
-            deviceLocal: true,
+        return storageBufferFactory.CreateDeviceLocal(
             logicalDevice: vkContext.LogicalDevice,
             sizeBytes: sizeBytes,
             vulkanInstance: vkContext.Instance
         );
     }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes, bool deviceLocal = false) {
+    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var vkContext = (IVulkanDeviceContext)deviceContext;
 
         // Indirect-capable. Host-visible by default (the CPU fills it via Write before submit — host-coherent, no extra
         // barrier); device-local when a compute shader writes it as a UAV (GPU-computed args), ordered by a barrier.
         return storageBufferFactory.Create(
-            deviceLocal: deviceLocal,
+            indirectArgs: true,
+            logicalDevice: vkContext.LogicalDevice,
+            sizeBytes: sizeBytes,
+            vulkanInstance: vkContext.Instance
+        );
+    }
+    /// <inheritdoc/>
+    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
+        var vkContext = (IVulkanDeviceContext)deviceContext;
+
+        return storageBufferFactory.CreateDeviceLocal(
             indirectArgs: true,
             logicalDevice: vkContext.LogicalDevice,
             sizeBytes: sizeBytes,

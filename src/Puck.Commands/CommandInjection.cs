@@ -45,5 +45,7 @@ internal readonly record struct CommandInjection(
     /// drain barrier. This is process-local coordination, not deterministic snapshot identity.</summary>
     internal bool CompletesTextSubmission { get; init; }
 
+    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
+
     internal bool DispatchWhenMapInactive { get; init; }
 }

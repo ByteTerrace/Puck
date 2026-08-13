@@ -28,7 +28,8 @@ public unsafe interface IAllocator {
     /// <param name="alignment">The required alignment in bytes, or 0 for the allocator's default (see
     /// <see cref="Allocate"/>).</param>
     /// <returns>A pointer to the resized block (which may differ from <paramref name="ptr"/>), or
-    /// <see langword="null"/> if the resize failed (the original block is then left as the implementation left
-    /// it — implementation-defined).</returns>
+    /// <see langword="null"/> if a non-zero resize failed; on that failure the original block remains allocated,
+    /// unchanged, and owned by the caller. A zero-size request retains the underlying allocator's documented
+    /// zero-size behavior.</returns>
     void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0);
 }

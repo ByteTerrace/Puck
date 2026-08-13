@@ -46,12 +46,10 @@ public sealed class FontAtlasSourceResolver(
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: fontPath);
         ArgumentNullException.ThrowIfNull(generationOptions);
 
-        var resolvedPath = (Path.IsPathRooted(path: fontPath)
-            ? fontPath
-            : Path.Combine(
-                path1: basePath,
-                path2: fontPath
-            ));
+        var resolvedPath = ResolveAgainstBase(
+            basePath: basePath,
+            path: fontPath
+        );
 
         return LoadFromFont(
             fontBytes: m_assetSource.Read(path: resolvedPath),
@@ -59,12 +57,12 @@ public sealed class FontAtlasSourceResolver(
         );
     }
 
-    /// <summary>Resolves the atlas for a pre-baked font-atlas bake pipeline (<c>tools/font-atlas</c>) metadata file, loading it through <see cref="FontAtlasLoader"/> instead of generating one.</summary>
+    /// <summary>Resolves the atlas for a pre-baked font-atlas bake pipeline (<c>experimental/tools/font-atlas</c>) metadata file, loading it through <see cref="FontAtlasLoader"/> instead of generating one.</summary>
     /// <remarks>
     /// The atlas image is expected alongside <paramref name="atlasPath"/>, sharing its base name with a
     /// <c>.png</c> extension. Like <see cref="Resolve(string, FontAtlasGenerationOptions, string)"/>, the
-    /// result is cached under a hash of the metadata and image contents, so repeated resolution of the
-    /// same pre-baked files is free after the first call. Only the metadata's declared image path is
+    /// result is cached under a hash of the metadata and image contents plus the resolved image identifier, so
+    /// repeated resolution of the same pre-baked files is free after the first call. Only the resolved image path is
     /// recorded on the returned <see cref="FontAtlas"/> — no image pixels are decoded; use an
     /// <see cref="IFontAtlasImageDataLoader"/> when the pixels are actually needed.
     /// </remarks>
@@ -79,25 +77,33 @@ public sealed class FontAtlasSourceResolver(
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: atlasPath);
 
-        var resolvedAtlasPath = (Path.IsPathRooted(path: atlasPath)
-            ? atlasPath
-            : Path.Combine(
-                path1: basePath,
-                path2: atlasPath
-            ));
+        var resolvedAtlasPath = ResolveAgainstBase(
+            basePath: basePath,
+            path: atlasPath
+        );
         var resolvedImagePath = Path.ChangeExtension(path: resolvedAtlasPath, extension: ".png");
+
+        if (!m_assetSource.Exists(path: resolvedImagePath)) {
+            throw new FileNotFoundException(fileName: resolvedImagePath, message: "Font atlas image file was not found.");
+        }
+
         var atlasBytes = m_assetSource.Read(path: resolvedAtlasPath);
-        var imageBytes = (m_assetSource.Exists(path: resolvedImagePath)
-            ? m_assetSource.Read(path: resolvedImagePath)
-            : ReadOnlyMemory<byte>.Empty);
+        var imageBytes = m_assetSource.Read(path: resolvedImagePath);
         var cacheHash = CombineHashes(
-            first: AssetContentHash.Compute(content: atlasBytes.Span),
-            second: AssetContentHash.Compute(content: imageBytes.Span)
+            first: CombineHashes(
+                first: AssetContentHash.Compute(content: atlasBytes.Span),
+                second: AssetContentHash.Compute(content: imageBytes.Span)
+            ),
+            second: AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: resolvedImagePath))
         );
 
         return m_fontAtlasCache.GetOrAdd(
             hash: cacheHash,
-            valueFactory: () => m_fontAtlasLoader.Load(jsonPath: resolvedAtlasPath)
+            valueFactory: () => m_fontAtlasLoader.Load(
+                atlasIdentifier: resolvedAtlasPath,
+                jsonContent: atlasBytes,
+                imagePath: resolvedImagePath
+            )
         );
     }
 
@@ -124,6 +130,14 @@ public sealed class FontAtlasSourceResolver(
                 });
             }
         );
+    }
+    private static string ResolveAgainstBase(string path, string basePath) {
+        return (Path.IsPathRooted(path: path)
+            ? path
+            : Path.Combine(
+                path1: basePath,
+                path2: path
+            ));
     }
     private static string ToContentAddress(string scheme, AssetContentHash hash) {
         return $"{scheme}://sha256-64/{hash.Value:x16}";

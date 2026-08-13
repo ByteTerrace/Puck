@@ -101,7 +101,7 @@
 //       The unified-overlay proof, run on BOTH backends (Direct3D 12 first, then --backend vulkan). Each session
 //       boots, waits for the console, then world.screenshot-s three composed frames over the outermost-decorator
 //       capture chain: (a) console panel ON — its stage region must be visibly SCRIM-DARKENED versus (b) a
-//       world.console off control shot (mean-luminance drop, robust against the moving world beneath); (c) a
+//       console off control shot (mean-luminance drop, robust against the moving world beneath); (c) a
 //       deliberately invalid mutation (world.kit.remove on the defaultSeatKit) must surface as the danger-hued
 //       TOAST — asserted as a danger-red pixel population in the toast strip that the control shot lacks — beside
 //       its loud '[world.mutation rejected: ...]' stderr line. Decodes the engine's own PNGs (filter-0 RGBA)
@@ -7274,7 +7274,7 @@ static class UiFloorProof {
 
             // (2) The no-console control: the binding bars stay, but the assertion region is the console's stage
             // corner, which they never enter.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
             passed &= ComposedShotKit.Screenshot(ctx: ctx, name: "control-shot", path: controlPath);
 
             // (3) The rejection toast: removing the defaultSeatKit fails validation loudly server-side AND must
@@ -7504,7 +7504,7 @@ static class EditorModeProof {
 
             // The console panel would repaint with every verb echo between shots — hide it so the pixel region
             // reads the WORLD (the binding bars sit in the excluded bottom strip; no toasts fire in this script).
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
             // Pin the roster to seat 1: connected pads on a dev machine auto-seat extra players, and any second seat
             // arms the sole-editor LAYOUT policy — which would swamp the camera pixel work below. The policy gets its
@@ -7860,7 +7860,7 @@ static class EditorEditProof {
             }
 
             // Pin the stage: console panel off, exactly four console-joined seats, zero census (static world).
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "clip-console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "clip-console-off");
 
             for (var seat = 2; (seat <= 4); seat++) {
                 passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"clip-pin-leave-{seat}");
@@ -7955,7 +7955,7 @@ static class EditorEditProof {
 
             // Pin the stage: console panel off (the pixel band must read the WORLD), roster to seat 1 (dev-machine
             // pads auto-seat extras), census to 0 (a static world — the highlight diff's noise floor).
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
             for (var seat = 2; (seat <= 4); seat++) {
                 passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-roster-leave-{seat}");
@@ -8740,7 +8740,7 @@ static class PlacementsProof {
 
             // Pin the stage: console panel off, roster to seat 1, zero census — the asserted bands must read ONLY
             // the placements under test.
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
             for (var seat = 2; (seat <= 4); seat++) {
                 passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
@@ -9168,7 +9168,7 @@ static class PopulationProof {
     // (a dev-machine pad auto-seats extra players), every entity on ONE kit, and a fixed idle census. Nothing below
     // inherits a boot value.
     static bool PinStage(ComposedShotKit.Ctx ctx) {
-        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
         for (var seat = 2; (seat <= 4); seat++) {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
@@ -9592,7 +9592,7 @@ static class SculptProof {
             // Pin the stage: console panel off, roster to seat 1, zero census, and the editor camera at a fixed
             // vantage over empty grass BEFORE the bench opens (the workbench orbit seeds from this pose, so the
             // preview/stamp shots share one deterministic camera).
-            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+            passed &= ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
             for (var seat = 2; (seat <= 4); seat++) {
                 passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
@@ -11450,7 +11450,7 @@ static class ReplayProof {
     // captured starting state). Both sessions run this identical prefix — the determinism comparison is only a
     // comparison if the two runs start from the same pinned stage.
     static bool PinStage(ComposedShotKit.Ctx ctx) {
-        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
         for (var seat = 2; (seat <= 4); seat++) {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");
@@ -11798,7 +11798,7 @@ static class ScreenSourcesProof {
     // PIN the stage: seat 1 alone (a dev-machine pad auto-seats extra players and an engaged seat shows up in
     // screen.state) and an empty census (nothing autonomous behind the slabs). Nothing below reads a boot value.
     static bool PinStage(ComposedShotKit.Ctx ctx) {
-        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "world.console off", expect: "[world.console: off]", name: "console-off");
+        var passed = ComposedShotKit.SendAwait(ctx: ctx, line: "console off", expect: "[console: seat=1 off]", name: "console-off");
 
         for (var seat = 2; (seat <= 4); seat++) {
             passed &= ComposedShotKit.SendAwait(ctx: ctx, line: $"player.leave {seat}", expect: "[player.leave:", name: $"pin-leave-{seat}");

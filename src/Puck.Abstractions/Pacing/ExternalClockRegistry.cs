@@ -81,12 +81,32 @@ public sealed class ExternalClockRegistry {
         }
     }
 
-    // Whether this source's publishes are forwarded to the pacer; read lock-free on every publish.
-    internal bool IsElected(ExternalClockSource source) =>
-        ReferenceEquals(
-        objA: m_elected,
-        objB: source
-    );
+    internal void Publish(ExternalClockSource source, long arrivalTimestamp, long frameVersion) {
+        lock (m_gate) {
+            ObjectDisposedException.ThrowIf(condition: source.IsDisposed, instance: source);
+
+            source.Channel.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
+
+            if (ReferenceEquals(objA: m_elected, objB: source)) {
+                PacerClock.Publish(arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
+            }
+        }
+    }
+
+    internal void Unregister(ExternalClockSource source) {
+        lock (m_gate) {
+            if (source.IsDisposed) {
+                return;
+            }
+
+            source.MarkDisposed();
+
+            if (m_sources.TryGetValue(key: source.SourceId, value: out var registered) && ReferenceEquals(registered, source)) {
+                _ = m_sources.Remove(key: source.SourceId);
+                ReevaluateElection();
+            }
+        }
+    }
 
     // Applies the policy over the current registrations. Named: elect the named source when present. Auto: elect the
     // sole source, and un-elect when plurality appears (no arbitrary winner, ever). Off: never elect. The structural
@@ -130,9 +150,8 @@ public sealed class ExternalClockRegistry {
 /// independent — sources at different rates never pollute each other), plus the forwarding hook that feeds the
 /// registry's pacer channel while — and only while — this source is elected.
 /// </summary>
-public sealed class ExternalClockSource {
+public sealed class ExternalClockSource : IDisposable {
     // This source's own latest-arrival channel; every publish lands here regardless of election.
-    private readonly ExternalPresentClock m_channel = new();
     private readonly ExternalClockRegistry m_registry;
 
     internal ExternalClockSource(ExternalClockRegistry registry, string sourceId) {
@@ -142,22 +161,23 @@ public sealed class ExternalClockSource {
 
     /// <summary>Gets the stable source identity this channel registered under.</summary>
     public string SourceId { get; }
+    internal ExternalPresentClock Channel { get; } = new();
+    internal bool IsDisposed { get; private set; }
+
+    /// <summary>Reads this source's latest arrival even when it is not elected.</summary>
+    public bool TryRead(out long arrivalTimestamp, out long frameVersion) =>
+        Channel.TryRead(arrivalTimestamp: out arrivalTimestamp, frameVersion: out frameVersion);
 
     /// <summary>Publishes a frame arrival (from the producer's own thread at its own cadence); forwarded to the pacer
     /// only while this source is elected.</summary>
     /// <param name="arrivalTimestamp">The arrival time in <see cref="System.Diagnostics.Stopwatch"/> ticks (local receipt time for a network source).</param>
     /// <param name="frameVersion">The producer's monotonically increasing frame counter at this arrival.</param>
     public void Publish(long arrivalTimestamp, long frameVersion) {
-        m_channel.Publish(
-            arrivalTimestamp: arrivalTimestamp,
-            frameVersion: frameVersion
-        );
-
-        if (m_registry.IsElected(source: this)) {
-            m_registry.PacerClock.Publish(
-                arrivalTimestamp: arrivalTimestamp,
-                frameVersion: frameVersion
-            );
-        }
+        m_registry.Publish(source: this, arrivalTimestamp: arrivalTimestamp, frameVersion: frameVersion);
     }
+
+    /// <summary>Unregisters the source. Disposal is idempotent and immediately re-evaluates election.</summary>
+    public void Dispose() => m_registry.Unregister(source: this);
+
+    internal void MarkDisposed() => IsDisposed = true;
 }

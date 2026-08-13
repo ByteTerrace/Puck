@@ -303,7 +303,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_cullArgsPipeline;
     private readonly nint m_cullArgsSet;
     private readonly IGpuShaderModule m_cullArgsShaderModule;
-    private readonly IGpuStorageBuffer m_cullBoundsBuffer;
+    private readonly IGpuBuffer m_cullBoundsBuffer;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
     private readonly IGpuDeviceContext m_deviceContext;
     private readonly nint m_deviceHandle;
@@ -325,7 +325,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly SdfInstanceGrid.Workspace m_instanceGridWorkspace;
     private readonly int m_instanceGridWordCapacity;
     private readonly IGpuShaderModule m_instanceCullShaderModule;
-    private readonly IGpuStorageBuffer m_instanceMaskBuffer;
+    private readonly IGpuBuffer m_instanceMaskBuffer;
     private readonly int m_instanceMaskWordCount;
     private readonly nint m_pool;
     private readonly IGpuStorageBuffer m_programBuffer;
@@ -362,7 +362,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly bool[] m_decalDirty = BuildRingDirtyFlags();
     private readonly IGpuStorageImage?[] m_sourceTextures;
     private readonly IGpuStorageImage m_storageImage;
-    private readonly IGpuStorageBuffer m_tileBuffer;
+    private readonly IGpuBuffer m_tileBuffer;
     private readonly uint m_tileGridX;
     private readonly uint m_tileGridY;
     // Timing is AVAILABLE when a supported factory + recorder were supplied; whether a given frame is timed is a
@@ -379,7 +379,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // The carve-bake brick pool (carve-bake plan §3): one persistent device-local f32 buffer the sliced bake writes and
     // the beam + views kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound to
     // the beam/views sets, since both kernels compile the sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
-    private readonly IGpuStorageBuffer m_brickPoolBuffer;
+    private readonly IGpuBuffer m_brickPoolBuffer;
     private readonly int m_brickPoolVoxelCapacity;
     private readonly bool m_brickPoolEnabled;
     // The bake pipeline + per-slot request buffers/sets — created ONLY when the pool is enabled (nothing bakes into a
@@ -402,7 +402,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // through. Held explicitly rather than by reading the ring's other slot: the ring slot's contents are only defined
     // relative to the produced-frame count, and an engine whose caller ever produces an odd number of frames between
     // two renders would silently reproject through the wrong camera.
-    private readonly IGpuStorageBuffer m_viewsArgsBuffer;
+    private readonly IGpuBuffer m_viewsArgsBuffer;
     // The core-ops Stage 1 variant (see SdfViewsKernelVariant): same bindings array as m_viewsPipeline, so its
     // descriptor-set layout is identically defined — the per-slot m_viewsSets bind against WHICHEVER pipeline
     // UploadProgram selected (compatible layouts on Vulkan; the same slot packing + root-signature shape on
@@ -628,7 +628,7 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // surviving-tile bbox, 3 group counts) and the bbox group origin (2 uints). Both are device-local — the GPU
         // writes them as UAVs, then a barrier orders the indirect read; the views dispatch reads the args (the
         // dispatch grid) and the bounds (its pixel offset). The all-empty margins are never dispatched.
-        m_viewsArgsBuffer = gpu.StorageBufferFactory.CreateIndirectArgs(deviceContext: device, sizeBytes: (sizeof(uint) * 3), deviceLocal: true);
+        m_viewsArgsBuffer = gpu.StorageBufferFactory.CreateDeviceLocalIndirectArgs(deviceContext: device, sizeBytes: (sizeof(uint) * 3));
         m_cullBoundsBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(deviceContext: device, sizeBytes: (sizeof(uint) * 2));
 
         // Stage 2's full-frame composite grid is constant for the run, so its dispatch is driven INDIRECTLY: the GPU
@@ -2846,16 +2846,16 @@ public sealed class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             throw new InvalidOperationException(message: "A pipelined preview frame is still in flight on this engine; complete it with AcquireFramePixels before submitting another frame (SubmitFramePipelined must not be interleaved with RenderFrame or SubmitFrame on one engine).");
         }
     }
-    private void WriteStorageBuffer(nint set, uint binding, IGpuStorageBuffer buffer) {
+    private void WriteStorageBuffer(nint set, uint binding, IGpuBuffer buffer) {
         m_descriptorAllocator.WriteStorageBuffer(binding: binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: set, deviceHandle: m_deviceHandle);
     }
     // For 4-byte-element read-only structured buffers (the float cull buffer, the uint cull-bounds) — NOT the 16-byte
     // (uint4) program-word stride WriteStorageBuffer assumes; a stride-16 SRV over the 8-byte bounds buffer is a
     // zero-element view the indirect views dispatch page-faults reading on Direct3D 12.
-    private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuStorageBuffer buffer) {
+    private void WriteStorageBufferReadOnly(nint set, uint binding, IGpuBuffer buffer) {
         m_descriptorAllocator.WriteStorageBufferReadOnly(binding: binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: set, deviceHandle: m_deviceHandle);
     }
-    private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuStorageBuffer buffer) {
+    private void WriteStorageBufferReadWrite(nint set, uint binding, IGpuBuffer buffer) {
         m_descriptorAllocator.WriteStorageBufferReadWrite(binding: binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: set, deviceHandle: m_deviceHandle);
     }
 }

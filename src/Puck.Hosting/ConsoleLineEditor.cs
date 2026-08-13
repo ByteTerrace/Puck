@@ -3,18 +3,18 @@ using System.Text;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
 
-namespace Puck.World;
+namespace Puck.Hosting;
 
 /// <summary>
-/// The console panel's line editor: a caret-addressed buffer plus a bounded command history, driven by
-/// <see cref="WorldConsoleTextSink"/> from captured window text/edit events and republished to
-/// <see cref="WorldConsoleMirror"/> after every edit — the state behind the prompt row's <c>"&gt; "</c> + input the
-/// overlay already draws. Selection is all-or-nothing (<see cref="SelectAll"/> selects the whole line; there is no
-/// partial drag/shift-arrow selection).
+/// The console panel's line editor: a caret-addressed buffer plus a bounded command history, driven by the
+/// terminal's window-input sink from captured window text/edit events and republished to the
+/// <see cref="ConsoleTape"/> after every edit — the state behind the prompt row's <c>"&gt; "</c> + input a renderer
+/// draws. Selection is all-or-nothing (<see cref="SelectAll"/> selects the whole line; there is no partial
+/// drag/shift-arrow selection).
 /// </summary>
-/// <remarks>Single-threaded by contract: every method here runs on the window-pump thread, the same thread
-/// <see cref="WorldConsoleTextSink.Observe"/> is called from, so there is no locking.</remarks>
-internal sealed class WorldConsoleInput {
+/// <remarks>Single-threaded by contract: every method here runs on the window-pump thread, the same thread the
+/// window-input sink observes from, so there is no locking.</remarks>
+public sealed class ConsoleLineEditor {
     private const int HistoryCapacity = 64;
     // A block caret so a reopened panel shows the insertion point without a blink timer.
     private const char CaretGlyph = '█';
@@ -26,28 +26,28 @@ internal sealed class WorldConsoleInput {
     private readonly List<string> m_history = new();
     // Ranges [0, m_history.Count]; m_history.Count means "not browsing" (the live, uncommitted line).
     private int m_historyCursor;
-    private readonly WorldConsoleMirror m_mirror;
-    private readonly TextCommandSource m_source;
+    private readonly ITextCommandSink m_source;
+    private readonly ConsoleTape m_tape;
 
-    /// <summary>Initializes a new instance of the <see cref="WorldConsoleInput"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ConsoleLineEditor"/> class.</summary>
     /// <param name="source">The command source a submitted line enqueues into.</param>
-    /// <param name="mirror">The mirror republished after every edit.</param>
+    /// <param name="tape">The tape republished after every edit.</param>
     /// <param name="clipboard">The clipboard <see cref="Copy"/>/<see cref="Cut"/> write through.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/>, <paramref name="mirror"/>, or
+    /// <exception cref="ArgumentNullException"><paramref name="source"/>, <paramref name="tape"/>, or
     /// <paramref name="clipboard"/> is <see langword="null"/>.</exception>
-    public WorldConsoleInput(TextCommandSource source, WorldConsoleMirror mirror, IClipboardService clipboard) {
+    public ConsoleLineEditor(ITextCommandSink source, ConsoleTape tape, IClipboardService clipboard) {
         ArgumentNullException.ThrowIfNull(argument: source);
-        ArgumentNullException.ThrowIfNull(argument: mirror);
+        ArgumentNullException.ThrowIfNull(argument: tape);
         ArgumentNullException.ThrowIfNull(argument: clipboard);
 
         m_clipboard = clipboard;
-        m_mirror = mirror;
         m_source = source;
+        m_tape = tape;
     }
 
     /// <summary>Inserts printable text at the caret, control characters filtered out (a WM_CHAR for Enter/Tab must
     /// not also land as a literal character — those arrive as their own named-key edges instead). When the whole
-    /// line is selected, the insertion REPLACES it (paste-over-selection), matching a normal text field.</summary>
+    /// line is selected, the insertion replaces it (paste-over-selection), matching a normal text field.</summary>
     /// <param name="text">The typed or pasted text.</param>
     /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
     public void AppendText(string text) {
@@ -77,7 +77,7 @@ internal sealed class WorldConsoleInput {
     }
 
     /// <summary>Deletes the character before the caret, if any — or, when the whole line is selected, the
-    /// selection itself (the selection deletion IS the edit).</summary>
+    /// selection itself (the selection deletion is the edit).</summary>
     public void Backspace() {
         if (m_allSelected) {
             ClearSelectionEdit();
@@ -94,7 +94,7 @@ internal sealed class WorldConsoleInput {
     }
 
     /// <summary>Deletes the character at the caret, if any — or, when the whole line is selected, the selection
-    /// itself (the selection deletion IS the edit).</summary>
+    /// itself (the selection deletion is the edit).</summary>
     public void DeleteForward() {
         if (m_allSelected) {
             ClearSelectionEdit();
@@ -193,7 +193,7 @@ internal sealed class WorldConsoleInput {
     }
 
     /// <summary>Copies the whole line to the clipboard, when the buffer is non-empty. All-or-nothing: a bare
-    /// Ctrl+C with nothing selected still copies the line — a convenience, since the WHOLE line is always what a
+    /// Ctrl+C with nothing selected still copies the line — a convenience, since the whole line is always what a
     /// selection would have covered. Leaves the buffer and selection state untouched.</summary>
     public void Copy() {
         if (m_buffer.Length == 0) {
@@ -203,7 +203,7 @@ internal sealed class WorldConsoleInput {
         m_clipboard.SetText(text: m_buffer.ToString());
     }
 
-    /// <summary>Copies the whole line to the clipboard, then clears the buffer (the selection deletion IS the
+    /// <summary>Copies the whole line to the clipboard, then clears the buffer (the selection deletion is the
     /// edit). A no-op on an empty buffer.</summary>
     public void Cut() {
         Copy();
@@ -215,8 +215,9 @@ internal sealed class WorldConsoleInput {
         ClearSelectionEdit();
     }
 
-    /// <summary>Submits the buffered line to <see cref="TextCommandSource.Enqueue"/> — the same tick-aligned dispatch
-    /// path stdin uses — then records it in history and clears the buffer. A no-op on an empty buffer.</summary>
+    /// <summary>Submits the buffered line to the editor's principal-bound <see cref="ITextCommandSink"/> — the same
+    /// tick-aligned command pump stdin uses, under this session's own identity — then records it in history and
+    /// clears the buffer. A no-op on an empty buffer.</summary>
     public void Submit() {
         if (m_buffer.Length == 0) {
             return;
@@ -271,13 +272,13 @@ internal sealed class WorldConsoleInput {
     private void Republish() {
         if (m_allSelected) {
             // The raw buffer, no caret glyph — the highlight rect shows the whole line as selected instead.
-            m_mirror.SetInput(input: m_buffer.ToString(), selected: true);
+            m_tape.SetInput(input: m_buffer.ToString(), selected: true);
             return;
         }
 
         var text = m_buffer.ToString();
         var display = ((text[..m_caret] + CaretGlyph) + text[m_caret..]);
 
-        m_mirror.SetInput(input: display, selected: false);
+        m_tape.SetInput(input: display, selected: false);
     }
 }
