@@ -101,7 +101,7 @@ that is easy to miss:
 | `InputSignal` | A raw input keyed by a physical source id, *before* binding. |
 | `CommandBinding` | Binds an input source id to a command (constant or pass-through value). |
 | `CommandInjectionSink` | One pre-resolved-command door, bound to its principal and lane at construction. |
-| `TextCommandSource` / `CommandShell` | Queue and per-frame pump for command lines through the registry's text path. |
+| `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
 | `InputRouter` | Captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 

@@ -14,9 +14,6 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
     private const uint VkStructureTypeWin32SurfaceCreateInfoKhr = 1000009000;
     private const uint VkStructureTypeXcbSurfaceCreateInfoKhr = 1000005000;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
-
     /// <inheritdoc/>
     public VkResult CreateViSurface(
         nint instanceHandle,
@@ -186,58 +183,16 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
 
-    private unsafe InstancePointers GetPointers(nint instanceHandle) {
-        if (m_pointers.TryGetValue(
+    private InstancePointers GetPointers(nint instanceHandle) {
+        return m_pointers.GetOrAdd(
             key: instanceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetInstanceProcAddr();
-        InstancePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateViSurfaceNN"u8) {
-            pNew.CreateViSurfaceNn = (delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateWaylandSurfaceKHR"u8) {
-            pNew.CreateWaylandSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateWin32SurfaceKHR"u8) {
-            pNew.CreateWin32SurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateXcbSurfaceKHR"u8) {
-            pNew.CreateXcbSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroySurfaceKHR"u8) {
-            pNew.DestroySurfaceKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        m_pointers[instanceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getInstanceProcAddr is not null) {
-                return m_getInstanceProcAddr;
+            valueFactory: static handle => new InstancePointers {
+                CreateViSurfaceNn = (delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateViSurfaceNN"u8),
+                CreateWaylandSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateWaylandSurfaceKHR"u8),
+                CreateWin32SurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateWin32SurfaceKHR"u8),
+                CreateXcbSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateXcbSurfaceKHR"u8),
+                DestroySurfaceKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkDestroySurfaceKHR"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
-
-            m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getInstanceProcAddr;
-        }
+        );
     }
 }

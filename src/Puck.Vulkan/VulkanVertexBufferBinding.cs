@@ -15,12 +15,11 @@ public readonly record struct VulkanVertexBufferBinding {
     /// <param name="offset">The byte offset within the buffer at which vertex data begins.</param>
     /// <exception cref="ArgumentException"><paramref name="bufferHandle"/> is zero.</exception>
     public VulkanVertexBufferBinding(nint bufferHandle, ulong offset = 0) {
-        if (bufferHandle == 0) {
-            throw new ArgumentException(
-                message: "Vulkan vertex-buffer handle must be non-zero.",
-                paramName: nameof(bufferHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: bufferHandle,
+            handleDescription: "vertex-buffer",
+            paramName: nameof(bufferHandle)
+        );
 
         BufferHandle = bufferHandle;
         Offset = offset;

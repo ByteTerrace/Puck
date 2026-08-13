@@ -13,17 +13,17 @@
         "resolved": "2.0.11",
         "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.commands": {
+      "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
-          "Puck.Maths": "[1.0.0, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
       },
-      "puck.maths": {
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
+      "puck.abstractions": {
         "type": "Project"
       }
     }

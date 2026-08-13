@@ -1776,10 +1776,21 @@ internal static class LawRegistry {
     /// <param name="id">The owning law id, named in the exception if resolution fails.</param>
     /// <param name="member">The declared member reference.</param>
     /// <returns>The resolved cover reference.</returns>
+    /// <remarks>A constructed-generic reference carries the assembly version that was current when its row was
+    /// authored; resolution binds any <c>Puck.Maths</c> reference to the loaded assembly regardless of that stamped
+    /// version, so a version change cannot orphan the authored declarations.</remarks>
     /// <exception cref="InvalidOperationException"><paramref name="member"/>'s type does not resolve.</exception>
     private static CoverRef ResolveMember(string id, MemberRef member) {
-        var type = MathsAssembly.GetType(name: member.Type)
-            ?? throw new InvalidOperationException($"law '{id}' names a member of type '{member.Type}', which does not resolve in the Puck.Maths assembly.");
+        var type = Type.GetType(
+            typeName: member.Type,
+            assemblyResolver: static name => {
+                if (name.Name == MathsAssembly.GetName().Name) { return MathsAssembly; }
+
+                try { return Assembly.Load(assemblyRef: name); } catch { return null; }
+            },
+            typeResolver: static (assembly, name, ignoreCase) => (assembly ?? MathsAssembly).GetType(name: name, throwOnError: false, ignoreCase: ignoreCase),
+            throwOnError: false
+        ) ?? throw new InvalidOperationException($"law '{id}' names a member of type '{member.Type}', which does not resolve in the Puck.Maths assembly.");
 
         return new(Type: type, Name: member.Name);
     }

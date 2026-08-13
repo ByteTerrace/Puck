@@ -841,15 +841,14 @@ internal sealed class SdfDebugCommandModule(IRenderNode rootNode) : ICommandModu
     // The debug scene has no separate on/off "mode" to gate on (it configures freely, then `sdf` enters) — only the
     // host gate applies (mirrors WorldScene's single-tier guard).
     private Func<CommandContext, CommandResult> WithScene(Func<SdfDebugScene, string> handler) =>
-        CommandAvailability.WithTarget(
-            getTarget: () => Scene,
-            handler: handler,
-            unavailableMessage: "[sdf: unavailable — the overworld is not the active root]"
-        );
+        _ => ((Scene is { } scene)
+            ? new CommandResult(Output: handler(arg: scene))
+            : new CommandResult(Output: "[sdf: unavailable — the overworld is not the active root]"));
     private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<SdfDebugScene, string[], string> handler) =>
-        CommandAvailability.WithTargetArgs(
-            getTarget: () => Scene,
-            handler: handler,
-            unavailableMessage: "[sdf: unavailable — the overworld is not the active root]"
-        );
+        (_, args) => ((Scene is { } scene)
+            ? new CommandResult(Output: handler(
+                arg1: scene,
+                arg2: args
+            ))
+            : new CommandResult(Output: "[sdf: unavailable — the overworld is not the active root]"));
 }

@@ -83,14 +83,9 @@ public sealed class RowActivatorTracker {
             return RowActivatorTransition.None;
         }
 
-        var released = (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled);
-        var value = (released
-            ? 0f
-            : signal.Value.AsAxis1D);
-
         if (!m_heldTracker!.Set(
             index: index,
-            value: value
+            signal: in signal
         )) {
             return RowActivatorTransition.None;
         }

@@ -26,24 +26,19 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
     private const uint TrueValue = 1;
     private const uint VkStructureTypeSwapchainCreateInfoKhr = 1000001000;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     /// <inheritdoc/>
     public VkResult CreateSwapchain(VulkanSwapchainCreateRequest request, out nint swapchainHandle) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.SurfaceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan surface handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.SurfaceHandle,
+            handleDescription: "surface",
+            paramName: nameof(request)
+        );
 
         var createSwapchain = GetPointers(deviceHandle: request.DeviceHandle).CreateSwapchainKhr;
 
@@ -111,41 +106,14 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateSwapchainKHR"u8) {
-            pNew.CreateSwapchainKhr = (delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroySwapchainKHR"u8) {
-            pNew.DestroySwapchainKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                CreateSwapchainKhr = (delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSwapchainKHR"u8),
+                DestroySwapchainKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySwapchainKHR"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
     private unsafe nint MarshalQueueFamilyIndices(IReadOnlyList<uint> queueFamilyIndices) {
         if (0 == queueFamilyIndices.Count) {

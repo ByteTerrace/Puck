@@ -12,10 +12,10 @@ public static class CarriageSigner {
     /// Signs an envelope. <paramref name="signingAlgorithm"/> drives the actual cryptographic operation and
     /// is independent of <paramref name="header"/>'s own <see cref="CarriageEnvelopeHeader.Algorithm"/>
     /// field — in honest minting code the two are always equal, but keeping them as separate parameters is
-    /// what lets the harness construct the algorithm-confusion attack (an envelope that claims one
+    /// what lets the adversarial tests construct the algorithm-confusion attack (an envelope that claims one
     /// algorithm while a different, correctly-pinned one actually produced the signature).
     /// </summary>
-    /// <param name="codec">The serialisation to sign under. The resulting signature only verifies against this codec's re-encoding.</param>
+    /// <param name="codec">The serialisation that produces the exact signed-portion bytes passed to <paramref name="signingKey"/>.</param>
     /// <param name="header">The context header to sign. Its own <see cref="CarriageEnvelopeHeader.Algorithm"/> is written as-is, never derived from <paramref name="signingAlgorithm"/>.</param>
     /// <param name="payloadKind">Which shape <paramref name="payloadBytes"/> is.</param>
     /// <param name="payloadBytes">The already-encoded payload bytes.</param>
@@ -128,7 +128,7 @@ public static class CarriageSigner {
     /// <param name="notBefore">The issuer-authored window start, Unix seconds.</param>
     /// <param name="notAfter">The issuer-authored window end, Unix seconds.</param>
     /// <param name="audience">The one world this claim is valid at, or <see langword="null"/> for a bearer claim.</param>
-    /// <param name="sequence">The bearer claim's sequence number, or <see langword="null"/> for a directed claim.</param>
+    /// <param name="sequence">The optional replay-protection sequence number. It is required for a bearer claim and may also appear on a directed claim.</param>
     /// <param name="claimBytes">The opaque claim payload.</param>
     /// <param name="declaredAlgorithm">What the header actually declares; defaults to <paramref name="signerAlgorithm"/> (see <see cref="SignKeyBinding"/> for why this can be overridden).</param>
     /// <exception cref="ArgumentException"><paramref name="purpose"/> is <see cref="CarriagePurposes.KeyBinding"/>.</exception>

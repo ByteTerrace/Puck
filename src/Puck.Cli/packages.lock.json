@@ -22,9 +22,9 @@
       },
       "FSharp.Core": {
         "type": "Direct",
-        "requested": "[10.0.110, )",
-        "resolved": "10.0.110",
-        "contentHash": "JZrIO0ZvPlTSuMAgxiXD1zvS3XAKzZF0VfneJ9jiS0dkf9zJQ1zPLFRd1CJdssWW0ymmhX3CuR4VJjgOk42r/A=="
+        "requested": "[10.*, )",
+        "resolved": "10.1.400",
+        "contentHash": "H9wlZ/tWgNp+Q4WQ5aUSi3XOBXrL6z+UkR0PNeyDFyoZR3c3PbtA21B9FqlthrhEwQ6f5AtQV0JLhBBDqjjscw=="
       },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "Direct",
@@ -72,7 +72,7 @@
       },
       "Resharp": {
         "type": "Direct",
-        "requested": "[1.0.5, )",
+        "requested": "[1.*, )",
         "resolved": "1.0.5",
         "contentHash": "2gnMKbuDxRxlnkMkl8w7aC+Nzkc2qxAOZd5FUKjgpgT2S7nOrf2ooYjp0zL7yRk2DUYLDpj+ewH/awxsGlXKsA=="
       },
@@ -314,6 +314,22 @@
         "resolved": "44.0.0",
         "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
       },
+      "ByteTerrace.Puck.Carriage": {
+        "type": "Project",
+        "dependencies": {
+          "System.Formats.Cbor": "[9.*, )"
+        }
+      },
+      "ByteTerrace.Puck.Commands": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
       "puck.abstractions": {
         "type": "Project"
       },
@@ -321,19 +337,6 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
-        }
-      },
-      "puck.carriage": {
-        "type": "Project",
-        "dependencies": {
-          "System.Formats.Cbor": "[9.*, )"
-        }
-      },
-      "puck.commands": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Maths": "[1.0.0, )",
-          "System.CommandLine": "[2.*, )"
         }
       },
       "puck.forge": {
@@ -347,46 +350,43 @@
       "puck.hosting": {
         "type": "Project",
         "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )"
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Abstractions": "[1.0.0, )"
         }
       },
       "puck.humblegamingbrick": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Microsoft.Extensions.DependencyInjection": "[10.*, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )",
           "Puck.Snapshots": "[1.0.0, )"
         }
-      },
-      "puck.maths": {
-        "type": "Project"
       },
       "puck.recording": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )"
         }
       },
       "puck.scripting": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Assets": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )",
           "Wasmtime": "[44.0.0, 44.0.0]"
         }
       },
       "puck.sdfvm": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Assets": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )",
           "Puck.Recording": "[1.0.0, )",
           "Puck.Shaders": "[1.0.0, )",
           "Puck.Text": "[1.0.0, )"
@@ -404,18 +404,18 @@
       "puck.text": {
         "type": "Project",
         "dependencies": {
-          "Puck.Assets": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Assets": "[1.0.0, )"
         }
       },
       "puck.world.data": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Carriage": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Carriage": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )",
-          "Puck.Forge": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )"
+          "Puck.Forge": "[1.0.0, )"
         }
       }
     }

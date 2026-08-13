@@ -36,6 +36,8 @@
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Puck.Analyzers.Tests/Puck.Analyzers.Tests.csproj" />
+        <Project Path="tests/Puck.Carriage.Tests/Puck.Carriage.Tests.csproj" />
+        <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.Dynamics.Spike.Tests/Puck.Dynamics.Spike.Tests.csproj" />
         <Project Path="tests/Puck.Launcher.Tests/Puck.Launcher.Tests.csproj" />
         <Project Path="tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj" />

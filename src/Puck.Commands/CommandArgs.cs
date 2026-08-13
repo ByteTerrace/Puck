@@ -12,12 +12,14 @@ namespace Puck.Commands;
 /// culture, no thousands separators) can never drift between verbs.
 /// </summary>
 public static class CommandArgs {
-    /// <summary>Parses one finite float argument, invariant-culture, allowing a leading sign and a decimal point only
-    /// (no thousands separators, NaN, or infinities).</summary>
+    /// <summary>The single float-parse rule for every console argument — finite, invariant-culture decimal or exponent
+    /// notation with optional leading/trailing whitespace (no thousands separators, NaN, or infinities). Both the
+    /// <see cref="string"/> overload and <see cref="WireArgs.TryFloat"/> route through this span core, so the rule has
+    /// exactly one definition site and cannot drift between the array and zero-copy argument paths.</summary>
     /// <param name="text">The argument token.</param>
     /// <param name="value">The parsed value, or 0 on failure.</param>
     /// <returns>Whether the token parsed.</returns>
-    public static bool TryParseFloat(string text, out float value) =>
+    public static bool TryParseFloat(ReadOnlySpan<char> text, out float value) =>
         (float.TryParse(
         s: text,
         result: out value,
@@ -25,6 +27,15 @@ public static class CommandArgs {
         style: NumberStyles.Float
     ) &&
         float.IsFinite(f: value));
+
+    /// <summary>Parses one finite float argument, invariant-culture (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseFloat(string text, out float value) => TryParseFloat(
+        text: text.AsSpan(),
+        value: out value
+    );
 
     /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
     /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
@@ -53,17 +64,27 @@ public static class CommandArgs {
         return true;
     }
 
-    /// <summary>Parses one integer argument, invariant-culture (plain digit strings — console args are typed, not
-    /// formatted numbers).</summary>
+    /// <summary>The single integer-parse rule for every console argument — invariant-culture plain digit strings
+    /// (console args are typed, not formatted numbers). Both the <see cref="string"/> overload and
+    /// <see cref="WireArgs.TryInt"/> route through this span core.</summary>
     /// <param name="text">The argument token.</param>
     /// <param name="value">The parsed value, or 0 on failure.</param>
     /// <returns>Whether the token parsed.</returns>
-    public static bool TryParseInt(string text, out int value) =>
+    public static bool TryParseInt(ReadOnlySpan<char> text, out int value) =>
         int.TryParse(
         s: text,
         result: out value,
         provider: CultureInfo.InvariantCulture,
         style: NumberStyles.Integer
+    );
+
+    /// <summary>Parses one integer argument, invariant-culture (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseInt(string text, out int value) => TryParseInt(
+        text: text.AsSpan(),
+        value: out value
     );
 
     /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON

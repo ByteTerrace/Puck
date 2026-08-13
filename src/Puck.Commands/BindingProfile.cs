@@ -236,15 +236,12 @@ public static class BindingProfile {
                         paramName: nameof(document)
                     );
 
-                    if (
-                        (chordCommand.Scale is { } scale) &&
-                        (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))
-                    ) {
-                        throw new ArgumentException(
-                            message: $"Chord row {rowIndex} (group \"{row.Group}\") channel {channel.Describe()} scale must be in [-1, 1].",
-                            paramName: nameof(document)
-                        );
-                    }
+                    ValidateChannelScale(
+                        channel: channel,
+                        path: $"Chord row {rowIndex} (group \"{row.Group}\")",
+                        paramName: nameof(document),
+                        scale: chordCommand.Scale
+                    );
                 } else if (string.IsNullOrEmpty(value: chordCommand.Command)) {
                     throw new ArgumentException(
                         message: $"Chord row {rowIndex} (group \"{row.Group}\") must name the command or channel it fires.",
@@ -738,16 +735,19 @@ public static class BindingProfile {
             } else {
                 var command = row.Command!;
                 var isChannel = (command.Channel is not null);
-                var pressValue = (command.Value ?? (isChannel
-                    ? CommandValue.Axis(value: (command.Scale ?? 1f))
-                    : CommandValue.Digital(active: true)));
+                var pressValue = CompiledBindingProfile.PressValue(
+                    channelScale: (isChannel
+                        ? (command.Scale ?? 1f)
+                        : null),
+                    explicitValue: command.Value
+                );
                 var effectiveCommand = (isChannel
                     ? channelCommandName(arg: command.Channel!)
                     : command.Command!);
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
-                    Command: new CompiledBindingProfile.CompiledChordCommand(
+                    Command: new CompiledBindingProfile.CompiledCommandEdge(
                         Command: effectiveCommand,
                         DispatchRelease: command.HoldRelease,
                         PressValue: pressValue,
@@ -798,7 +798,7 @@ public static class BindingProfile {
                 );
             }
 
-            var label = EntryLabel(entry: entry);
+            var label = entry.TriggerLabel;
 
             if ((entry.Command is null) == (entry.Channel is null)) {
                 throw new ArgumentException(
@@ -835,15 +835,12 @@ public static class BindingProfile {
                     paramName: nameof(page)
                 );
 
-                if (
-                    (entry.Scale is { } scale) &&
-                    (!float.IsFinite(f: scale) || (scale < -1f) || (scale > 1f))
-                ) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" entry for {label} channel {channel.Describe()} scale must be in [-1, 1].",
-                        paramName: nameof(page)
-                    );
-                }
+                ValidateChannelScale(
+                    channel: channel,
+                    path: $"Page \"{page.Id}\" entry for {label}",
+                    paramName: nameof(page),
+                    scale: entry.Scale
+                );
 
                 effectiveCommand = channelCommandName(arg: channel);
                 // The scale rides ChannelScale, never Value: Value is an UNCONDITIONAL override (see CommandBinding's
@@ -931,21 +928,24 @@ public static class BindingProfile {
                     );
                 }
 
-                var pressValue = (entry.Value ?? ((channelScale is { } scale)
-                    ? CommandValue.Axis(value: scale)
-                    : CommandValue.Digital(active: true)));
+                var pressValue = CompiledBindingProfile.PressValue(
+                    channelScale: channelScale,
+                    explicitValue: entry.Value
+                );
 
                 activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
                     ActivatorIndex: nextActivatorIndex++,
                     Activator: activator,
-                    Command: effectiveCommand,
-                    // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
-                    // entry whose Dispatch is false, and only the channel verb's handler calls seat.ReleaseChannel —
-                    // without dispatch, a closed gate or completed tap would hold the channel forever. A command
-                    // destination keeps HoldRelease's own default (momentary; no release needed).
-                    DispatchRelease: (channelScale is not null),
-                    PressValue: pressValue,
-                    ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                    Edge: new CompiledBindingProfile.CompiledCommandEdge(
+                        Command: effectiveCommand,
+                        // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
+                        // entry whose Dispatch is false, and only the channel verb's handler calls seat.ReleaseChannel —
+                        // without dispatch, a closed gate or completed tap would hold the channel forever. A command
+                        // destination keeps HoldRelease's own default (momentary; no release needed).
+                        DispatchRelease: (channelScale is not null),
+                        PressValue: pressValue,
+                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                    )
                 ));
 
                 continue;
@@ -1002,15 +1002,6 @@ public static class BindingProfile {
         return (table, activators);
     }
 
-    // A stable label for error messages — an activator entry has no Source, so it identifies by its sequence.
-    private static string EntryLabel(BindingPageEntryDefinition entry) {
-        return (entry.Source ?? ((entry.Activator is { } activator)
-            ? $"activator[{string.Join(
-            separator: ',',
-            values: activator.Sequence
-        )}]"
-            : "(unset)"));
-    }
     private static BindingPageView BuildView(
         HashSet<int> chord,
         string group,
@@ -1030,9 +1021,9 @@ public static class BindingProfile {
                 : entry.Command!),
                 Icon: entry.Icon,
                 Label: entry.Label,
-                // An activator entry has no Source — EntryLabel's synthetic "activator[...]" label stands in, so a
+                // An activator entry has no Source — its synthetic "activator[...]" label stands in, so a
                 // binding-bar consumer never renders a null/blank chip for it.
-                Source: EntryLabel(entry: entry)
+                Source: entry.TriggerLabel
             );
         }
 
@@ -1074,6 +1065,19 @@ public static class BindingProfile {
                     message: $"{path} channel reference is not a declared name variant.",
                     paramName: paramName
                 );
+        }
+    }
+    // A channel destination's scale must be a finite value in [-1, 1]; an omitted scale is the default (+1) and
+    // always valid. The one check both a chord-command channel and a page-entry channel run.
+    private static void ValidateChannelScale(float? scale, ChannelRef channel, string path, string paramName) {
+        if (
+            (scale is { } value) &&
+            (!float.IsFinite(f: value) || (value < -1f) || (value > 1f))
+        ) {
+            throw new ArgumentException(
+                message: $"{path} channel {channel.Describe()} scale must be in [-1, 1].",
+                paramName: paramName
+            );
         }
     }
     private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {

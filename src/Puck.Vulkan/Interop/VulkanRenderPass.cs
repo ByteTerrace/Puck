@@ -27,19 +27,17 @@ public sealed class VulkanRenderPass : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(argument: renderPassApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == renderPassHandle) {
-            throw new ArgumentException(
-                message: "Vulkan render-pass handle must be non-zero.",
-                paramName: nameof(renderPassHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: renderPassHandle,
+            handleDescription: "render-pass",
+            paramName: nameof(renderPassHandle)
+        );
 
         DeviceHandle = deviceHandle;
         Handle = renderPassHandle;

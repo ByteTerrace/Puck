@@ -32,30 +32,38 @@ public sealed class CompiledBindingProfile {
         int[] Chord,
         IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>>? Table,
         BindingPageView? View,
-        CompiledChordCommand? Command,
+        CompiledCommandEdge? Command,
         IReadOnlyList<CompiledActivatorEntry>? Activators = null
     );
 
-    // A command row's precomputed edge payloads: the press fires the command with PressValue, the release clears
-    // it with ReleaseValue (an inactive value of the same kind); DispatchRelease mirrors HoldRelease.
-    internal sealed record CompiledChordCommand(
+    // The one precomputed command-edge payload shape shared by a command chord row and a row activator: the press
+    // fires Command with PressValue, the release clears it with ReleaseValue (an inactive value of the same kind);
+    // DispatchRelease mirrors HoldRelease.
+    internal sealed record CompiledCommandEdge(
         string Command,
         bool DispatchRelease,
         CommandValue PressValue,
         CommandValue ReleaseValue
     );
 
-    // A compiled row activator: the same press/release edge payload shape as CompiledChordCommand, plus the
-    // sequence/mode/timeout a RowActivatorTracker resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across
-    // the whole compiled profile) a slot's per-activator tracker array is keyed by.
+    // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker
+    // resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across the whole compiled profile) a slot's
+    // per-activator tracker array is keyed by.
     internal sealed record CompiledActivatorEntry(
         int ActivatorIndex,
         BindingActivatorDefinition Activator,
-        string Command,
-        bool DispatchRelease,
-        CommandValue PressValue,
-        CommandValue ReleaseValue
+        CompiledCommandEdge Edge
     );
+
+    // The press-edge value a command/channel destination dispatches when it declares no explicit Value: a channel
+    // contributes its declared scale as an Axis, a plain command an active digital. BindingProfile.Compile builds
+    // the real edge from this and BindingVocabularyCheck reads its Kind, so the value-less-press rule has one
+    // definition site instead of a copy hand-synced across the two files.
+    internal static CommandValue PressValue(CommandValue? explicitValue, float? channelScale) {
+        return (explicitValue ?? ((channelScale is { } scale)
+            ? CommandValue.Axis(value: scale)
+            : CommandValue.Digital(active: true)));
+    }
 
     internal CompiledBindingProfile(
         IReadOnlyList<BindingModifierDefinition> modifiers,

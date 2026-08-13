@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>A single, modality-aware command surface for driving deterministic simulations: keyboard, mouse, gamepad, console text, AI, replay, and network input all become the same typed, named command carrying a per-frame value. The fixed-step path captures every modality into ordered per-slot snapshots and applies exactly one snapshot per host-owned tick.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Commands</PackageId>
+        <PackageTags>bindings;commands;determinism;input;simulation</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>

@@ -9,7 +9,6 @@ public readonly partial record struct FixedQ4816 {
                                                      NumberStyles.AllowTrailingWhite |
                                                      NumberStyles.AllowLeadingSign |
                                                      NumberStyles.AllowDecimalPoint;
-    private const int MaximumFormattedLength = 34;
 
     private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(
         fractionBitCount: FractionBitCount
@@ -148,51 +147,13 @@ public readonly partial record struct FixedQ4816 {
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         FixedPointText.ValidateGeneralFormat(format: format);
 
-        var numberFormat = ((provider is null)
-            ? NumberFormatInfo.InvariantInfo
-            : NumberFormatInfo.GetInstance(formatProvider: provider));
-        var separator = numberFormat.NumberDecimalSeparator;
-        var negativeSign = numberFormat.NegativeSign;
-
-        if ((separator == ".") && (negativeSign == "-")) {
-            return TryFormatCore(destination: destination, charsWritten: out charsWritten);
-        }
-
-        Span<char> invariant = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(destination: invariant, charsWritten: out var invariantLength);
-        var body = invariant[..invariantLength];
-        var negative = (body[0] == '-');
-
-        if (negative) {
-            body = body[1..];
-        }
-
-        var pointIndex = body.IndexOf(value: '.');
-        var signLength = (negative ? negativeSign.Length : 0);
-        var requiredLength = ((signLength + body.Length) + ((pointIndex < 0) ? 0 : (separator.Length - 1)));
-
-        if (destination.Length < requiredLength) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        if (negative) {
-            negativeSign.AsSpan().CopyTo(destination: destination);
-        }
-
-        if (pointIndex < 0) {
-            body.CopyTo(destination: destination[signLength..]);
-        } else {
-            body[..pointIndex].CopyTo(destination: destination[signLength..]);
-            separator.AsSpan().CopyTo(destination: destination[(signLength + pointIndex)..]);
-            body[(pointIndex + 1)..].CopyTo(destination: destination[((signLength + pointIndex) + separator.Length)..]);
-        }
-
-        charsWritten = requiredLength;
-
-        return true;
+        return FixedPointText.TryFormatSigned(
+            rawValue: Value,
+            fractionBitCount: FractionBitCount,
+            destination: destination,
+            charsWritten: out charsWritten,
+            provider: provider
+        );
     }
 
     /// <summary>Renders the exact decimal expansion as a string.</summary>
@@ -205,20 +166,7 @@ public readonly partial record struct FixedQ4816 {
     public string ToString(string? format, IFormatProvider? formatProvider) {
         FixedPointText.ValidateGeneralFormat(format: format.AsSpan());
 
-        var invariant = ToString();
-        var numberFormat = ((formatProvider is null)
-            ? NumberFormatInfo.InvariantInfo
-            : NumberFormatInfo.GetInstance(formatProvider: formatProvider));
-        var separator = numberFormat.NumberDecimalSeparator;
-        var negativeSign = numberFormat.NegativeSign;
-
-        if (separator != ".") {
-            invariant = invariant.Replace(oldValue: ".", newValue: separator, comparisonType: StringComparison.Ordinal);
-        }
-
-        return (((negativeSign == "-") || !invariant.StartsWith(value: '-'))
-            ? invariant
-            : string.Concat(str0: negativeSign, str1: invariant.AsSpan(start: 1)));
+        return FixedPointText.SpliceProviderTokens(invariant: ToString(), provider: formatProvider);
     }
 
     static bool INumberBase<FixedQ4816>.TryConvertFromChecked<TOther>(TOther value, out FixedQ4816 result) {
@@ -498,53 +446,5 @@ public readonly partial record struct FixedQ4816 {
         result = default!;
 
         return false;
-    }
-    private bool TryFormatCore(Span<char> destination, out int charsWritten) {
-        var negative = (Value < 0L);
-        var magnitude = FusedArithmetic.RawMagnitude(value: Value);
-        var integerPart = (magnitude >> FractionBitCount);
-        var fraction = magnitude & ((1UL << FractionBitCount) - 1UL);
-        // The exact required length is a pure function of the raw, so the length check runs BEFORE any write and
-        // the caller's destination is genuinely all-or-nothing. Each rendered fraction digit multiplies by ten,
-        // which strips exactly one factor of two from the sixteen the denominator holds, so the expansion
-        // terminates after sixteen minus the fraction's trailing zero count digits.
-        var requiredLength = ((negative ? 1 : 0) + ((int)integerPart.LogarithmBase10()));
-
-        if (fraction != 0UL) {
-            requiredLength += (1 + (FractionBitCount - BitOperations.TrailingZeroCount(value: fraction)));
-        }
-
-        if (destination.Length < requiredLength) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        var position = 0;
-
-        if (negative) {
-            destination[position++] = '-';
-        }
-
-        _ = integerPart.TryFormat(
-            destination: destination[position..],
-            charsWritten: out var integerChars,
-            format: default,
-            provider: CultureInfo.InvariantCulture
-        );
-        position += integerChars;
-
-        if (fraction != 0UL) {
-            // The length check above already reserved the point and every digit, so the write cannot come up short.
-            position += FixedPointText.WriteFractionDigits(
-                fraction: fraction,
-                fractionBitCount: FractionBitCount,
-                destination: destination[position..]
-            );
-        }
-
-        charsWritten = position;
-
-        return true;
     }
 }

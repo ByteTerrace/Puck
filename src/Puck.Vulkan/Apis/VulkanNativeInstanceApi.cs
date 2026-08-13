@@ -41,7 +41,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     private readonly Lock m_syncRoot = new();
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> m_createInstance;
     private unsafe delegate* unmanaged[Cdecl]<nint, nint, void> m_destroyInstance;
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
     private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> m_enumerateInstanceExtensionProperties;
 
     /// <inheritdoc/>
@@ -103,7 +102,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     // pre-1.1 loader (no such export) is effectively extinct, so fall back to 1.3 there too.
     private static uint ProbeApiVersion() {
         try {
-            var enumerateInstanceVersion = (delegate* unmanaged[Cdecl]<uint*, VkResult>)VulkanNativeLibrary.GetExport(functionName: "vkEnumerateInstanceVersion");
+            var enumerateInstanceVersion = (delegate* unmanaged[Cdecl]<uint*, VkResult>)VulkanProcResolver.ResolveOptionalExport(functionName: "vkEnumerateInstanceVersion");
             uint version;
 
             if (
@@ -185,12 +184,10 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return 0;
         }
 
-        var getProcAddr = GetInstanceProcAddr();
-        delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult> createMessenger;
-
-        fixed (byte* functionName = "vkCreateDebugUtilsMessengerEXT"u8) {
-            createMessenger = (delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult>)getProcAddr(instanceHandle, functionName);
-        }
+        var createMessenger = (delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+            functionName: "vkCreateDebugUtilsMessengerEXT"u8,
+            instanceHandle: instanceHandle
+        );
 
         // Best-effort: the entry point is absent unless VK_EXT_debug_utils is enabled and supported.
         if (createMessenger is null) {
@@ -224,12 +221,10 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return;
         }
 
-        var getProcAddr = GetInstanceProcAddr();
-        delegate* unmanaged[Cdecl]<nint, nint, nint, void> destroyMessenger;
-
-        fixed (byte* functionName = "vkDestroyDebugUtilsMessengerEXT"u8) {
-            destroyMessenger = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getProcAddr(instanceHandle, functionName);
-        }
+        var destroyMessenger = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+            functionName: "vkDestroyDebugUtilsMessengerEXT"u8,
+            instanceHandle: instanceHandle
+        );
 
         if (destroyMessenger is null) {
             return;
@@ -257,24 +252,13 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
         return 0;
     }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getInstanceProcAddr is not null) {
-                return m_getInstanceProcAddr;
-            }
-
-            m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
-
-            return m_getInstanceProcAddr;
-        }
-    }
     private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> GetEnumerateInstanceExtensionProperties() {
         lock (m_syncRoot) {
             if (m_enumerateInstanceExtensionProperties is not null) {
                 return m_enumerateInstanceExtensionProperties;
             }
 
-            m_enumerateInstanceExtensionProperties = (delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult>)VulkanNativeLibrary.GetExport(functionName: "vkEnumerateInstanceExtensionProperties");
+            m_enumerateInstanceExtensionProperties = (delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult>)VulkanProcResolver.ResolveExport(functionName: "vkEnumerateInstanceExtensionProperties");
 
             return m_enumerateInstanceExtensionProperties;
         }
@@ -284,7 +268,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             if (m_createInstance is not null) {
                 return m_createInstance;
             }
-            m_createInstance = (delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult>)VulkanNativeLibrary.GetExport(functionName: "vkCreateInstance");
+            m_createInstance = (delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveExport(functionName: "vkCreateInstance");
             return m_createInstance;
         }
     }
@@ -293,7 +277,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             if (m_destroyInstance is not null) {
                 return m_destroyInstance;
             }
-            m_destroyInstance = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanNativeLibrary.GetExport(functionName: "vkDestroyInstance");
+            m_destroyInstance = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveExport(functionName: "vkDestroyInstance");
             return m_destroyInstance;
         }
     }

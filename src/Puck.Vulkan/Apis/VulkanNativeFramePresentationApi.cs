@@ -30,9 +30,6 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     private const uint StructureTypePresentIdKhr = 1000294000;
     private const uint StructureTypeSubmitInfo = 4;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     /// <inheritdoc/>
     public VkResult AcquireNextImage(VulkanFrameAcquireRequest request, out uint imageIndex) {
         ValidateAcquireRequest(request: request);
@@ -50,33 +47,29 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     }
     /// <inheritdoc/>
     public VkResult Present(VulkanPresentRequest request) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.PresentQueueHandle) {
-            throw new ArgumentException(
-                message: "Vulkan present-queue handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.PresentQueueHandle,
+            handleDescription: "present-queue",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.RenderFinishedSemaphoreHandle) {
-            throw new ArgumentException(
-                message: "Vulkan render-finished semaphore handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.RenderFinishedSemaphoreHandle,
+            handleDescription: "render-finished semaphore",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.SwapchainHandle) {
-            throw new ArgumentException(
-                message: "Vulkan swapchain handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.SwapchainHandle,
+            handleDescription: "swapchain",
+            paramName: nameof(request)
+        );
 
         var queuePresent = GetPointers(deviceHandle: request.DeviceHandle).QueuePresentKhr;
         var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
@@ -166,33 +159,29 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     }
     /// <inheritdoc/>
     public VkResult Submit(VulkanFrameSubmitRequest request) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.CommandBufferHandle) {
-            throw new ArgumentException(
-                message: "Vulkan command-buffer handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.CommandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.FenceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan fence handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.FenceHandle,
+            handleDescription: "fence",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.GraphicsQueueHandle) {
-            throw new ArgumentException(
-                message: "Vulkan graphics-queue handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.GraphicsQueueHandle,
+            handleDescription: "graphics-queue",
+            paramName: nameof(request)
+        );
 
         var queueSubmit = GetPointers(deviceHandle: request.DeviceHandle).QueueSubmit;
         var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
@@ -247,33 +236,29 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     }
     /// <inheritdoc/>
     public VkResult Submit(nint deviceHandle, nint graphicsQueueHandle, nint commandBufferHandle, nint fenceHandle) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == graphicsQueueHandle) {
-            throw new ArgumentException(
-                message: "Vulkan graphics-queue handle must be non-zero.",
-                paramName: nameof(graphicsQueueHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: graphicsQueueHandle,
+            handleDescription: "graphics-queue",
+            paramName: nameof(graphicsQueueHandle)
+        );
 
-        if (0 == commandBufferHandle) {
-            throw new ArgumentException(
-                message: "Vulkan command-buffer handle must be non-zero.",
-                paramName: nameof(commandBufferHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
 
-        if (0 == fenceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan fence handle must be non-zero.",
-                paramName: nameof(fenceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: fenceHandle,
+            handleDescription: "fence",
+            paramName: nameof(fenceHandle)
+        );
 
         var queueSubmit = GetPointers(deviceHandle: deviceHandle).QueueSubmit;
         var commandBufferPointer = m_allocator.Alloc(size: IntPtr.Size);
@@ -316,76 +301,36 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkAcquireNextImageKHR"u8) {
-            pNew.AcquireNextImageKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkQueuePresentKHR"u8) {
-            pNew.QueuePresentKhr = (delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkQueueSubmit"u8) {
-            pNew.QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        // Optional: present (VK_KHR_present_wait). vkGetDeviceProcAddr returns null when the extension was not enabled,
-        // which the present-timing path treats as "unsupported" and falls back to open-loop pacing.
-        fixed (byte* pName = "vkWaitForPresentKHR"u8) {
-            pNew.WaitForPresentKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                AcquireNextImageKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAcquireNextImageKHR"u8),
+                QueuePresentKhr = (delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueuePresentKHR"u8),
+                QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueueSubmit"u8),
+                // Optional: present (VK_KHR_present_wait). Resolves to null when the extension was not enabled, which the
+                // present-timing path treats as "unsupported" and falls back to open-loop pacing.
+                WaitForPresentKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkWaitForPresentKHR"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
     private static unsafe void ValidateAcquireRequest(VulkanFrameAcquireRequest request) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.ImageAvailableSemaphoreHandle) {
-            throw new ArgumentException(
-                message: "Vulkan image-available semaphore handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.ImageAvailableSemaphoreHandle,
+            handleDescription: "image-available semaphore",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.SwapchainHandle) {
-            throw new ArgumentException(
-                message: "Vulkan swapchain handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.SwapchainHandle,
+            handleDescription: "swapchain",
+            paramName: nameof(request)
+        );
     }
 }

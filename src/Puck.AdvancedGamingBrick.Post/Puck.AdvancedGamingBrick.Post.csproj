@@ -12,7 +12,6 @@
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <!-- The capture sink, frame-hash observer and PNG encoder the diagnostics render path writes through. -->
         <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
     </ItemGroup>
 </Project>

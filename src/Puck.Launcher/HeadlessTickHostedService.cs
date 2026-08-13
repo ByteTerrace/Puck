@@ -24,7 +24,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly ILogger<HeadlessTickHostedService> m_logger;
     private readonly LauncherOptions m_options;
     private readonly IPrecisionWaiter? m_precisionWaiter;
-    private readonly CommandShell m_shell;
+    private readonly TextCommandSource m_textSource;
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly TerminalControl m_terminal;
@@ -39,7 +39,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         IEnumerable<IFixedStepSimulation> simulations,
         IEnumerable<IPrecisionWaiter> precisionWaiters,
         CommandRegistry registry,
-        CommandShell shell,
+        TextCommandSource textSource,
         TerminalControl terminal
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
@@ -50,7 +50,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(precisionWaiters);
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(shell);
+        ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
 
         m_applicationLifetime = applicationLifetime;
@@ -61,7 +61,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_options = options;
         m_precisionWaiter = precisionWaiters.FirstOrDefault();
         m_registry = registry;
-        m_shell = shell;
+        m_textSource = textSource;
         m_simulation = LauncherHostLoop.SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation), hostDescription: "headless host");
         m_terminal = terminal;
 
@@ -125,7 +125,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 : (long?)null);
 
             while (!stoppingToken.IsCancellationRequested) {
-                m_shell.Collect();
+                m_textSource.Collect();
 
                 // Flush the command pump's buffered result echoes ONCE, right after the drain that produced them (see
                 // BufferedConsoleOutput) — the windowed loop's own precedent.

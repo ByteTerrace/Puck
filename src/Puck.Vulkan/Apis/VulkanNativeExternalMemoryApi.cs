@@ -41,11 +41,8 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
     private const uint StructureTypeMemoryGetWin32HandleInfo = 1000073003;
     private const uint StructureTypeMemoryWin32HandleProperties = 1000073002;
 
-    private readonly Lock m_syncRoot = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
 
     private struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult> CreateImage;
@@ -120,9 +117,12 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 out var memoryProperties
             );
 
-            var memoryTypeIndex = FindMemoryTypeIndex(
-                memoryProperties: memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits & handleProperties.MemoryTypeBits
+            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                memoryProperties: in memoryProperties,
+                memoryTypeBits: memoryRequirements.MemoryTypeBits & handleProperties.MemoryTypeBits,
+                preferredProperties: MemoryPropertyDeviceLocalBit,
+                requireProperties: false,
+                resourceDescription: "the imported external handle"
             );
             var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
                 Image = imageHandle,
@@ -228,9 +228,12 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             // An opaque Win32 handle came from a Vulkan allocation, so its compatible memory types are exactly the
             // image's requirements. vkGetMemoryWin32HandlePropertiesKHR must NOT be called for an opaque handle type
             // (the spec restricts it to foreign/non-opaque handles), unlike the Direct3D 12 import path.
-            var memoryTypeIndex = FindMemoryTypeIndex(
-                memoryProperties: memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits
+            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                memoryProperties: in memoryProperties,
+                memoryTypeBits: memoryRequirements.MemoryTypeBits,
+                preferredProperties: MemoryPropertyDeviceLocalBit,
+                requireProperties: false,
+                resourceDescription: "the imported external handle"
             );
             var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
                 Image = imageHandle,
@@ -337,9 +340,12 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
 
             // Fresh device-local memory: unlike the import path there is no handle-properties query to intersect,
             // so the type is chosen from the image's requirements alone.
-            var memoryTypeIndex = FindMemoryTypeIndex(
-                memoryProperties: memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits
+            var memoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                memoryProperties: in memoryProperties,
+                memoryTypeBits: memoryRequirements.MemoryTypeBits,
+                preferredProperties: MemoryPropertyDeviceLocalBit,
+                requireProperties: false,
+                resourceDescription: "the imported external handle"
             );
             var dedicatedInfo = new VkMemoryDedicatedAllocateInfo {
                 Image = imageHandle,
@@ -436,129 +442,27 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
         }
     }
 
-    private static uint FindMemoryTypeIndex(VkPhysicalDeviceMemoryProperties memoryProperties, uint memoryTypeBits) {
-        for (var index = 0; (index < memoryProperties.MemoryTypeCount); index++) {
-            var supported = (0 != (memoryTypeBits & (1u << index)));
-            var deviceLocal = (0 != (memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: index) & MemoryPropertyDeviceLocalBit));
-
-            if (
-                supported &&
-                deviceLocal
-            ) {
-                return (uint)index;
-            }
-        }
-
-        for (var index = 0; (index < memoryProperties.MemoryTypeCount); index++) {
-            if (0 != (memoryTypeBits & (1u << index))) {
-                return (uint)index;
-            }
-        }
-
-        throw new InvalidOperationException(message: "No Vulkan memory type is compatible with the imported external handle.");
-    }
     private DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var existing
-        )) {
-            return existing;
-        }
-
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pointers = default;
-
-        fixed (byte* name = "vkCreateImage"u8) {
-            pointers.CreateImage = (delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkDestroyImage"u8) {
-            pointers.DestroyImage = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkGetImageMemoryRequirements"u8) {
-            pointers.GetImageMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkAllocateMemory"u8) {
-            pointers.AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkFreeMemory"u8) {
-            pointers.FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkBindImageMemory"u8) {
-            pointers.BindImageMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkGetMemoryWin32HandlePropertiesKHR"u8) {
-            pointers.GetMemoryWin32HandleProperties = (delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-        fixed (byte* name = "vkGetMemoryWin32HandleKHR"u8) {
-            pointers.GetMemoryWin32Handle = (delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)getAddr(
-                deviceHandle,
-                name
-            );
-        }
-
-        m_pointers[deviceHandle] = pointers;
-
-        return pointers;
+            valueFactory: static handle => new DevicePointers {
+                CreateImage = (delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8),
+                DestroyImage = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8),
+                GetImageMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8),
+                AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
+                FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
+                BindImageMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8),
+                GetMemoryWin32HandleProperties = (delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8),
+                GetMemoryWin32Handle = (delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandleKHR"u8),
+            }
+        );
     }
     private InstancePointers GetInstancePointers(nint instanceHandle) {
-        if (m_instancePointers.TryGetValue(
+        return m_instancePointers.GetOrAdd(
             key: instanceHandle,
-            value: out var existing
-        )) {
-            return existing;
-        }
-
-        var getAddr = GetInstanceProcAddr();
-        InstancePointers pointers = default;
-
-        fixed (byte* name = "vkGetPhysicalDeviceMemoryProperties"u8) {
-            pointers.GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)getAddr(
-                instanceHandle,
-                name
-            );
-        }
-
-        m_instancePointers[instanceHandle] = pointers;
-
-        return pointers;
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is null) {
-                m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
             }
-
-            return m_getDeviceProcAddr;
-        }
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getInstanceProcAddr is null) {
-                m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
-            }
-
-            return m_getInstanceProcAddr;
-        }
+        );
     }
 }

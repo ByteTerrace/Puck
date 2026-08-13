@@ -35,9 +35,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     private readonly ConcurrentDictionary<int, string> m_requestedGroups = new();
     private readonly ConcurrentDictionary<int, SlotState> m_slots = new();
     // A Tapped row activator's deferred release (see DrainScheduledEdges) — populated during THIS tick's signal
-    // processing, drained on the NEXT tick's call, before it folds its own due signals. Small and short-lived (at
-    // most one entry per completed tap awaiting its release), so a plain list needs no pooling.
+    // processing, drained on the NEXT tick's call, before it folds its own due signals. The list is retained across
+    // drains; the next scheduled edge clears the already-consumed contents before appending a fresh batch.
     private readonly List<(int Slot, BindingChordEdge Edge)> m_scheduledEdges = [];
+    private bool m_scheduledEdgesPending;
     private volatile CompiledBindingProfile m_profile;
 
     private sealed class SlotState {
@@ -153,15 +154,13 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
 
     /// <inheritdoc/>
     public IReadOnlyList<(int Slot, BindingChordEdge Edge)> DrainScheduledEdges() {
-        if (m_scheduledEdges.Count == 0) {
+        if (!m_scheduledEdgesPending) {
             return [];
         }
 
-        var due = m_scheduledEdges.ToArray();
+        m_scheduledEdgesPending = false;
 
-        m_scheduledEdges.Clear();
-
-        return due;
+        return m_scheduledEdges;
     }
 
     /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
@@ -197,25 +196,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         var state = StateFor(slot: slot);
 
         if (state.GroupIndex != groupIndex) {
-            var previousPageRowIndex = state.PageRowIndex;
-
             state.GroupIndex = groupIndex;
-            state.PageRowIndex = state.Profile.PageRowOf(
-                groupIndex: groupIndex,
-                heldOrder: state.Tracker.HeldOrder
-            );
-
-            // A page flip changes which row activators are IN SCOPE (see ApplyRowActivators) — abandon the
-            // outgoing page's partial activator progress rather than let it complete silently after the player has
-            // moved on.
-            if (previousPageRowIndex != state.PageRowIndex) {
-                ResetActivatorTrackers(
-                    state: state,
-                    pageRowIndex: previousPageRowIndex
-                );
-            }
-
-            Publish(state: state);
+            ResolveAndPublishPage(state: state);
         }
 
         return true;
@@ -266,6 +248,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     /// slot. Silent by design: the router's own held cancellation delivers the release edges.</summary>
     /// <param name="slot">The logical player slot.</param>
     public void Reset(int slot) {
+        _ = m_scheduledEdges.RemoveAll(match: scheduled => scheduled.Slot == slot);
+
+        if (m_scheduledEdges.Count == 0) {
+            m_scheduledEdgesPending = false;
+        }
+
         if (m_slots.TryGetValue(
             key: slot,
             value: out var state
@@ -287,6 +275,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
     /// <summary>Releases every slot this instance currently tracks — the all-slots twin of <see cref="Reset(int)"/>,
     /// wired to OS window focus loss (see <see cref="IInputBindings.ResetAll"/>).</summary>
     public void ResetAll() {
+        m_scheduledEdges.Clear();
+        m_scheduledEdgesPending = false;
+
         foreach (var slot in m_slots.Keys) {
             Reset(slot: slot);
         }
@@ -357,11 +348,17 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             }
         }
 
+        ResolveAndPublishPage(state: state);
+    }
+
+    // Re-resolves and publishes the page selected by the slot's current group and held order. A page flip abandons
+    // the outgoing row activators' partial progress before the new view becomes visible.
+    private static void ResolveAndPublishPage(SlotState state) {
         var previousPageRowIndex = state.PageRowIndex;
 
-        state.PageRowIndex = profile.PageRowOf(
+        state.PageRowIndex = state.Profile.PageRowOf(
             groupIndex: state.GroupIndex,
-            heldOrder: held
+            heldOrder: state.Tracker.HeldOrder
         );
 
         if (previousPageRowIndex != state.PageRowIndex) {
@@ -388,7 +385,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
             return;
         }
 
-        foreach (var activatorEntry in activators) {
+        for (var activatorIndex = 0; (activatorIndex < activators.Count); activatorIndex++) {
+            var activatorEntry = activators[activatorIndex];
             var tracker = (state.ActivatorTrackers[activatorEntry.ActivatorIndex] ??= new RowActivatorTracker(activator: activatorEntry.Activator));
             var transition = tracker.Apply(signal: in signal);
 
@@ -397,10 +395,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
                     AppendEdge(
                         state: state,
                         edge: new BindingChordEdge(
-                            Command: activatorEntry.Command,
+                            Command: activatorEntry.Edge.Command,
                             Dispatch: true,
                             Phase: CommandPhase.Started,
-                            Value: activatorEntry.PressValue
+                            Value: activatorEntry.Edge.PressValue
                         )
                     );
                     break;
@@ -408,10 +406,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
                     AppendEdge(
                         state: state,
                         edge: new BindingChordEdge(
-                            Command: activatorEntry.Command,
-                            Dispatch: activatorEntry.DispatchRelease,
+                            Command: activatorEntry.Edge.Command,
+                            Dispatch: activatorEntry.Edge.DispatchRelease,
                             Phase: CommandPhase.Completed,
-                            Value: activatorEntry.ReleaseValue
+                            Value: activatorEntry.Edge.ReleaseValue
                         )
                     );
                     break;
@@ -419,10 +417,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
                     AppendEdge(
                         state: state,
                         edge: new BindingChordEdge(
-                        Command: activatorEntry.Command,
+                        Command: activatorEntry.Edge.Command,
                         Dispatch: true,
                         Phase: CommandPhase.Started,
-                        Value: activatorEntry.PressValue,
+                        Value: activatorEntry.Edge.PressValue,
                         // MOMENTARY: its own release is already scheduled one tick below — marking THIS edge held
                         // too would make the tick the scheduled release lands on ALSO carry a stale, non-dispatching
                         // re-assertion of the press (harmless to a dispatch-gated reader, but not the clean single-
@@ -430,12 +428,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
                         Momentary: true
                     )
                     );
-                    m_scheduledEdges.Add(item: (slot, new BindingChordEdge(
-                        Command: activatorEntry.Command,
-                        Dispatch: activatorEntry.DispatchRelease,
+                    AppendScheduledEdge(slot: slot, edge: new BindingChordEdge(
+                        Command: activatorEntry.Edge.Command,
+                        Dispatch: activatorEntry.Edge.DispatchRelease,
                         Phase: CommandPhase.Completed,
-                        Value: activatorEntry.ReleaseValue
-                    )));
+                        Value: activatorEntry.Edge.ReleaseValue
+                    ));
                     break;
                 case RowActivatorTransition.None:
                 default:
@@ -461,6 +459,14 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource {
         }
 
         state.PendingEdges[state.PendingEdgeCount++] = edge;
+    }
+    private void AppendScheduledEdge(int slot, in BindingChordEdge edge) {
+        if (!m_scheduledEdgesPending) {
+            m_scheduledEdges.Clear();
+            m_scheduledEdgesPending = true;
+        }
+
+        m_scheduledEdges.Add(item: (slot, edge));
     }
     private static void Publish(SlotState state) {
         state.View = state.Profile.ViewOf(rowIndex: state.PageRowIndex);

@@ -16,8 +16,6 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     private const uint StructureTypeWriteDescriptorSet = 35;
     private const uint StructureTypeWriteDescriptorSetAccelerationStructureKhr = 1000150007;
 
-    private readonly Lock m_syncRoot = new();
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <inheritdoc/>
@@ -228,66 +226,16 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     }
 
     private DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkAllocateDescriptorSets"u8) {
-            pNew.AllocateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateDescriptorPool"u8) {
-            pNew.CreateDescriptorPool = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateSampler"u8) {
-            pNew.CreateSampler = (delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyDescriptorPool"u8) {
-            pNew.DestroyDescriptorPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroySampler"u8) {
-            pNew.DestroySampler = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkUpdateDescriptorSets"u8) {
-            pNew.UpdateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                AllocateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateDescriptorSets"u8),
+                CreateDescriptorPool = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorPool"u8),
+                CreateSampler = (delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSampler"u8),
+                DestroyDescriptorPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorPool"u8),
+                DestroySampler = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySampler"u8),
+                UpdateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUpdateDescriptorSets"u8),
             }
-
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
 }

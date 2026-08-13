@@ -13,17 +13,13 @@ namespace Puck.Vulkan;
 public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi {
     private const uint StructureTypeShaderModuleCreateInfo = 16;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     /// <inheritdoc/>
     public VkResult CreateShaderModule(VulkanShaderModuleCreateRequest request, out nint moduleHandle) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
         var createShaderModule = GetPointers(deviceHandle: request.DeviceHandle).CreateShaderModule;
 
@@ -75,40 +71,13 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateShaderModule"u8) {
-            pNew.CreateShaderModule = (delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyShaderModule"u8) {
-            pNew.DestroyShaderModule = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                CreateShaderModule = (delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateShaderModule"u8),
+                DestroyShaderModule = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyShaderModule"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
 }

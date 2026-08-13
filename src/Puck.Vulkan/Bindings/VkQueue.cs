@@ -14,12 +14,11 @@ public readonly record struct VkQueue {
     /// <param name="familyIndex">The index of the queue family this queue belongs to.</param>
     /// <exception cref="ArgumentException"><paramref name="handle"/> is zero.</exception>
     public VkQueue(nint handle, uint familyIndex) {
-        if (0 == handle) {
-            throw new ArgumentException(
-                message: "Vulkan queue handle must be non-zero.",
-                paramName: nameof(handle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: handle,
+            handleDescription: "queue",
+            paramName: nameof(handle)
+        );
 
         Handle = handle;
         FamilyIndex = familyIndex;

@@ -38,16 +38,9 @@ public sealed class BindingChordTracker {
             return false;
         }
 
-        // The X component covers both shapes a modifier arrives in: an analog trigger's Axis1D magnitude and a
-        // digital button's 0/1. A release/cancel edge always releases, whatever value it carries.
-        var released = (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled);
-        var value = (released
-            ? 0f
-            : signal.Value.AsAxis1D);
-
         _ = m_tracker.Set(
             index: modifierIndex,
-            value: value
+            signal: in signal
         );
 
         return true;

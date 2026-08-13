@@ -18,11 +18,6 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
     private const uint DeviceLocalMemoryPropertyBit = 0x00000001;
     private const uint HostCoherentMemoryPropertyBit = 0x00000004;
     private const uint HostVisibleMemoryPropertyBit = 0x00000002;
-    private const uint StructureTypeMemoryAllocateInfo = 5;
-
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
 
     /// <inheritdoc/>
     public VulkanStorageBufferCreateResult CreateStorageBuffer(VulkanStorageBufferCreateRequest request) {
@@ -47,14 +42,22 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
                 extraUsage: (request.IndirectArgs ? BufferUsageIndirectBufferBit : 0u),
                 size: request.SizeBytes
             );
-            memoryHandle = AllocateAndBindMemory(
+            memoryHandle = VulkanNativeBufferSupport.AllocateAndBindMemory(
                 allocateMemory: allocateMemory,
                 bindBufferMemory: bindBufferMemory,
                 bufferHandle: bufferHandle,
+                deviceHandle: request.DeviceHandle,
                 freeMemory: freeMemory,
                 getBufferMemoryRequirements: getBufferMemoryRequirements,
                 getPhysicalDeviceMemoryProperties: getPhysicalDeviceMemoryProperties,
-                request: request
+                physicalDeviceHandle: request.PhysicalDeviceHandle,
+                // Device-local memory is GPU-only (never host-mapped — the buffer's Map/Write is never called for it);
+                // the default host-visible+coherent memory backs buffers the CPU writes.
+                preferredProperties: (request.DeviceLocal
+                    ? DeviceLocalMemoryPropertyBit
+                    : HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit),
+                requireProperties: true,
+                resourceDescription: "a storage buffer"
             );
             return new VulkanStorageBufferCreateResult(
                 BufferHandle: bufferHandle,
@@ -147,109 +150,28 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateBuffer"u8) {
-            pNew.CreateBuffer = (delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyBuffer"u8) {
-            pNew.DestroyBuffer = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetBufferMemoryRequirements"u8) {
-            pNew.GetBufferMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkAllocateMemory"u8) {
-            pNew.AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkFreeMemory"u8) {
-            pNew.FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkBindBufferMemory"u8) {
-            pNew.BindBufferMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkMapMemory"u8) {
-            pNew.MapMemory = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkUnmapMemory"u8) {
-            pNew.UnmapMemory = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
+            valueFactory: static handle => new DevicePointers {
+                AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
+                BindBufferMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8),
+                CreateBuffer = (delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8),
+                DestroyBuffer = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8),
+                FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
+                GetBufferMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8),
+                MapMemory = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8),
+                UnmapMemory = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8),
+            }
+        );
     }
-    private unsafe InstancePointers GetInstancePointers(nint instanceHandle) {
-        if (m_instancePointers.TryGetValue(
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
             key: instanceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-
-        var getAddr = GetInstanceProcAddr();
-        InstancePointers pNew = default;
-
-        fixed (byte* pName = "vkGetPhysicalDeviceMemoryProperties"u8) {
-            pNew.GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-
-        m_instancePointers[instanceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getInstanceProcAddr is not null) {
-                return m_getInstanceProcAddr;
-            }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
-
-            m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getInstanceProcAddr;
-        }
+        );
     }
     private static unsafe void ValidateCreateRequest(VulkanStorageBufferCreateRequest request) {
         VulkanNativeBufferSupport.ValidateBufferHandles(
@@ -273,78 +195,5 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             size: size,
             usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | extraUsage
         );
-    }
-    private static unsafe nint AllocateAndBindMemory(
-        delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult> allocateMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult> bindBufferMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, nint, void> freeMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void> getBufferMemoryRequirements,
-        delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> getPhysicalDeviceMemoryProperties,
-        VulkanStorageBufferCreateRequest request,
-        nint bufferHandle
-    ) {
-        getBufferMemoryRequirements(
-            request.DeviceHandle,
-            bufferHandle,
-            out var memoryRequirements
-        );
-        getPhysicalDeviceMemoryProperties(
-            request.PhysicalDeviceHandle,
-            out var memoryProperties
-        );
-        var memoryTypeIndex = FindMemoryTypeIndex(
-            memoryProperties: memoryProperties,
-            memoryTypeBits: memoryRequirements.MemoryTypeBits,
-            // Device-local memory is GPU-only (never host-mapped — the buffer's Map/Write is never called for it);
-            // the default host-visible+coherent memory backs buffers the CPU writes.
-            requiredProperties: (request.DeviceLocal
-                ? DeviceLocalMemoryPropertyBit
-                : HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit)
-        );
-        var allocateInfo = new VkMemoryAllocateInfo {
-            AllocationSize = memoryRequirements.Size,
-            MemoryTypeIndex = memoryTypeIndex,
-            SType = StructureTypeMemoryAllocateInfo,
-        };
-        var result = allocateMemory(
-            request.DeviceHandle,
-            in allocateInfo,
-            0,
-            out var memoryHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkAllocateMemory");
-
-        try {
-            bindBufferMemory(
-                request.DeviceHandle,
-                bufferHandle,
-                memoryHandle,
-                0
-            ).ThrowIfFailed(operation: "vkBindBufferMemory");
-            return memoryHandle;
-        } catch {
-            freeMemory(
-                request.DeviceHandle,
-                memoryHandle,
-                0
-            );
-            throw;
-        }
-    }
-    private static unsafe uint FindMemoryTypeIndex(uint memoryTypeBits, uint requiredProperties, VkPhysicalDeviceMemoryProperties memoryProperties) {
-        for (var index = 0; (index < memoryProperties.MemoryTypeCount); index++) {
-            var supported = (0 != (memoryTypeBits & (1u << index)));
-            var hasProperties = ((memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: index) & requiredProperties) == requiredProperties);
-
-            if (
-                supported &&
-                hasProperties
-            ) {
-                return (uint)index;
-            }
-        }
-
-        throw new InvalidOperationException(message: "The Vulkan physical device did not report a compatible host-visible storage-buffer memory type.");
     }
 }

@@ -47,7 +47,8 @@ public interface IChordEdgeSource {
     /// immediately; its release is deferred one tick rather than collapsing into the same
     /// <see cref="CommandSnapshot"/>, which a downstream reader that only samples state between ticks would never
     /// observe — a same-tick press+release is indistinguishable from never having pressed at all).</summary>
-    /// <returns>Every (slot, edge) pair now due, in scheduling order. Empty when nothing is pending.</returns>
+    /// <returns>Every (slot, edge) pair now due, in scheduling order. Empty when nothing is pending. The list may
+    /// alias retained internal storage; consume it before resolving another signal or resetting the bindings.</returns>
     /// <remarks>Called exactly once per tick, by <see cref="InputRouter"/>, before that tick folds its own due
     /// signals — so anything scheduled during this tick's signal processing is, by construction of that call
     /// order, deferred to the next tick's call rather than drained again immediately. No clock or engine-tick

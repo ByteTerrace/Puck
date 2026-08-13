@@ -44,7 +44,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly ISurfacePresenter m_presenter;
     private readonly IRenderNode m_root;
     private readonly IHostContext m_rootHostContext;
-    private readonly CommandShell m_shell;
+    private readonly TextCommandSource m_textSource;
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
@@ -70,7 +70,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         IEnumerable<IFixedStepSimulation> simulations,
         IEnumerable<ISnapshotInputCapture> snapshotInputCaptures,
         CommandRegistry registry,
-        CommandShell shell,
+        TextCommandSource textSource,
         TerminalControl terminal,
         INativeWindowFactory windowFactory
     ) {
@@ -87,7 +87,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(rootHostContext);
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(shell);
+        ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentNullException.ThrowIfNull(windowFactory);
 
@@ -104,7 +104,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         m_root = root;
         m_rootHostContext = rootHostContext;
         m_registry = registry;
-        m_shell = shell;
+        m_textSource = textSource;
         m_simulation = LauncherHostLoop.SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation), hostDescription: "launcher");
         m_snapshotInputCaptures = snapshotInputCaptures.ToArray();
         m_terminal = terminal;
@@ -407,7 +407,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                     hostFrame++;
 
-                    m_shell.Collect();
+                    m_textSource.Collect();
 
                     // Flush the command pump's buffered result echoes ONCE, right after the drain that produced them
                     // (see BufferedConsoleOutput): every line submitted this frame appended to the buffer during Collect,

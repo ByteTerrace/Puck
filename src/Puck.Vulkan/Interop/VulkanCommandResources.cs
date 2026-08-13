@@ -33,19 +33,17 @@ public sealed class VulkanCommandResources : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: commandBufferHandles);
         ArgumentNullException.ThrowIfNull(argument: commandResourcesApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == commandPoolHandle) {
-            throw new ArgumentException(
-                message: "Vulkan command-pool handle must be non-zero.",
-                paramName: nameof(commandPoolHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: commandPoolHandle,
+            handleDescription: "command-pool",
+            paramName: nameof(commandPoolHandle)
+        );
 
         DeviceHandle = deviceHandle;
         CommandBufferHandles = commandBufferHandles;

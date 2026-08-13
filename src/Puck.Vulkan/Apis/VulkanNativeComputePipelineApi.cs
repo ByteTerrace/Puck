@@ -20,9 +20,7 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
     private const uint StructureTypePipelineShaderStageCreateInfo = 18;
 
     private readonly IAllocator m_allocator;
-    private readonly Lock m_syncRoot = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeComputePipelineApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -40,13 +38,17 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         out nint pipelineLayoutHandle,
         out nint pipelineHandle
     ) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(message: "Vulkan logical-device handle must be non-zero.", paramName: nameof(request));
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
-        if (0 == request.ShaderModuleHandle) {
-            throw new ArgumentException(message: "Vulkan compute shader-module handle must be non-zero.", paramName: nameof(request));
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.ShaderModuleHandle,
+            handleDescription: "compute shader-module",
+            paramName: nameof(request)
+        );
 
         var pointers = GetPointers(deviceHandle: request.DeviceHandle);
 
@@ -252,64 +254,16 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
     }
 
     private DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateComputePipelines"u8) {
-            pNew.CreateComputePipelines = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreatePipelineLayout"u8) {
-            pNew.CreatePipelineLayout = (delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateDescriptorSetLayout"u8) {
-            pNew.CreateDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyPipeline"u8) {
-            pNew.DestroyPipeline = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyDescriptorSetLayout"u8) {
-            pNew.DestroyDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyPipelineLayout"u8) {
-            pNew.DestroyPipelineLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                CreateComputePipelines = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateComputePipelines"u8),
+                CreatePipelineLayout = (delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8),
+                CreateDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8),
+                DestroyPipeline = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8),
+                DestroyDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8),
+                DestroyPipelineLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8),
             }
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-            return m_getDeviceProcAddr;
-        }
+        );
     }
 }

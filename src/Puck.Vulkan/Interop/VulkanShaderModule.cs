@@ -33,19 +33,17 @@ public sealed class VulkanShaderModule : IGpuShaderModule {
     ) {
         ArgumentNullException.ThrowIfNull(argument: shaderModuleApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == handle) {
-            throw new ArgumentException(
-                message: "Vulkan shader-module handle must be non-zero.",
-                paramName: nameof(handle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: handle,
+            handleDescription: "shader-module",
+            paramName: nameof(handle)
+        );
 
         Stage = stage;
         DeviceHandle = deviceHandle;

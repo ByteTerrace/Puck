@@ -40,12 +40,11 @@ public sealed class VulkanInstance : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: enabledLayers);
         ArgumentNullException.ThrowIfNull(argument: instanceApi);
 
-        if (0 == instanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(instanceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
 
         Handle = instanceHandle;
         DisplayKind = displayKind;

@@ -6,7 +6,7 @@ namespace Puck.World;
 /// <summary>
 /// Shared player-index parsing for the world verbs: the trailing (or positional) integer index the drive-a-player and
 /// roster-management verbs constrain to <c>[min, max]</c>. A local index-in-range convenience over
-/// <see cref="Puck.Commands.CommandArgs.TryParseInt"/>.
+/// <see cref="Puck.Commands.CommandArgs.TryParseInt(string, out int)"/>.
 /// </summary>
 internal static class WorldArgs {
     /// <summary>Parses an integer index token at <paramref name="at"/> constrained to <c>[min, max]</c>. When

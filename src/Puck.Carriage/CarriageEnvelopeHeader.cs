@@ -13,7 +13,7 @@ namespace Puck.Carriage;
 /// <param name="NotBefore">The issuer-authored validity window start, Unix seconds.</param>
 /// <param name="NotAfter">The issuer-authored validity window end, Unix seconds. The tighter of this and the verifier's own maximum age governs.</param>
 /// <param name="Audience">The one world this claim is valid at, or <see langword="null"/> for a bearer claim that travels anywhere and needs a durable sequence instead.</param>
-/// <param name="Sequence">The bearer claim's per-(issuer, subject) sequence number, or <see langword="null"/> for a directed claim.</param>
+/// <param name="Sequence">The optional replay-protection sequence number. It is required for a bearer claim and may also appear on a directed claim.</param>
 public sealed record CarriageEnvelopeHeader(
     string Domain,
     string? Subject,

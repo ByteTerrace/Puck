@@ -1,0 +1,32 @@
+<Project>
+    <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+        <Authors>ByteTerrace</Authors>
+        <Company>ByteTerrace</Company>
+        <Copyright>Copyright © 2026 ByteTerrace</Copyright>
+                <!--
+            PolyForm Noncommercial 1.0.0 is not on NuGet.org's approved license-EXPRESSION
+            allowlist (that list admits only OSI/FSF-approved licenses), so a
+            <PackageLicenseExpression> would be rejected at push. The license travels as a packed
+            FILE instead: LICENSE.md carries the noncommercial default terms, and LICENSING.md
+            rides along as content so the dual-license / paid-commercial path is discoverable from
+            inside the package.
+        -->
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <IncludeSymbols>true</IncludeSymbols>
+        <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+        <PackageProjectUrl>https://github.com/ByteTerrace/Puck</PackageProjectUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <Product>ByteTerrace.Puck</Product>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>https://github.com/ByteTerrace/Puck.git</RepositoryUrl>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <Version>0.1.0-alpha</Version>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <None Include="$(MSBuildThisFileDirectory)..\LICENSE.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)..\LICENSING.md" Pack="true" PackagePath="\" Visible="false" />
+        <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" Visible="false" />
+    </ItemGroup>
+</Project>

@@ -91,6 +91,24 @@ public sealed class HeldOrderTracker {
         return false;
     }
 
+    /// <summary>Feeds one modifier's <see cref="InputSignal"/> this frame, folding the phase-to-value rule in one
+    /// place: a release/cancel edge releases (value 0) whatever value it carries; otherwise the signal's
+    /// <see cref="CommandValue.AsAxis1D"/> magnitude — an analog trigger's level or a digital button's 0/1 — drives
+    /// the hysteresis band.</summary>
+    /// <param name="index">The modifier's index (0-based, less than the count passed to the constructor).</param>
+    /// <param name="signal">This frame's signal for the modifier.</param>
+    /// <returns><see langword="true"/> when the modifier's held/released membership changed.</returns>
+    public bool Set(int index, in InputSignal signal) {
+        var value = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled)
+            ? 0f
+            : signal.Value.AsAxis1D);
+
+        return Set(
+            index: index,
+            value: value
+        );
+    }
+
     /// <summary>Releases every modifier (focus loss, device disconnect, or a mode reset).</summary>
     public void Reset() {
         Array.Clear(array: m_latched);

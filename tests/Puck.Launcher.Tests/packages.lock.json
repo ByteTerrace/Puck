@@ -451,28 +451,31 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.commands": {
+      "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
-          "Puck.Maths": "[1.0.0, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
+      "puck.abstractions": {
+        "type": "Project"
       },
       "puck.hosting": {
         "type": "Project",
         "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )"
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Abstractions": "[1.0.0, )"
         }
       },
       "puck.input": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )",
           "System.IO.Hashing": "[10.*, )"
         }
       },
@@ -484,9 +487,6 @@
           "Puck.Hosting": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )"
         }
-      },
-      "puck.maths": {
-        "type": "Project"
       }
     }
   }

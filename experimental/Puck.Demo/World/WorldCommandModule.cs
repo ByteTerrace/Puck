@@ -67,19 +67,21 @@ internal sealed class WorldCommandModule(IRenderNode rootNode) : ICommandModule 
         );
     }
 
-    // Wraps a scene-reading handler with the shared availability guard (CommandAvailability). WorldScene has no
-    // on/off mode of its own (unlike CreatorScene/TrackerScene) — the world sculptor is live for the whole run once
-    // the root resolves — so only the host gate applies; no isActive/inactiveMessage is given.
+    // WorldScene has no on/off mode of its own (unlike CreatorScene/TrackerScene) — the world sculptor is live for
+    // the whole run once the root resolves, so these wrappers apply only the host gate.
     private Func<CommandContext, CommandResult> WithScene(Func<WorldScene, Puck.Assets.ContentAddressedStore, string> handler) =>
-        CommandAvailability.WithTarget<WorldScene>(
-            getTarget: () => Scene,
-            handler: scene => handler(arg1: scene, arg2: WorldCommands.OpenStore()),
-            unavailableMessage: "[world: unavailable — the overworld is not the active root]"
-        );
+        _ => ((Scene is { } scene)
+            ? new CommandResult(Output: handler(
+                arg1: scene,
+                arg2: WorldCommands.OpenStore()
+            ))
+            : new CommandResult(Output: "[world: unavailable — the overworld is not the active root]"));
     private Func<CommandContext, string[], CommandResult> WithSceneArgs(Func<WorldScene, Puck.Assets.ContentAddressedStore, string[], string> handler) =>
-        CommandAvailability.WithTargetArgs<WorldScene>(
-            getTarget: () => Scene,
-            handler: (scene, args) => handler(arg1: scene, arg2: WorldCommands.OpenStore(), arg3: args),
-            unavailableMessage: "[world: unavailable — the overworld is not the active root]"
-        );
+        (_, args) => ((Scene is { } scene)
+            ? new CommandResult(Output: handler(
+                arg1: scene,
+                arg2: WorldCommands.OpenStore(),
+                arg3: args
+            ))
+            : new CommandResult(Output: "[world: unavailable — the overworld is not the active root]"));
 }

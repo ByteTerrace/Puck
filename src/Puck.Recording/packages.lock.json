@@ -14,10 +14,10 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
-      "puck.abstractions": {
+      "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.maths": {
+      "puck.abstractions": {
         "type": "Project"
       }
     }

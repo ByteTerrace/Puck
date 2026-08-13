@@ -31,26 +31,23 @@ public sealed class VulkanVertexBuffer : IGpuVertexBuffer {
     ) {
         ArgumentNullException.ThrowIfNull(argument: vertexBufferApi);
 
-        if (0 == bufferHandle) {
-            throw new ArgumentException(
-                message: "Vulkan vertex-buffer handle must be non-zero.",
-                paramName: nameof(bufferHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: bufferHandle,
+            handleDescription: "vertex-buffer",
+            paramName: nameof(bufferHandle)
+        );
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == memoryHandle) {
-            throw new ArgumentException(
-                message: "Vulkan device-memory handle must be non-zero.",
-                paramName: nameof(memoryHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: memoryHandle,
+            handleDescription: "device-memory",
+            paramName: nameof(memoryHandle)
+        );
 
         BufferHandle = bufferHandle;
         DeviceHandle = deviceHandle;

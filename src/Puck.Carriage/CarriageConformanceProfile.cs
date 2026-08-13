@@ -8,17 +8,8 @@ public enum CarriageConformanceExtensions {
     /// <summary>Only the mandatory CBOR and ECDSA-P256-SHA256 base profile.</summary>
     None = 0,
 
-    /// <summary>Accept the shelved fixed-layout-v1 encoding in addition to mandatory CBOR.</summary>
-    FixedLayoutV1 = (1 << 0),
-
-    /// <summary>Accept ECDSA-P256-SHA384 signing keys in addition to mandatory SHA-256.</summary>
-    EcdsaP256Sha384 = (1 << 1),
-
     /// <summary>Accept and structurally validate sealed-carriage payloads.</summary>
-    SealedCarriageV1 = (1 << 2),
-
-    /// <summary>Provide the optional §17 interchange fixture tooling.</summary>
-    InterchangeV1 = (1 << 3),
+    SealedCarriageV1 = (1 << 0),
 }
 
 /// <summary>
@@ -51,11 +42,7 @@ public static class CarriageResourceLimits {
 /// verification. The base profile is CBOR v1 plus ECDSA-P256-SHA256; every other capability is explicit.
 /// </summary>
 public sealed class CarriageConformanceProfile {
-    private const CarriageConformanceExtensions AllKnownExtensions =
-        CarriageConformanceExtensions.FixedLayoutV1 |
-        CarriageConformanceExtensions.EcdsaP256Sha384 |
-        CarriageConformanceExtensions.SealedCarriageV1 |
-        CarriageConformanceExtensions.InterchangeV1;
+    private const CarriageConformanceExtensions AllKnownExtensions = CarriageConformanceExtensions.SealedCarriageV1;
 
     private CarriageConformanceProfile(string name, CarriageConformanceExtensions extensions) {
         Name = name;
@@ -73,9 +60,6 @@ public sealed class CarriageConformanceProfile {
 
     /// <summary>The explicit extensions this verifier has enabled.</summary>
     public CarriageConformanceExtensions Extensions { get; }
-
-    /// <summary>Whether this profile includes the optional interchange tooling contract.</summary>
-    public bool SupportsInterchangeTooling => Includes(extension: CarriageConformanceExtensions.InterchangeV1);
 
     /// <summary>Creates a verifier-side profile by adding named extensions to the mandatory base.</summary>
     /// <param name="extensions">Only defined <see cref="CarriageConformanceExtensions"/> bits are accepted.</param>
@@ -147,8 +131,8 @@ public sealed class CarriageConformanceProfile {
         // Validate only the entry this claim can actually select. A disabled entry for some unrelated peer
         // must not poison every otherwise-valid claim in the trust list.
         var selectedEntry = (
-            trustList.FindDirectSigner(domain: claim.Header.Domain, subject: claim.Header.Subject) ??
-            trustList.FindVouchingRoot(domain: claim.Header.Domain)
+            trustList.FindDirectSignerForVerification(domain: claim.Header.Domain, subject: claim.Header.Subject) ??
+            trustList.FindVouchingRootForVerification(domain: claim.Header.Domain)
         );
 
         if (selectedEntry is not null) {
@@ -183,7 +167,9 @@ public sealed class CarriageConformanceProfile {
             }
         }
 
-        var result = CarriageVerifier.VerifyChain(
+        // Binding targets and the terminal claim payload are profile-checked inside the verifier's
+        // authenticated path, on the payloads it already decoded.
+        return CarriageVerifier.VerifyChain(
             codec: codec,
             claim: claim,
             chain: chain,
@@ -193,23 +179,6 @@ public sealed class CarriageConformanceProfile {
             expectedAudience: expectedAudience,
             profile: this
         );
-
-        if (!result.Verified) {
-            return result;
-        }
-
-        // Binding targets were already decoded and profile-checked inside the authenticated hop before
-        // their keys were used. Only the terminal claim payload remains to inspect here.
-        if (!TryValidateAuthenticatedPayload(
-            codec: codec,
-            envelope: claim,
-            label: "claim",
-            refusal: out refusal
-        )) {
-            return CarriageVerifyResult.Refuse(reason: refusal!);
-        }
-
-        return result;
     }
 
     private bool TryValidateEnvelope(
@@ -224,15 +193,10 @@ public sealed class CarriageConformanceProfile {
             return false;
         }
 
-        int encodedLength;
-
-        try {
-            encodedLength = codec.EncodeEnvelope(envelope: envelope).Length;
-        } catch (Exception exception) {
-            refusal = $"{label} cannot be encoded under codec '{codec.Name}' for its profile resource check: {exception.GetType().Name}: {exception.Message}";
-
-            return false;
-        }
+        // AllowsCodec above pinned the codec, so the complete encoded length is derived from the byte
+        // lengths the envelope already carries rather than paid for with a re-encode. An envelope whose
+        // parsed fields cannot encode at all is still refused, by the verifier's coherence check.
+        var encodedLength = CborCarriageCodec.EncodedEnvelopeLength(envelope: envelope);
 
         if (encodedLength > CarriageResourceLimits.EnvelopeBytes) {
             refusal = $"{label}'s complete encoding is {encodedLength} bytes; profile '{Name}' permits at most {CarriageResourceLimits.EnvelopeBytes}";
@@ -282,39 +246,21 @@ public sealed class CarriageConformanceProfile {
         return true;
     }
 
-    private bool TryValidateAuthenticatedPayload(
-        ICarriageCodec codec,
-        SignedCarriageEnvelope envelope,
-        string label,
-        out string? refusal
-    ) {
-        if (envelope.PayloadKind == CarriagePayloadKind.KeyBinding) {
-            var payload = codec.DecodeKeyBindingPayload(bytes: envelope.PayloadSpan);
+    /// <summary>Checks a verified sealed claim payload's nested profile constraints — called by the verifier on the payload it already decoded, so the sealed payload is decoded once per claim.</summary>
+    internal bool TryValidateSealedPayload(SealedPayload payload, string label, out string? refusal) {
+        if (!AllowsAlgorithm(algorithm: payload.RecipientId.Algorithm)) {
+            refusal = $"{label}'s recipient names algorithm '{payload.RecipientId.Algorithm}', which verifier profile '{Name}' does not enable";
 
-            return TryValidateKeyBindingPayload(payload: payload, label: label, refusal: out refusal);
+            return false;
         }
 
-        if (envelope.PayloadKind == CarriagePayloadKind.Sealed) {
-            var payload = codec.DecodeSealedPayload(bytes: envelope.PayloadSpan);
+        if (payload.EphemeralPublicKeySubjectPublicKeyInfo.Length > CarriageResourceLimits.SubjectPublicKeyInfoBytes) {
+            refusal = $"{label}'s ephemeral SPKI is {payload.EphemeralPublicKeySubjectPublicKeyInfo.Length} bytes; profile '{Name}' permits at most {CarriageResourceLimits.SubjectPublicKeyInfoBytes}";
 
-            if (!AllowsAlgorithm(algorithm: payload.RecipientId.Algorithm)) {
-                refusal = $"{label}'s recipient names algorithm '{payload.RecipientId.Algorithm}', which verifier profile '{Name}' does not enable";
-
-                return false;
-            }
-
-            if (payload.EphemeralPublicKeySubjectPublicKeyInfo.Length > CarriageResourceLimits.SubjectPublicKeyInfoBytes) {
-                refusal = $"{label}'s ephemeral SPKI is {payload.EphemeralPublicKeySubjectPublicKeyInfo.Length} bytes; profile '{Name}' permits at most {CarriageResourceLimits.SubjectPublicKeyInfoBytes}";
-
-                return false;
-            }
-
-            return ValidateKeyIdText(id: payload.RecipientId, label: $"{label}'s recipient", refusal: out refusal);
+            return false;
         }
 
-        refusal = null;
-
-        return true;
+        return ValidateKeyIdText(id: payload.RecipientId, label: $"{label}'s recipient", refusal: out refusal);
     }
 
     /// <summary>Checks an authenticated binding's nested profile constraints before its target key is used for the next cryptographic hop.</summary>
@@ -334,17 +280,11 @@ public sealed class CarriageConformanceProfile {
         return ValidateKeyIdText(id: payload.TargetId, label: $"{label}'s target", refusal: out refusal);
     }
 
-    private bool AllowsCodec(ICarriageCodec codec) =>
-        (codec is CborCarriageCodec) ||
-        ((codec is FixedLayoutCarriageCodec) && Includes(extension: CarriageConformanceExtensions.FixedLayoutV1));
+    private bool AllowsCodec(ICarriageCodec codec) => (codec is CborCarriageCodec);
 
     /// <summary>Whether this receiver-selected profile permits <paramref name="algorithm"/>.</summary>
     public bool AllowsAlgorithm(string algorithm) =>
         string.Equals(a: algorithm, b: CarriageAlgorithms.EcdsaP256Sha256, comparisonType: StringComparison.Ordinal) ||
-        (
-            Includes(extension: CarriageConformanceExtensions.EcdsaP256Sha384) &&
-            string.Equals(a: algorithm, b: CarriageAlgorithms.EcdsaP256Sha384, comparisonType: StringComparison.Ordinal)
-        ) ||
         (
             Includes(extension: CarriageConformanceExtensions.SealedCarriageV1) &&
             string.Equals(a: algorithm, b: CarriageAlgorithms.EcdhP256HkdfSha256Aes256Gcm, comparisonType: StringComparison.Ordinal)
@@ -396,10 +336,7 @@ public sealed class CarriageConformanceProfile {
     }
 
     private static string ExtensionName(CarriageConformanceExtensions extension) => extension switch {
-        CarriageConformanceExtensions.FixedLayoutV1 => "fixed-layout-v1",
-        CarriageConformanceExtensions.EcdsaP256Sha384 => "ecdsa-p256-sha384",
         CarriageConformanceExtensions.SealedCarriageV1 => "sealed-carriage-v1",
-        CarriageConformanceExtensions.InterchangeV1 => "interchange-v1",
         _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(extension),
             actualValue: extension,

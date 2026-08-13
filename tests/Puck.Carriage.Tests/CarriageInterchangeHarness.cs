@@ -1,14 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Puck.Carriage;
+namespace Puck.Carriage.Tests;
 
 /// <summary>
-/// The cross-implementation check (README.md §17): mint a chain to files, or pin a chain
-/// minted by the other implementation and verify it. The envelope is a specification each side implements
-/// independently, and the only thing that proves the specification was written well enough is bytes minted
-/// by one side verifying in the other — so this is a file-in/file-out mode of the harness rather than
-/// anything the engine calls.
+/// A test-only file round trip that mints a seven-file carriage fixture and verifies it again. It exercises
+/// fixture parsing, complete chain verification, sealed-payload opening, and malformed-input reporting; it
+/// is test infrastructure rather than a shipped interchange protocol.
 /// </summary>
 /// <remarks>
 /// <para>The interchange directory holds seven files:</para>
@@ -25,7 +23,7 @@ namespace Puck.Carriage;
 /// the other side can actually unseal; see the warning below.</item>
 /// <item><c>manifest.txt</c> — <c>key=value</c> lines naming what the verifier must expect: domain,
 /// subject, algorithm, purpose, audience, sequence, replay horizon, and the sealed claim's purpose and expected
-/// plaintext. The format is fixed by §17 — UTF-8, LF-terminated, first <c>=</c> splits, three backslash
+/// plaintext. The fixture format is UTF-8, LF-terminated, first <c>=</c> splits, three backslash
 /// escapes, unknown keys ignored.</item>
 /// </list>
 /// <para><b>Why the sealed artifact has to exist.</b> Sealed carriage's key derivation
@@ -43,10 +41,10 @@ namespace Puck.Carriage;
 /// <para><b>Neither verb may crash.</b> Every file in the directory is input, and input that is missing,
 /// truncated, corrupt, or simply not what it claims to be is a failed check with a name and a non-zero exit
 /// — never an unhandled exception. A cross-checking implementer reading a stack trace cannot tell "your
-/// bytes are bad" from "your tool fell over", and those are different verdicts (§17, the tool protocol).
+/// bytes are bad" from "your tool fell over", and those are different verdicts under this harness contract.
 /// That is why every step here runs through <see cref="TryStep{T}"/>.</para>
 /// </remarks>
-public static class CarriageInterchange {
+internal static class CarriageInterchangeHarness {
     private const string BindingOneFileName = "binding-1.envelope";
     private const string BindingTwoFileName = "binding-2.envelope";
     private const string ClaimFileName = "claim.envelope";
@@ -55,10 +53,10 @@ public static class CarriageInterchange {
     private const string RootKeyFileName = "root.spki";
     private const string SealedFileName = "sealed.envelope";
     private static readonly CarriageConformanceProfile InterchangeProfile = CarriageConformanceProfile.Base.WithExtensions(
-        extensions: CarriageConformanceExtensions.EcdsaP256Sha384 | CarriageConformanceExtensions.SealedCarriageV1 | CarriageConformanceExtensions.InterchangeV1
+        extensions: CarriageConformanceExtensions.SealedCarriageV1
     );
 
-    /// <summary>The manifest keys §17 requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
+    /// <summary>The manifest keys this fixture requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
     private static readonly string[] RequiredManifestKeys = [
         "algorithm",
         "audience",
@@ -83,7 +81,7 @@ public static class CarriageInterchange {
     /// <summary>The purpose the interchange sealed claim is minted with.</summary>
     public const string InterchangeSealedPurpose = "carriage.cross-check.sealed";
 
-    /// <summary>The audience both interchange envelopes are directed at — §17 fixes the sealed envelope's audience as the claim's, so the manifest carries one value for both.</summary>
+    /// <summary>The audience both fixture envelopes are directed at. The sealed envelope uses the claim's audience, so the manifest carries one value for both.</summary>
     public const string InterchangeAudience = "world:interchange";
 
     /// <summary>The sequence the interchange claim carries. The fixture verifier inspects the returned commit requirement but deliberately does not mutate production replay state.</summary>
@@ -185,7 +183,7 @@ public static class CarriageInterchange {
         // The sealed claim. Its header is built FIRST because the header's own encoding is the AEAD
         // associated data (§14), so the ciphertext cannot exist until the context it is bound to does; then
         // the same header is signed, which is what names the sender (sealing alone proves nobody). Its
-        // audience is the claim's — §17 fixes that rather than giving the fixture a second knob — and it
+        // audience is the claim's rather than giving the fixture a second knob, and it
         // carries NO sequence, so re-verifying the same file against a durable mark store stays legal.
         var sealedHeader = new CarriageEnvelopeHeader(
             Domain: rootId.Domain,
@@ -291,9 +289,8 @@ public static class CarriageInterchange {
     /// <returns>0 when every check held, 1 when at least one failed.</returns>
     /// <remarks>
     /// This method never propagates an exception, whatever is in <paramref name="directory"/>. A corrupt
-    /// <c>claim.envelope</c> used to escape as an unhandled <see cref="FormatException"/> and terminate the
-    /// process, which reports the fixture as broken by crashing — the one thing §17's tool protocol forbids,
-    /// because it is indistinguishable from the tool itself being broken.
+    /// <c>claim.envelope</c> is reported as a failed check rather than escaping as an unhandled
+    /// <see cref="FormatException"/>, because a crash is indistinguishable from the harness itself being broken.
     /// </remarks>
     public static int Verify(string directory) {
         try {
@@ -331,7 +328,7 @@ public static class CarriageInterchange {
             Console.WriteLine(value: $"[FAIL] cross-verify manifest: {ManifestFileName} is missing (or leaves empty) the required key(s) {string.Join(
                 separator: ", ",
                 values: missingKeys
-            )} — §17 requires all {RequiredManifestKeys.Length}");
+            )} — the fixture requires all {RequiredManifestKeys.Length}");
 
             return 1;
         }
@@ -445,10 +442,10 @@ public static class CarriageInterchange {
             return 1;
         }
 
-        // Reading the clock here is legitimate where it would not be in the engine: this is a file-in
-        // file-out developer tool whose admission boundary IS the process invocation, so there is no tape
-        // to replay and no tick to be inside (README.md §9). Verification is pure; the fixture checks the
-        // replay-commit requirement rather than committing it to production state.
+        // Reading the clock here is legitimate where it would not be in the engine: this test-only fixture
+        // is minted and consumed outside simulation state, so there is no tape to replay and no tick to be
+        // inside (README.md §9). Verification is pure; the fixture checks the replay-commit requirement
+        // rather than committing it to production state.
         CarriageVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
             InterchangeProfile.VerifyChain(
             codec: codec,
@@ -694,7 +691,7 @@ public static class CarriageInterchange {
             return 1;
         }
 
-        // §17 fixes the sealed envelope's audience and sequence rather than adding manifest keys for them:
+        // The fixture fixes the sealed envelope's audience and sequence rather than adding manifest keys for them:
         // an unsigned hint about a signed field is a second source of truth, and a sequence here would make
         // the SECOND verification of the same file a legitimate replay refusal.
         if (
@@ -705,7 +702,7 @@ public static class CarriageInterchange {
         ) ||
             (sealedClaim.Header.Sequence is not null)
         ) {
-            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed envelope carries audience '{(sealedClaim.Header.Audience ?? "(none)")}' and sequence '{(sealedClaim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}'; §17 fixes them as the manifest's audience '{manifest["audience"]}' and no sequence");
+            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed envelope carries audience '{(sealedClaim.Header.Audience ?? "(none)")}' and sequence '{(sealedClaim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}'; the fixture requires the manifest's audience '{manifest["audience"]}' and no sequence");
 
             return 1;
         }
@@ -791,7 +788,7 @@ public static class CarriageInterchange {
     /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
     /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
     /// that arrived from somewhere else, so there is no exception type it could raise that is a better
-    /// outcome than a reported failure. §17's tool protocol makes this normative — a crash and a refusal are
+    /// outcome than a reported failure. The harness contract distinguishes a crash from a refusal — they are
     /// different verdicts, and a cross-checking implementer cannot tell them apart from a stack trace.
     /// </summary>
     /// <typeparam name="T">What the step produces.</typeparam>
@@ -871,7 +868,7 @@ public static class CarriageInterchange {
     private static string Describe(Exception exception) => $"{exception.GetType().Name}: {exception.Message}";
 
     /// <summary>
-    /// Writes the manifest in the format §17 fixes: UTF-8 with no byte-order mark, one <c>key=value</c> per
+    /// Writes the fixture manifest as UTF-8 with no byte-order mark, one <c>key=value</c> per
     /// line, LF line terminators including a final one, and the three backslash escapes applied to values.
     /// LF rather than the platform's newline, because a fixture crossing between implementations is bytes
     /// and the platform it was minted on is not part of the contract.
@@ -893,7 +890,7 @@ public static class CarriageInterchange {
     }
 
     /// <summary>
-    /// Reads the manifest by §17's rules. Empty lines are ignored; every other line must hold a
+    /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
     /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
     /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
     /// which is a fixture that quietly checks less than it claims.
@@ -945,7 +942,7 @@ public static class CarriageInterchange {
         return manifest;
     }
 
-    /// <summary>Applies §17's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
+    /// <summary>Applies the fixture's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
     /// <param name="value">The raw value.</param>
     private static string EscapeManifestValue(string value) {
         var builder = new StringBuilder(capacity: value.Length);

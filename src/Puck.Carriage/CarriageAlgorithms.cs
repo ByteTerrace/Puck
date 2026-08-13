@@ -18,7 +18,7 @@ public enum CarriageKeyRole {
 /// pinned key's algorithm — never from an untrusted envelope field.
 /// </summary>
 /// <param name="Name">The wire string, e.g. <c>ecdsa-p256-sha256</c>. Curve and hash are both named because a
-/// P-256 key can sign under SHA-256 or SHA-384: curve alone does not pin the scheme.</param>
+/// P-256 key can sign under more than one digest: curve alone does not pin the scheme.</param>
 /// <param name="Role">Whether this algorithm signs or seals.</param>
 /// <param name="Curve">The EC curve every key under this algorithm name uses.</param>
 /// <param name="SignatureHash">The hash algorithm ECDSA signs over. <see langword="null"/> for sealing algorithms.</param>
@@ -35,11 +35,8 @@ public readonly record struct CarriageAlgorithmDescriptor(
 /// is a lookup key into this table, never an instruction the message gets to invent.
 /// </summary>
 public static class CarriageAlgorithms {
-    /// <summary>P-256 ECDSA, signing over a SHA-256 digest — the default signing algorithm.</summary>
+    /// <summary>P-256 ECDSA, signing over a SHA-256 digest — the mandatory signing algorithm.</summary>
     public const string EcdsaP256Sha256 = "ecdsa-p256-sha256";
-
-    /// <summary>P-256 ECDSA, signing over a SHA-384 digest.</summary>
-    public const string EcdsaP256Sha384 = "ecdsa-p256-sha384";
 
     /// <summary>P-256 ECDH key agreement, HKDF-SHA256 key derivation, AES-256-GCM AEAD — the sealing algorithm.</summary>
     public const string EcdhP256HkdfSha256Aes256Gcm = "ecdh-p256-hkdf-sha256-aes256gcm";
@@ -67,11 +64,6 @@ public static class CarriageAlgorithms {
             hash: HashAlgorithmName.SHA256
         );
         Add(
-            name: EcdsaP256Sha384,
-            role: CarriageKeyRole.Signing,
-            hash: HashAlgorithmName.SHA384
-        );
-        Add(
             name: EcdhP256HkdfSha256Aes256Gcm,
             role: CarriageKeyRole.Sealing,
             hash: null
@@ -92,7 +84,7 @@ public static class CarriageAlgorithms {
             return descriptor;
         }
 
-        throw new NotSupportedException(message: $"'{algorithm}' is not a carriage algorithm this prototype understands.");
+        throw new NotSupportedException(message: $"'{algorithm}' is not a carriage algorithm.");
     }
 
     /// <summary>Determines whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
@@ -105,7 +97,9 @@ public static class CarriageAlgorithms {
 /// so every key imported from bytes has the two compared before it is used, or a name promising P-256 would
 /// happily verify against a key on some other curve (the invalid-curve family of attacks). Named curves do
 /// not compare by value across platforms — the same curve arrives as an OID on one and a friendly name on
-/// another — so identity is decided by an alias set rather than by <see cref="ECCurve"/> equality.
+/// another — so identity is decided by a per-curve alias set rather than by <see cref="ECCurve"/> equality.
+/// A curve named by a <see cref="CarriageAlgorithmDescriptor"/> must have an alias set here, or every key
+/// under that algorithm is refused.
 /// </summary>
 public static class CarriageCurves {
     private static readonly HashSet<string> NistP256Aliases = new(comparer: StringComparer.OrdinalIgnoreCase) {
@@ -116,6 +110,8 @@ public static class CarriageCurves {
         "prime256v1",
         "secp256r1",
     };
+
+    private static readonly HashSet<string>[] AliasSets = [NistP256Aliases];
 
     /// <summary>Determines whether <paramref name="key"/>'s curve is the one <paramref name="expected"/> names.</summary>
     /// <param name="key">The curve reported by an imported key's exported parameters.</param>
@@ -129,20 +125,30 @@ public static class CarriageCurves {
             return false;
         }
 
-        var keyIsP256 = IsNistP256(curve: key);
+        var aliases = FindAliasSet(curve: expected);
 
         return (
-            (keyIsP256 == IsNistP256(curve: expected)) &&
-            keyIsP256
+            (aliases is not null) &&
+            Contains(set: aliases, curve: key)
         );
     }
 
     /// <summary>Determines whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
     /// <param name="curve">The curve to test.</param>
     public static bool IsNistP256(ECCurve curve) =>
-        (curve.IsNamed &&
-        (
-            NistP256Aliases.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
-            NistP256Aliases.Contains(item: (curve.Oid.FriendlyName ?? string.Empty))
-        ));
+        (curve.IsNamed && Contains(set: NistP256Aliases, curve: curve));
+
+    private static HashSet<string>? FindAliasSet(ECCurve curve) {
+        foreach (var set in AliasSets) {
+            if (Contains(set: set, curve: curve)) {
+                return set;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Contains(HashSet<string> set, ECCurve curve) =>
+        (set.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
+        set.Contains(item: (curve.Oid.FriendlyName ?? string.Empty)));
 }

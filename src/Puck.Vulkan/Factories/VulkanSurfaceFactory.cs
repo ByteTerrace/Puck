@@ -133,12 +133,11 @@ public sealed class VulkanSurfaceFactory : IVulkanSurfaceFactory {
         nint instanceHandle,
         NativeSurfaceBinding binding
     ) {
-        if (0 == instanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(instanceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
 
         return binding.DisplayKind switch {
             NativeDisplayKind.Vi => CreateViSurface(

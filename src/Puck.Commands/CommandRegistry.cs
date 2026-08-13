@@ -335,11 +335,27 @@ public sealed class CommandRegistry {
     /// <returns>An active value for digital and axis kinds; an inactive value for kinds that have no meaningful impulse.</returns>
     private static CommandValue ImpulseValue(CommandValueKind kind) {
         return kind switch {
-            CommandValueKind.Digital => CommandValue.Digital(active: true),
+            CommandValueKind.Digital => DigitalImpulse,
             CommandValueKind.Axis1D => CommandValue.Axis(value: 1f),
             CommandValueKind.Axis2D => CommandValue.Axis(value: Vector2.One),
             _ => CommandValue.Inactive(kind: kind),
         };
+    }
+
+    /// <summary>Gets a command line's first token under the same <see cref="char.IsWhiteSpace(char)"/> rule the full
+    /// fast-path tokenizer uses.</summary>
+    /// <param name="line">The command line.</param>
+    /// <returns>The leading verb, or an empty span for a blank line.</returns>
+    private static ReadOnlySpan<char> LeadingVerb(ReadOnlySpan<char> line) {
+        line = line.TrimStart();
+
+        for (var index = 0; (index < line.Length); index++) {
+            if (char.IsWhiteSpace(c: line[index])) {
+                return line[..index];
+            }
+        }
+
+        return line;
     }
 
     /// <summary>Splits a line into whitespace-delimited token ranges without allocating. A token is a maximal run of
@@ -399,9 +415,7 @@ public sealed class CommandRegistry {
         }
 
         if (mode.Length > 1) {
-            return new CommandResult(Output: "[wire.ack: expected one of on | quiet]") {
-                IsError = true,
-            };
+            return CommandResult.Error(output: "[wire.ack: expected one of on | quiet]");
         }
 
         switch (mode[0]) {
@@ -414,9 +428,7 @@ public sealed class CommandRegistry {
 
                 return new CommandResult(Output: "[wire.ack: quiet]");
             default:
-                return new CommandResult(Output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]") {
-                    IsError = true,
-                };
+                return CommandResult.Error(output: $"[wire.ack: unknown mode '{mode[0]}' — expected on | quiet]");
         }
     }
 
@@ -425,7 +437,7 @@ public sealed class CommandRegistry {
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(string[] mode) {
         if (mode.Length > 1) {
-            return Reject(text: "[wire.errors: expected no argument or `reset`]");
+            return CommandResult.Error(output: "[wire.errors: expected no argument or `reset`]");
         }
 
         if (
@@ -436,7 +448,7 @@ public sealed class CommandRegistry {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            return Reject(text: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
+            return CommandResult.Error(output: $"[wire.errors: unknown mode '{mode[0]}' — expected `reset`]");
         }
 
         // Read the count BEFORE `reset` zeroes it, and do not let this verb's own report count as a rejection.
@@ -460,12 +472,6 @@ public sealed class CommandRegistry {
     public void NoteDeferredRejection() {
         m_rejections++;
     }
-
-    // A refused submission. Counting happens once, in Submit, over every error result from either dispatch path, so
-    // this helper only shapes the result — nothing here double-counts.
-    private static CommandResult Reject(string text) => new(Output: text) {
-        IsError = true,
-    };
 
     /// <summary>Builds the help listing of every registered command and its description, ordered by name.</summary>
     /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
@@ -536,16 +542,11 @@ public sealed class CommandRegistry {
     /// unresolved or <see cref="CommandRouting.Immediate"/> line reads applied state, so it must wait.</summary>
     /// <param name="line">The command line whose leading verb token is classified.</param>
     internal bool RoutesToSimulation(string line) {
-        var content = line.AsSpan().Trim();
+        var verb = LeadingVerb(line: line);
 
-        if (content.IsEmpty) {
+        if (verb.IsEmpty) {
             return false;
         }
-
-        var separator = content.IndexOfAny(values: " \t");
-        var verb = ((separator < 0)
-            ? content
-            : content[..separator]);
 
         return (
             m_byNameAlt.TryGetValue(
@@ -587,10 +588,9 @@ public sealed class CommandRegistry {
                             completesTextSubmission: entry.CompletesTextSubmission
                         );
                     } else if (
-                        entry.CompletesTextSubmission &&
-                        (m_pendingSimulationSubmissions != 0)
+                        entry.CompletesTextSubmission
                     ) {
-                        m_pendingSimulationSubmissions--;
+                        ReleaseSubmissionBarrier(completesTextSubmission: true);
                     }
 
                     continue;
@@ -679,14 +679,28 @@ public sealed class CommandRegistry {
                 m_rejections++;
             }
         } finally {
-            if (
-                completesTextSubmission &&
-                (m_pendingSimulationSubmissions != 0)
-            ) {
-                m_pendingSimulationSubmissions--;
-            }
+            ReleaseSubmissionBarrier(completesTextSubmission: completesTextSubmission);
         }
     }
+    // Releases one submitted simulation line's FIFO barrier exactly once. The defensive non-zero guard keeps a
+    // malformed or repeated completion from underflowing and blocking every later immediate read-back forever.
+    private void ReleaseSubmissionBarrier(bool completesTextSubmission) {
+        if (
+            completesTextSubmission &&
+            (m_pendingSimulationSubmissions != 0)
+        ) {
+            m_pendingSimulationSubmissions--;
+        }
+    }
+    // The one definition of the wire.ack-quiet suppression rule, applied on every text dispatch path (fast, full
+    // parse, snapshot re-dispatch): in quiet mode a successful acknowledgement-only result carries no answer, so drop
+    // it to None. An error (IsError) and an answer-bearing verb's output are never suppressed.
+    private CommandResult SuppressAckIfQuiet(CommandResult result, CommandDefinition definition) {
+        return ((m_acksQuiet && definition.AcknowledgementOnly && !result.IsError)
+            ? CommandResult.None
+            : result);
+    }
+
     /// <summary>Runs a command's handler and notifies every observer of the dispatch.</summary>
     /// <param name="context">The invocation state passed to the handler.</param>
     /// <param name="definition">The command being dispatched.</param>
@@ -695,13 +709,11 @@ public sealed class CommandRegistry {
     private CommandResult Dispatch(in CommandContext context, CommandDefinition definition, bool suppressWireAck = false) {
         var result = definition.Handler(arg: context);
 
-        if (
-            suppressWireAck &&
-            m_acksQuiet &&
-            definition.AcknowledgementOnly &&
-            !result.IsError
-        ) {
-            result = CommandResult.None;
+        if (suppressWireAck) {
+            result = SuppressAckIfQuiet(
+                definition: definition,
+                result: result
+            );
         }
 
         if (m_observers.Length != 0) {
@@ -794,11 +806,13 @@ public sealed class CommandRegistry {
             if (
                 (tokenCount > 0) &&
                 m_fastPathAlt.TryGetValue(
-                key: line.AsSpan(range: tokenRanges[0]),
+                key: LeadingVerb(line: line),
                 value: out var fast
             )
             ) {
                 var argRanges = tokenRanges[1..tokenCount];
+                // The handler reads WireArgs.Echo to skip building a success echo it would only be dropped; the final
+                // suppression itself is SuppressAckIfQuiet's, so the rule stays defined in exactly one place.
                 var quiet = (m_acksQuiet && fast.AcknowledgementOnly);
                 var result = fast.WireArgsHandler!(
                     arg1: m_fastContext,
@@ -809,19 +823,17 @@ public sealed class CommandRegistry {
                     )
                 );
 
-                // Quiet mode drops a SUCCESSFUL acknowledgement-only echo (the handler already skipped building it via
-                // WireArgs.Echo, so this is the contract backstop): an answer-bearing verb's output and every error
-                // (IsError) always survive, so a scripted run still reads back poses and still sees its failures.
-                return ((quiet && !result.IsError)
-                    ? CommandResult.None
-                    : result);
+                return SuppressAckIfQuiet(
+                    definition: fast,
+                    result: result
+                );
             }
         }
 
         var parseResult = m_root.Parse(commandLine: line);
 
         if (parseResult.Errors.Count > 0) {
-            return Reject(text: $"[wire.reject: {string.Join(
+            return CommandResult.Error(output: $"[wire.reject: {string.Join(
                 separator: " | ",
                 values: parseResult.Errors.Select(selector: error => error.Message)
             )}]");
@@ -888,14 +900,14 @@ public sealed class CommandRegistry {
                 value: value
             ));
 
-            // Apply the same quiet-mode ack suppression the fast path does, so a quoted or many-token wire line (which
-            // takes this full parse) obeys wire.ack identically: a successful acknowledgement-only echo is dropped,
-            // while an answer-bearing verb's output and every error survive.
-            return ((m_acksQuiet && definition.AcknowledgementOnly && !result.IsError)
-                ? CommandResult.None
-                : result);
+            // A quoted or many-token wire line takes this full parse; it obeys wire.ack through the same rule the fast
+            // path does.
+            return SuppressAckIfQuiet(
+                definition: definition,
+                result: result
+            );
         }
 
-        return Reject(text: $"[wire.reject: unknown command '{line}']");
+        return CommandResult.Error(output: $"[wire.reject: unknown command '{line}']");
     }
 }

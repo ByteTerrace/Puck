@@ -40,12 +40,11 @@ public sealed class VulkanLogicalDevice : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDeviceApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
         Handle = deviceHandle;
         PhysicalDevice = physicalDevice;

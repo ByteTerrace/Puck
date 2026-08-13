@@ -36,26 +36,23 @@ public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     ) {
         ArgumentNullException.ThrowIfNull(argument: graphicsPipelineApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == layoutHandle) {
-            throw new ArgumentException(
-                message: "Vulkan pipeline-layout handle must be non-zero.",
-                paramName: nameof(layoutHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: layoutHandle,
+            handleDescription: "pipeline-layout",
+            paramName: nameof(layoutHandle)
+        );
 
-        if (0 == pipelineHandle) {
-            throw new ArgumentException(
-                message: "Vulkan graphics-pipeline handle must be non-zero.",
-                paramName: nameof(pipelineHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: pipelineHandle,
+            handleDescription: "graphics-pipeline",
+            paramName: nameof(pipelineHandle)
+        );
 
         DeviceHandle = deviceHandle;
         DescriptorSetLayoutHandle = descriptorSetLayoutHandle;

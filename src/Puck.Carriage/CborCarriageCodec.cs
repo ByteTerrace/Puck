@@ -3,14 +3,15 @@ using System.Formats.Cbor;
 namespace Puck.Carriage;
 
 /// <summary>
-/// The CBOR <see cref="ICarriageCodec"/>, built on <see cref="System.Formats.Cbor"/> (inbox in the BCL — no
-/// package reference needed). A full envelope is a definite-length 2-element CBOR array
+/// The CBOR <see cref="ICarriageCodec"/>, built on <see cref="System.Formats.Cbor"/> (Microsoft-authored,
+/// but inbox only through the ASP.NET Core shared framework — hence the standalone package reference in
+/// this project's csproj). A full envelope is a definite-length 2-element CBOR array
 /// <c>[signedPortion: bstr, signature: bstr]</c>; wrapping the signed portion as an opaque byte string
 /// means the exact bytes that were signed travel verbatim and never need re-deriving by re-encoding a
 /// decoded model (definite-length CBOR arrays are canonical for a fixed field sequence, so re-encoding
 /// would reproduce the same bytes regardless, but the wrapped form makes that a structural guarantee rather
 /// than an encoder-implementation detail). The signed portion itself is a definite-length 11-element array,
-/// same field order as <see cref="FixedLayoutCarriageCodec"/>:
+/// in field order:
 /// format version, domain, subject, algorithm, purpose, not-before, not-after, audience, sequence, payload
 /// kind, payload. A key binding payload is a 5-element array (target domain, target subject, target
 /// algorithm, target key-hash, public key SPKI); a sealed payload is an 8-element array (recipient domain,
@@ -222,6 +223,10 @@ public sealed class CborCarriageCodec : ICarriageCodec {
     public byte[] EncodeSealedPayload(SealedPayload payload) {
         SealedCarriage.ValidatePayloadStructure(payload: payload);
 
+        return EncodeSealedPayloadCore(payload: payload);
+    }
+
+    private static byte[] EncodeSealedPayloadCore(SealedPayload payload) {
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
         writer.WriteStartArray(definiteLength: 8);
@@ -291,9 +296,11 @@ public sealed class CborCarriageCodec : ICarriageCodec {
 
                 SealedCarriage.ValidatePayloadStructure(payload: payload);
 
+                // The structure was validated just above; the canonicality re-encode must not import the
+                // ephemeral EC key a second time.
                 RequireCanonical(
                     received: source,
-                    reencoded: EncodeSealedPayload(payload: payload),
+                    reencoded: EncodeSealedPayloadCore(payload: payload),
                     what: "sealed payload"
                 );
 
@@ -301,6 +308,24 @@ public sealed class CborCarriageCodec : ICarriageCodec {
             }
         );
     }
+
+    /// <summary>
+    /// Computes the exact length <see cref="EncodeEnvelope"/> would produce, from the envelope's carried
+    /// byte lengths alone: a definite-length 2-element array of two definite-length byte strings has framing
+    /// that depends only on those lengths.
+    /// </summary>
+    internal static long EncodedEnvelopeLength(SignedCarriageEnvelope envelope) =>
+        (1 +
+        (long)ByteStringPrefixLength(contentLength: envelope.SignedPortionLength) + envelope.SignedPortionLength +
+        ByteStringPrefixLength(contentLength: envelope.SignatureLength) + envelope.SignatureLength);
+
+    /// <summary>The byte count of a CBOR definite-length byte-string head (major type 2) for the given content length.</summary>
+    private static int ByteStringPrefixLength(int contentLength) => contentLength switch {
+        < 0x18 => 1,
+        <= 0xFF => 2,
+        <= 0xFFFF => 3,
+        _ => 5,
+    };
 
     private static void WriteSignedPortion(CborWriter writer, CarriageEnvelopeHeader header, CarriagePayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
         writer.WriteStartArray(definiteLength: 11);

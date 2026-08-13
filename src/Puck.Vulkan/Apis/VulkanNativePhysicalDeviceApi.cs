@@ -34,17 +34,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
     private const uint StructureTypePhysicalDeviceProperties2 = 1000059001;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
-
     /// <inheritdoc/>
     public IReadOnlyList<nint> EnumeratePhysicalDevices(nint instanceHandle) {
-        if (0 == instanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(instanceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
 
         var enumeratePhysicalDevices = GetPointers(instanceHandle: instanceHandle).EnumeratePhysicalDevices;
 
@@ -633,19 +629,17 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
 
     private static unsafe void ValidatePhysicalDeviceInputs(nint instanceHandle, nint physicalDeviceHandle) {
-        if (0 == instanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(instanceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
 
-        if (0 == physicalDeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan physical-device handle must be non-zero.",
-                paramName: nameof(physicalDeviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: physicalDeviceHandle,
+            handleDescription: "physical-device",
+            paramName: nameof(physicalDeviceHandle)
+        );
     }
     private static unsafe void ValidatePhysicalDeviceSurfaceInputs(
         nint instanceHandle,
@@ -657,12 +651,11 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        if (0 == surfaceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan surface handle must be non-zero.",
-                paramName: nameof(surfaceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: surfaceHandle,
+            handleDescription: "surface",
+            paramName: nameof(surfaceHandle)
+        );
     }
 
     private unsafe struct InstancePointers {
@@ -681,94 +674,22 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
 
-    private unsafe InstancePointers GetPointers(nint instanceHandle) {
-        if (m_pointers.TryGetValue(
+    private InstancePointers GetPointers(nint instanceHandle) {
+        return m_pointers.GetOrAdd(
             key: instanceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetInstanceProcAddr();
-        InstancePointers pNew = default;
-
-        fixed (byte* pName = "vkEnumeratePhysicalDevices"u8) {
-            pNew.EnumeratePhysicalDevices = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceProperties"u8) {
-            pNew.GetPhysicalDeviceProperties = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceQueueFamilyProperties"u8) {
-            pNew.GetPhysicalDeviceQueueFamilyProperties = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceSurfaceSupportKHR"u8) {
-            pNew.GetPhysicalDeviceSurfaceSupportKhr = (delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8) {
-            pNew.GetPhysicalDeviceSurfaceCapabilitiesKhr = (delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceSurfaceFormatsKHR"u8) {
-            pNew.GetPhysicalDeviceSurfaceFormatsKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceSurfacePresentModesKHR"u8) {
-            pNew.GetPhysicalDeviceSurfacePresentModesKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceFeatures"u8) {
-            pNew.GetPhysicalDeviceFeatures = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceFeatures2"u8) {
-            pNew.GetPhysicalDeviceFeatures2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetPhysicalDeviceProperties2"u8) {
-            pNew.GetPhysicalDeviceProperties2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkEnumerateDeviceExtensionProperties"u8) {
-            pNew.EnumerateDeviceExtensionProperties = (delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        m_pointers[instanceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getInstanceProcAddr is not null) {
-                return m_getInstanceProcAddr;
+            valueFactory: static handle => new InstancePointers {
+                EnumeratePhysicalDevices = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkEnumeratePhysicalDevices"u8),
+                GetPhysicalDeviceProperties = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceProperties"u8),
+                GetPhysicalDeviceQueueFamilyProperties = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8),
+                GetPhysicalDeviceSurfaceSupportKhr = (delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8),
+                GetPhysicalDeviceSurfaceCapabilitiesKhr = (delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8),
+                GetPhysicalDeviceSurfaceFormatsKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8),
+                GetPhysicalDeviceSurfacePresentModesKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8),
+                GetPhysicalDeviceFeatures = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceFeatures"u8),
+                GetPhysicalDeviceFeatures2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceFeatures2"u8),
+                GetPhysicalDeviceProperties2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceProperties2"u8),
+                EnumerateDeviceExtensionProperties = (delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkEnumerateDeviceExtensionProperties"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
-
-            m_getInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getInstanceProcAddr;
-        }
+        );
     }
 }

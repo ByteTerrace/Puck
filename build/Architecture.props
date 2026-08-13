@@ -199,6 +199,7 @@
         neither project appears below at all.
     -->
     <ItemGroup>
+        <PuckArchitectureFriends Include="Puck.Carriage" Friends="Puck.Carriage.Tests" />
         <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
     </ItemGroup>
 

@@ -971,7 +971,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.ToString and FixedQ4816.TryFormat \u2014 the sign-magnitude digit-at-a-time renderer that never routes through double (FixedQ4816.GenericMath.cs:525-583)",
+        "Subject": "FixedQ4816.ToString and FixedQ4816.TryFormat \u2014 the sign-magnitude digit-at-a-time renderer in FixedPointText.TryFormatRaw that never routes through double",
         "Against": "Oracles.ExactDyadicDecimalSigned, whose magnitude digits come from n/2\u02E2 == (n\u00B75\u02E2)/10\u02E2 in BigInteger \u2014 a deliberately different derivation, exact on both sides. The MinValue rung is where the renderer\u0027s unsigned magnitude 2\u2076\u00B3 is load-bearing, and is the second of only two public windows onto FusedArithmetic.RawMagnitude",
         "Shared": "",
         "Citation": "",

@@ -298,15 +298,18 @@
         "resolved": "10.0.11",
         "contentHash": "QTXEoQBzz00SFWbo7nAg1Ogd4f99lwqcO9uAJ7MYSLEUR28f6As32QktrqG2Fr9cfAfd1GjLyGYspE7Ipj7P6w=="
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.commands": {
+      "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
-          "Puck.Maths": "[1.0.0, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
+      "puck.abstractions": {
+        "type": "Project"
       },
       "puck.directx": {
         "type": "Project",
@@ -317,12 +320,9 @@
       "puck.hosting": {
         "type": "Project",
         "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )"
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Abstractions": "[1.0.0, )"
         }
-      },
-      "puck.maths": {
-        "type": "Project"
       }
     }
   }

@@ -1472,11 +1472,6 @@ public readonly partial record struct FixedQ4816(long Value)
         Value.CompareTo(value: other.Value);
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2¹⁶</c> fraction always terminates within sixteen digits).</returns>
-    public override string ToString() {
-        Span<char> buffer = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(destination: buffer, charsWritten: out var charsWritten);
-
-        return new string(value: buffer[..charsWritten]);
-    }
+    public override string ToString() =>
+        FixedPointText.FormatSignedRaw(rawValue: Value, fractionBitCount: FractionBitCount);
 }

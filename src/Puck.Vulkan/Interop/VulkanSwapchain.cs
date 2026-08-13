@@ -40,19 +40,17 @@ public sealed class VulkanSwapchain : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(argument: swapchainApi);
 
-        if (0 == swapchainHandle) {
-            throw new ArgumentException(
-                message: "Vulkan swapchain handle must be non-zero.",
-                paramName: nameof(swapchainHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: swapchainHandle,
+            handleDescription: "swapchain",
+            paramName: nameof(swapchainHandle)
+        );
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
         Handle = swapchainHandle;
         DeviceHandle = deviceHandle;

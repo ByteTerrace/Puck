@@ -9,6 +9,11 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ImplicitUsings>enable</ImplicitUsings>
         <InvariantGlobalization>true</InvariantGlobalization>
+        <!-- Nothing packs unless it opts in. A "blessed" project sets <IsPackable>true</IsPackable>
+             in its own csproj, which turns on the shared version and NuGet metadata in
+             build\Packaging.targets; every other project stays out of `dotnet pack` entirely. The
+             '' guard leaves an explicit per-project choice (e.g. Puck.Analyzers) untouched. -->
+        <IsPackable Condition="'$(IsPackable)' == ''">false</IsPackable>
         <Nullable>enable</Nullable>
         <OptimizationPreference>Speed</OptimizationPreference>
         <PlatformTarget>x64</PlatformTarget>

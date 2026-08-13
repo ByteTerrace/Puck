@@ -36,26 +36,23 @@ public sealed class VulkanFrameReadbackBuffer : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(argument: frameReadbackApi);
 
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == bufferHandle) {
-            throw new ArgumentException(
-                message: "Vulkan readback buffer handle must be non-zero.",
-                paramName: nameof(bufferHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: bufferHandle,
+            handleDescription: "readback buffer",
+            paramName: nameof(bufferHandle)
+        );
 
-        if (0 == memoryHandle) {
-            throw new ArgumentException(
-                message: "Vulkan readback memory handle must be non-zero.",
-                paramName: nameof(memoryHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: memoryHandle,
+            handleDescription: "readback memory",
+            paramName: nameof(memoryHandle)
+        );
 
         if (0 == sizeBytes) {
             throw new ArgumentOutOfRangeException(

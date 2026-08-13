@@ -39,9 +39,6 @@ public readonly partial record struct FixedQ3232(long Value)
 
     private const ulong FractionBitMask = ((1UL << FractionBitCount) - 1UL);
     private const long IntegerBitMask = unchecked((long)~FractionBitMask);
-    // The widest canonical rendering is a sign, up to ten integer digits, the point, and up to thirty-two
-    // fraction digits.
-    private const int MaximumFormattedLength = (1 + 10 + 1 + FractionBitCount);
     private const long MaxIntegerValue = (long.MaxValue >> FractionBitCount);
     private const long MinIntegerValue = (long.MinValue >> FractionBitCount);
     private const long RawEpsilon = 1L;
@@ -580,11 +577,6 @@ public readonly partial record struct FixedQ3232(long Value)
         Value.CompareTo(value: other.Value);
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2³²</c> fraction always terminates within thirty-two digits).</returns>
-    public override string ToString() {
-        Span<char> buffer = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(destination: buffer, charsWritten: out var charsWritten);
-
-        return new string(value: buffer[..charsWritten]);
-    }
+    public override string ToString() =>
+        FixedPointText.FormatSignedRaw(rawValue: Value, fractionBitCount: FractionBitCount);
 }

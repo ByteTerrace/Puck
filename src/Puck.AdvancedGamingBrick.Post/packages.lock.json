@@ -32,42 +32,42 @@
         "resolved": "2.0.11",
         "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
       },
+      "ByteTerrace.Puck.Commands": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
       "puck.abstractions": {
         "type": "Project"
       },
       "puck.advancedgamingbrick": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Microsoft.Extensions.DependencyInjection": "[10.*, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Hosting": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )",
           "Puck.Snapshots": "[1.0.0, )"
-        }
-      },
-      "puck.commands": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Maths": "[1.0.0, )",
-          "System.CommandLine": "[2.*, )"
         }
       },
       "puck.hosting": {
         "type": "Project",
         "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Commands": "[1.0.0, )"
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Abstractions": "[1.0.0, )"
         }
-      },
-      "puck.maths": {
-        "type": "Project"
       },
       "puck.recording": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )"
         }
       },
       "puck.snapshots": {

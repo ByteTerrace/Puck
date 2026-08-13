@@ -14,17 +14,13 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
     private const uint StructureTypeFenceCreateInfo = 8;
     private const uint StructureTypeSemaphoreCreateInfo = 9;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     /// <inheritdoc/>
     public VkResult CreateFence(VulkanFrameSynchronizationCreateRequest request, out nint fenceHandle) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
         var createFence = GetPointers(deviceHandle: request.DeviceHandle).CreateFence;
         var createInfo = new VkFenceCreateInfo {
@@ -43,12 +39,11 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
     }
     /// <inheritdoc/>
     public VkResult CreateSemaphore(VulkanFrameSynchronizationCreateRequest request, out nint semaphoreHandle) {
-        if (0 == request.DeviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
 
         var createSemaphore = GetPointers(deviceHandle: request.DeviceHandle).CreateSemaphore;
         var createInfo = new VkSemaphoreCreateInfo { SType = StructureTypeSemaphoreCreateInfo };
@@ -96,19 +91,17 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
     }
     /// <inheritdoc/>
     public VkResult ResetFence(nint deviceHandle, nint fenceHandle) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == fenceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan fence handle must be non-zero.",
-                paramName: nameof(fenceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: fenceHandle,
+            handleDescription: "fence",
+            paramName: nameof(fenceHandle)
+        );
 
         var resetFences = GetPointers(deviceHandle: deviceHandle).ResetFences;
 
@@ -120,19 +113,17 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
     }
     /// <inheritdoc/>
     public VkResult WaitForFence(nint deviceHandle, nint fenceHandle, ulong timeout) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (0 == fenceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan fence handle must be non-zero.",
-                paramName: nameof(fenceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: fenceHandle,
+            handleDescription: "fence",
+            paramName: nameof(fenceHandle)
+        );
 
         var waitForFences = GetPointers(deviceHandle: deviceHandle).WaitForFences;
 
@@ -156,64 +147,17 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateFence"u8) {
-            pNew.CreateFence = (delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCreateSemaphore"u8) {
-            pNew.CreateSemaphore = (delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyFence"u8) {
-            pNew.DestroyFence = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroySemaphore"u8) {
-            pNew.DestroySemaphore = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkResetFences"u8) {
-            pNew.ResetFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkWaitForFences"u8) {
-            pNew.WaitForFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                CreateFence = (delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFence"u8),
+                CreateSemaphore = (delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSemaphore"u8),
+                DestroyFence = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFence"u8),
+                DestroySemaphore = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySemaphore"u8),
+                ResetFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkResetFences"u8),
+                WaitForFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkWaitForFences"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
 }

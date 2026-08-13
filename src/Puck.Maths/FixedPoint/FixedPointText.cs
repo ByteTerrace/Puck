@@ -9,8 +9,8 @@ internal enum FixedPointParseStatus {
     Overflow
 }
 
-/// <summary>Exact decimal parsing and format validation shared by the fixed-point primitives. Rendering
-/// (<see cref="WriteFractionDigits"/>) is always allocation-free. <see cref="Parse"/>'s fraction-digit accumulation
+/// <summary>Exact decimal parsing and rendering shared by the fixed-point primitives. Rendering
+/// (<see cref="TryFormatRaw"/>) is always allocation-free. <see cref="Parse"/>'s fraction-digit accumulation
 /// and rounding stay allocation-free too, in <see cref="UInt128"/>, for every carrier at or below
 /// <see cref="NarrowFractionBitCountLimit"/> fraction bits — every format today except one. Only above that limit does
 /// the accumulation route through <see cref="BigInteger"/> (and therefore allocate), because a carrier wide enough to
@@ -25,6 +25,247 @@ internal static class FixedPointText {
     /// allocation-free. Every carrier below <c>FixedQ1648</c>'s forty-eight fraction bits — sixteen and thirty-two —
     /// sits under it today.</summary>
     private const int NarrowFractionBitCountLimit = 37;
+
+    /// <summary>A buffer length covering the invariant expansion of every 64-bit raw at any fraction bit count: a
+    /// sign, twenty integer digits (the decimal length of <c>2⁶⁴</c>), the point, and one fraction digit per fraction
+    /// bit.</summary>
+    private const int MaximumInvariantLength = (1 + 20 + 1 + 64);
+
+    /// <summary>Writes the invariant exact decimal expansion of a raw fixed-point magnitude.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormatRaw(
+        ulong magnitude,
+        bool negative,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten
+    ) {
+        var integerPart = (magnitude >> fractionBitCount);
+        var fraction = magnitude & ((1UL << fractionBitCount) - 1UL);
+        // The exact required length is a pure function of the raw, so the length check runs before any write and the
+        // caller's destination is genuinely all-or-nothing. Each rendered fraction digit multiplies by ten, which
+        // strips exactly one factor of two from the denominator, so the expansion terminates after fractionBitCount
+        // minus the fraction's trailing zero count digits.
+        var requiredLength = ((negative ? 1 : 0) + ((int)integerPart.LogarithmBase10()));
+
+        if (fraction != 0UL) {
+            requiredLength += (1 + (fractionBitCount - BitOperations.TrailingZeroCount(value: fraction)));
+        }
+
+        if (destination.Length < requiredLength) {
+            charsWritten = 0;
+
+            return false;
+        }
+
+        var position = 0;
+
+        if (negative) {
+            destination[position++] = '-';
+        }
+
+        _ = integerPart.TryFormat(
+            destination: destination[position..],
+            charsWritten: out var integerChars,
+            format: default,
+            provider: CultureInfo.InvariantCulture
+        );
+        position += integerChars;
+
+        if (fraction != 0UL) {
+            // The length check above already reserved the point and every digit, so the write cannot come up short.
+            position += WriteFractionDigits(
+                fraction: fraction,
+                fractionBitCount: fractionBitCount,
+                destination: destination[position..]
+            );
+        }
+
+        charsWritten = position;
+
+        return true;
+    }
+
+    /// <summary>Writes a raw fixed-point magnitude using a provider's decimal-separator and negative-sign
+    /// tokens.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormat(
+        ulong magnitude,
+        bool negative,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten,
+        IFormatProvider? provider
+    ) {
+        var numberFormat = ((provider is null)
+            ? NumberFormatInfo.InvariantInfo
+            : NumberFormatInfo.GetInstance(formatProvider: provider));
+
+        if ((numberFormat.NumberDecimalSeparator == ".") && (!negative || (numberFormat.NegativeSign == "-"))) {
+            return TryFormatRaw(
+                magnitude: magnitude,
+                negative: negative,
+                fractionBitCount: fractionBitCount,
+                destination: destination,
+                charsWritten: out charsWritten
+            );
+        }
+
+        Span<char> invariant = stackalloc char[MaximumInvariantLength];
+
+        _ = TryFormatRaw(
+            magnitude: magnitude,
+            negative: negative,
+            fractionBitCount: fractionBitCount,
+            destination: invariant,
+            charsWritten: out var invariantLength
+        );
+
+        return TrySpliceProviderTokens(
+            invariant: invariant[..invariantLength],
+            numberFormat: numberFormat,
+            destination: destination,
+            charsWritten: out charsWritten
+        );
+    }
+
+    /// <summary>Writes a signed raw value using a provider's decimal-separator and negative-sign tokens.</summary>
+    /// <param name="rawValue">The signed raw value.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormatSigned(
+        long rawValue,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten,
+        IFormatProvider? provider
+    ) =>
+        TryFormat(
+            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
+            negative: (rawValue < 0L),
+            fractionBitCount: fractionBitCount,
+            destination: destination,
+            charsWritten: out charsWritten,
+            provider: provider
+        );
+
+    /// <summary>Renders the invariant exact decimal expansion of a raw fixed-point magnitude as a string.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <returns>The invariant exact decimal expansion.</returns>
+    internal static string FormatRaw(ulong magnitude, bool negative, int fractionBitCount) {
+        Span<char> buffer = stackalloc char[MaximumInvariantLength];
+
+        _ = TryFormatRaw(
+            magnitude: magnitude,
+            negative: negative,
+            fractionBitCount: fractionBitCount,
+            destination: buffer,
+            charsWritten: out var charsWritten
+        );
+
+        return new string(value: buffer[..charsWritten]);
+    }
+
+    /// <summary>Renders the invariant exact decimal expansion of a signed raw value as a string.</summary>
+    /// <param name="rawValue">The signed raw value.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <returns>The invariant exact decimal expansion.</returns>
+    internal static string FormatSignedRaw(long rawValue, int fractionBitCount) =>
+        FormatRaw(
+            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
+            negative: (rawValue < 0L),
+            fractionBitCount: fractionBitCount
+        );
+
+    /// <summary>Splices a provider's decimal-separator and negative-sign tokens into an invariant expansion.</summary>
+    /// <param name="invariant">The invariant exact decimal expansion.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>The spliced expansion, or <paramref name="invariant"/> itself when no token differs.</returns>
+    internal static string SpliceProviderTokens(string invariant, IFormatProvider? provider) {
+        var numberFormat = ((provider is null)
+            ? NumberFormatInfo.InvariantInfo
+            : NumberFormatInfo.GetInstance(formatProvider: provider));
+        var negative = invariant.StartsWith(value: '-');
+        var pointIndex = invariant.IndexOf(value: '.');
+
+        if ((!negative || (numberFormat.NegativeSign == "-"))
+            && ((pointIndex < 0) || (numberFormat.NumberDecimalSeparator == "."))) {
+            return invariant;
+        }
+
+        var requiredLength = ((invariant.Length
+            + (negative ? (numberFormat.NegativeSign.Length - 1) : 0))
+            + ((pointIndex < 0) ? 0 : (numberFormat.NumberDecimalSeparator.Length - 1)));
+
+        return string.Create(
+            length: requiredLength,
+            state: (invariant, numberFormat),
+            action: static (destination, state) => _ = TrySpliceProviderTokens(
+                invariant: state.invariant,
+                numberFormat: state.numberFormat,
+                destination: destination,
+                charsWritten: out _
+            )
+        );
+    }
+
+    private static bool TrySpliceProviderTokens(
+        ReadOnlySpan<char> invariant,
+        NumberFormatInfo numberFormat,
+        Span<char> destination,
+        out int charsWritten
+    ) {
+        var body = invariant;
+        var negative = (body[0] == '-');
+
+        if (negative) {
+            body = body[1..];
+        }
+
+        var separator = numberFormat.NumberDecimalSeparator;
+        var negativeSign = numberFormat.NegativeSign;
+        var pointIndex = body.IndexOf(value: '.');
+        var signLength = (negative ? negativeSign.Length : 0);
+        var requiredLength = ((signLength + body.Length) + ((pointIndex < 0) ? 0 : (separator.Length - 1)));
+
+        if (destination.Length < requiredLength) {
+            charsWritten = 0;
+
+            return false;
+        }
+
+        if (negative) {
+            negativeSign.AsSpan().CopyTo(destination: destination);
+        }
+
+        if (pointIndex < 0) {
+            body.CopyTo(destination: destination[signLength..]);
+        } else {
+            body[..pointIndex].CopyTo(destination: destination[signLength..]);
+            separator.AsSpan().CopyTo(destination: destination[(signLength + pointIndex)..]);
+            body[(pointIndex + 1)..].CopyTo(destination: destination[((signLength + pointIndex) + separator.Length)..]);
+        }
+
+        charsWritten = requiredLength;
+
+        return true;
+    }
 
     /// <summary>Writes the decimal point and the exact terminating expansion of a raw fraction.</summary>
     /// <param name="fraction">The raw fraction bits, strictly below <c>2^fractionBitCount</c>.</param>

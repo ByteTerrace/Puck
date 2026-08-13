@@ -1,24 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!--
-        Deliberately both a console harness (Program.cs's scenario run and export/verify interchange
-        verbs — see README.md) and a referenced library; .NET allows both from one csproj.
-    -->
     <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <RootNamespace>Puck.Carriage</RootNamespace>
         <AssemblyName>Puck.Carriage</AssemblyName>
-        <!-- Leaf contracts and data: zero Puck.* dependencies (BCL + one NuGet package only), so it sits beneath every layer that consumes it. -->
+        <Description>The signed-carriage envelope: issuer-signed claims that travel between federated worlds and verify offline against an authored trust list. Canonical CBOR byte layout, chain walk with depth and window enforcement, purpose and domain binding, replay marks, and sealed carriages with bound encryption.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Carriage</PackageId>
+        <PackageTags>cbor;claims;federation;offline-verification;signing</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Carriage</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <!--
-            System.Formats.Cbor is a Microsoft-authored BCL-adjacent assembly (not a third-party
-            dependency), but for a plain console app it only arrives inbox through the
-            Microsoft.AspNetCore.App shared framework — a FrameworkReference to all of ASP.NET Core would
-            be a strange way to get one CBOR type. The standalone NuGet package is the correct way to
-            reference it without that, and matches the repository's floating-lock convention.
-        -->
         <PackageReference Include="System.Formats.Cbor" Version="[9.*, )" />
     </ItemGroup>
 </Project>

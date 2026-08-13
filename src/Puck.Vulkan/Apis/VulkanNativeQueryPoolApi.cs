@@ -14,17 +14,13 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
     private const uint QueryTypeTimestamp = 2;
     private const uint StructureTypeQueryPoolCreateInfo = 11;
 
-    private readonly Lock m_syncRoot = new();
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     /// <inheritdoc/>
     public VkResult CreateTimestampPool(nint deviceHandle, uint queryCount, out nint queryPoolHandle) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
         if (0 == queryCount) {
             throw new ArgumentException(
@@ -148,58 +144,16 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
-    private unsafe DevicePointers GetPointers(nint deviceHandle) {
-        if (m_pointers.TryGetValue(
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateQueryPool"u8) {
-            pNew.CreateQueryPool = (delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDestroyQueryPool"u8) {
-            pNew.DestroyQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCmdResetQueryPool"u8) {
-            pNew.CmdResetQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkCmdWriteTimestamp"u8) {
-            pNew.CmdWriteTimestamp = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetQueryPoolResults"u8) {
-            pNew.GetQueryPoolResults = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_pointers[deviceHandle] = pNew;
-        return pNew;
-    }
-    private unsafe delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        lock (m_syncRoot) {
-            if (m_getDeviceProcAddr is not null) {
-                return m_getDeviceProcAddr;
+            valueFactory: static handle => new DevicePointers {
+                CreateQueryPool = (delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateQueryPool"u8),
+                DestroyQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyQueryPool"u8),
+                CmdResetQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdResetQueryPool"u8),
+                CmdWriteTimestamp = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdWriteTimestamp"u8),
+                GetQueryPoolResults = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetQueryPoolResults"u8),
             }
-            var export = VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
-
-            m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return m_getDeviceProcAddr;
-        }
+        );
     }
 }

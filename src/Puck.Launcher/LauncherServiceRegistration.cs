@@ -147,9 +147,10 @@ public static class LauncherServiceRegistration {
             );
         });
 
-        // Command pump: the registry, the stdin text source (results echoed to stdout so scripted runs are
-        // assertable), and the per-frame shell. The keyboard binding source and the input adapter are
-        // developer-supplied (they encode the engine's controls), so the pump stays engine-agnostic.
+        // Command pump: the registry and the stdin text source (results echoed to stdout so scripted runs are
+        // assertable). The text source owns both the queue and its per-frame Collect drain. The keyboard binding
+        // source and the input adapter are developer-supplied (they encode the engine's controls), so the pump stays
+        // engine-agnostic.
         services.TryAddSingleton<CommandRegistry>();
         // The once-per-frame buffered stdout the pump flushes after each Collect (see BufferedConsoleOutput): the result
         // echoes append into it instead of each paying an AutoFlush syscall, collapsing a piped burst to one write.
@@ -176,13 +177,6 @@ public static class LauncherServiceRegistration {
                 registry: provider.GetRequiredService<CommandRegistry>()
             );
         });
-        // The shell pumps TEXT only. Physical input has one capture point (the InputRouter's per-tick mixer), which is
-        // where a signal becomes deterministic state carrying a stamped principal; there is no second, frame-driven
-        // dispatch path for a producer to register into.
-        services.TryAddSingleton(implementationFactory: static sp => new CommandShell(
-            textSource: sp.GetRequiredService<TextCommandSource>()
-        ));
-
         // The terminal's own command surface (just `quit`, which drives the baton). The fixed-step/tick hosted
         // service AND the stdin reader are added by the CALLER (AddLauncherTerminal / AddLauncherHeadlessTerminal),
         // in that relative order — the generic host starts IHostedServices in REGISTRATION order, and the fixed-step

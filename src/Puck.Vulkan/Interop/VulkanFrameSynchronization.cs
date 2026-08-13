@@ -39,26 +39,23 @@ public sealed class VulkanFrameSynchronization : IDisposable {
         ArgumentNullException.ThrowIfNull(renderFinishedSemaphoreHandles);
         ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
 
-        if (deviceHandle == 0) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        if (imageAvailableSemaphoreHandle == 0) {
-            throw new ArgumentException(
-                message: "Vulkan image-available semaphore handle must be non-zero.",
-                paramName: nameof(imageAvailableSemaphoreHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: imageAvailableSemaphoreHandle,
+            handleDescription: "image-available semaphore",
+            paramName: nameof(imageAvailableSemaphoreHandle)
+        );
 
-        if (inFlightFenceHandle == 0) {
-            throw new ArgumentException(
-                message: "Vulkan in-flight fence handle must be non-zero.",
-                paramName: nameof(inFlightFenceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: inFlightFenceHandle,
+            handleDescription: "in-flight fence",
+            paramName: nameof(inFlightFenceHandle)
+        );
 
         if (
             (renderFinishedSemaphoreHandles.Length == 0) ||

@@ -162,18 +162,18 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "puck.abstractions": {
+      "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.maths": {
+      "puck.abstractions": {
         "type": "Project"
       },
       "puck.recording": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Maths": "[1.0.0, )"
+          "Puck.Abstractions": "[1.0.0, )"
         }
       }
     }

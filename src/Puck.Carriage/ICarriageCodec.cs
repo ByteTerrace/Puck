@@ -1,14 +1,9 @@
 namespace Puck.Carriage;
 
 /// <summary>
-/// A serialisation of the carriage envelope's ONE field list (README.md). Two
-/// implementations exist — <see cref="CborCarriageCodec"/>, which the specification's §2 fixes as the
-/// format, and <see cref="FixedLayoutCarriageCodec"/>, which its §16 keeps on the shelf for a context that
-/// cannot carry a CBOR implementation at all. Both encode the SAME fields in the SAME order (see each
-/// implementation's file header), but they are not interchangeable at the byte level: the signing input is
-/// whichever codec's
-/// bytes were actually signed, so an envelope signed under one codec never verifies re-encoded under the
-/// other. That is deliberate, not a gap — see the "serialisation cross-check" scenario in Program.cs.
+/// A serialisation of the carriage envelope's one field list (README.md). The specification's §2 fixes CBOR
+/// as the format; <see cref="CborCarriageCodec"/> is the sole implementation. The signing input is the exact
+/// codec bytes, so the signed portion travels verbatim rather than being re-derived from a decoded model.
 /// </summary>
 public interface ICarriageCodec {
     /// <summary>A short label for this codec, used in report output.</summary>

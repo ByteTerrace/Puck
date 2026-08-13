@@ -271,10 +271,9 @@ public sealed class OverworldWorld {
     public ulong CurrentTick => m_tick;
     /// <summary>Observation-only hook fired once per <see cref="Advance"/> call, AFTER the tick completes:
     /// <c>(tick, hashBefore, hashAfter)</c>, where the hashes bracket the step with <see cref="StateHash"/> samples
-    /// taken immediately before intents apply and immediately after. Exists so a console-facing tick transcript
-    /// (<see cref="Puck.Commands.TickTranscript"/>) can narrate "what did this tick do to the hash" without the sim
-    /// exposing anything new to READ: both samples are computed ONLY when a subscriber is attached, and the hook
-    /// itself never mutates simulation state.</summary>
+    /// taken immediately before intents apply and immediately after. Observation tooling can use the hook to narrate
+    /// "what did this tick do to the hash" without the simulation exposing anything new to read: both samples are
+    /// computed only when a subscriber is attached, and the hook itself never mutates simulation state.</summary>
     public Action<ulong, ulong, ulong>? OnTickAdvanced { get; set; }
     /// <summary>The number of occupied slots.</summary>
     public int ActivePlayerCount { get; private set; }

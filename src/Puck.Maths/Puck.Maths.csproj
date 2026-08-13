@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>Deterministic numerics for reproducible simulation: binary fixed-point scalars, vectors, rotations and world coordinates; resumable pseudorandom streams; exact finite fields, integer and real-quadratic arithmetic; and a presented-algebra tier. Identical results bit-for-bit across machines, operating systems, and GPU backends.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Maths</PackageId>
+        <PackageTags>determinism;finite-field;fixed-point;maths;numerics;simulation</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
     </PropertyGroup>

@@ -6,7 +6,8 @@ namespace Puck.Carriage;
 /// The one verify path for everything (README.md, "Signed carriage"): a key binding and a claim
 /// are both envelopes, and <see cref="VerifyChain"/> is the only entry point either goes through — a
 /// binding is verified as a chain hop inside this method, never through a separate code path. Offline by
-/// construction: a claim that arrives without its full chain is refused here, never resolved by fetching.
+/// construction: when verification selects a vouching root, a claim that arrives without its two-binding
+/// chain is refused here, never resolved by fetching.
 /// </summary>
 /// <remarks>
 /// <para><b>The depth rule, stated once.</b> A chain has exactly two admissible lengths and no others:</para>
@@ -53,7 +54,7 @@ internal static class CarriageVerifier {
     /// </param>
     /// <param name="expectedPurpose">The purpose this call expects the claim to declare. Must be non-blank, and must not be <see cref="CarriagePurposes.KeyBinding"/> — that purpose is refused unconditionally, which is what stops a binding being replayed as a claim.</param>
     /// <param name="expectedAudience">The verifying world's own audience identity, checked against a directed claim's <see cref="CarriageEnvelopeHeader.Audience"/>.</param>
-    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> only for this assembly's adversarial harness.</param>
+    /// <param name="profile">The public facade's receiver-selected profile, used to stop an authenticated binding from selecting a disabled algorithm for the following hop; <see langword="null"/> only when the adversarial tests exercise this internal verifier directly.</param>
     public static CarriageVerifyResult VerifyChain(
         ICarriageCodec codec,
         SignedCarriageEnvelope claim,
@@ -114,7 +115,7 @@ internal static class CarriageVerifier {
 
         // A direct pin is strictly more specific than a domain root, so it is consulted first: pinning a
         // person's own key is a statement about that person, not about whoever minted them.
-        var directTrust = trustList.FindDirectSigner(
+        var directTrust = trustList.FindDirectSignerForVerification(
             domain: claim.Header.Domain,
             subject: claim.Header.Subject
         );
@@ -197,7 +198,8 @@ internal static class CarriageVerifier {
 
         var payloadRefusal = ValidateAuthenticatedClaimPayload(
             codec: codec,
-            claim: claim
+            claim: claim,
+            profile: profile
         );
 
         return ((payloadRefusal is null)
@@ -226,7 +228,7 @@ internal static class CarriageVerifier {
             return CarriageVerifyResult.Refuse(reason: $"broken chain: expected exactly two bindings (root-vouches-issuing, issuing-vouches-subject), found {chain.Count}");
         }
 
-        var rootTrust = trustList.FindVouchingRoot(domain: claim.Header.Domain);
+        var rootTrust = trustList.FindVouchingRootForVerification(domain: claim.Header.Domain);
 
         if (rootTrust is null) {
             return CarriageVerifyResult.Refuse(reason: $"domain '{claim.Header.Domain}' is not a trusted vouching root");
@@ -343,7 +345,8 @@ internal static class CarriageVerifier {
 
         var payloadRefusal = ValidateAuthenticatedClaimPayload(
             codec: codec,
-            claim: claim
+            claim: claim,
+            profile: profile
         );
 
         return ((payloadRefusal is null)
@@ -354,17 +357,17 @@ internal static class CarriageVerifier {
     /// <summary>
     /// Validates a claim payload whose signature has already authenticated its bytes. In particular, an
     /// attacker-controlled sealed payload is not decoded and its ephemeral EC key is not imported before
-    /// the signature check succeeds.
+    /// the signature check succeeds. The profile's nested constraints run here, on this one decode.
     /// </summary>
-    private static string? ValidateAuthenticatedClaimPayload(ICarriageCodec codec, SignedCarriageEnvelope claim) {
+    private static string? ValidateAuthenticatedClaimPayload(ICarriageCodec codec, SignedCarriageEnvelope claim, CarriageConformanceProfile? profile) {
         if (claim.PayloadKind != CarriagePayloadKind.Sealed) {
             return null;
         }
 
-        try {
-            _ = codec.DecodeSealedPayload(bytes: claim.PayloadSpan);
+        SealedPayload payload;
 
-            return null;
+        try {
+            payload = codec.DecodeSealedPayload(bytes: claim.PayloadSpan);
         } catch (Exception exception) when (
             (exception is FormatException) ||
             (exception is ArgumentException) ||
@@ -373,6 +376,19 @@ internal static class CarriageVerifier {
         ) {
             return $"sealed claim payload is malformed: {exception.Message}";
         }
+
+        if (
+            (profile is not null) &&
+            !profile.TryValidateSealedPayload(
+                payload: payload,
+                label: "claim",
+                refusal: out var refusal
+            )
+        ) {
+            return refusal;
+        }
+
+        return null;
     }
 
     /// <summary>

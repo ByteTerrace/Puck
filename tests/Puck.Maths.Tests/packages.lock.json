@@ -157,7 +157,7 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "puck.maths": {
+      "ByteTerrace.Puck.Maths": {
         "type": "Project"
       }
     }

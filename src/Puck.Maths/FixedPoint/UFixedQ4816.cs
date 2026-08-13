@@ -26,8 +26,6 @@ public readonly partial record struct UFixedQ4816(ulong Value)
 
     private const ulong FractionBitMask = (RawOne - 1UL);
     private const ulong IntegerBitMask = ~FractionBitMask;
-    // The widest canonical rendering is 15 integer digits + '.' + 16 fraction digits.
-    private const int MaximumFormattedLength = (32 + 2);
     private const ulong MaxIntegerValue = (ulong.MaxValue >> FractionBitCount);
     private const ulong RawEpsilon = 1UL;
     private const ulong RawHalf = (1UL << (FractionBitCount - 1));
@@ -602,55 +600,19 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
         FixedPointText.ValidateGeneralFormat(format: format);
 
-        var separator = ((provider is null)
-            ? NumberFormatInfo.InvariantInfo.NumberDecimalSeparator
-            : NumberFormatInfo.GetInstance(formatProvider: provider).NumberDecimalSeparator);
-
-        if (separator == ".") {
-            return TryFormatCore(destination: destination, charsWritten: out charsWritten);
-        }
-
-        Span<char> invariant = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(destination: invariant, charsWritten: out var invariantLength);
-        var pointIndex = invariant[..invariantLength].IndexOf(value: '.');
-
-        if (pointIndex < 0) {
-            if (destination.Length < invariantLength) {
-                charsWritten = 0;
-                return false;
-            }
-
-            invariant[..invariantLength].CopyTo(destination: destination);
-            charsWritten = invariantLength;
-            return true;
-        }
-
-        var requiredLength = ((invariantLength - 1) + separator.Length);
-
-        if (destination.Length < requiredLength) {
-            charsWritten = 0;
-            return false;
-        }
-
-        invariant[..pointIndex].CopyTo(destination: destination);
-        separator.AsSpan().CopyTo(destination: destination[pointIndex..]);
-        invariant[(pointIndex + 1)..invariantLength].CopyTo(destination: destination[(pointIndex + separator.Length)..]);
-        charsWritten = requiredLength;
-        return true;
+        return FixedPointText.TryFormat(
+            magnitude: Value,
+            negative: false,
+            fractionBitCount: FractionBitCount,
+            destination: destination,
+            charsWritten: out charsWritten,
+            provider: provider
+        );
     }
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2¹⁶</c> fraction always terminates within sixteen digits).</returns>
-    public override string ToString() {
-        Span<char> buffer = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(
-            destination: buffer,
-            charsWritten: out var charsWritten
-        );
-
-        return new string(value: buffer[..charsWritten]);
-    }
+    public override string ToString() =>
+        FixedPointText.FormatRaw(magnitude: Value, negative: false, fractionBitCount: FractionBitCount);
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <param name="format">Empty or <c>G</c> for the exact decimal expansion.</param>
     /// <param name="formatProvider">The provider supplying the decimal separator; null selects invariant culture.</param>
@@ -658,52 +620,6 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     public string ToString(string? format, IFormatProvider? formatProvider) {
         FixedPointText.ValidateGeneralFormat(format: format.AsSpan());
 
-        var invariant = ToString();
-        var separator = ((formatProvider is null)
-            ? NumberFormatInfo.InvariantInfo.NumberDecimalSeparator
-            : NumberFormatInfo.GetInstance(formatProvider: formatProvider).NumberDecimalSeparator);
-
-        return ((separator == ".")
-            ? invariant
-            : invariant.Replace(oldValue: ".", newValue: separator, comparisonType: StringComparison.Ordinal));
-    }
-
-    // Renders the exact decimal expansion (a /2^16 fraction always terminates within 16 digits) without routing
-    // through double; returns false and writes nothing meaningful when destination is too small.
-    private bool TryFormatCore(Span<char> destination, out int charsWritten) {
-        var integerPart = (Value >> FractionBitCount);
-
-        if (!integerPart.TryFormat(
-            destination: destination,
-            charsWritten: out charsWritten,
-            format: default,
-            provider: CultureInfo.InvariantCulture
-        )) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        var fraction = Value & FractionBitMask;
-
-        if (0UL == fraction) {
-            return true;
-        }
-
-        var fractionChars = FixedPointText.WriteFractionDigits(
-            fraction: fraction,
-            fractionBitCount: FractionBitCount,
-            destination: destination[charsWritten..]
-        );
-
-        if (fractionChars < 0) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        charsWritten += fractionChars;
-
-        return true;
+        return FixedPointText.SpliceProviderTokens(invariant: ToString(), provider: formatProvider);
     }
 }

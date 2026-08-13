@@ -55,4 +55,16 @@ public sealed record BindingPageEntryDefinition(
     CommandValue? Value = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] BindingActivatorDefinition? Activator = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold
-);
+) {
+    /// <summary>Gets a stable label identifying this entry's trigger for a diagnostic or a binding-bar chip: its
+    /// <see cref="Source"/>, else its activator sequence rendered as <c>activator[a,b,…]</c>, else <c>(unset)</c> when
+    /// the structural gate has not yet refused a trigger-less entry. The one label an entry renders by. Null-tolerant
+    /// on the sequence (a deserialized document can carry an activator with no <c>sequence</c>): the label labels a
+    /// refusal, so it must never itself throw on the malformed shape it is describing.</summary>
+    internal string TriggerLabel => (Source ?? ((Activator is { } activator)
+        ? $"activator[{string.Join(
+        separator: ',',
+        values: (activator.Sequence ?? [])
+    )}]"
+        : "(unset)"));
+}

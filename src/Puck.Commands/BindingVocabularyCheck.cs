@@ -92,10 +92,7 @@ public static class BindingVocabularyCheck {
                         }
                     }
 
-                    var label = (entry.Source ?? $"activator[{string.Join(
-                        separator: ',',
-                        values: (entry.Activator?.Sequence ?? [])
-                    )}]");
+                    var label = entry.TriggerLabel;
 
                     // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix parsed
                     // off — BindingProfile.Compile already refused a malformed suffix structurally) must name a
@@ -121,18 +118,14 @@ public static class BindingVocabularyCheck {
                     }
 
                     if (entry.Channel is { } channelRef) {
-                        if (
-                            (channel is not null) &&
-                            !channel(arg: channelRef)
-                        ) {
-                            errors.Add(item: $"page \"{page.Id}\" binds {label} to channel {channelRef.Describe()}, which resolves no declared channel");
-                        } else if (
-                            (entry.Scale is { } scale) &&
-                            (scale != 1f) &&
-                            (channelBinary?.Invoke(arg: channelRef) ?? false)
-                        ) {
-                            errors.Add(item: $"page \"{page.Id}\" binds {label} to channel {channelRef.Describe()} with scale {scale}, but a binary channel's scale is always the default (+1)");
-                        }
+                        CheckChannel(
+                            channel: channelRef,
+                            channelBinary: channelBinary,
+                            channelExists: channel,
+                            errors: errors,
+                            prefix: $"page \"{page.Id}\" binds {label} to channel",
+                            scale: entry.Scale
+                        );
 
                         continue;
                     }
@@ -171,24 +164,17 @@ public static class BindingVocabularyCheck {
 
             if (row.Command is { } chordCommand) {
                 if (chordCommand.Channel is { } chordChannel) {
-                    if (
-                        (channel is not null) &&
-                        !channel(arg: chordChannel)
-                    ) {
-                        errors.Add(item: $"chord [{string.Join(
+                    CheckChannel(
+                        channel: chordChannel,
+                        channelBinary: channelBinary,
+                        channelExists: channel,
+                        errors: errors,
+                        prefix: $"chord [{string.Join(
                             separator: '+',
                             values: (row.Chord ?? [])
-                        )}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()}, which resolves no declared channel");
-                    } else if (
-                        (chordCommand.Scale is { } chordScale) &&
-                        (chordScale != 1f) &&
-                        (channelBinary?.Invoke(arg: chordChannel) ?? false)
-                    ) {
-                        errors.Add(item: $"chord [{string.Join(
-                            separator: '+',
-                            values: (row.Chord ?? [])
-                        )}] (group \"{row.Group}\") folds into channel {chordChannel.Describe()} with scale {chordScale}, but a binary channel's scale is always the default (+1)");
-                    }
+                        )}] (group \"{row.Group}\") folds into channel",
+                        scale: chordCommand.Scale
+                    );
 
                     continue;
                 }
@@ -218,9 +204,12 @@ public static class BindingVocabularyCheck {
                     continue;
                 }
 
-                // A command-meaning chord dispatches its constant Value on the press edge, or the default active
-                // digital when it carries none (see BindingProfile.Compile's press-value derivation).
-                var pressed = (chordCommand.Value?.Kind ?? CommandValueKind.Digital);
+                // A command-meaning chord (a channel one continues above) dispatches the same press value
+                // BindingProfile.Compile builds; validate the kind it will actually send.
+                var pressed = CompiledBindingProfile.PressValue(
+                    channelScale: null,
+                    explicitValue: chordCommand.Value
+                ).Kind;
 
                 if (pressed != declared.ValueKind) {
                     errors.Add(item: $"chord [{string.Join(
@@ -245,15 +234,42 @@ public static class BindingVocabularyCheck {
                         continue;
                     }
 
+                    var sectorKind = CompiledBindingProfile.PressValue(
+                        channelScale: null,
+                        explicitValue: sector.Value
+                    ).Kind;
+
                     if (command(arg: sector.Command) is not { } declared) {
                         errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which names no registered command");
                     } else if (declared.Bindability != CommandBindability.Bindable) {
                         errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which is not bindable");
-                    } else if ((sector.Value?.Kind ?? CommandValueKind.Digital) != declared.ValueKind) {
-                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: (sector.Value?.Kind ?? CommandValueKind.Digital))} to \"{sector.Command}\", which takes {Word(kind: declared.ValueKind)}");
+                    } else if (sectorKind != declared.ValueKind) {
+                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: sectorKind)} to \"{sector.Command}\", which takes {Word(kind: declared.ValueKind)}");
                     }
                 }
             }
+        }
+    }
+
+    private static void CheckChannel(
+        ChannelRef channel,
+        Func<ChannelRef, bool>? channelBinary,
+        Func<ChannelRef, bool>? channelExists,
+        List<string> errors,
+        string prefix,
+        float? scale
+    ) {
+        if (
+            (channelExists is not null) &&
+            !channelExists(arg: channel)
+        ) {
+            errors.Add(item: $"{prefix} {channel.Describe()}, which resolves no declared channel");
+        } else if (
+            (scale is { } value) &&
+            (value != 1f) &&
+            (channelBinary?.Invoke(arg: channel) ?? false)
+        ) {
+            errors.Add(item: $"{prefix} {channel.Describe()} with scale {value}, but a binary channel's scale is always the default (+1)");
         }
     }
 

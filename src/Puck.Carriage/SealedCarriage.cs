@@ -9,10 +9,9 @@ namespace Puck.Carriage;
 /// carriage") — ECDH P-256 key agreement to an AES-256-GCM key, with the envelope's serialized context
 /// header as AEAD associated data. Literal AEAD applied twice over: the header binds the ciphertext to its
 /// context exactly as it binds a signature's payload, which is why two keypairs are provisioned (one for
-/// signing, one for sealing) rather than one. This type performs the AEAD operation only; it does not sign
-/// — combining a sealed payload with the ordinary signed envelope (nesting one inside the other) is
-/// straightforward if sender authentication beyond "held the matching private key" is also wanted, but is
-/// out of scope for what the doc asks this prototype to prove.
+/// signing, one for sealing) rather than one. This type performs the AEAD operation only; it does not sign.
+/// A caller that also needs sender authentication encodes the returned payload and signs it as an ordinary
+/// <see cref="CarriagePayloadKind.Sealed"/> carriage envelope.
 /// </summary>
 /// <remarks>
 /// <para><b>Sealed carriage is deliberately unauthenticated as to sender.</b> The agreement is

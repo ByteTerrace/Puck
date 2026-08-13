@@ -31,19 +31,17 @@ public sealed class VulkanSurface : IDisposable {
     ) {
         ArgumentNullException.ThrowIfNull(argument: surfaceApi);
 
-        if (0 == instanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(instanceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(instanceHandle)
+        );
 
-        if (0 == surfaceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan surface handle must be non-zero.",
-                paramName: nameof(surfaceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: surfaceHandle,
+            handleDescription: "surface",
+            paramName: nameof(surfaceHandle)
+        );
 
         InstanceHandle = instanceHandle;
         Handle = surfaceHandle;

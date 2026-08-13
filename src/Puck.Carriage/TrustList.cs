@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Security.Cryptography;
 
 namespace Puck.Carriage;
@@ -155,11 +156,14 @@ public sealed record TrustListEntry(
 /// Every entry is validated at construction, so the verifier never walks an inconsistent list.
 /// </summary>
 public sealed record TrustList {
+    private readonly TrustListEntry[] m_entries;
+
     /// <summary>Builds and validates a trust list.</summary>
     /// <param name="entries">
     /// The trusted entries. Each is validated, and no two may occupy the same lookup slot — the same
     /// <c>(domain, subject, mode)</c> triple — whether or not they pin the same key. An ambiguous list is a
-    /// bug, not a preference order.
+    /// bug, not a preference order. The list, every SPKI byte sequence, and every reach set are copied;
+    /// later mutation of caller-owned storage cannot change verifier policy.
     /// <para>The rule is slot identity rather than key identity because that is what the lookups are keyed
     /// on: <see cref="FindVouchingRoot"/> and <see cref="FindDirectSigner"/> match on domain, subject and
     /// mode and return the first hit, so a second entry in one slot can never be reached and its reach and
@@ -191,22 +195,37 @@ public sealed record TrustList {
 
         var seen = new HashSet<(string Domain, string? Subject, CarriageTrustMode Mode)>();
 
-        foreach (var entry in entries) {
+        // Each entry is copied before its copy is validated: the verifier walks exactly the list, SPKI
+        // bytes, and frozen reach set that were validated, so a caller mutating what it passed in after
+        // construction cannot put an unvalidated entry in front of the verifier (the same reason
+        // SignedCarriageEnvelope copies everything at its boundary).
+        var defensiveEntries = new TrustListEntry[entries.Count];
+
+        for (var index = 0; index < defensiveEntries.Length; index++) {
+            var source = entries[index];
+            var entry = source with {
+                PublicKeySubjectPublicKeyInfo = source.PublicKeySubjectPublicKeyInfo.ToArray(),
+                Reach = source.Reach.ToFrozenSet(comparer: StringComparer.Ordinal),
+            };
+
             entry.Validate();
 
             if (!seen.Add(item: (entry.PinnedId.Domain, entry.PinnedId.Subject, entry.Mode))) {
                 throw new ArgumentException(message: $"A trust list pins domain '{entry.PinnedId.Domain}' (subject '{(entry.PinnedId.Subject ?? "(none)")}') twice in the same mode — lookup returns the first match, so the second entry's reach and maximum age could never govern, and the list is refused rather than resolved by order.");
             }
+
+            defensiveEntries[index] = entry;
         }
 
         DefaultMaximumAge = defaultMaximumAge;
         DefaultRootBindingMaximumAge = (defaultRootBindingMaximumAge ?? defaultMaximumAge);
         DefaultSubjectBindingMaximumAge = (defaultSubjectBindingMaximumAge ?? defaultMaximumAge);
         ReplayAcceptanceHorizon = replayAcceptanceHorizon;
-        Entries = entries;
+        m_entries = defensiveEntries;
+        Entries = Array.AsReadOnly(array: defensiveEntries.Select(selector: CreateDetachedEntry).ToArray());
     }
 
-    /// <summary>The trusted entries, in authored order.</summary>
+    /// <summary>Gets a detached, read-only snapshot of the trusted entries in authored order.</summary>
     public IReadOnlyList<TrustListEntry> Entries { get; }
 
     /// <summary>The verifier's default maximum claim age when an entry does not override it, or <see langword="null"/> for no ceiling.</summary>
@@ -226,8 +245,18 @@ public sealed record TrustList {
 
     /// <summary>Finds the <see cref="CarriageTrustMode.Vouches"/> entry for a domain, or <see langword="null"/> if that domain is not trusted to vouch.</summary>
     /// <param name="domain">The root fingerprint to look up.</param>
+    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no vouching root matches.</returns>
     public TrustListEntry? FindVouchingRoot(string domain) {
-        foreach (var entry in Entries) {
+        var entry = FindVouchingRootForVerification(domain: domain);
+
+        return (entry is null) ? null : CreateDetachedEntry(entry: entry);
+    }
+
+    /// <summary>Finds the verifier-owned vouching-root snapshot without exposing it outside the assembly.</summary>
+    /// <param name="domain">The root fingerprint to look up.</param>
+    /// <returns>The verifier-owned matching entry, or <see langword="null"/> when no vouching root matches.</returns>
+    internal TrustListEntry? FindVouchingRootForVerification(string domain) {
+        foreach (var entry in m_entries) {
             if (
                 (entry.Mode == CarriageTrustMode.Vouches) &&
                 string.Equals(
@@ -250,12 +279,23 @@ public sealed record TrustList {
     /// </summary>
     /// <param name="domain">The claim's domain (the pinned key's own root fingerprint).</param>
     /// <param name="subject">The claim's subject.</param>
+    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no direct signer matches.</returns>
     public TrustListEntry? FindDirectSigner(string domain, string? subject) {
+        var entry = FindDirectSignerForVerification(domain: domain, subject: subject);
+
+        return (entry is null) ? null : CreateDetachedEntry(entry: entry);
+    }
+
+    /// <summary>Finds the verifier-owned direct-signer snapshot without exposing it outside the assembly.</summary>
+    /// <param name="domain">The claim's root fingerprint.</param>
+    /// <param name="subject">The claim's subject.</param>
+    /// <returns>The verifier-owned matching entry, or <see langword="null"/> when no direct signer matches.</returns>
+    internal TrustListEntry? FindDirectSignerForVerification(string domain, string? subject) {
         if (subject is null) {
             return null;
         }
 
-        foreach (var entry in Entries) {
+        foreach (var entry in m_entries) {
             if (
                 (entry.Mode == CarriageTrustMode.SignsDirectly) &&
                 string.Equals(
@@ -284,6 +324,10 @@ public sealed record TrustList {
 
     /// <summary>The maximum age for an issuing-to-subject binding admitted by <paramref name="entry"/>.</summary>
     public TimeSpan? SubjectBindingMaximumAgeFor(TrustListEntry entry) => (entry.SubjectBindingMaximumAge ?? DefaultSubjectBindingMaximumAge);
+
+    private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
+        PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
+    };
 
     private static void ValidateOptionalDuration(TimeSpan? value, string name) {
         if (

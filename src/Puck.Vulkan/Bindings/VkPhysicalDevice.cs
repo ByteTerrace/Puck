@@ -22,12 +22,11 @@ public readonly record struct VkPhysicalDevice {
         VkPhysicalDeviceType deviceType,
         VulkanQueueFamilySelection queueFamilySelection
     ) {
-        if (0 == handle) {
-            throw new ArgumentException(
-                message: "Vulkan physical-device handle must be non-zero.",
-                paramName: nameof(handle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: handle,
+            handleDescription: "physical-device",
+            paramName: nameof(handle)
+        );
 
         Handle = handle;
         DeviceType = deviceType;

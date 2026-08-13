@@ -46,10 +46,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     // current Vulkan feature struct (even the aggregate VkPhysicalDeviceVulkan1xFeatures).
     private const int FeatureStructureByteSize = 256;
 
-    private readonly Lock m_syncRoot = new();
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getInstanceProcAddr;
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
-
     private unsafe struct InstancePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult> CreateDevice;
     }
@@ -62,65 +58,32 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     private readonly ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
     private readonly ConcurrentDictionary<nint, DevicePointers> m_devicePointers = new();
 
-    private unsafe InstancePointers GetInstancePointers(nint instanceHandle) {
-        if (m_instancePointers.TryGetValue(
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
             key: instanceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetInstanceProcAddr();
-        InstancePointers pNew = default;
-
-        fixed (byte* pName = "vkCreateDevice"u8) {
-            pNew.CreateDevice = (delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)getAddr(
-                instanceHandle,
-                pName
-            );
-        }
-        m_instancePointers[instanceHandle] = pNew;
-        return pNew;
+            valueFactory: static handle => new InstancePointers {
+                CreateDevice = (delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkCreateDevice"u8),
+            }
+        );
     }
-    private unsafe DevicePointers GetDevicePointers(nint deviceHandle) {
-        if (m_devicePointers.TryGetValue(
+    private DevicePointers GetDevicePointers(nint deviceHandle) {
+        return m_devicePointers.GetOrAdd(
             key: deviceHandle,
-            value: out var pointers
-        )) {
-            return pointers;
-        }
-        var getAddr = GetDeviceProcAddr();
-        DevicePointers pNew = default;
-
-        fixed (byte* pName = "vkDestroyDevice"u8) {
-            pNew.DestroyDevice = (delegate* unmanaged[Cdecl]<nint, nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkDeviceWaitIdle"u8) {
-            pNew.DeviceWaitIdle = (delegate* unmanaged[Cdecl]<nint, VkResult>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        fixed (byte* pName = "vkGetDeviceQueue"u8) {
-            pNew.GetDeviceQueue = (delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)getAddr(
-                deviceHandle,
-                pName
-            );
-        }
-        m_devicePointers[deviceHandle] = pNew;
-        return pNew;
+            valueFactory: static handle => new DevicePointers {
+                DestroyDevice = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDevice"u8),
+                DeviceWaitIdle = (delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDeviceWaitIdle"u8),
+                GetDeviceQueue = (delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetDeviceQueue"u8),
+            }
+        );
     }
 
     /// <inheritdoc/>
     public VkResult CreateLogicalDevice(VulkanLogicalDeviceCreateRequest request, out nint deviceHandle) {
-        if (0 == request.InstanceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan instance handle must be non-zero.",
-                paramName: nameof(request)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: request.InstanceHandle,
+            handleDescription: "instance",
+            paramName: nameof(request)
+        );
 
         var createDevice = GetInstancePointers(instanceHandle: request.InstanceHandle).CreateDevice;
 
@@ -291,12 +254,11 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     }
     /// <inheritdoc/>
     public VkResult WaitIdle(nint deviceHandle) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
         var waitIdle = GetDevicePointers(deviceHandle: deviceHandle).DeviceWaitIdle;
 
@@ -307,12 +269,11 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     }
     /// <inheritdoc/>
     public nint GetDeviceQueue(nint deviceHandle, uint queueFamilyIndex, uint queueIndex) {
-        if (0 == deviceHandle) {
-            throw new ArgumentException(
-                message: "Vulkan logical-device handle must be non-zero.",
-                paramName: nameof(deviceHandle)
-            );
-        }
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
         var getDeviceQueue = GetDevicePointers(deviceHandle: deviceHandle).GetDeviceQueue;
 
@@ -328,29 +289,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         return queueHandle;
     }
 
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
-        return GetProcAddr(
-            cached: ref m_getDeviceProcAddr,
-            exportName: "vkGetDeviceProcAddr"
-        );
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
-        return GetProcAddr(
-            cached: ref m_getInstanceProcAddr,
-            exportName: "vkGetInstanceProcAddr"
-        );
-    }
-    private delegate* unmanaged[Cdecl]<nint, byte*, nint> GetProcAddr(ref delegate* unmanaged[Cdecl]<nint, byte*, nint> cached, string exportName) {
-        lock (m_syncRoot) {
-            if (cached is not null) {
-                return cached;
-            }
-            var export = VulkanNativeLibrary.GetExport(functionName: exportName);
-
-            cached = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)export;
-            return cached;
-        }
-    }
     private MarshalledStringArray MarshalStringArray(IReadOnlyList<string> values) {
         if (0 == values.Count) {
             return new MarshalledStringArray(

@@ -3,13 +3,6 @@
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
-    <!--
-        The native ARM7TDMI AdvancedGamingBrick core, including its IScreenMachineEngine adapter (Hosting/):
-        AdvancedGamingBrickEngine (IScreenMachineEngine, id "advanced-gaming-brick") builds an AdvancedMachineHost that
-        direct-boots a .gba cartridge, advances exact engine-tick/input segments on one ordered worker, maps the neutral
-        controller image to KEYINPUT, and double-buffers the native 240x160 framebuffer through backend-neutral IGpu*
-        seams.
-    -->
     <PropertyGroup>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>

@@ -16,4 +16,8 @@
     <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
          transitively-arriving edge is checked the same as a declared one. -->
     <Import Project="$(MSBuildThisFileDirectory)build\Puck.Architecture.targets" />
+
+    <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a
+         csproj's own <IsPackable>true</IsPackable> is visible to the flag-guarded groups inside. -->
+    <Import Project="$(MSBuildThisFileDirectory)build\Packaging.targets" />
 </Project>

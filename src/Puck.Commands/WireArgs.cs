@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Puck.Commands;
 
 /// <summary>
@@ -131,29 +129,22 @@ public readonly ref struct WireArgs {
     }
 
     /// <summary>Parses the token at <paramref name="index"/> as a finite invariant-culture <see cref="float"/> straight
-    /// from its span (no thousands separators, NaN, or infinities), matching <see cref="CommandArgs.TryParseFloat"/>.</summary>
+    /// from its span, through <see cref="CommandArgs.TryParseFloat(ReadOnlySpan{char}, out float)"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
     /// <returns>Whether the token parsed.</returns>
-    public bool TryFloat(int index, out float value) =>
-        (float.TryParse(
-        s: this[index],
-        style: NumberStyles.Float,
-        provider: CultureInfo.InvariantCulture,
-        result: out value
-    ) &&
-        float.IsFinite(f: value));
+    public bool TryFloat(int index, out float value) => CommandArgs.TryParseFloat(
+        text: this[index],
+        value: out value
+    );
 
     /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="int"/> straight from its
-    /// span (plain digits with an optional sign), matching <see cref="CommandArgs.TryParseInt"/>.</summary>
+    /// span, through <see cref="CommandArgs.TryParseInt(ReadOnlySpan{char}, out int)"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>
     /// <param name="value">The parsed value, or <c>0</c> on failure.</param>
     /// <returns>Whether the token parsed.</returns>
-    public bool TryInt(int index, out int value) =>
-        int.TryParse(
-        s: this[index],
-        style: NumberStyles.Integer,
-        provider: CultureInfo.InvariantCulture,
-        result: out value
+    public bool TryInt(int index, out int value) => CommandArgs.TryParseInt(
+        text: this[index],
+        value: out value
     );
 }
