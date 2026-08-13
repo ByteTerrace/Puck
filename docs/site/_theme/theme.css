@@ -1,0 +1,145 @@
+/*
+  ByteTerrace docs theme. Palette, typography and the light/dark toggle are
+  lifted from blob.byteterrace.com/public/bds-theorem.html so the docs read as
+  one surface with the essays. Served same-origin under $web/_theme so the
+  Report-Only CSP (font-src 'self') stays quiet.
+*/
+
+/* Fonts — self-hosted OFL woff2 (Lora, JetBrains Mono). Same-origin absolute
+   paths resolve for both the home page (at /) and the reference (at /reference/). */
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: italic; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400i.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 500; font-display: swap; src: url(/_theme/fonts/lora-500.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 600; font-display: swap; src: url(/_theme/fonts/lora-600.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(/_theme/fonts/jetbrains-mono-400.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(/_theme/fonts/jetbrains-mono-500.woff2) format("woff2"); }
+
+/* Light is the bare :root default; system-dark applies unless the toggle has
+   pinned an explicit choice via [data-theme] on <html>. */
+:root {
+  --paper:        #e7e4ed;
+  --paper-2:      #dbd7e4;
+  --ink:          #2b2736;
+  --ink-soft:     #5a5470;
+  --ink-faint:    #877f99;
+  --accent:       #ad3a53;
+  --accent-bright:#d15d78;
+  --accent-ink:   #fdf0f3;
+  --accent-2:     #0e7d6b;
+  --rule:         #d0cbdc;
+  --code-bg:      #221f2c;
+  --code-fg:      #e9e5f1;
+  --quote-bg:     #e0dce9;
+  --measure:      39rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:        #1b1924;
+    --paper-2:      #262231;
+    --ink:          #ebe7f2;
+    --ink-soft:     #b5aec3;
+    --ink-faint:    #847d93;
+    --accent:       #f2879a;
+    --accent-bright:#ffa3b3;
+    --accent-ink:   #2a0d14;
+    --accent-2:     #4fd0b4;
+    --rule:         #363145;
+    --code-bg:      #15131c;
+    --code-fg:      #e8e3f0;
+    --quote-bg:     #262231;
+  }
+}
+:root[data-theme="light"] {
+  --paper:#e7e4ed; --paper-2:#dbd7e4; --ink:#2b2736; --ink-soft:#5a5470;
+  --ink-faint:#877f99; --accent:#ad3a53; --accent-bright:#d15d78;
+  --accent-ink:#fdf0f3; --accent-2:#0e7d6b; --rule:#d0cbdc;
+  --code-bg:#221f2c; --code-fg:#e9e5f1; --quote-bg:#e0dce9;
+}
+:root[data-theme="dark"] {
+  --paper:#1b1924; --paper-2:#262231; --ink:#ebe7f2; --ink-soft:#b5aec3;
+  --ink-faint:#847d93; --accent:#f2879a; --accent-bright:#ffa3b3;
+  --accent-ink:#2a0d14; --accent-2:#4fd0b4; --rule:#363145;
+  --code-bg:#15131c; --code-fg:#e8e3f0; --quote-bg:#262231;
+}
+
+* { box-sizing: border-box; }
+
+html { color-scheme: light dark; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: clamp(1.08rem, 0.98rem + 0.5vw, 1.28rem);
+  line-height: 1.66;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration-color: var(--rule); text-underline-offset: 0.15em; }
+a:hover { color: var(--accent-bright); text-decoration-color: var(--accent-bright); }
+
+code, pre, kbd { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: var(--code-bg); color: var(--code-fg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+
+/* ── Header: docs + repo links and the theme toggle ─────────────────────── */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.7rem clamp(1rem, 4vw, 2.4rem);
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+.site-header .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+.site-header .brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
+  display: block;
+}
+.site-header .brand:hover { color: var(--accent); }
+.site-header nav {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  margin-left: auto;
+  font-size: 0.98rem;
+}
+.site-header nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.site-header nav a:hover { color: var(--accent); }
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }

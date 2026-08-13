@@ -1,0 +1,102 @@
+name: Docs
+
+# Builds the DocFX API reference and deploys the documentation site to the
+# $web container of the bytrcstp001 storage account, behind Front Door. Auth is
+# the bytrcidpzzz user-assigned managed identity via GitHub OIDC federation
+# (no stored secret) — see the federated-credential + repo-variable notes in
+# the PR/handoff. Runs when a GitHub Release is published.
+#
+# Layout written to $web:
+#   /index.html         home page (brotli — Front Door forces Content-Encoding: br here)
+#   /_theme/**          shared theme.css + self-hosted fonts
+#   /reference/**       DocFX output
+#
+# SAFETY: exactly one step deletes remote blobs (the reference sync), and it is
+# scoped to the reference/ prefix. Nothing here touches the rest of $web.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for the OIDC token azure/login exchanges
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-docs:
+    runs-on: windows-latest
+    environment:
+      name: Blobs
+      url: https://byteterrace.com/
+    env:
+      ACCOUNT: bytrcstp001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build API reference (DocFX)
+        run: |
+          dotnet tool restore
+          dotnet docfx docs/api/docfx.json
+
+      - name: Assemble deploy tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path deploy/reference | Out-Null
+          Copy-Item docs/api/_site/*    deploy/reference/  -Recurse -Force
+          Copy-Item docs/site/_theme    deploy/_theme      -Recurse -Force
+          Copy-Item docs/site/favicon.ico deploy/favicon.ico -Force
+
+          # Home page is brotli-compressed in place: Front Door's portal rule set
+          # force-sets Content-Encoding: br on /index.html, so the stored bytes
+          # must actually be brotli or the browser cannot decode them.
+          $raw = [IO.File]::ReadAllBytes("docs/site/index.html")
+          $out = [IO.File]::Create("deploy/index.html")
+          $br  = [IO.Compression.BrotliStream]::new($out, [IO.Compression.CompressionLevel]::SmallestSize)
+          $br.Write($raw, 0, $raw.Length)
+          $br.Dispose(); $out.Dispose()
+          Write-Host "index.html: $($raw.Length) -> $((Get-Item deploy/index.html).Length) bytes (brotli)"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to $web
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # 1) API reference — sync WITH delete, scoped to the reference/ prefix
+          #    only. This is the single delete-capable operation in the workflow.
+          az storage blob sync --account-name $env:ACCOUNT --auth-mode login `
+            --container '$web' --source deploy/reference --destination reference `
+            --only-show-errors
+
+          # 2) Shared theme + fonts — overwrite, never delete.
+          az storage blob upload-batch --account-name $env:ACCOUNT --auth-mode login `
+            --destination '$web/_theme' --source deploy/_theme --overwrite `
+            --only-show-errors
+
+          # 3) Home page — brotli bytes with explicit headers. Overwrites the SPA
+          #    index.html only; leaves any other $web root content untouched.
+          az storage blob upload --account-name $env:ACCOUNT --auth-mode login `
+            --container '$web' --name index.html --file deploy/index.html --overwrite `
+            --content-type 'text/html' --content-encoding 'br' `
+            --only-show-errors
+
+          # 4) Favicon at the site root — plain, overwrite only.
+          az storage blob upload --account-name $env:ACCOUNT --auth-mode login `
+            --container '$web' --name favicon.ico --file deploy/favicon.ico --overwrite `
+            --content-type 'image/x-icon' `
+            --only-show-errors

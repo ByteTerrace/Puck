@@ -1,0 +1,79 @@
+/*
+  ByteTerrace skin for the DocFX "modern" template. Maps Bootstrap 5.3's
+  variables onto the same palette, fonts and light/dark values as the home page
+  and the essays (blob.byteterrace.com/public/*). The modern template drives
+  light/dark by toggling [data-bs-theme] on <html>; we bind our colours to that
+  so its existing toggle keeps working.
+
+  Fonts are the self-hosted woff2 deployed to $web/_theme/fonts, referenced by
+  absolute same-origin paths so they resolve from /reference/* the same as /.
+*/
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: italic; font-weight: 400; font-display: swap; src: url(/_theme/fonts/lora-400i.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 500; font-display: swap; src: url(/_theme/fonts/lora-500.woff2) format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 600; font-display: swap; src: url(/_theme/fonts/lora-600.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(/_theme/fonts/jetbrains-mono-400.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(/_theme/fonts/jetbrains-mono-500.woff2) format("woff2"); }
+
+:root,
+[data-bs-theme="light"] {
+  --bs-body-bg: #e7e4ed;
+  --bs-body-bg-rgb: 231, 228, 237;
+  --bs-secondary-bg: #dbd7e4;
+  --bs-tertiary-bg: #dbd7e4;
+  --bs-body-color: #2b2736;
+  --bs-body-color-rgb: 43, 39, 54;
+  --bs-emphasis-color: #2b2736;
+  --bs-secondary-color: #5a5470;
+  --bs-tertiary-color: #877f99;
+  --bs-border-color: #d0cbdc;
+  --bs-heading-color: #2b2736;
+  --bs-link-color: #ad3a53;
+  --bs-link-color-rgb: 173, 58, 83;
+  --bs-link-hover-color: #d15d78;
+  --bs-link-hover-color-rgb: 209, 93, 120;
+  --bs-code-color: #ad3a53;
+}
+
+[data-bs-theme="dark"] {
+  --bs-body-bg: #1b1924;
+  --bs-body-bg-rgb: 27, 25, 36;
+  --bs-secondary-bg: #262231;
+  --bs-tertiary-bg: #262231;
+  --bs-body-color: #ebe7f2;
+  --bs-body-color-rgb: 235, 231, 242;
+  --bs-emphasis-color: #ffffff;
+  --bs-secondary-color: #b5aec3;
+  --bs-tertiary-color: #847d93;
+  --bs-border-color: #363145;
+  --bs-heading-color: #ebe7f2;
+  --bs-link-color: #f2879a;
+  --bs-link-color-rgb: 242, 135, 154;
+  --bs-link-hover-color: #ffa3b3;
+  --bs-link-hover-color-rgb: 255, 163, 179;
+  --bs-code-color: #f2879a;
+}
+
+:root {
+  --bs-body-font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --bs-font-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --bs-body-font-size: 1.02rem;
+  --bs-body-line-height: 1.6;
+}
+
+body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+
+/* Headings a touch tighter than body copy, matching the essays. */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: var(--bs-body-font-family);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+/* Code inherits the mono face and the paper-2 ground. */
+code, pre, kbd, samp, .code { font-family: var(--bs-font-monospace); }
+
+/* Brand mark in the navbar. The modern template only sizes its default SVG, so
+   a PNG logo must be capped explicitly or it renders at full resolution. */
+.navbar-brand { font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem; }
+.navbar-brand img { height: 1.7rem; width: auto; border-radius: 6px; }

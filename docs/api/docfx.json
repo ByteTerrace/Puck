@@ -12,7 +12,9 @@
             }
         ],
         "globalMetadata": {
-            "_appFooter": "Puck — Maths · Commands · Input · Text · Abstractions · Vulkan · Assets",
+            "_appFaviconPath": "/favicon.ico",
+            "_appFooter": "Puck — Abstractions · Assets · Commands · Input · Maths · Text · Vulkan",
+            "_appLogoPath": "/_theme/logo.png",
             "_appName": "Puck",
             "_appTitle": "Puck API Reference",
             "_disableContribution": true,
@@ -29,7 +31,8 @@
         ],
         "template": [
             "default",
-            "modern"
+            "modern",
+            "templates/byteterrace"
         ]
     },
     "metadata": [

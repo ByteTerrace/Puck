@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Puck</title>
+  <meta name="description" content="Puck is an everything-as-data engine: versioned JSON documents describe what runs, rendered and replayed deterministically on Vulkan or Direct3D 12.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <!-- Apply the stored theme before first paint so a reload never flashes the
+       wrong ground. Mirrors the toggle below, which persists to localStorage. -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/_theme/theme.css">
+  <style>
+    .wrap { max-width: 54rem; margin: 0 auto; padding: clamp(3rem, 8vw, 6rem) 1.4rem 5rem; }
+    .hero h1 {
+      font-weight: 600;
+      font-size: clamp(2.6rem, 1.8rem + 3vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+      margin: 0 0 1rem;
+    }
+    .hero p.lede {
+      font-size: clamp(1.15rem, 1rem + 0.6vw, 1.4rem);
+      color: var(--ink-soft);
+      max-width: 42rem;
+      margin: 0 0 2.6rem;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+      gap: 1rem;
+      margin: 2.5rem 0;
+    }
+    .card {
+      display: block;
+      padding: 1.3rem 1.4rem;
+      background: var(--paper-2);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card h2 { margin: 0 0 0.35rem; font-size: 1.15rem; font-weight: 600; color: var(--accent); }
+    .card p { margin: 0; font-size: 0.98rem; color: var(--ink-soft); line-height: 1.5; }
+    .libs { color: var(--ink-faint); font-size: 0.95rem; margin-top: 3rem; }
+    .libs code { color: var(--ink-soft); }
+    footer.site-footer {
+      max-width: 54rem;
+      margin: 0 auto;
+      padding: 2rem 1.4rem 4rem;
+      color: var(--ink-faint);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--rule);
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/"><img class="brand-mark" src="/_theme/logo.png" alt="" width="28" height="28"> Puck</a>
+    <nav>
+      <a href="/reference/">Docs</a>
+      <a href="https://github.com/ByteTerrace/Puck" rel="noopener">GitHub</a>
+      <button class="theme-toggle" id="themeToggle" type="button" title="Toggle light / dark" aria-label="Toggle light and dark theme">◑</button>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Puck</h1>
+      <p class="lede">
+        An everything-as-data engine. Versioned JSON documents describe what runs;
+        the engine renders, composites, validates, and replays them deterministically
+        on either GPU backend — Vulkan or Direct3D&nbsp;12.
+      </p>
+    </section>
+
+    <section class="cards">
+      <a class="card" href="/reference/">
+        <h2>API reference</h2>
+        <p>Generated member documentation for the reusable Puck libraries, built from source and XML docs.</p>
+      </a>
+      <a class="card" href="https://www.nuget.org/profiles/ByteTerrace" rel="noopener">
+        <h2>Packages</h2>
+        <p>The <code>ByteTerrace.Puck.*</code> libraries on NuGet.org.</p>
+      </a>
+      <a class="card" href="https://github.com/ByteTerrace/Puck" rel="noopener">
+        <h2>Source</h2>
+        <p>The repository, issues, and release history on GitHub.</p>
+      </a>
+    </section>
+
+    <p class="libs">
+      Published libraries:
+      <code>ByteTerrace.Puck.Carriage</code>,
+      <code>ByteTerrace.Puck.Commands</code>,
+      <code>ByteTerrace.Puck.Maths</code>.
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    © 2026 ByteTerrace
+  </footer>
+
+  <script>
+    // Theme toggle: system default until clicked, then an explicit choice that
+    // persists across pages. Matches the reference essays' data-theme model.
+    (function () {
+      var btn = document.getElementById("themeToggle");
+      var root = document.documentElement;
+      btn.addEventListener("click", function () {
+        var current = root.getAttribute("data-theme");
+        if (!current) {
+          current = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        var next = current === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        try { localStorage.setItem("theme", next); } catch (e) {}
+      });
+    })();
+  </script>
+</body>
+</html>
