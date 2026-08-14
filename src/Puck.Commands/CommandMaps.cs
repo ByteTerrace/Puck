@@ -4,9 +4,9 @@ namespace Puck.Commands;
 /// Defines well-known command-map names.
 /// </summary>
 /// <remarks>
-/// A command map is a named group of commands that can be activated or deactivated together,
-/// providing the modality model that determines which commands accept source-driven activation at
-/// any given time. Hosts define their own maps, such as gameplay, console, or menu, in addition to
+/// A command map is an immutable classification of commands. Each <see cref="InputRouter"/> resolves an independent
+/// active set per logical slot, providing the modality model that determines which commands accept source-driven
+/// activation for that player. Hosts define their own maps, such as gameplay, vehicle, plan, or menu, in addition to
 /// <see cref="Global"/>.
 /// </remarks>
 public static class CommandMaps {

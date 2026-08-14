@@ -29,7 +29,7 @@ public sealed class BindingChordTracker {
 
     /// <summary>Applies a signal to the tracker.</summary>
     /// <param name="signal">The signal, in the router's deterministic capture order.</param>
-    /// <returns><see langword="true"/> when the signal drove a declared modifier (the active page may have changed).</returns>
+    /// <returns><see langword="true"/> when the signal changed the held modifier order.</returns>
     public bool Apply(in InputSignal signal) {
         if (!m_profile.TryGetModifier(
             source: signal.Source,
@@ -38,12 +38,10 @@ public sealed class BindingChordTracker {
             return false;
         }
 
-        _ = m_tracker.Set(
+        return m_tracker.Set(
             index: modifierIndex,
             signal: in signal
         );
-
-        return true;
     }
 
     /// <summary>Releases every modifier (focus loss, device disconnect, or a profile reload).</summary>

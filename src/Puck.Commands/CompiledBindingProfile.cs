@@ -40,12 +40,14 @@ public sealed class CompiledBindingProfile {
 
     // The one precomputed command-edge payload shape shared by a command chord row and a row activator: the press
     // fires Command with PressValue, the release clears it with ReleaseValue (an inactive value of the same kind);
-    // DispatchRelease mirrors HoldRelease.
+    // DispatchRelease mirrors HoldRelease. Reassertable marks a channel destination: it may recover continuous
+    // state from a digital Active sample without turning that sample into a command edge.
     internal sealed record CompiledCommandEdge(
         string Command,
         bool DispatchRelease,
         CommandValue PressValue,
-        CommandValue ReleaseValue
+        CommandValue ReleaseValue,
+        bool Reassertable
     );
 
     // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker

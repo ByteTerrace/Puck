@@ -32,6 +32,7 @@ public sealed class CommandInjectionSink {
             CommandId: commandId,
             Value: value,
             Phase: phase,
+            Origin: CommandOrigin.Text,
             Principal: m_principal,
             Slot: m_slot,
             Text: text

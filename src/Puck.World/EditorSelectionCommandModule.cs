@@ -163,11 +163,10 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
 
         return EditorSculptCommandModule.Echo(slot: slot, verb: "editor.select", detail: DescribeSelection(slot: slot, selection: in selection));
     }
-    // The no-arg fold: CommandContext.Source (non-null only for a bound dispatch — see
-    // CommandDefinition.WithWireArgs's doctrine comment; Value.Kind is not a safe discriminator once this verb
-    // declares Axis1D) distinguishes a bound row from a typed no-arg line. Bound: axis>0 next, axis<0 prev, axis==0
-    // deselect (the West chord's own constant). Typed (Source null): deselect too — it always succeeds and clears
-    // the selection.
+    // The no-arg fold: CommandContext.Origin (see CommandDefinition.WithWireArgs's doctrine comment; Value.Kind is
+    // not a safe discriminator once this verb declares Axis1D) distinguishes a bound row from a typed no-arg line.
+    // Bound: axis>0 next, axis<0 prev, axis==0 deselect (the West chord's own constant). Typed: deselect too — it
+    // always succeeds and clears the selection.
     private CommandResult NoArgSelectHandler(CommandContext context) {
         var (slot, error) = EditorCommandModule.ResolveSlot(context: context, args: WireArgs.Empty, at: 0, verb: "editor.select");
 
@@ -179,7 +178,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
             return guard;
         }
 
-        if (context.Source is not null) {
+        if (context.Origin == CommandOrigin.Binding) {
             var axis = context.Value.AsAxis1D;
 
             if (axis > 0f) {
@@ -530,7 +529,7 @@ internal sealed class EditorSelectionCommandModule(WorldEditorSession session, W
             return CommandResult.Error(output: "[editor.place: expected <creationId> [yawDeg [scale]]]");
         }
 
-        var slot = ((context.Parse is null) ? context.Slot : 0);
+        var slot = ((context.Origin == CommandOrigin.Binding) ? context.Slot : 0);
 
         if (m_session.NotEditingError(slot: slot, verb: "editor.place") is { } guard) {
             return guard;

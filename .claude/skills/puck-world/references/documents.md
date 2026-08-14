@@ -796,7 +796,11 @@ id) and ENTRY-BY-SOURCE when both name the same page (per-source replace,
 first-touch-per-layer so a hold/release pair in one layer accumulates).
 The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
-copied. Live surface: `player.bind`, `player.bindings`.
+copied. `WorldSeatBindings` compares the filtered composed document plus the
+ordered channel-name map before compiling: a route that presents a new document
+instance with identical effective content is a true no-op, preserving held
+commands, chord/page state, and release latches. Live surface: `player.bind`,
+`player.bindings`.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Null resolves to `WorldBindingBarAuthoring.Default`

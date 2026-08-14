@@ -5,6 +5,7 @@ namespace Puck.Commands;
 /// the small terminal/navigation plane beside, rather than inside, authored gameplay bindings.
 /// </summary>
 public interface IAlwaysActiveInputBindings {
-    /// <summary>Returns the host bindings for a slot and provider-neutral source, or <see langword="null"/>.</summary>
+    /// <summary>Returns the host bindings for a slot and provider-neutral source, or <see langword="null"/>. A returned
+    /// list is immutable runtime data; return a different list to change the mapping.</summary>
     IReadOnlyList<CommandBinding>? Resolve(int slot, string source);
 }

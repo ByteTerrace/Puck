@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Puck.Commands.Tests;
@@ -18,6 +19,8 @@ public sealed class InputRouterTests {
         var press = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
 
         Assert.Equal(expected: CommandPhase.Started, actual: press.Phase);
+        Assert.Equal(expected: CommandOrigin.Binding, actual: press.Origin);
+        Assert.Equal(expected: "key.w", actual: press.Source);
         Assert.True(condition: press.Dispatch);
         Assert.True(condition: router.IsCommandHeld(slot: 0, command: Command));
 
@@ -62,6 +65,53 @@ public sealed class InputRouterTests {
         var cancellation = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
 
         Assert.Equal(expected: CommandPhase.Canceled, actual: cancellation.Phase);
+        Assert.Equal(expected: CommandOrigin.Binding, actual: cancellation.Origin);
+    }
+
+    [Fact]
+    public void ScopedBindingReloadCancelsOnlyTheAffectedSlot() {
+        var bindings = new ReloadableBindings(new CommandBinding(Command: Command));
+        var firstDevice = InputDeviceId.FromConnectionKey(key: "first-pad");
+        var secondDevice = InputDeviceId.FromConnectionKey(key: "second-pad");
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(Command)]),
+            bindings: bindings,
+            principalResolver: new ConsolePrincipal(),
+            slotResolver: device => ((device == firstDevice) ? 0 : 1)
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: firstDevice));
+        router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: secondDevice));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        bindings.Reload(slot: 0);
+
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: Command));
+        Assert.True(condition: router.IsCommandHeld(slot: 1, command: Command));
+
+        var snapshot = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(expected: CommandPhase.Canceled, actual: Assert.Single(snapshot.Lanes[0].Entries).Phase);
+        Assert.Equal(expected: CommandPhase.Active, actual: Assert.Single(snapshot.Lanes[1].Entries).Phase);
+    }
+
+    [Fact]
+    public void ResolvedBindingCacheDoesNotOwnRetiredListIdentities() {
+        var bindings = new ReplacingBindings(new CommandBinding(Command: Command));
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(Command)]),
+            bindings: bindings,
+            principalResolver: new ConsolePrincipal()
+        );
+        var retired = ResolveAndRetireList(router: router, bindings: bindings);
+
+        for (var attempt = 0; retired.IsAlive && (attempt < 10); attempt++) {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        Assert.False(condition: retired.IsAlive);
     }
 
     [Fact]
@@ -117,25 +167,99 @@ public sealed class InputRouterTests {
     [Fact]
     public void FocusLossCancelsHeldCommandsDropsQueuedPhysicalSignalsAndResetsBindings() {
         var bindings = new TrackingBindings(binding: new CommandBinding(Command: Command));
+        var registry = new CommandRegistry(modules: [new SimulationDigitalModule(Command)]);
+        var clock = new FakeClock();
         var router = new InputRouter(
-            registry: new CommandRegistry(modules: [new DigitalModule(Command)]),
+            registry: registry,
             bindings: bindings,
-            principalResolver: new ConsolePrincipal()
+            principalResolver: new ConsolePrincipal(),
+            clock: clock
         );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
 
         router.Capture(signal: InputSignal.Press(source: "key.w"));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
         router.Capture(signal: InputSignal.Press(source: "key.up"));
+        Inject(
+            registry: registry,
+            text: "survives-focus-loss"
+        );
 
         router.ReleaseHeld();
 
         Assert.True(condition: bindings.WasReset);
         Assert.False(condition: router.IsCommandHeld(slot: 0, command: Command));
 
-        var cancellation = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+        var entries = Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
+        var cancellation = Assert.Single(collection: entries, predicate: static entry => entry.Phase == CommandPhase.Canceled);
+        var injection = Assert.Single(collection: entries, predicate: static entry => entry.Text == $"{Command} survives-focus-loss");
 
         Assert.Equal(expected: CommandPhase.Canceled, actual: cancellation.Phase);
+        Assert.Equal(expected: CommandOrigin.Text, actual: injection.Origin);
+        Assert.DoesNotContain(collection: entries, filter: static entry => entry.Source == "key.up");
         Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+
+    [Fact]
+    public void SignalAndInjectionStreamsMergeByCaptureSequence() {
+        var router = Router(out var registry, out var clock);
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", captureTick: 10UL));
+        clock.NowTicks = 10UL;
+        Inject(
+            registry: registry,
+            text: "between-edges"
+        );
+        router.Capture(signal: InputSignal.Release(source: "key.w", captureTick: 10UL));
+
+        var entries = Assert.Single(router.SnapshotForTick(tick: 1UL, windowEndTick: 11UL).Lanes).Entries;
+
+        Assert.Collection(
+            entries,
+            static entry => {
+                Assert.Equal(expected: CommandOrigin.Binding, actual: entry.Origin);
+                Assert.Equal(expected: CommandPhase.Started, actual: entry.Phase);
+                Assert.Equal(expected: "key.w", actual: entry.Source);
+            },
+            static entry => {
+                Assert.Equal(expected: CommandOrigin.Text, actual: entry.Origin);
+                Assert.Equal(expected: $"{Command} between-edges", actual: entry.Text);
+            },
+            static entry => {
+                Assert.Equal(expected: CommandOrigin.Binding, actual: entry.Origin);
+                Assert.Equal(expected: CommandPhase.Completed, actual: entry.Phase);
+                Assert.Equal(expected: "key.w", actual: entry.Source);
+            }
+        );
+    }
+
+    [Fact]
+    public void BothCaptureStreamsRetainFutureDatedItemsUntilTheirWindow() {
+        var router = Router(out var registry, out var clock);
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", captureTick: 30UL));
+        clock.NowTicks = 40UL;
+        Inject(
+            registry: registry,
+            text: "future-injection"
+        );
+
+        Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: 30UL).Lanes);
+
+        var entries = Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: 41UL).Lanes).Entries;
+
+        Assert.Collection(
+            entries,
+            static entry => {
+                Assert.Equal(expected: CommandOrigin.Binding, actual: entry.Origin);
+                Assert.Equal(expected: CommandPhase.Started, actual: entry.Phase);
+            },
+            static entry => {
+                Assert.Equal(expected: CommandOrigin.Text, actual: entry.Origin);
+                Assert.Equal(expected: $"{Command} future-injection", actual: entry.Text);
+            }
+        );
     }
 
     [Fact]
@@ -172,7 +296,7 @@ public sealed class InputRouterTests {
     }
 
     [Fact]
-    public void DeactivatingAMapCannotSwallowTheReleaseOfAnExistingHold() {
+    public void RemovingAMapDeterministicallyCancelsAnExistingHold() {
         var phases = new List<CommandPhase>();
         var registry = new CommandRegistry(modules: [new MappedModule(phases: phases)]);
         var router = new InputRouter(
@@ -184,17 +308,17 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal()
         );
 
-        registry.ActivateMap(map: "play");
+        router.SetActiveMaps(slot: 0, maps: ["play"]);
         router.Capture(signal: InputSignal.Press(source: "key.a"));
         var press = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
         registry.ApplySnapshot(snapshot: in press);
 
-        registry.DeactivateMap(map: "play");
+        router.SetActiveMaps(slot: 0, maps: []);
         router.Capture(signal: InputSignal.Release(source: "key.a"));
         var release = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
         registry.ApplySnapshot(snapshot: in release);
 
-        Assert.Equal(expected: [CommandPhase.Started, CommandPhase.Completed], actual: phases);
+        Assert.Equal(expected: [CommandPhase.Started, CommandPhase.Canceled], actual: phases);
         Assert.False(condition: router.IsCommandHeld(slot: 0, command: "mapped.hold"));
     }
 
@@ -213,6 +337,134 @@ public sealed class InputRouterTests {
         Assert.DoesNotContain(collection: Assert.Single(repeated.Lanes).Entries, filter: static entry => entry.Dispatch);
     }
 
+    [Fact]
+    public void DigitalReassertionCountsAsLiveInputWithoutDispatchingANewCommandEdge() {
+        var router = Router(out _);
+
+        router.Capture(signal: InputSignal.Reassert(source: "key.w"));
+        var snapshot = router.SnapshotForTick(tick: 7UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Empty(collection: snapshot.Lanes);
+        Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
+        Assert.Equal(expected: 7UL, actual: lastInput);
+    }
+
+    [Fact]
+    public void SnapshotIdentityIsStructuralAndExcludesLocalDeviceAnnotations() {
+        var first = Router(out _);
+        var second = Router(out _);
+
+        first.Capture(signal: InputSignal.Press(
+            source: "key.w",
+            deviceId: InputDeviceId.FromConnectionKey(key: "first-local-device")
+        ));
+        second.Capture(signal: InputSignal.Press(
+            source: "key.w",
+            deviceId: InputDeviceId.FromConnectionKey(key: "second-local-device")
+        ));
+
+        var firstSnapshot = first.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        var secondSnapshot = second.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(expected: firstSnapshot, actual: secondSnapshot);
+        Assert.Equal(expected: firstSnapshot.GetHashCode(), actual: secondSnapshot.GetHashCode());
+    }
+
+    [Fact]
+    public void HeldSnapshotConstructionAllocatesNothingAfterBuffersAreWarm() {
+        var router = Router(out _);
+
+        router.Capture(signal: InputSignal.Press(source: "key.w"));
+        _ = router.SnapshotForTick(tick: 0UL, windowEndTick: ulong.MaxValue);
+
+        for (var tick = 1UL; (tick <= 32UL); tick++) {
+            _ = router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue);
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var observedEntries = 0;
+
+        for (var tick = 33UL; (tick < 1_057UL); tick++) {
+            observedEntries += router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes[0].Entries.Count;
+        }
+
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+
+        Assert.Equal(expected: 1_024, actual: observedEntries);
+        Assert.Equal(expected: 0L, actual: allocated);
+    }
+
+    [Fact]
+    public void BatchedCaptureStreamsDrainAndMergeWithoutAllocatingAfterBuffersAreWarm() {
+        var registry = new CommandRegistry(modules: [new SimulationDigitalModule(Command)]);
+        var clock = new FakeClock();
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal(),
+            clock: clock
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        for (var tick = 0UL; (tick < 1_024UL); tick++) {
+            CaptureBatch(router: router, captureTick: tick);
+            InjectBatch(registry: registry);
+            _ = router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue);
+        }
+
+        var captureAllocated = 0L;
+        var drainAllocated = 0L;
+        var observedEntries = 0;
+
+        for (var tick = 1_024UL; (tick < 2_048UL); tick++) {
+            var beforeCapture = GC.GetAllocatedBytesForCurrentThread();
+
+            CaptureBatch(router: router, captureTick: tick);
+            var afterCapture = GC.GetAllocatedBytesForCurrentThread();
+
+            clock.NowTicks = tick;
+            InjectBatch(registry: registry);
+            var beforeDrain = GC.GetAllocatedBytesForCurrentThread();
+
+            observedEntries += router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes[0].Entries.Count;
+            var afterDrain = GC.GetAllocatedBytesForCurrentThread();
+
+            captureAllocated += (afterCapture - beforeCapture);
+            drainAllocated += (afterDrain - beforeDrain);
+        }
+
+        Assert.Equal(expected: 4_096, actual: observedEntries);
+        Assert.Equal(expected: 0L, actual: captureAllocated);
+        Assert.Equal(expected: 0L, actual: drainAllocated);
+    }
+
+    private static void CaptureBatch(InputRouter router, ulong captureTick) {
+        for (var index = 0; (index < 4); index++) {
+            router.Capture(signal: InputSignal.Press(source: "key.unbound", captureTick: captureTick));
+        }
+    }
+
+    private static void InjectBatch(CommandRegistry registry) {
+        for (var index = 0; (index < 4); index++) {
+            _ = registry.Submit(line: $"{Command} queued");
+        }
+    }
+
+    private static void Inject(CommandRegistry registry, string text) =>
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: $"{Command} {text}"));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference ResolveAndRetireList(InputRouter router, ReplacingBindings bindings) {
+        var retired = new WeakReference(target: bindings.Current);
+
+        router.Capture(signal: InputSignal.Press(source: "button.action"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        bindings.Replace();
+
+        return retired;
+    }
+
     private static InputRouter Router(out CommandRegistry registry) {
         registry = new CommandRegistry(modules: [new DigitalModule(Command)]);
 
@@ -222,11 +474,46 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal()
         );
     }
+    private static InputRouter Router(out CommandRegistry registry, out FakeClock clock) {
+        registry = new CommandRegistry(modules: [new SimulationDigitalModule(Command)]);
+        clock = new FakeClock();
+
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(new CommandBinding(Command: Command)),
+            principalResolver: new ConsolePrincipal(),
+            clock: clock
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        return router;
+    }
 
     private sealed class FixedBindings(CommandBinding binding) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [binding];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
+    }
+
+    private sealed class ReloadableBindings(CommandBinding binding) : IInputBindings, IInputBindingsReloadSource {
+        private readonly CommandBinding[] m_bindings = [binding];
+
+        public event Action<int?>? Reloading;
+
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
+
+        public void Reload(int? slot) => Reloading?.Invoke(obj: slot);
+    }
+
+    private sealed class ReplacingBindings(CommandBinding binding) : IInputBindings {
+        private readonly CommandBinding m_binding = binding;
+
+        public IReadOnlyList<CommandBinding> Current { get; private set; } = [binding];
+
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => Current;
+
+        public void Replace() => Current = [m_binding];
     }
 
     private sealed class TrackingBindings(CommandBinding binding) : IInputBindings {
@@ -245,6 +532,14 @@ public sealed class InputRouterTests {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
     }
 
+    private sealed class EmptyBindings : IInputBindings {
+        public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
+    }
+
+    private sealed class FakeClock : IInputClock {
+        public ulong NowTicks { get; set; }
+    }
+
     private sealed class DigitalModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
@@ -253,6 +548,18 @@ public sealed class InputRouterTests {
                 valueKind: CommandValueKind.Digital,
                 handler: static _ => CommandResult.None,
                 bindability: CommandBindability.Bindable
+            );
+        }
+    }
+
+    private sealed class SimulationDigitalModule(string command) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: command,
+                description: "Simulation-routed digital probe.",
+                handler: static (_, _) => CommandResult.None,
+                bindability: CommandBindability.Bindable,
+                routing: CommandRouting.Simulation
             );
         }
     }

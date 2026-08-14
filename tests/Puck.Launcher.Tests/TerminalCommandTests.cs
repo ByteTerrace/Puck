@@ -27,6 +27,56 @@ public sealed class TerminalCommandTests {
         Assert.True(condition: sessions.LastVisible);
     }
 
+    [Fact]
+    public void LauncherTextSourceMirrorsAdministrativeResultsAndHonorsContributedHoldGates() {
+        var gate = new TestHoldGate { Holding = true, };
+        var invocations = 0;
+        var services = new ServiceCollection();
+
+        services.AddSingleton<ITextCommandHoldGate>(implementationInstance: gate);
+        services.AddSingleton<ICommandModule>(implementationInstance: new ProbeModule(onInvoke: () => invocations++));
+        services.AddLauncherTerminal();
+
+        using var provider = services.BuildServiceProvider();
+        var source = provider.GetRequiredService<TextCommandSource>();
+        var terminalSessions = provider.GetRequiredService<TerminalConsoleSessions>();
+
+        source.Enqueue(line: "probe");
+        source.Collect();
+
+        Assert.Equal(expected: 0, actual: invocations);
+
+        gate.Holding = false;
+        source.Collect();
+
+        Assert.Equal(expected: 1, actual: invocations);
+        Assert.True(condition: terminalSessions.OperatorStore.TrySnapshot(frame: out var frame));
+        Assert.Contains(collection: frame.Lines, filter: static line => line.Text == "> probe");
+        Assert.Contains(collection: frame.Lines, filter: static line => line.Text == "[probe: ok]");
+    }
+
+    private sealed class TestHoldGate : ITextCommandHoldGate {
+        public bool Holding { get; set; }
+
+        public bool IsHolding() => Holding;
+    }
+
+    private sealed class ProbeModule(Action onInvoke) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                bindability: CommandBindability.Unbindable,
+                name: "probe",
+                description: "Reports a probe result.",
+                valueKind: CommandValueKind.Digital,
+                handler: _ => {
+                    onInvoke();
+
+                    return new CommandResult(Output: "[probe: ok]");
+                }
+            );
+        }
+    }
+
     private sealed class TestSessions(int count) : IConsoleSessions {
         public int Count { get; } = count;
         public int LastSlot { get; private set; } = -1;

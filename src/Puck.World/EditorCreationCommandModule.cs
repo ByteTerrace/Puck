@@ -93,7 +93,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
         }
 
         var id = ((args.Count >= 2) ? args[1].ToString() : (canonical.Document.Name ?? "creation"));
-        var slot = ((context.Parse is null) ? context.Slot : 0);
+        var slot = ((context.Origin == CommandOrigin.Binding) ? context.Slot : 0);
 
         // Doc + hash from the SAME canonical result — the hash-provenance contract, satisfied structurally.
         // The acting principal is the one this dispatch's ingress door stamped (see WorldPrincipalMapping) — a chord

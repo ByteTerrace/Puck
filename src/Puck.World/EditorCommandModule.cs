@@ -240,9 +240,9 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     }
     // The camera fold: a literal fly|orbit token -> explicit selection (typed only — a token always came through
     // WireArgs, never a bound dispatch, which carries none). With no token, the discriminator is
-    // CommandContext.Source (non-null ONLY for a bound dispatch — see CommandDefinition.WithWireArgs's valueKind
-    // doctrine comment; Value.Kind is NOT a safe discriminator once this verb declares Axis1D, because the text
-    // path's own impulse value would then also read as Axis1D):
+    // CommandContext.Origin (see CommandDefinition.WithWireArgs's valueKind doctrine comment; Value.Kind is NOT a
+    // safe discriminator once this verb declares Axis1D, because the text path's own impulse value would then also
+    // read as Axis1D):
     //   bound, axis > 0  -> fly (the camera page's South row, Axis(1f))
     //   bound, axis < 0  -> orbit (the camera page's West row, Axis(-1f))
     //   bound, axis == 0 -> toggle (the base page's South row, Axis(0f) — the plain chord act)
@@ -262,7 +262,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             return resolveError;
         }
 
-        var isBound = (context.Source is not null);
+        var isBound = (context.Origin == CommandOrigin.Binding);
         EditorCameraMode? explicitMode = null;
 
         if (hasToken) {
@@ -399,7 +399,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         ));
     }
     private CommandResult MoveRouter(CommandContext context) {
-        if (context.Parse is not null) {
+        if (context.Origin != CommandOrigin.Binding) {
             return CommandResult.Error(output: "[editor.stick.move: a routed stick channel, not a typed verb — script the camera with editor.cam.pose or a drag with editor.drag]");
         }
 
@@ -408,7 +408,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         return CommandResult.None;
     }
     private CommandResult LookRouter(CommandContext context) {
-        if (context.Parse is not null) {
+        if (context.Origin != CommandOrigin.Binding) {
             return CommandResult.Error(output: "[editor.stick.look: a routed stick channel, not a typed verb — script the camera with editor.cam.pose]");
         }
 
@@ -417,7 +417,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
         return CommandResult.None;
     }
     private CommandResult VerticalHandler(CommandContext context, bool ascend, string name) {
-        if (context.Parse is not null) {
+        if (context.Origin != CommandOrigin.Binding) {
             return CommandResult.Error(output: $"[{name}: a held control, not a typed verb — use editor.cam.pose to script the camera]");
         }
 
@@ -466,7 +466,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             return false;
         }
 
-        if (context.Source is not null) {
+        if (context.Origin == CommandOrigin.Binding) {
             direction = ((context.Value.AsAxis1D >= 0f) ? 1 : -1);
 
             return true;

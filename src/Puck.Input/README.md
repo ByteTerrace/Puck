@@ -163,17 +163,29 @@ reads factory or user stick calibration from SPI flash and falls back to its
 nominal scale if a read is missing or implausible. Switch IMU calibration and
 both Steam families currently use nominal scales.
 
-## ⌨️ Keyboard, text, and pointer browsing
+## ⌨️ Keyboard, mouse commands, text, and pointer browsing
 
-`InputSources` is the single vocabulary for keyboard and gamepad control names.
-`WindowInputMapper` converts neutral key and text events from `Puck.Platform`
-into `InputSignal`s, mirroring the gamepad capture path. Left and right
-Control, Shift, Alt, and Super keys remain distinct ordinary controls.
+`InputSources` is the single vocabulary for keyboard, mouse, and gamepad control
+names. `WindowInputMapper` converts neutral window events from `Puck.Platform`
+into `InputSignal`s, mirroring the gamepad capture path. Left and right Control,
+Shift, Alt, and Super remain distinct ordinary controls; number-row and numpad
+digits remain distinct too, including when programmable mouse buttons emit them.
 
-Pointer position, motion, buttons, and wheel input are browsing state. The
-window observer chain consumes them before `WindowInputMapper`; there are no
-pointer `InputSources`, so binding documents cannot advertise controls that the
-fixed-step command snapshot never carries.
+Absolute cursor position, hover, capture, and visibility remain presentation
+state in the window-observer path. Relative motion (`mouse.motion`), two-axis
+wheel notches (`mouse.wheel`), and numbered buttons (`mouse.button1` and upward)
+also project into the command path. Button numbering has no five-button model
+ceiling; a backend preserves every stable ordinal it can report. Windows' generic
+mouse messages expose the conventional five, while programmable devices such as
+the Naga commonly expose their larger grid as number-row or numpad keyboard
+controls; both families are bindable here. Mouse motion and wheel samples are
+transient impulses, never persistent analog holds.
+
+`HeldDigitalInputState` retains keyboard and mouse-button first-down order and
+emits per-frame digital `Active` samples after the original press frame. That
+lets binding reloads and per-player modality changes cancel first, then recover
+channels and modifier pages through the current profile without synthesizing an
+edge verb.
 
 Bindings, chord pages, toggles, sequences, interactive rebinding, and the
 binding document format belong to [Puck.Commands](../Puck.Commands/README.md).
@@ -270,7 +282,8 @@ feature framing. Triton feature messages use report id 1 and
 | `GamepadCoalescer` / `GamepadDrain` | Bridge high-rate acquisition to a loss-aware per-frame view. |
 | `GamepadState` / `GamepadButtons` | Define the normalized controller state and button vocabulary. |
 | `ImuOrientationTracker` | Holds complementary-filter orientation and gyro-bias state. |
-| `InputSources` / `WindowInputMapper` | Own physical source names and neutral keyboard/text mapping. |
+| `InputSources` / `WindowInputMapper` | Own physical source names and neutral keyboard/mouse/text mapping. |
+| `HeldDigitalInputState` | Retains edge-reported held controls in press order and produces safe per-frame reassertions. |
 | `IGamepadOutput` / `TriggerEffectSpec` | Expose capability-gated controller output. |
 | `LightLegendComposer` / `LightLegendDriver` | Compose and deliver presentation-side LampArray legends. |
 

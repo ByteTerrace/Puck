@@ -214,8 +214,9 @@ composing writes. That is a defect class, not a shortcut.
 - **A stepped twin is not a verb.** `.next`/`.prev`/`.up`/`.down` fold onto the
   verb they step: keep it `Bindable`, declare `valueKind: Axis1D`, give the bound
   rows an `Axis(±1f)` constant, and read `context.Value` when
-  `context.Source is not null` (non-null ⇒ dispatched by a binding; it is null on
-  every text path). Do NOT discriminate on `context.Value.Kind` — that is only
+  `context.Origin == CommandOrigin.Binding`. Do NOT use `context.Source` as the
+  discriminator: presentation-driven and synthesized bindings have no physical
+  source. Do NOT discriminate on `context.Value.Kind` either — that is only
   coincidentally reliable while everything declares `Digital`.
 - **The recompose trap.** A binding whose dispatched value kind disagrees with its
   command's declared `ValueKind` is only NARRATED by the boot sweep, but

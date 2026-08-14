@@ -24,8 +24,11 @@ public sealed class ContractTests {
     public void Source_factories_reject_identifiers_outside_the_declared_vocabulary() {
         Assert.Equal(expected: "keyboard.a", actual: InputSources.Keyboard.Letter(letter: 'A'));
         Assert.Equal(expected: "keyboard.f12", actual: InputSources.Keyboard.Function(number: 12));
+        Assert.Equal(expected: "keyboard.1", actual: InputSources.Keyboard.Digit(number: 1));
+        Assert.Equal(expected: "keyboard.numpad1", actual: InputSources.Keyboard.NumpadDigit(number: 1));
         _ = Assert.Throws<ArgumentOutOfRangeException>(() => InputSources.Keyboard.Letter(letter: 'É'));
         _ = Assert.Throws<ArgumentOutOfRangeException>(() => InputSources.Keyboard.Function(number: 13));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => InputSources.Keyboard.Digit(number: 10));
     }
 
     [Fact]

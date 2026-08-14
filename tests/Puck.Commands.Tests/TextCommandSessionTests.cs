@@ -21,11 +21,16 @@ public sealed class TextCommandSessionTests {
             expected: CommandPrincipal.Seat(slot: context.Slot),
             actual: context.Principal
         ));
+        Assert.All(collection: seen, action: static context => Assert.Equal(
+            expected: CommandOrigin.Text,
+            actual: context.Origin
+        ));
     }
 
     [Fact]
     public void OneSeatsSimulationBarrierDoesNotBlockAnotherSeatsReadyText() {
-        var registry = new CommandRegistry(modules: [new SessionModule(seen: [])]);
+        var seen = new List<CommandContext>();
+        var registry = new CommandRegistry(modules: [new SessionModule(seen: seen)]);
         var router = Router(registry: registry, bindings: new EmptyBindings());
         var source = new TextCommandSource(registry: registry);
         var seatOneResults = new List<string>();
@@ -55,6 +60,11 @@ public sealed class TextCommandSessionTests {
         source.Collect();
 
         Assert.Equal(expected: ["simulate", "probe"], actual: seatOneResults);
+        Assert.Equal(expected: 3, actual: seen.Count);
+        Assert.All(collection: seen, action: static context => Assert.Equal(
+            expected: CommandOrigin.Text,
+            actual: context.Origin
+        ));
     }
 
     [Fact]

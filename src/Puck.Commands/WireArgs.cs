@@ -5,7 +5,7 @@ namespace Puck.Commands;
 /// submitted console line, each addressable as a <see cref="ReadOnlySpan{Char}"/> that slices straight into the original
 /// line (or the fallback token array) with no per-token substring. This is the wire format's argument primitive — the
 /// thing that lets the stdin hot path tokenize, look up, and dispatch a <c>verb arg arg…</c> line without materializing a
-/// single heap string (see <c>CommandRegistry.Submit</c>'s fast path).
+/// single heap string (see <c>CommandRegistry.Submit</c>'s wire-native path).
 /// </summary>
 /// <remarks>
 /// A <see cref="WireArgs"/> is a <see langword="ref"/> struct: it borrows the caller's line span and token ranges and is

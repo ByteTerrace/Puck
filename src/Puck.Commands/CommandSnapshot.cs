@@ -1,12 +1,11 @@
-using System.Collections.Immutable;
-
 namespace Puck.Commands;
 
 /// <summary>
 /// One fixed-step tick's complete, deterministic input — the canonical unit a game reads at tick time and a
 /// peer transmits. It is a pure function of the captured input for the tick's window, built in a total
 /// deterministic order, so the same captured input yields a bit-identical snapshot on every machine. It is
-/// ephemeral: built, applied, and dropped within the tick that produced it — nothing persists it. A world
+/// ephemeral: built, applied, and dropped within the tick that produced it — its borrowed buffers remain valid only
+/// until the producing router's next snapshot, and nothing persists it. A world
 /// tape records the server's input stream instead and re-runs guests against it on replay; a snapshot is
 /// never itself the recorded unit. Supersedes both the per-render-frame command collection and a game's
 /// hand-rolled per-tick intent.
@@ -22,14 +21,15 @@ public readonly record struct CommandSnapshot {
     /// <param name="tick">The fixed-step tick this snapshot is the input for.</param>
     /// <param name="lanes">The per-slot command lanes, ordered by <see cref="CommandLane.Slot"/>.</param>
     /// <param name="registry">The registry whose interned command-id namespace the lanes use.</param>
-    internal CommandSnapshot(ulong tick, ImmutableArray<CommandLane> lanes, CommandRegistry? registry = null) {
+    internal CommandSnapshot(ulong tick, CommandBuffer<CommandLane> lanes, CommandRegistry? registry = null) {
         Lanes = lanes;
         Registry = registry;
         Tick = tick;
     }
 
     /// <summary>The per-slot command lanes, ordered by <see cref="CommandLane.Slot"/> for a deterministic layout.</summary>
-    public ImmutableArray<CommandLane> Lanes { get; internal init; }
+    /// <remarks>The view remains valid until its producing router builds the next snapshot.</remarks>
+    public CommandBuffer<CommandLane> Lanes { get; internal init; }
 
     // The registry that minted the command-id namespace carried by Lanes. Internal so provenance is neither
     // forgeable nor part of the public snapshot payload; ApplySnapshot uses reference identity to keep an id from
@@ -44,7 +44,7 @@ public readonly record struct CommandSnapshot {
     /// <returns>A snapshot with no lanes.</returns>
     public static CommandSnapshot Empty(ulong tick) {
         return new CommandSnapshot(
-            lanes: [],
+            lanes: default,
             tick: tick
         );
     }
@@ -68,7 +68,7 @@ public readonly record struct CommandSnapshot {
     /// <param name="lane">The matching lane when found.</param>
     /// <returns><see langword="true"/> if a lane for <paramref name="slot"/> is present.</returns>
     public bool TryGetLane(int slot, out CommandLane lane) {
-        if (!Lanes.IsDefaultOrEmpty) {
+        if (!Lanes.IsEmpty) {
             for (var index = 0; (index < Lanes.Length); index++) {
                 if (Lanes[index].Slot == slot) {
                     lane = Lanes[index];

@@ -179,12 +179,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 var displayTimingRetryAttemptsRemaining = (((displayTimingInfo is not null) && !displayTiming.IsKnown) ? displayTimingRetryLimit : 0);
                 var nextDisplayTimingRetryTimestamp = 0L;
                 var precisionWaiter = (window as IPrecisionWaiter);
-                // An optional HELD root capability (contributed by the composition root) that wants every
-                // raw window input event as it is dequeued — see IWindowInputObserver's doc comment for why
-                // pointer/button state bypasses the InputSignal/command-binding pipeline below entirely, and for
-                // how a root with several observers (a camera-orbit sink, a console text sink) fans them out
-                // through one composite. Resolved once: the set of contributed capabilities never changes mid-run.
+                // An optional HELD root capability that sees every raw event. Mouse events can have two projections:
+                // this observer updates presentation state, while WindowInputMapper independently feeds their
+                // relative motion/buttons/wheel into command bindings. Resolved once: contributions never change.
                 _ = m_rootHostContext.HoldsCapability<IWindowInputObserver>(capability: out var windowInputObserver);
+                // Physical truth for edge-reported window controls. Each frame reasserts held keys and mouse buttons
+                // in original press order, allowing a freshly-installed profile or modality to recover continuous
+                // channels without synthesizing a Started edge.
+                var heldDigitalInput = new HeldDigitalInputState();
                 // CLOSED-LOOP present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
                 // instant it was confirmed. The pacer observes this rhythm — reporting the measured display interval
                 // (delta between consecutive confirmed presents) — but does not re-anchor the render deadline to the
@@ -348,18 +350,14 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             // OS WINDOW focus loss (Alt-Tab, click-away) — distinct from the IInputFocus/TerminalControl
                             // check above, which is engine-terminal focus and never fires from an OS-level Alt-Tab.
                             // WindowInputMapper has no case for this kind; it must never reach it.
+                            heldDigitalInput.Clear();
                             m_inputRouter?.ReleaseHeld();
                             continue;
                         }
 
-                        if (windowInput.Kind is WindowInputKind.PointerMove or WindowInputKind.PointerPosition or WindowInputKind.PointerButton or WindowInputKind.PointerWheel) {
-                            // The pointer is browsing state, not bound input: where the cursor is, what it is over,
-                            // which buttons are held, and how far the wheel turned are presentation/session-only and
-                            // must never reach a CommandSnapshot. The observer call above is therefore the pointer's
-                            // whole path — a pointer act enters the simulation only when a consumer of that state
-                            // dispatches an ordinary console verb, through the same door a typed line uses. No
-                            // InputSources entry names a pointer control, so these kinds must never reach
-                            // WindowInputMapper: it has no case for them and throws.
+                        if (windowInput.Kind == WindowInputKind.PointerPosition) {
+                            // Absolute cursor coordinates remain presentation-only. The other mouse shapes below
+                            // have a command projection in addition to the raw observer projection above.
                             continue;
                         }
 
@@ -369,6 +367,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         var signal = WindowInputMapper.ToInputSignal(inputEvent: in windowInput) with {
                             CaptureTick = m_inputClock.NowTicks,
                         };
+                        heldDigitalInput.Observe(signal: in signal, frameKey: hostFrame);
                         var isInputActive = hasInputFocus && inputFocus.IsActiveFor(deviceId: signal.DeviceId);
 
                         if (wasInputActive && isInputActive) {
@@ -386,6 +385,31 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                             // new text device with an already-open seat session. The router filters this path by the
                             // destination's declared input scope and resolves only the host-owned always-active plane.
                             m_inputRouter?.CaptureFocusExempt(signal: in signal);
+                        }
+                    }
+
+                    // Reassert after the whole raw batch: a release in this frame has already removed its control,
+                    // and every surviving control is emitted in physical first-down order. Re-resolve focus now so
+                    // a menu/terminal close in the event batch can make held channels live immediately.
+                    if (heldDigitalInput.Count > 0) {
+                        var heldCaptureTick = m_inputClock.NowTicks;
+                        var heldHasInputFocus = m_rootHostContext.HoldsCapability<IInputFocus>(capability: out var heldInputFocus);
+
+                        for (var heldIndex = 0; (heldIndex < heldDigitalInput.Count); heldIndex++) {
+                            if (!heldDigitalInput.TryReassert(
+                                index: heldIndex,
+                                frameKey: hostFrame,
+                                captureTick: heldCaptureTick,
+                                signal: out var heldSignal
+                            )) {
+                                continue;
+                            }
+
+                            if (heldHasInputFocus && heldInputFocus.IsActiveFor(deviceId: heldSignal.DeviceId)) {
+                                m_inputRouter?.Capture(signal: in heldSignal);
+                            } else {
+                                m_inputRouter?.CaptureFocusExempt(signal: in heldSignal);
+                            }
                         }
                     }
 

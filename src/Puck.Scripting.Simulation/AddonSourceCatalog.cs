@@ -79,12 +79,13 @@ public static class AddonSourceCatalog {
     }
 
     // Reads InputSourceValueAttribute/InputSourceUnaddressableAttribute off every const string field declared
-    // on InputSources' two physical-control groups (Keyboard, Gamepad — named directly rather than
+    // on InputSources' physical-control groups (Keyboard, Mouse, Gamepad — named directly rather than
     // discovered via GetNestedTypes, so each typeof() flows straight into ClassifySource's DynamicallyAccessedMembers
     // annotation the way AddonAbiRustPort's AppendAbiConstants does for AddonAbi's nested offset classes). A
     // future third group must add a line here, or it is silently never classified.
     //
-    // A source id declared by two different members is an InputSources authoring defect, not addon-supplied
+    // Parametric families (keyboard letters/functions and numbered mouse buttons) are recognized below without
+    // trying to reflect an unbounded constant set. A source id declared by two different members is an InputSources authoring defect, not addon-supplied
     // data — it cannot vary by which addon mounts — so it belongs here, at catalog-build time, thrown loud and
     // unconditional the same way CommandRegistry's constructor throws on a duplicate command name, rather than
     // softened into a per-addon fault a well-formed module could trigger. declaredBy is the one map both
@@ -100,6 +101,12 @@ public static class AddonSourceCatalog {
             shapes: shapes,
             unaddressable: unaddressable,
             type: typeof(InputSources.Keyboard)
+        );
+        ClassifyGroup(
+            declaredBy: declaredBy,
+            shapes: shapes,
+            unaddressable: unaddressable,
+            type: typeof(InputSources.Mouse)
         );
         ClassifyGroup(
             declaredBy: declaredBy,
@@ -180,12 +187,21 @@ public static class AddonSourceCatalog {
         }
     }
 
-    // The two open-ended keyboard families (InputSources.Keyboard.Letter/Function) mint a source id per
-    // character/number rather than declaring one constant each; recognizing them means mirroring that shape
-    // (a single lowercase letter, or "f" + the same 1..12 range WindowInputMapper accepts) rather than
-    // declaring an unbounded number of constants in the reflected tables above.
+    // Open-ended families mint source ids rather than declaring one constant each: keyboard letters/functions and
+    // numbered mouse buttons. Recognize exactly the same canonical range each public factory accepts.
     private static bool TryResolveParametric(string sourceId, out AddonSourceShape shape) {
         shape = default;
+
+        const string MouseButtonPrefix = "mouse.button";
+
+        if (sourceId.StartsWith(value: MouseButtonPrefix, comparisonType: StringComparison.Ordinal)) {
+            if (TryParseCanonicalPositiveNumber(digits: sourceId.AsSpan(start: MouseButtonPrefix.Length), maximum: ushort.MaxValue, number: out _)) {
+                shape = AddonSourceShape.Digital;
+                return true;
+            }
+
+            return false;
+        }
 
         const string KeyboardPrefix = "keyboard.";
 
@@ -207,14 +223,32 @@ public static class AddonSourceCatalog {
         }
 
         if (
+            (suffix.Length == 1) &&
+            char.IsAsciiDigit(c: suffix[0])
+        ) {
+            shape = AddonSourceShape.Digital;
+            return true;
+        }
+
+        const string NumpadPrefix = "numpad";
+
+        if (
+            suffix.StartsWith(value: NumpadPrefix, comparisonType: StringComparison.Ordinal) &&
+            (suffix.Length == (NumpadPrefix.Length + 1)) &&
+            char.IsAsciiDigit(c: suffix[^1])
+        ) {
+            shape = AddonSourceShape.Digital;
+            return true;
+        }
+
+        if (
             (suffix.Length >= 2) &&
             (suffix[0] == 'f') &&
-            TryParseFunctionKeyNumber(
+            TryParseCanonicalPositiveNumber(
             digits: suffix[1..],
+            maximum: 12,
             number: out var number
-        ) &&
-            (number >= 1) &&
-            (number <= 12)
+        )
         ) {
             shape = AddonSourceShape.Digital;
             return true;
@@ -227,27 +261,30 @@ public static class AddonSourceCatalog {
     // whitespace, no leading zero, culture-invariant. int.TryParse's default NumberStyles.Integer permits
     // AllowLeadingSign (so "keyboard.f+1" resolved) and is CultureInfo.CurrentCulture-dependent; a hand-rolled
     // digit walk is the only way to accept "1".."12" and nothing else regardless of the host's culture.
-    private static bool TryParseFunctionKeyNumber(ReadOnlySpan<char> digits, out int number) {
+    private static bool TryParseCanonicalPositiveNumber(ReadOnlySpan<char> digits, int maximum, out int number) {
         number = 0;
 
         if (
-            (digits.Length is not (1 or 2)) ||
-            !char.IsAsciiDigit(c: digits[0]) ||
-            ((digits.Length == 2) && !char.IsAsciiDigit(c: digits[1]))
-        ) {
-            return false;
-        }
-
-        if (
-            (digits.Length == 2) &&
+            digits.IsEmpty ||
             (digits[0] == '0')
         ) {
             return false;
         }
 
-        number = ((digits.Length == 1)
-            ? (digits[0] - '0')
-            : (((digits[0] - '0') * 10) + (digits[1] - '0')));
-        return true;
+        foreach (var digit in digits) {
+            if (!char.IsAsciiDigit(c: digit)) {
+                return false;
+            }
+
+            var next = ((number * 10) + (digit - '0'));
+
+            if (next > maximum) {
+                return false;
+            }
+
+            number = next;
+        }
+
+        return (number > 0);
     }
 }

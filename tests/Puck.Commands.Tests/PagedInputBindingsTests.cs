@@ -95,6 +95,8 @@ public sealed class PagedInputBindingsTests {
         var pulse = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
 
         Assert.Equal(expected: CommandPhase.Started, actual: pulse.Phase);
+        Assert.Equal(expected: CommandOrigin.Binding, actual: pulse.Origin);
+        Assert.Null(@object: pulse.Source);
         Assert.True(condition: pulse.Dispatch);
         Assert.False(condition: router.IsCommandHeld(slot: 0, command: ActionCommand));
 
@@ -197,6 +199,27 @@ public sealed class PagedInputBindingsTests {
     }
 
     [Fact]
+    public void ModifierTrackerReportsOnlyHeldOrderChanges() {
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "left", Source: "key.left")],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "base", Entries: [])
+            )]
+        ));
+        var tracker = new BindingChordTracker(profile: profile);
+        var press = InputSignal.Press(source: "key.left");
+        var release = InputSignal.Release(source: "key.left");
+
+        Assert.True(condition: tracker.Apply(signal: in press));
+        Assert.False(condition: tracker.Apply(signal: in press));
+        Assert.True(condition: tracker.Apply(signal: in release));
+        Assert.False(condition: tracker.Apply(signal: in release));
+    }
+
+    [Fact]
     public void ReloadCancelsRouterHoldsAndDropsDeferredActivatorEdges() {
         var bindings = Bindings(entries: [
             new BindingPageEntryDefinition(Source: "key.hold", Command: ActionCommand),
@@ -229,6 +252,197 @@ public sealed class PagedInputBindingsTests {
 
         Assert.Equal(expected: "key.hold", actual: cancellation.Source);
         Assert.Empty(collection: bindings.DrainScheduledEdges());
+    }
+
+    [Fact]
+    public void DigitalReassertionRecoversAChannelWithoutFiringCommandsOrActivators() {
+        var bindings = Bindings(entries: [
+            new BindingPageEntryDefinition(Source: "key.edge", Command: ActionCommand),
+            new BindingPageEntryDefinition(Source: "key.drive", Channel: new ChannelRef.Name(Value: "movement")),
+            new BindingPageEntryDefinition(
+                Source: null,
+                Command: ActionCommand,
+                Activator: new BindingActivatorDefinition(Sequence: ["key.a", "key.b"])
+            ),
+        ]);
+        var router = Router(
+            bindings: bindings,
+            registry: out var registry,
+            definitions: [
+                (ActionCommand, CommandValueKind.Digital),
+                (ChannelCommand, CommandValueKind.Axis1D),
+            ]
+        );
+
+        router.Capture(signal: InputSignal.Reassert(source: "key.edge"));
+        router.Capture(signal: InputSignal.Reassert(source: "key.a"));
+        router.Capture(signal: InputSignal.Reassert(source: "key.b"));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        router.Capture(signal: InputSignal.Reassert(source: "key.drive"));
+        var recovered = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.True(condition: registry.TryGetId(name: ChannelCommand, id: out var channelId));
+        Assert.Equal(expected: channelId, actual: recovered.CommandId);
+        Assert.Equal(expected: CommandPhase.Active, actual: recovered.Phase);
+        Assert.True(condition: recovered.Dispatch);
+        Assert.Equal(expected: 1f, actual: recovered.Value.AsAxis1D);
+        Assert.True(condition: router.IsCommandHeld(slot: 0, command: ChannelCommand));
+
+        router.Capture(signal: InputSignal.Release(source: "key.drive"));
+        var released = Assert.Single(
+            Assert.Single(router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries,
+            predicate: static entry => entry.Phase == CommandPhase.Completed
+        );
+
+        Assert.True(condition: released.Dispatch);
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: ChannelCommand));
+    }
+
+    [Fact]
+    public void TransientAxisChannelReleasesOnTheFollowingTickInsteadOfBecomingHeld() {
+        var bindings = Bindings(entries: [new BindingPageEntryDefinition(
+            Source: "mouse.motion.x",
+            Channel: new ChannelRef.Name(Value: "movement")
+        )]);
+        var router = Router(bindings: bindings, definitions: [(ChannelCommand, CommandValueKind.Axis1D)]);
+
+        router.Capture(signal: InputSignal.Axis(source: "mouse.motion", value: new System.Numerics.Vector2(x: 4f, y: -2f), transient: true));
+        var active = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(expected: CommandPhase.Active, actual: active.Phase);
+        Assert.Equal(expected: 4f, actual: active.Value.AsAxis1D);
+        Assert.True(condition: active.Dispatch);
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: ChannelCommand));
+
+        var released = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(expected: CommandPhase.Completed, actual: released.Phase);
+        Assert.Equal(expected: 0f, actual: released.Value.AsAxis1D);
+        Assert.True(condition: released.Dispatch);
+        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+
+    [Fact]
+    public void SuppressedTransientChannelSampleNeverBecomesCarriedState() {
+        var bindings = Bindings(entries: [new BindingPageEntryDefinition(
+            Source: "mouse.motion.x",
+            Channel: new ChannelRef.Name(Value: "movement"),
+            ActivateOn: CommandPhase.Completed
+        )]);
+        var router = Router(bindings: bindings, definitions: [(ChannelCommand, CommandValueKind.Axis1D)]);
+
+        router.Capture(signal: InputSignal.Axis(source: "mouse.motion", value: new System.Numerics.Vector2(x: 4f, y: -2f), transient: true));
+        var suppressed = Assert.Single(Assert.Single(router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.False(condition: suppressed.Dispatch);
+        Assert.False(condition: router.IsCommandHeld(slot: 0, command: ChannelCommand));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes);
+    }
+
+    [Fact]
+    public void OrderedModifierReassertionRestoresThePageButDoesNotFireItsCommandChord() {
+        var profile = BindingProfile.Compile(
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [
+                    new BindingModifierDefinition(Id: "first", Source: "key.first"),
+                    new BindingModifierDefinition(Id: "second", Source: "key.second"),
+                ],
+                Chords: [
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Chord: [],
+                        Page: new BindingPageDefinition(Id: "base", Entries: [])
+                    ),
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Chord: ["first"],
+                        Command: new BindingCommandDefinition(Command: ActionCommand)
+                    ),
+                    new BindingChordDefinition(
+                        Group: "play",
+                        Chord: ["first", "second"],
+                        Page: new BindingPageDefinition(Id: "held-page", Entries: [
+                            new BindingPageEntryDefinition(Source: "key.drive", Channel: new ChannelRef.Name(Value: "movement")),
+                        ])
+                    ),
+                ]
+            ),
+            channelCommandName: static _ => ChannelCommand
+        );
+        var bindings = new PagedInputBindings(profile: profile);
+        var router = Router(
+            bindings: bindings,
+            registry: out var registry,
+            definitions: [
+                (ActionCommand, CommandValueKind.Digital),
+                (ChannelCommand, CommandValueKind.Axis1D),
+            ]
+        );
+
+        router.Capture(signal: InputSignal.Reassert(source: "key.first"));
+        router.Capture(signal: InputSignal.Reassert(source: "key.second"));
+        router.Capture(signal: InputSignal.Reassert(source: "key.drive"));
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        Assert.Equal(expected: "held-page", actual: bindings.ViewFor(slot: 0).PageId);
+        var recovered = Assert.Single(Assert.Single(snapshot.Lanes).Entries);
+        Assert.True(condition: registry.TryGetId(name: ChannelCommand, id: out var channelId));
+        Assert.True(condition: registry.TryGetId(name: ActionCommand, id: out var actionId));
+        Assert.Equal(expected: channelId, actual: recovered.CommandId);
+        Assert.DoesNotContain(collection: snapshot.Lanes.SelectMany(selector: static lane => lane.Entries), filter: entry => entry.CommandId == actionId);
+    }
+
+    [Fact]
+    public void ChannelCommandChordRecoversAsActiveWhileAnEdgeCommandChordDoesNot() {
+        static PagedInputBindings ChordBindings(BindingCommandDefinition command) => new(profile: BindingProfile.Compile(
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [new BindingModifierDefinition(Id: "hold", Source: "key.hold")],
+                Chords: [
+                    new BindingChordDefinition(Group: "play", Chord: [], Page: new BindingPageDefinition(Id: "base", Entries: [])),
+                    new BindingChordDefinition(Group: "play", Chord: ["hold"], Command: command),
+                ]
+            ),
+            channelCommandName: static _ => ChannelCommand
+        ));
+
+        var actionBindings = ChordBindings(command: new BindingCommandDefinition(Command: ActionCommand));
+        var actionRouter = Router(bindings: actionBindings, definitions: [(ActionCommand, CommandValueKind.Digital)]);
+
+        actionRouter.Capture(signal: InputSignal.Reassert(source: "key.hold"));
+        Assert.Empty(collection: actionRouter.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        var channelBindings = ChordBindings(command: new BindingCommandDefinition(Channel: new ChannelRef.Name(Value: "movement")));
+        var channelRouter = Router(bindings: channelBindings, definitions: [(ChannelCommand, CommandValueKind.Axis1D)]);
+
+        channelRouter.Capture(signal: InputSignal.Reassert(source: "key.hold"));
+        var recovered = Assert.Single(Assert.Single(channelRouter.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(expected: CommandPhase.Active, actual: recovered.Phase);
+        Assert.True(condition: recovered.Dispatch);
+        Assert.True(condition: channelRouter.IsCommandHeld(slot: 0, command: ChannelCommand));
+    }
+
+    [Fact]
+    public void ReleaseAfterReloadCannotFireANewReleaseOnlyCommand() {
+        var initial = Bindings(entries: [new BindingPageEntryDefinition(Source: "key.hold", Command: ActionCommand)]);
+        var router = Router(bindings: initial, definitions: [(ActionCommand, CommandValueKind.Digital)]);
+
+        router.Capture(signal: InputSignal.Press(source: "key.hold"));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        initial.Reload(profile: Profile(entries: [new BindingPageEntryDefinition(
+            Source: "key.hold",
+            Command: ActionCommand,
+            ActivateOn: CommandPhase.Completed
+        )]));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        router.Capture(signal: InputSignal.Reassert(source: "key.hold"));
+        router.Capture(signal: InputSignal.Release(source: "key.hold"));
+
+        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
     }
 
     [Fact]
@@ -378,8 +592,14 @@ public sealed class PagedInputBindingsTests {
     }
 
     private static InputRouter Router(PagedInputBindings bindings, params (string Name, CommandValueKind Kind)[] definitions) {
+        return Router(bindings: bindings, registry: out _, definitions: definitions);
+    }
+
+    private static InputRouter Router(PagedInputBindings bindings, out CommandRegistry registry, params (string Name, CommandValueKind Kind)[] definitions) {
+        registry = new CommandRegistry(modules: [new TestModule(definitions: definitions)]);
+
         return new InputRouter(
-            registry: new CommandRegistry(modules: [new TestModule(definitions: definitions)]),
+            registry: registry,
             bindings: bindings,
             principalResolver: new ConsolePrincipal()
         );

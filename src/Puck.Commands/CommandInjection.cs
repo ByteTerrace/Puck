@@ -20,6 +20,7 @@ namespace Puck.Commands;
 /// The edge the injection represents. <see cref="CommandPhase.Started"/> dispatches as a one-shot press, the natural
 /// shape for a console impulse; an injection is never held across ticks (it appears only in the tick it folds into).
 /// </param>
+/// <param name="Origin">How the command entered the command pipeline.</param>
 /// <param name="Principal">The identity the injecting door is bound to.</param>
 /// <param name="Slot">The logical player slot the command drives (a console command targets the local slot, <c>0</c>).</param>
 /// <param name="CaptureTick">
@@ -29,12 +30,13 @@ namespace Puck.Commands;
 /// </param>
 /// <param name="Text">The original simulation-command line, when the injection came from console text. Preserved in
 /// the snapshot so argument-bearing verbs execute at tick time.</param>
-/// <param name="Source">The logical authored source for a compiler-minted presentation activation, or
-/// <see langword="null"/> for console/peer injections without a binding source.</param>
+/// <param name="Source">The physical binding source when one exists, or <see langword="null"/> for text and
+/// synthesized bindings.</param>
 internal readonly record struct CommandInjection(
     ushort CommandId,
     CommandValue Value,
     CommandPhase Phase,
+    CommandOrigin Origin,
     CommandPrincipal Principal,
     int Slot = 0,
     ulong CaptureTick = 0UL,

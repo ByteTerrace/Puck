@@ -163,18 +163,6 @@ public static class BindingVocabularyCheck {
                         continue;
                     }
 
-                    if (command(arg: entry.Command) is not { } declared) {
-                        errors.Add(item: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command");
-
-                        continue;
-                    }
-
-                    if (declared.Bindability != CommandBindability.Bindable) {
-                        errors.Add(item: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable");
-
-                        continue;
-                    }
-
                     var dispatched = (entry.Value?.Kind ?? ((entry.Activator is not null)
                         ? CompiledBindingProfile.PressValue(
                         channelScale: null,
@@ -184,12 +172,15 @@ public static class BindingVocabularyCheck {
                         ? sourceKind?.Invoke(arg: sourceForKind)
                         : null)));
 
-                    if (
-                        (dispatched is { } kind) &&
-                        (kind != declared.ValueKind)
-                    ) {
-                        errors.Add(item: $"page \"{page.Id}\" sends {Word(kind: kind)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared.ValueKind)}");
-                    }
+                    CheckCommand(
+                        command: command,
+                        commandName: entry.Command,
+                        dispatched: dispatched,
+                        errors: errors,
+                        unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
+                        unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
+                        mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared)}"
+                    );
                 }
             }
 
@@ -226,24 +217,10 @@ public static class BindingVocabularyCheck {
                     continue;
                 }
 
-                if (command(arg: chordCommand.Command) is not { } declared) {
-                    errors.Add(item: $"chord [{string.Join(
-                        separator: '+',
-                        values: (row.Chord ?? [])
-                    )}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which names no registered command");
-
-                    continue;
-                }
-
-                if (declared.Bindability != CommandBindability.Bindable) {
-                    errors.Add(item: $"chord [{string.Join(
-                        separator: '+',
-                        values: (row.Chord ?? [])
-                    )}] (group \"{row.Group}\") fires \"{chordCommand.Command}\", which is not bindable");
-
-                    continue;
-                }
-
+                var chordLabel = $"chord [{string.Join(
+                    separator: '+',
+                    values: (row.Chord ?? [])
+                )}] (group \"{row.Group}\")";
                 // A command-meaning chord (a channel one continues above) dispatches the same press value
                 // BindingProfile.Compile builds; validate the kind it will actually send.
                 var pressed = CompiledBindingProfile.PressValue(
@@ -251,12 +228,15 @@ public static class BindingVocabularyCheck {
                     explicitValue: chordCommand.Value
                 ).Kind;
 
-                if (pressed != declared.ValueKind) {
-                    errors.Add(item: $"chord [{string.Join(
-                        separator: '+',
-                        values: (row.Chord ?? [])
-                    )}] (group \"{row.Group}\") sends {Word(kind: pressed)} to \"{chordCommand.Command}\", which takes {Word(kind: declared.ValueKind)}");
-                }
+                CheckCommand(
+                    command: command,
+                    commandName: chordCommand.Command,
+                    dispatched: pressed,
+                    errors: errors,
+                    unknownError: $"{chordLabel} fires \"{chordCommand.Command}\", which names no registered command",
+                    unbindableError: $"{chordLabel} fires \"{chordCommand.Command}\", which is not bindable",
+                    mismatchError: (actual, declared) => $"{chordLabel} sends {Word(kind: actual)} to \"{chordCommand.Command}\", which takes {Word(kind: declared)}"
+                );
             }
         }
 
@@ -285,15 +265,41 @@ public static class BindingVocabularyCheck {
                         explicitValue: sector.Value
                     ).Kind;
 
-                    if (command(arg: sector.Command) is not { } declared) {
-                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which names no registered command");
-                    } else if (declared.Bindability != CommandBindability.Bindable) {
-                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which is not bindable");
-                    } else if (sectorKind != declared.ValueKind) {
-                        errors.Add(item: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: sectorKind)} to \"{sector.Command}\", which takes {Word(kind: declared.ValueKind)}");
-                    }
+                    CheckCommand(
+                        command: command,
+                        commandName: sector.Command,
+                        dispatched: sectorKind,
+                        errors: errors,
+                        unknownError: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which names no registered command",
+                        unbindableError: $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" commits \"{sector.Command}\", which is not bindable",
+                        mismatchError: (actual, declared) => $"wheel \"{wheel!.Id}\" ring \"{ring!.Id}\" sends {Word(kind: actual)} to \"{sector.Command}\", which takes {Word(kind: declared)}"
+                    );
                 }
             }
+        }
+    }
+
+    private static void CheckCommand(
+        Func<string, CommandMetadata?> command,
+        string commandName,
+        CommandValueKind? dispatched,
+        List<string> errors,
+        string unknownError,
+        string unbindableError,
+        Func<CommandValueKind, CommandValueKind, string> mismatchError
+    ) {
+        if (command(arg: commandName) is not { } declared) {
+            errors.Add(item: unknownError);
+        } else if (declared.Bindability != CommandBindability.Bindable) {
+            errors.Add(item: unbindableError);
+        } else if (
+            (dispatched is { } actual) &&
+            (actual != declared.ValueKind)
+        ) {
+            errors.Add(item: mismatchError(
+                arg1: actual,
+                arg2: declared.ValueKind
+            ));
         }
     }
 

@@ -119,6 +119,11 @@
         "resolved": "10.0.11",
         "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
       },
+      "Wasmtime": {
+        "type": "Transitive",
+        "resolved": "44.0.0",
+        "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
+      },
       "xunit.analyzers": {
         "type": "Transitive",
         "resolved": "1.27.0",
@@ -186,6 +191,9 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
@@ -215,6 +223,22 @@
           "Microsoft.Extensions.Options": "[10.*, )",
           "Puck.Abstractions": "[1.0.0, )",
           "Puck.Input": "[1.0.0, )"
+        }
+      },
+      "puck.scripting": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Wasmtime": "[44.0.0, 44.0.0]"
+        }
+      },
+      "puck.scripting.simulation": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Scripting": "[1.0.0, )"
         }
       }
     }

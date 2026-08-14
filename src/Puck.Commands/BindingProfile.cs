@@ -783,7 +783,8 @@ public static class BindingProfile {
                         Command: effectiveCommand,
                         DispatchRelease: command.HoldRelease,
                         PressValue: pressValue,
-                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
+                        Reassertable: isChannel
                     ),
                     GroupIndex: groupIndex,
                     Table: null,
@@ -997,7 +998,8 @@ public static class BindingProfile {
                         // destination keeps HoldRelease's own default (momentary; no release needed).
                         DispatchRelease: (channelScale is not null),
                         PressValue: pressValue,
-                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind)
+                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
+                        Reassertable: (channelScale is not null)
                     )
                 ));
 

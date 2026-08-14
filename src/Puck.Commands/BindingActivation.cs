@@ -6,9 +6,6 @@ namespace Puck.Commands;
 /// construct one, so a radial presenter cannot invent a command, value, or phase outside the authored profile.
 /// </summary>
 public sealed class BindingActivation {
-    /// <summary>The logical source stamped on a radial activation so handlers distinguish it from console text.</summary>
-    public const string RadialSource = "binding.radial";
-
     internal BindingActivation(string command, CommandValue value, CommandPhase phase) {
         Command = command;
         Phase = phase;

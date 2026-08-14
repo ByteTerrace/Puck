@@ -41,12 +41,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     private bool m_scheduledEdgesPending;
     private volatile CompiledBindingProfile m_profile;
 
-    event Action IInputBindingsReloadSource.Reloading {
+    event Action<int?> IInputBindingsReloadSource.Reloading {
         add => Reloading += value;
         remove => Reloading -= value;
     }
 
-    private event Action? Reloading;
+    private event Action<int?>? Reloading;
 
     private sealed class SlotState {
         public required bool[] ArmedRows { get; init; }
@@ -95,20 +95,25 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     /// <inheritdoc/>
     public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
         var state = StateFor(slot: slot);
+        var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
 
         if (state.Tracker.Apply(signal: signal)) {
-            SyncChordState(state: state);
+            SyncChordState(state: state, isDigitalReassertion: isDigitalReassertion);
         }
 
         // The active page's ROW ACTIVATORS, evaluated regardless of whether this signal matches this page's
         // per-source table below — an activator's trigger is its own ordered sequence, not necessarily the signal
         // that happens to be resolving right now (a Tapped tracker in particular must see every signal to detect
         // wrong input; see RowActivatorTracker).
-        ApplyRowActivators(
-            slot: slot,
-            state: state,
-            signal: in signal
-        );
+        // Activators are gestures, not held-state destinations. Reassertions may rebuild modifier/page state but
+        // never advance or complete a Held/Tapped sequence without a real physical edge.
+        if (!isDigitalReassertion) {
+            ApplyRowActivators(
+                slot: slot,
+                state: state,
+                signal: in signal
+            );
+        }
 
         if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
             // A release resolves to whatever its press resolved to (see remarks), then the latch clears.
@@ -128,13 +133,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             : null);
 
         if (
-            (signal.Phase == CommandPhase.Started) &&
+            ((signal.Phase == CommandPhase.Started) || isDigitalReassertion) &&
             (resolved is not null) &&
             !state.Latches.ContainsKey(key: signal.Source)
         ) {
-            // Windows repeats key-down while a key is held. The FIRST press owns the release mapping; a repeat after
-            // a page/group flip must not overwrite it with the newly visible row and turn one physical hold into a
-            // different command on release.
+            // The first real press owns the release mapping. After a reload/reset, the first reassertion establishes
+            // the current mapping's release ownership; later repeats/page flips cannot overwrite either latch.
             state.Latches[signal.Source] = resolved;
         }
 
@@ -307,7 +311,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     public void Reload(CompiledBindingProfile profile) {
         ArgumentNullException.ThrowIfNull(profile);
 
-        Reloading?.Invoke();
+        Reloading?.Invoke(obj: null);
         m_scheduledEdges.Clear();
         m_scheduledEdgesPending = false;
         m_profile = profile;
@@ -316,7 +320,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
 
     // Recompute a slot's chord-derived state after a tracker change: the deepest-page resolution, the published
     // view, and the command-row transition edges (releases of broken armed rows first, then fresh completions).
-    private static void SyncChordState(SlotState state) {
+    private static void SyncChordState(SlotState state, bool isDigitalReassertion) {
         var held = state.Tracker.HeldOrder;
         var profile = state.Profile;
 
@@ -354,14 +358,21 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             // A command chord fires on COMPLETION: the held order equals its chord exactly (a press only ever
             // appends to the held order, so completion is the exact-match moment).
             if (held.SequenceEqual(other: row.Chord)) {
+                var command = row.Command!;
+
+                if (isDigitalReassertion && !command.Reassertable) {
+                    continue;
+                }
+
                 state.ArmedRows[rowIndex] = true;
                 AppendEdge(
                     state: state,
                     edge: new BindingChordEdge(
-                        Command: row.Command!.Command,
+                        Command: command.Command,
                         Dispatch: true,
-                        Phase: CommandPhase.Started,
-                        Value: row.Command.PressValue
+                        DispatchRelease: command.DispatchRelease,
+                        Phase: (isDigitalReassertion ? CommandPhase.Active : CommandPhase.Started),
+                        Value: command.PressValue
                     )
                 );
             }
@@ -416,6 +427,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         edge: new BindingChordEdge(
                             Command: activatorEntry.Edge.Command,
                             Dispatch: true,
+                            DispatchRelease: activatorEntry.Edge.DispatchRelease,
                             Phase: CommandPhase.Started,
                             Value: activatorEntry.Edge.PressValue
                         )
@@ -444,7 +456,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         // too would make the tick the scheduled release lands on ALSO carry a stale, non-dispatching
                         // re-assertion of the press (harmless to a dispatch-gated reader, but not the clean single-
                         // entry pulse a tap is supposed to produce).
-                        Momentary: true
+                        Momentary: true,
+                        DispatchRelease: activatorEntry.Edge.DispatchRelease
                     )
                     );
                     AppendScheduledEdge(slot: slot, edge: new BindingChordEdge(

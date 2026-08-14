@@ -10,7 +10,10 @@ public interface IInputBindings {
     /// <summary>Returns the bindings a slot maps a source to, or <see langword="null"/> when the slot binds nothing to it.</summary>
     /// <param name="slot">The logical player slot.</param>
     /// <param name="source">The provider-neutral input source id (an <c>InputSources</c> control).</param>
-    /// <returns>The command bindings for <paramref name="slot"/> and <paramref name="source"/>, or <see langword="null"/>.</returns>
+    /// <returns>The command bindings for <paramref name="slot"/> and <paramref name="source"/>, or <see langword="null"/>.
+    /// A returned list is immutable runtime data: replace the list (and raise
+    /// <see cref="IInputBindingsReloadSource.Reloading"/> when mutable) to change bindings rather than mutating it
+    /// in place.</returns>
     IReadOnlyList<CommandBinding>? Resolve(int slot, string source);
 
     /// <summary>
@@ -27,6 +30,13 @@ public interface IInputBindings {
             slot: slot,
             source: signal.Source
         );
+    }
+
+    /// <summary>Releases one slot's held chord/modifier and press-latch state. Runtime modality transitions use this
+    /// seam before held digital controls reassert through the new command surface. Default no-op for stateless
+    /// resolvers.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    void Reset(int slot) {
     }
 
     /// <summary>

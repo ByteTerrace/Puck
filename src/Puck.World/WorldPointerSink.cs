@@ -28,8 +28,8 @@ internal interface IWorldWheelConsumer : IWorldPointerConsumer {
 /// The one <see cref="IWindowInputObserver"/> the pointer has. It writes every raw pointer event into
 /// <see cref="WorldPointer"/> and then drives each registered <see cref="IWorldPointerConsumer"/>, so the whole
 /// engine reads pointer state from one store instead of each interested party parsing the raw event stream for
-/// itself. Nothing here names an intent: this is pointer infrastructure, and what a drag or a scroll means is a
-/// consumer's business.
+/// itself. This remains the presentation projection; the window pump independently maps relative motion, wheel
+/// motion, and buttons into bindable mouse command sources.
 /// </summary>
 /// <remarks>
 /// <para>The mouse carries no <see cref="InputDeviceId"/> of its own — there is no per-mouse device identity to
@@ -100,8 +100,7 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
 
                 break;
             case WindowInputKind.PointerButton:
-                // Vector.X carries the button index (0=left, 1=right, 2=middle), the edge its phase.
-                m_pointer.SetButton(slot: slot, button: (int)inputEvent.Vector.X, down: (inputEvent.Phase == CommandPhase.Started));
+                m_pointer.SetButton(slot: slot, button: inputEvent.ButtonIndex, down: (inputEvent.Phase == CommandPhase.Started));
 
                 break;
             case WindowInputKind.PointerWheel:

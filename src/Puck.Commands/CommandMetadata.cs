@@ -14,10 +14,12 @@ namespace Puck.Commands;
 /// <param name="Routing">Whether a submitted text line runs inline or folds into the deterministic snapshot stream.</param>
 /// <param name="Bindability">Whether a binding document may name this command as a destination.</param>
 /// <param name="InputScope">Whether source-driven activation requires ordinary terminal focus.</param>
+/// <param name="Map">The command map that classifies source-driven activation.</param>
 public readonly record struct CommandMetadata(
     string Name,
     CommandValueKind ValueKind,
     CommandRouting Routing,
     CommandBindability Bindability,
-    CommandInputScope InputScope = CommandInputScope.Focused
+    CommandInputScope InputScope = CommandInputScope.Focused,
+    string Map = CommandMaps.Global
 );

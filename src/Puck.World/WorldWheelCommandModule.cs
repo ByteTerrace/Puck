@@ -90,7 +90,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         int slot;
         int direction;
 
-        if (context.Source is not null) {
+        if (context.Origin == CommandOrigin.Binding) {
             // A bound dispatch: the seat is the pressing device's, the direction the row's constant Axis1D value
             // (the stepped-twin fold — never a sibling verb per direction).
             slot = context.Slot;
@@ -138,7 +138,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
         int slot;
 
-        if (context.Source is not null) {
+        if (context.Origin == CommandOrigin.Binding) {
             slot = context.Slot;
 
             // The router's synthesized focus-loss cancellation is the ONE non-release edge that reaches this
@@ -177,7 +177,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             return RequiresWindowed(verb: SelectCommand);
         }
 
-        if (context.Source is null) {
+        if (context.Origin != CommandOrigin.Binding) {
             return CommandResult.Error(output: $"[{SelectCommand}: this Axis2D act is driven by an authored binding]");
         }
 
@@ -193,7 +193,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
         int slot;
 
-        if (context.Source is not null) {
+        if (context.Origin == CommandOrigin.Binding) {
             slot = context.Slot;
         } else if (!WorldArgs.TryParseIndex(args: args, at: 0, min: 1, max: PlayerRoster.MaxSlots, fallback: 1, value: out var player)) {
             return CommandResult.Error(output: $"[{CancelCommand}: player index must be an integer 1..{PlayerRoster.MaxSlots}]");

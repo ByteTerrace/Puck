@@ -10,7 +10,7 @@ namespace Puck.Platform.Linux;
 
 /// <summary>An X11 (XCB) native window backed by libxcb. Drives the window lifecycle and
 /// the events the engine loop needs (resize, close, first paint, pointer motion and buttons, the full F1–F12
-/// function-key range plus a fixed set of navigation keys, and the Control/Shift/Alt/Super modifier keys — each
+/// function-key range plus number-row/numpad, a fixed set of navigation keys, and the Control/Shift/Alt/Super modifier keys — each
 /// side its own <see cref="KeyCode"/> — on the standard Linux evdev keymap). Full keysym
 /// text input, letters, Space, Tab, and clipboard integration are out of scope; on the Steam Deck this path runs
 /// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>. No pointer
@@ -60,6 +60,18 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const byte KeycodeControlLeft = 37;
     private const byte KeycodeControlRight = 105;
     private const byte KeycodeDown = 116;
+    private const byte KeycodeDigit1 = 10;
+    private const byte KeycodeDigit2 = 11;
+    private const byte KeycodeDigit3 = 12;
+    private const byte KeycodeDigit4 = 13;
+    private const byte KeycodeDigit5 = 14;
+    private const byte KeycodeDigit6 = 15;
+    private const byte KeycodeDigit7 = 16;
+    private const byte KeycodeDigit8 = 17;
+    private const byte KeycodeDigit9 = 18;
+    private const byte KeycodeDigit0 = 19;
+    private const byte KeycodeMinus = 20;
+    private const byte KeycodeEquals = 21;
     private const byte KeycodeEscape = 9;
     private const byte KeycodeF1 = 67;
     // F1..F10 are contiguous from 67, so the range check below spans them with these two bounds alone; F11/F12 sit at
@@ -69,6 +81,18 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const byte KeycodeF12 = 96;
     private const byte KeycodeGrave = 49;
     private const byte KeycodeLeft = 113;
+    private const byte KeycodeNumpad7 = 79;
+    private const byte KeycodeNumpad8 = 80;
+    private const byte KeycodeNumpad9 = 81;
+    private const byte KeycodeNumpadSubtract = 82;
+    private const byte KeycodeNumpad4 = 83;
+    private const byte KeycodeNumpad5 = 84;
+    private const byte KeycodeNumpad6 = 85;
+    private const byte KeycodeNumpadAdd = 86;
+    private const byte KeycodeNumpad1 = 87;
+    private const byte KeycodeNumpad2 = 88;
+    private const byte KeycodeNumpad3 = 89;
+    private const byte KeycodeNumpad0 = 90;
     private const byte KeycodeReturn = 36;
     private const byte KeycodeRight = 114;
     private const byte KeycodeShiftLeft = 50;
@@ -472,26 +496,46 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
         m_lastPointerY = pointerY;
     }
     private void HandleButtonPress(nint eventPointer) {
-        if (TryMapButton(detail: Marshal.ReadByte(ofs: 1, ptr: eventPointer), button: out var button)) {
+        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
+
+        if (TryMapWheel(detail: detail, notches: out var notches)) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: notches));
+        } else if (TryMapButton(detail: detail, button: out var button)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Started));
         }
     }
     private void HandleButtonRelease(nint eventPointer) {
-        if (TryMapButton(detail: Marshal.ReadByte(ofs: 1, ptr: eventPointer), button: out var button)) {
+        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
+
+        // X11 models wheel notches as button press/release pairs. The press is the impulse; its release is not a
+        // second act and carries no held state to clear.
+        if (!TryMapWheel(detail: detail, notches: out _) && TryMapButton(detail: detail, button: out var button)) {
             m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Completed));
         }
     }
-    // X11 button numbering (1=left, 2=middle, 3=right; 4/5 are the scroll wheel, ignored here) mapped to the
-    // engine's neutral 0=left/1=right/2=middle convention (WindowInputEvent.PointerButton).
+    // X11 button numbering (1=left, 2=middle, 3=right; 4..7 are wheel directions; 8+ are extra buttons) mapped to
+    // the engine's neutral 0=left/1=right/2=middle/3+=extras convention without capping the extra-button range.
     private static bool TryMapButton(byte detail, out int button) {
         button = detail switch {
             1 => 0,
             2 => 2,
             3 => 1,
+            >= 8 => (detail - 5),
             _ => -1,
         };
 
         return (button >= 0);
+    }
+    private static bool TryMapWheel(byte detail, out Vector2 notches) {
+        notches = detail switch {
+            4 => new Vector2(x: 0f, y: 1f),
+            5 => new Vector2(x: 0f, y: -1f),
+            6 => new Vector2(x: -1f, y: 0f),
+            7 => new Vector2(x: 1f, y: 0f),
+            _ => Vector2.Zero,
+        };
+
+        return (notches != Vector2.Zero);
     }
     private void ReconcilePendingRelease(nint eventPointer, byte responseType) {
         if (m_pendingReleaseKeycode is not { } pendingKeycode) {
@@ -544,6 +588,30 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
         }
 
         key = keycode switch {
+            KeycodeDigit0 => KeyCode.Digit0,
+            KeycodeDigit1 => KeyCode.Digit1,
+            KeycodeDigit2 => KeyCode.Digit2,
+            KeycodeDigit3 => KeyCode.Digit3,
+            KeycodeDigit4 => KeyCode.Digit4,
+            KeycodeDigit5 => KeyCode.Digit5,
+            KeycodeDigit6 => KeyCode.Digit6,
+            KeycodeDigit7 => KeyCode.Digit7,
+            KeycodeDigit8 => KeyCode.Digit8,
+            KeycodeDigit9 => KeyCode.Digit9,
+            KeycodeMinus => KeyCode.Minus,
+            KeycodeEquals => KeyCode.Equals,
+            KeycodeNumpad0 => KeyCode.Numpad0,
+            KeycodeNumpad1 => KeyCode.Numpad1,
+            KeycodeNumpad2 => KeyCode.Numpad2,
+            KeycodeNumpad3 => KeyCode.Numpad3,
+            KeycodeNumpad4 => KeyCode.Numpad4,
+            KeycodeNumpad5 => KeyCode.Numpad5,
+            KeycodeNumpad6 => KeyCode.Numpad6,
+            KeycodeNumpad7 => KeyCode.Numpad7,
+            KeycodeNumpad8 => KeyCode.Numpad8,
+            KeycodeNumpad9 => KeyCode.Numpad9,
+            KeycodeNumpadSubtract => KeyCode.NumpadSubtract,
+            KeycodeNumpadAdd => KeyCode.NumpadAdd,
             KeycodeF11 => KeyCode.F11,
             KeycodeF12 => KeyCode.F12,
             KeycodeEscape => KeyCode.Escape,

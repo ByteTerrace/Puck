@@ -324,7 +324,8 @@ public sealed class BindingRadialTests {
         var entry = Assert.Single(collection: lane.Entries);
         Assert.Equal(expected: expectedPrincipal, actual: entry.Principal);
         Assert.Equal(expected: CommandPhase.Started, actual: entry.Phase);
-        Assert.Equal(expected: BindingActivation.RadialSource, actual: entry.Source);
+        Assert.Equal(expected: CommandOrigin.Binding, actual: entry.Origin);
+        Assert.Null(@object: entry.Source);
     }
 
     [Fact]

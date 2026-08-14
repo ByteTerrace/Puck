@@ -25,13 +25,16 @@ namespace Puck.Commands;
 /// This is the authority for attributing
 /// the input to a fixed-step simulation tick and for rhythm-grade edge timing.
 /// </param>
+/// <param name="Transient">Whether an active analog sample is an impulse rather than persistent device state.
+/// Transient channel destinations receive an automatic inactive edge on the following tick.</param>
 public readonly record struct InputSignal(
     string Source,
     InputDeviceId DeviceId,
     CommandValue Value,
     CommandPhase Phase,
     string? Text = null,
-    ulong CaptureTick = 0UL
+    ulong CaptureTick = 0UL,
+    bool Transient = false
 ) {
     /// <summary>A digital press of a control (<see cref="CommandPhase.Started"/>, digital value).</summary>
     public static InputSignal Press(string source, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
@@ -53,14 +56,26 @@ public readonly record struct InputSignal(
             Value: CommandValue.Digital(active: false)
         );
     }
-    /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
-    public static InputSignal Axis(string source, Vector2 value, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
+    /// <summary>Creates a digital held-state reassertion (<see cref="CommandPhase.Active"/>). This may recover
+    /// continuous channel state and binding modifiers but never represents a fresh command edge.</summary>
+    public static InputSignal Reassert(string source, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
             CaptureTick: captureTick,
             DeviceId: deviceId,
             Phase: CommandPhase.Active,
             Source: source,
-            Value: CommandValue.Axis(value: value)
+            Value: CommandValue.Digital(active: true)
+        );
+    }
+    /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
+    public static InputSignal Axis(string source, Vector2 value, InputDeviceId deviceId = default, ulong captureTick = 0UL, bool transient = false) {
+        return new InputSignal(
+            CaptureTick: captureTick,
+            DeviceId: deviceId,
+            Phase: CommandPhase.Active,
+            Source: source,
+            Value: CommandValue.Axis(value: value),
+            Transient: transient
         );
     }
     /// <summary>A text activation carrying typed characters.</summary>

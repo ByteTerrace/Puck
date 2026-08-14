@@ -1,8 +1,10 @@
+using Puck.Launcher;
+
 namespace Puck.World;
 
 /// <summary>
 /// The console wire's TICK barrier: the state behind <c>world.wait</c>. It is armed by that verb with a release tick and
-/// read every frame as <see cref="Puck.Commands.TextCommandSource.HoldGate"/>, so the queued lines AFTER a wait stay
+/// read every frame through <see cref="ITextCommandHoldGate"/>, so the queued lines AFTER a wait stay
 /// queued until the world's fixed-step simulation has actually advanced the requested number of ticks.
 /// </summary>
 /// <remarks>
@@ -11,7 +13,7 @@ namespace Puck.World;
 /// of a scripted "drive, then read back". Both members run on the window-pump thread (the drain and the fixed step are
 /// the same loop iteration), so no synchronization is needed.
 /// </remarks>
-internal sealed class WorldConsoleWaitGate {
+internal sealed class WorldConsoleWaitGate : ITextCommandHoldGate {
     private bool m_armed;
     private ulong m_releaseTick;
 

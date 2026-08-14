@@ -8,7 +8,9 @@ namespace Puck.Commands;
 /// carry the phase the command's handler must see.
 /// </summary>
 /// <param name="Command">The name of the command the edge drives.</param>
-/// <param name="Phase">The edge: <see cref="CommandPhase.Started"/> on chord completion, <see cref="CommandPhase.Completed"/> on chord break.</param>
+/// <param name="Phase">The edge: <see cref="CommandPhase.Started"/> on a real chord completion,
+/// <see cref="CommandPhase.Active"/> when a channel chord is recovered from held digital state, or
+/// <see cref="CommandPhase.Completed"/> on chord break.</param>
 /// <param name="Value">The value the edge carries (the row's press value, or its inactive twin on release).</param>
 /// <param name="Dispatch">Whether the edge's handler fires (a press always dispatches; a release dispatches only
 /// for a <see cref="BindingCommandDefinition.HoldRelease"/> row — either way the release clears the carried held state).</param>
@@ -21,12 +23,17 @@ namespace Puck.Commands;
 /// carrying that scheduled release also carry a stale, non-dispatching re-assertion of the press — harmless to a
 /// dispatch-gated reader, but not the clean single-entry pulse a tap is supposed to produce. Ignored on a
 /// <see cref="CommandPhase.Completed"/> edge (a release never marks anything held regardless).</param>
+/// <param name="DispatchRelease">Whether the release paired with a <see cref="CommandPhase.Started"/> edge dispatches.
+/// For a momentary press, the router retains this fact without carrying the press into later snapshots, so a modality
+/// transition can deliver a cancellation instead of stranding the handler that consumed its press. Ignored on a
+/// release edge.</param>
 public readonly record struct BindingChordEdge(
     string Command,
     CommandPhase Phase,
     CommandValue Value,
     bool Dispatch,
-    bool Momentary = false
+    bool Momentary = false,
+    bool DispatchRelease = false
 );
 
 /// <summary>

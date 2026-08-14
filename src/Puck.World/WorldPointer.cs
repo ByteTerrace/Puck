@@ -7,9 +7,9 @@ namespace Puck.World;
 /// <summary>
 /// Every local seat's live pointer state — where the cursor is, how far it moved, which buttons are down, and how
 /// far the wheel turned — one slot per <see cref="PlayerRoster.MaxSlots"/> entry. This is browsing state, the
-/// pointer input store: session-only, never persisted, never authored on a document,
-/// and never an input the deterministic simulation reads. A pointer act reaches the simulation only when a consumer
-/// of this state dispatches an ordinary console verb, through the same door a typed line uses.
+/// pointer input store: session-only, never persisted, never authored on a document, and never read by the
+/// deterministic simulation. The same raw mouse event may independently enter the command plane through its
+/// <see cref="Puck.Input.InputSources.Mouse"/> projection; this store is not that projection.
 /// </summary>
 /// <remarks>
 /// <para>Written by <see cref="WorldPointerSink"/> alone (the window-pump thread) and read by any number of
@@ -26,7 +26,7 @@ namespace Puck.World;
 /// caching it.</para>
 /// </remarks>
 internal sealed class WorldPointer {
-    // 0=left, 1=right, 2=middle — the same index WindowInputEvent.PointerButton carries in Vector.X, held here as
+    // 0=left, 1=right, 2=middle — the same index WindowInputEvent.PointerButton carries in ButtonIndex, held here as
     // one bit each so a consumer asks "is this button down" without a per-button array.
     private readonly int[] m_buttons = new int[PlayerRoster.MaxSlots];
     // Latched by the first SetPosition and never cleared: (0,0) is a legal cursor position, so "has the platform

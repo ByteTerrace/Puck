@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -25,7 +26,7 @@ namespace Puck.World;
 /// pure/available there; the per-seat profile and session layers start null (every seat inherits the engine default at boot), and
 /// the roster/verbs push them in as they change. Chord-command edges (<see cref="IChordEdgeSource"/>) forward to the
 /// resolving seat's paged bindings.</remarks>
-internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
+internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInputBindingsReloadSource {
     // The admitted context families this resolver tracks per seat, in WorldContextFamilies.Families order, and each
     // seat's boot state per family (nothing joined, nothing engaged, until the post-step sync publishes otherwise).
     private static readonly string[] s_contextFamilies = [.. WorldContextFamilies.Families];
@@ -50,6 +51,17 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     // re-derives that seat's table.
     private readonly IReadOnlyList<WorldChannel>[] m_channelSource;
     private readonly WorldChannelTable[] m_channels;
+    // Exact effective-profile identity per seat. Reference changes are common at world-route seams; only a change to
+    // the filtered composed document or channel-name ordinal map warrants resetting chord/page/latch state.
+    private readonly byte[][] m_effectiveDocuments;
+    private readonly string[][] m_effectiveChannelNames;
+
+    event Action<int?> IInputBindingsReloadSource.Reloading {
+        add => Reloading += value;
+        remove => Reloading -= value;
+    }
+
+    private event Action<int?>? Reloading;
 
     /// <summary>The number of local seats this router resolves for.</summary>
     public const int SeatCount = WorldPopulation.LocalSeatCount;
@@ -78,6 +90,8 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         m_overlays = new IReadOnlyList<WorldBindingOverlay>[SeatCount];
         m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
         m_channels = new WorldChannelTable[SeatCount];
+        m_effectiveDocuments = new byte[SeatCount][];
+        m_effectiveChannelNames = new string[SeatCount][];
 
         // Every seat's authority claim begins at boot, so
         // every seat seeds from the SAME boot overlays/channels here — SyncSeat is what lets them diverge later.
@@ -92,6 +106,8 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         }
 
         var seedDocument = ComposeSeat(slot: 0);
+        var seedDocumentBytes = SerializeEffectiveDocument(document: seedDocument);
+        var seedChannelNames = ChannelNames(channels: bootChannels);
         var seedBase = BindingProfile.Compile(
             document: seedDocument,
             channelCommandName: channel => RoutedChannelCommandName(channels: bootTable, channel: channel)
@@ -103,6 +119,8 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
             m_seats[slot] = new PagedInputBindings(profile: seedBase);
             m_contextStates[slot] = [.. s_contextBootStates];
             m_seatContexts[slot] = (seedDocument.Contexts ?? []);
+            m_effectiveDocuments[slot] = seedDocumentBytes;
+            m_effectiveChannelNames[slot] = seedChannelNames;
         }
     }
 
@@ -319,6 +337,13 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
         }
     }
 
+    /// <inheritdoc/>
+    public void Reset(int slot) {
+        if ((uint)slot < SeatCount) {
+            m_seats[slot].Reset(slot: slot);
+        }
+    }
+
     /// <summary>The immutable view of the page the seat's held chord currently selects — the binding bar's read
     /// seam (a single volatile reference read; see <see cref="PagedInputBindings.ViewFor"/>).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
@@ -448,13 +473,32 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
             return;
         }
 
+        var documentBytes = SerializeEffectiveDocument(document: document);
+        var channelNames = ChannelNames(channels: m_channelSource[slot]);
+
+        if (
+            m_effectiveDocuments[slot].AsSpan().SequenceEqual(other: documentBytes) &&
+            m_effectiveChannelNames[slot].AsSpan().SequenceEqual(other: channelNames)
+        ) {
+            // A new document instance with the same effective profile is a true no-op: keep the live tracker,
+            // armed chord rows, release latches, and held commands intact. Context references may be new even
+            // though their content is identical, so retain the newest document view for read-back.
+            m_seatContexts[slot] = (document.Contexts ?? []);
+            DeriveActiveGroup(slot: slot);
+            return;
+        }
+
         try {
             var channels = m_channels[slot];
 
-            m_seats[slot].Reload(profile: BindingProfile.Compile(
+            var profile = BindingProfile.Compile(
                 document: document,
                 channelCommandName: channel => RoutedChannelCommandName(channels: channels, channel: channel)
-            ));
+            );
+            Reloading?.Invoke(obj: slot);
+            m_seats[slot].Reload(profile: profile);
+            m_effectiveDocuments[slot] = documentBytes;
+            m_effectiveChannelNames[slot] = channelNames;
         } catch (ArgumentException exception) {
             Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected ({exception.Message.ReplaceLineEndings(replacementText: " ")}); keeping the prior mapping.");
 
@@ -772,6 +816,18 @@ internal sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource {
     }
     private BindingProfileDocument ComposeSeat(int slot) {
         return WorldBindingComposer.Compose(BaseLayers(overlays: m_overlays[slot], profile: m_profileBindings[slot], session: m_sessionRebinds[slot]));
+    }
+    private static byte[] SerializeEffectiveDocument(BindingProfileDocument document) {
+        return JsonSerializer.SerializeToUtf8Bytes(value: document, jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
+    }
+    private static string[] ChannelNames(IReadOnlyList<WorldChannel> channels) {
+        var names = new string[channels.Count];
+
+        for (var index = 0; (index < names.Length); index++) {
+            names[index] = channels[index].Name;
+        }
+
+        return names;
     }
 
     // Runtime lowering for an AUTHORED channel name. The name is resolved only while this seat's composed profile is

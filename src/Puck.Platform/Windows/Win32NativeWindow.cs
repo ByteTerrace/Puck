@@ -28,6 +28,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int SwpNoOwnerZOrder = 0x0200;
     private const int SwpNoZOrder = 0x0004;
     private const int VkA = 0x41;
+    private const int Vk0 = 0x30;
+    private const int Vk9 = 0x39;
     private const int VkBack = 0x08;
     private const int VkC = 0x43;
     private const int VkControl = 0x11;
@@ -48,7 +50,13 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int VkLWin = 0x5B;
     private const int VkLeft = 0x25;
     private const int VkMenu = 0x12;
+    private const int VkNumpad0 = 0x60;
+    private const int VkNumpad9 = 0x69;
+    private const int VkAdd = 0x6B;
+    private const int VkSubtract = 0x6D;
     private const int VkOem3 = 0xC0;
+    private const int VkOemMinus = 0xBD;
+    private const int VkOemPlus = 0xBB;
     private const int VkRShift = 0xA1;
     private const int VkRWin = 0x5C;
     private const int VkReturn = 0x0D;
@@ -74,6 +82,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmMButtonUp = 0x0208;
     private const uint WmMouseMove = 0x0200;
     private const uint WmMouseWheel = 0x020A;
+    private const uint WmMouseHWheel = 0x020E;
+    private const uint WmXButtonDown = 0x020B;
+    private const uint WmXButtonUp = 0x020C;
     // WHEEL_DELTA: the notch quantum WM_MOUSEWHEEL's high word counts in. A free-spin or precision wheel reports
     // FRACTIONS of it, so the neutral event carries the quotient as a float rather than an integer notch count —
     // rounding here would silently drop every sub-notch report a high-resolution wheel makes.
@@ -530,6 +541,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 return HandleMouseMove(lParam: lParam);
             case WmMouseWheel:
                 return HandleMouseWheel(wParam: wParam);
+            case WmMouseHWheel:
+                return HandleMouseHWheel(wParam: wParam);
             case WmLButtonDown:
                 return HandlePointerButtonDown(button: 0, windowHandle: windowHandle);
             case WmLButtonUp:
@@ -542,6 +555,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 return HandlePointerButtonDown(button: 2, windowHandle: windowHandle);
             case WmMButtonUp:
                 return HandlePointerButtonUp(button: 2);
+            case WmXButtonDown:
+                return HandlePointerButtonDown(button: XButtonIndex(wParam: wParam), windowHandle: windowHandle);
+            case WmXButtonUp:
+                return HandlePointerButtonUp(button: XButtonIndex(wParam: wParam));
             case WmClose:
                 _ = User32.DestroyWindow(windowHandle: windowHandle);
                 return 0;
@@ -693,6 +710,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     // The one VK→named-key table both physical edges share. Side-sensitive modifiers derive from the event's
     // lParam: Control/Alt use the extended bit, while Shift resolves its scan code through MapVirtualKey.
     private static bool TryMapNamedKey(long virtualKey, nint lParam, out KeyCode key) {
+        if (virtualKey is >= Vk0 and <= Vk9) {
+            key = (KeyCode)((int)KeyCode.Digit0 + (virtualKey - Vk0));
+            return true;
+        }
+
+        if (virtualKey is >= VkNumpad0 and <= VkNumpad9) {
+            key = (KeyCode)((int)KeyCode.Numpad0 + (virtualKey - VkNumpad0));
+            return true;
+        }
+
         key = virtualKey switch {
             VkOem3 => KeyCode.Backtick,
             VkBack => KeyCode.Backspace,
@@ -704,6 +731,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             VkLeft => KeyCode.ArrowLeft,
             VkRight => KeyCode.ArrowRight,
             VkSpace => KeyCode.Space,
+            VkOemMinus => KeyCode.Minus,
+            VkOemPlus => KeyCode.Equals,
+            VkSubtract => KeyCode.NumpadSubtract,
+            VkAdd => KeyCode.NumpadAdd,
             VkF1 => KeyCode.F1,
             VkF2 => KeyCode.F2,
             VkF3 => KeyCode.F3,
@@ -829,6 +860,20 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
 
         return 0;
+    }
+    private nint HandleMouseHWheel(nint wParam) {
+        var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
+
+        if (notches != 0f) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: new Vector2(x: notches, y: 0f)));
+        }
+
+        return 0;
+    }
+    // WM_XBUTTON's high word is 1 for XBUTTON1 and 2 for XBUTTON2. They follow left/right/middle as the neutral
+    // zero-based button indices 3 and 4; keeping the conversion arithmetic makes the backend vocabulary scalable.
+    private static int XButtonIndex(nint wParam) {
+        return (2 + unchecked((ushort)(wParam.ToInt64() >> 16)));
     }
     // A left-button press captures the mouse: the OS then keeps routing WM_MOUSEMOVE/WM_LBUTTONUP to this window
     // even after the pointer leaves the client area (or the whole window), so a drag that starts inside and ends

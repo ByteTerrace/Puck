@@ -1,4 +1,5 @@
-using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Puck.Maths;
 
 namespace Puck.Commands;
@@ -35,15 +36,20 @@ public sealed class InputRouter {
     private readonly IInputBindings m_bindings;
     private readonly IChordEdgeSource? m_chordEdges;
     private readonly Lock m_captureGate = new();
-    private readonly List<Captured> m_captured = [];
+    private readonly List<CapturedInjection> m_capturedInjections = [];
+    private readonly List<CapturedSignal> m_capturedSignals = [];
     private readonly CommandInjectionSink m_consoleTextSink;
-    // Simulation-thread scratch retained across ticks. Idle snapshots then allocate nothing; active snapshots allocate
-    // only their immutable output. Capture remains independently protected by m_captureGate.
-    private readonly List<Captured> m_due = [];
+    // Simulation-thread scratch retained across ticks. Snapshot output uses the same borrowed-storage discipline, so
+    // steady-state idle and active ticks allocate nothing. Capture remains independently protected by m_captureGate.
+    private readonly List<CapturedInjection> m_dueInjections = [];
+    private readonly List<CapturedSignal> m_dueSignals = [];
     private readonly Stack<HeldCommandState> m_freeHeldStates = [];
     private readonly IInputClock? m_clock;
     private readonly Dictionary<int, Dictionary<ushort, HeldCommandState>> m_heldBySlot = [];
     private readonly Dictionary<int, ulong> m_lastInputTickBySlot = [];
+    // Runtime modality is per logical slot. Missing slots share the registry's immutable Global-only default; a
+    // transition compiles named maps to command-id activity once, leaving source resolution as one array read.
+    private readonly Dictionary<int, CommandModality> m_modalityBySlot = [];
     // Physical first-down truth is shared by focused and focus-exempt capture. A console-opening press can move its
     // device between those routes before the OS emits repeats or the release; one latch must still recognize them as
     // the same press.
@@ -57,17 +63,42 @@ public sealed class InputRouter {
     private readonly CommandRegistry m_registry;
     private readonly Func<InputDeviceId, int> m_slotResolver;
     private readonly Dictionary<int, List<CommandEntry>> m_workingBySlot = [];
+    // Binding lists are immutable runtime artifacts. Lower each list's command names to ids once per installed
+    // profile/host plane, then keep the per-signal fold entirely in the registry's numeric namespace.
+    // The resolver owns each immutable list identity. Cache lowered command ids only while that list remains live;
+    // a mutable/custom resolver returning replacement identities cannot make the router retain every historical list.
+    private readonly ConditionalWeakTable<IReadOnlyList<CommandBinding>, ResolvedBinding[]> m_resolvedBindingLists = new();
+    private readonly Dictionary<string, ushort> m_resolvedCommandIds = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // Snapshot output is borrowed until the next SnapshotForTick call. Retain one entry array per observed slot and
+    // one lane array for the router, growing only when a new high-water mark is reached.
+    private readonly Dictionary<int, SnapshotEntryBuffer> m_snapshotEntriesBySlot = [];
+    private CommandLane[] m_snapshotLanes = [];
+    private int m_snapshotLaneCount;
     private ulong m_sequence;
 
-    // One captured item carries EITHER a raw signal (still needs a binding lookup) or a pre-resolved injection
-    // (a console/peer command, already bound). Both share the capture tick + sequence, so they sort into one
-    // deterministic order regardless of which kind they are.
-    private readonly record struct Captured(ulong Sequence, ulong CaptureTick, InputSignal? Signal, CommandInjection? Injection, bool FocusExemptOnly = false);
+    // Raw signals and pre-resolved injections stay in separate typed buffers: no event carries the inactive half of a
+    // pseudo-union. Both implement the same ordering header, so the due streams merge back into one deterministic
+    // (capture tick, sequence) order before folding.
+    private interface ICaptured {
+        ulong CaptureTick { get; }
+        ulong Sequence { get; }
+    }
+    private readonly record struct CapturedInjection(ulong Sequence, CommandInjection Injection) : ICaptured {
+        public ulong CaptureTick => Injection.CaptureTick;
+    }
+    private readonly record struct CapturedSignal(ulong Sequence, InputSignal Signal, bool FocusExemptOnly = false) : ICaptured {
+        public ulong CaptureTick => Signal.CaptureTick;
+    }
     private readonly record struct HeldCommand(int Slot, ushort CommandId);
     // One physical control holding a command: the (Device, Source) identity a digital hold is tracked and de-duped
     // by. Slot and command id are the enclosing dictionary keys, so they are not repeated here.
     private readonly record struct HeldControlId(InputDeviceId Device, string Source);
     private readonly record struct HeldContribution(HeldControlId Control, CommandEntry Entry);
+    private readonly record struct ResolvedBinding(CommandBinding Binding, ushort CommandId);
+    private sealed class SnapshotEntryBuffer {
+        internal int Count;
+        internal CommandEntry[] Items = [];
+    }
 
     // One held command's carried state within a slot. Entry/Controls model a single logical digital or synthesized
     // chord hold (first control down, last control up); Contributions models channel values independently by physical
@@ -76,21 +107,24 @@ public sealed class InputRouter {
     private sealed class HeldCommandState {
         public CommandEntry Entry;
         public bool HasEntry;
+        public bool HasPendingMomentaryRelease;
         public List<HeldControlId>? Controls;
         public List<HeldContribution>? Contributions;
 
-        public bool IsEmpty => !HasEntry && (Contributions is not { Count: > 0 });
+        public bool IsHeld => HasEntry || (Contributions is { Count: > 0 });
+        public bool IsEmpty => !HasEntry && !HasPendingMomentaryRelease && (Contributions is not { Count: > 0 });
 
         public void Reset() {
             Entry = default;
             HasEntry = false;
+            HasPendingMomentaryRelease = false;
             Controls?.Clear();
             Contributions?.Clear();
         }
     }
 
     /// <summary>Initializes a new instance of the <see cref="InputRouter"/> class.</summary>
-    /// <param name="registry">The registry that interns command ids and gates by map.</param>
+    /// <param name="registry">The registry that interns command ids and map metadata.</param>
     /// <param name="bindings">The slot-aware binding resolver (per-player mappings layered over a default).</param>
     /// <param name="principalResolver">Answers who is acting through a slot. Required: the mixer stamps every captured
     /// entry from it and must never synthesize an identity of its own.</param>
@@ -120,7 +154,7 @@ public sealed class InputRouter {
         m_slotResolver = (slotResolver ?? (static _ => 0));
 
         if (bindings is IInputBindingsReloadSource reloadSource) {
-            reloadSource.Reloading += ReleaseHeld;
+            reloadSource.Reloading += OnBindingsReloading;
         }
         // The console text door, built once here so nothing outside can mint one bound to a principal of its choosing.
         // Slot 0 is the local lane a console impulse rides; the Console principal is what makes it NOT that seat.
@@ -133,7 +167,7 @@ public sealed class InputRouter {
 
     /// <summary>Initializes an input router whose device-to-slot resolver supports side-effect-free probing followed by
     /// an explicit commit after a binding is accepted.</summary>
-    /// <param name="registry">The registry that interns command ids and gates by map.</param>
+    /// <param name="registry">The registry that interns command ids and map metadata.</param>
     /// <param name="bindings">The slot-aware binding resolver.</param>
     /// <param name="principalResolver">Answers who is acting through a slot.</param>
     /// <param name="slotResolver">The transactional device-to-slot resolver.</param>
@@ -175,12 +209,22 @@ public sealed class InputRouter {
     /// <param name="signal">The timestamped input signal to capture.</param>
     public void Capture(in InputSignal signal) {
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(
+            m_capturedSignals.Add(item: new CapturedSignal(
                 Sequence: m_sequence++,
-                CaptureTick: signal.CaptureTick,
                 Signal: signal,
-                Injection: null
+                FocusExemptOnly: false
             ));
+        }
+    }
+
+    private void OnBindingsReloading(int? slot) {
+        m_resolvedBindingLists.Clear();
+
+        if (slot is { } affectedSlot) {
+            ArgumentOutOfRangeException.ThrowIfNegative(affectedSlot);
+            _ = ClearSlotHeld(slot: affectedSlot);
+        } else {
+            ReleaseHeld();
         }
     }
 
@@ -191,11 +235,9 @@ public sealed class InputRouter {
     /// <param name="signal">The raw signal to capture.</param>
     public void CaptureFocusExempt(in InputSignal signal) {
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(
+            m_capturedSignals.Add(item: new CapturedSignal(
                 Sequence: m_sequence++,
-                CaptureTick: signal.CaptureTick,
                 Signal: signal,
-                Injection: null,
                 FocusExemptOnly: true
             ));
         }
@@ -221,12 +263,118 @@ public sealed class InputRouter {
             CommandId: commandId,
             Value: activation.Value,
             Phase: activation.Phase,
+            Origin: CommandOrigin.Binding,
             Principal: default,
-            Slot: slot,
-            Source: BindingActivation.RadialSource
+            Slot: slot
         ));
 
         return true;
+    }
+
+    /// <summary>Atomically replaces one logical slot's active command maps. <see cref="CommandMaps.Global"/> remains
+    /// active implicitly. Commands held in maps that leave the set receive deterministic cancellation on the next
+    /// snapshot; other slots and commands in retained maps are unchanged.</summary>
+    /// <param name="slot">The logical player slot whose modality changes.</param>
+    /// <param name="maps">The complete non-global active map set. Names are matched case-insensitively and must be
+    /// registered by at least one command.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="maps"/> contains an unregistered or null map.</exception>
+    /// <remarks>Pump-thread only. The replacement affects snapshots built after this call; an already-built snapshot
+    /// retains the modality decision made while it was constructed.</remarks>
+    public void SetActiveMaps(int slot, ReadOnlySpan<string> maps) {
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+
+        var previous = ModalityFor(slot: slot);
+        var next = m_registry.CreateModality(activeMaps: maps);
+
+        if (previous.ActiveMaps.AsSpan().SequenceEqual(other: next.ActiveMaps)) {
+            return;
+        }
+
+        if (ReferenceEquals(
+            objA: next,
+            objB: m_registry.DefaultModality
+        )) {
+            _ = m_modalityBySlot.Remove(key: slot);
+        } else {
+            m_modalityBySlot[slot] = next;
+        }
+
+        // Map transitions invalidate page/chord release ownership for this slot. Edge-reported controls remain
+        // physically held at the input source and reassert through the new modality in press order next frame.
+        m_bindings.Reset(slot: slot);
+
+        List<CommandInjection>? cancellations = null;
+
+        if (m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        )) {
+            List<ushort>? commandsToDrop = null;
+
+            foreach (var (commandId, state) in held) {
+                if (next.ActiveCommands[commandId]) {
+                    continue;
+                }
+
+                cancellations ??= [];
+                commandsToDrop ??= [];
+                AppendCancellations(
+                    cancellations: cancellations,
+                    slot: slot,
+                    state: state
+                );
+                RecycleHeldState(state: state);
+                commandsToDrop.Add(item: commandId);
+            }
+
+            if (commandsToDrop is not null) {
+                foreach (var commandId in commandsToDrop) {
+                    _ = held.Remove(key: commandId);
+                }
+
+                if (held.Count == 0) {
+                    _ = m_heldBySlot.Remove(key: slot);
+                }
+            }
+        }
+
+        List<(int Slot, ushort CommandId)>? latchesToDrop = null;
+
+        foreach (var (key, _) in m_toggleLatches) {
+            if ((key.Slot == slot) && !next.ActiveCommands[key.CommandId]) {
+                (latchesToDrop ??= []).Add(item: key);
+            }
+        }
+
+        if (latchesToDrop is not null) {
+            foreach (var key in latchesToDrop) {
+                _ = m_toggleLatches.Remove(key: key);
+            }
+        }
+
+        if (cancellations is not null) {
+            QueueCancellations(
+                cancellations: cancellations,
+                discardCapturedSignals: false
+            );
+        }
+    }
+
+    /// <summary>Determines whether a registered command map is active for a logical slot.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="map">The registered map name.</param>
+    /// <returns><see langword="true"/> when the map is active. Unknown maps return <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="map"/> is <see langword="null"/>.</exception>
+    public bool IsMapActive(int slot, string map) {
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentNullException.ThrowIfNull(map);
+
+        return m_registry.IsMapActive(
+            modality: ModalityFor(slot: slot),
+            map: map
+        );
     }
 
     /// <summary>Whether a logical command is currently carried held for a slot — a bound digital pressed and not yet
@@ -247,7 +395,11 @@ public sealed class InputRouter {
             key: slot,
             value: out var held
         ) &&
-            held.ContainsKey(key: commandId)
+            held.TryGetValue(
+                key: commandId,
+                value: out var state
+            ) &&
+            state.IsHeld
         );
     }
 
@@ -485,17 +637,15 @@ public sealed class InputRouter {
             if (discardCapturedSignals) {
                 // A physical press captured just before focus loss must not become a fresh held input afterward.
                 // Console/peer injections are not focus-owned and remain queued.
-                m_captured.RemoveAll(match: static captured => (captured.Signal is not null));
+                m_capturedSignals.Clear();
             }
 
             var captureTick = (m_clock?.NowTicks ?? 0UL);
 
             foreach (var cancellation in cancellations) {
-                m_captured.Add(item: new Captured(
+                m_capturedInjections.Add(item: new CapturedInjection(
                     Sequence: m_sequence++,
-                    CaptureTick: captureTick,
-                    Signal: null,
-                    Injection: cancellation
+                    Injection: (cancellation with { CaptureTick = captureTick, })
                 ));
             }
         }
@@ -515,11 +665,9 @@ public sealed class InputRouter {
             : (m_clock?.NowTicks ?? 0UL));
 
         lock (m_captureGate) {
-            m_captured.Add(item: new Captured(
+            m_capturedInjections.Add(item: new CapturedInjection(
                 Sequence: m_sequence++,
-                CaptureTick: captureTick,
-                Signal: null,
-                Injection: injection
+                Injection: (injection with { CaptureTick = captureTick, })
             ));
         }
     }
@@ -534,15 +682,7 @@ public sealed class InputRouter {
         // Take this tick's due signals (CaptureTick before the window close), leaving later-stamped signals for
         // a future tick. Total order: capture time, then the unique capture sequence — deterministic for a given
         // captured set, so the recorded snapshot reproduces the run exactly.
-        var due = DrainDue(windowEndTick: windowEndTick);
-
-        due.Sort(comparison: static (left, right) => {
-            var byTime = left.CaptureTick.CompareTo(value: right.CaptureTick);
-
-            return ((byTime != 0)
-                ? byTime
-                : left.Sequence.CompareTo(value: right.Sequence));
-        });
+        DrainDue(windowEndTick: windowEndTick);
 
         // Working per-slot ordered state for this tick. Seeded from carried held state (held digitals re-assert as
         // Active), then every due signal is appended in order; repeated commands stay repeated.
@@ -604,63 +744,122 @@ public sealed class InputRouter {
             }
         }
 
-        foreach (var captured in due) {
-            if (captured.Signal is InputSignal signal) {
+        var signalIndex = 0;
+        var injectionIndex = 0;
+        var dueSignals = CollectionsMarshal.AsSpan(list: m_dueSignals);
+        var dueInjections = CollectionsMarshal.AsSpan(list: m_dueInjections);
+
+        while ((signalIndex < dueSignals.Length) || (injectionIndex < dueInjections.Length)) {
+            if (
+                (injectionIndex >= dueInjections.Length) ||
+                (
+                    (signalIndex < dueSignals.Length) &&
+                    (CompareCaptureOrder(
+                        leftTick: dueSignals[signalIndex].CaptureTick,
+                        leftSequence: dueSignals[signalIndex].Sequence,
+                        rightTick: dueInjections[injectionIndex].CaptureTick,
+                        rightSequence: dueInjections[injectionIndex].Sequence
+                    ) < 0)
+                )
+            ) {
+                ref readonly var captured = ref dueSignals[signalIndex++];
+
                 ApplySignal(
                     workingBySlot: m_workingBySlot,
-                    signal: signal,
+                    signal: captured.Signal,
                     tick: tick,
                     focusExemptOnly: captured.FocusExemptOnly
                 );
-            } else if (captured.Injection is CommandInjection injection) {
+            } else {
+                ref readonly var captured = ref dueInjections[injectionIndex++];
+
                 ApplyInjection(
                     workingBySlot: m_workingBySlot,
-                    injection: injection
+                    injection: captured.Injection
                 );
             }
         }
 
-        return Build(
-            registry: m_registry,
-            tick: tick,
-            workingBySlot: m_workingBySlot,
-            principalResolver: m_principalResolver
-        );
+        return Build(tick: tick);
     }
 
-    private List<Captured> DrainDue(ulong windowEndTick) {
-        m_due.Clear();
+    private void DrainDue(ulong windowEndTick) {
+        m_dueSignals.Clear();
+        m_dueInjections.Clear();
 
+        // Drain both typed streams under one gate: a producer cannot land between them and make a later sequence
+        // eligible for this tick while an earlier one waits for the next tick.
         lock (m_captureGate) {
-            if (m_captured.Count == 0) {
-                return m_due;
-            }
-
-            var kept = 0;
-
-            for (var index = 0; (index < m_captured.Count); index++) {
-                var captured = m_captured[index];
-
-                if (captured.CaptureTick < windowEndTick) {
-                    m_due.Add(item: captured);
-                } else {
-                    m_captured[kept++] = captured;
-                }
-            }
-
-            m_captured.RemoveRange(
-                index: kept,
-                count: (m_captured.Count - kept)
+            DrainDueLocked(
+                captured: m_capturedSignals,
+                due: m_dueSignals,
+                windowEndTick: windowEndTick
+            );
+            DrainDueLocked(
+                captured: m_capturedInjections,
+                due: m_dueInjections,
+                windowEndTick: windowEndTick
             );
         }
 
-        return m_due;
+        m_dueSignals.Sort(comparison: static (left, right) => CompareCaptureOrder(
+            leftTick: left.CaptureTick,
+            leftSequence: left.Sequence,
+            rightTick: right.CaptureTick,
+            rightSequence: right.Sequence
+        ));
+        m_dueInjections.Sort(comparison: static (left, right) => CompareCaptureOrder(
+            leftTick: left.CaptureTick,
+            leftSequence: left.Sequence,
+            rightTick: right.CaptureTick,
+            rightSequence: right.Sequence
+        ));
+    }
+    private static void DrainDueLocked<T>(List<T> captured, List<T> due, ulong windowEndTick) where T : struct, ICaptured {
+        if (captured.Count == 0) {
+            return;
+        }
+
+        var kept = 0;
+
+        for (var index = 0; (index < captured.Count); index++) {
+            var item = captured[index];
+
+            if (item.CaptureTick < windowEndTick) {
+                due.Add(item: item);
+            } else {
+                captured[kept++] = item;
+            }
+        }
+
+        captured.RemoveRange(
+            index: kept,
+            count: (captured.Count - kept)
+        );
+    }
+    private static int CompareCaptureOrder(ulong leftTick, ulong leftSequence, ulong rightTick, ulong rightSequence) {
+        var byTime = leftTick.CompareTo(value: rightTick);
+
+        return ((byTime != 0)
+            ? byTime
+            : leftSequence.CompareTo(value: rightSequence));
     }
 
     // Folds a pre-resolved command directly into its slot's lane for this tick — no binding lookup (it is already
     // bound) and no held bookkeeping: an injection is one-shot, present only in the tick its capture window placed
     // it, with the caller-chosen edge. A held console input is expressed as an explicit Started/Completed pair.
-    private static void ApplyInjection(Dictionary<int, List<CommandEntry>> workingBySlot, CommandInjection injection) {
+    private void ApplyInjection(Dictionary<int, List<CommandEntry>> workingBySlot, CommandInjection injection) {
+        if (
+            (injection.Origin == CommandOrigin.Binding) &&
+            !IsSourceCommandActive(
+                slot: injection.Slot,
+                commandId: injection.CommandId
+            ) &&
+            !injection.DispatchWhenMapInactive
+        ) {
+            return;
+        }
+
         var working = WorkingFor(
             workingBySlot: workingBySlot,
             slot: injection.Slot
@@ -670,12 +869,12 @@ public sealed class InputRouter {
             commandId: injection.CommandId,
             device: default,
             dispatch: true,
+            origin: injection.Origin,
             phase: injection.Phase,
             principal: injection.Principal,
             source: injection.Source,
             text: injection.Text,
-            value: injection.Value,
-            dispatchWhenMapInactive: injection.DispatchWhenMapInactive
+            value: injection.Value
         ) {
             CompletesTextSubmission = injection.CompletesTextSubmission,
             SubmissionBarrier = injection.SubmissionBarrier,
@@ -691,11 +890,13 @@ public sealed class InputRouter {
         }
 
         m_lastInputTickBySlot[slot] = tick;
+        var activeCommands = ModalityFor(slot: slot).ActiveCommands;
 
         var physicalControl = new HeldControlId(
             Device: signal.DeviceId,
             Source: signal.Source
         );
+        var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
 
         if (signal.Phase == CommandPhase.Started) {
             // OS key repeat is another Started event. It must not re-run an edge command (especially a toggle), and
@@ -709,8 +910,8 @@ public sealed class InputRouter {
 
         // Focus-exempt capture deliberately never consults the current authored page. Host-owned terminal bindings
         // live in their own always-active plane, so a page override cannot accidentally remove the escape hatch.
-        var pageBindings = (focusExemptOnly ? null : m_bindings.Resolve(slot: slot, signal: signal));
-        var alwaysActiveBindings = m_alwaysActiveBindings?.Resolve(slot: slot, source: signal.Source);
+        var pageBindings = ResolveBindings(bindings: (focusExemptOnly ? null : m_bindings.Resolve(slot: slot, signal: signal)));
+        var alwaysActiveBindings = ResolveBindings(bindings: m_alwaysActiveBindings?.Resolve(slot: slot, source: signal.Source));
 
         if (!focusExemptOnly && (m_chordEdges is not null)) {
             // Chord-command edges synthesized by this signal's resolve fold into the same lane with their OWN
@@ -725,8 +926,8 @@ public sealed class InputRouter {
             }
         }
 
-        var pageBindingCount = (pageBindings?.Count ?? 0);
-        var alwaysActiveBindingCount = (alwaysActiveBindings?.Count ?? 0);
+        var pageBindingCount = pageBindings.Length;
+        var alwaysActiveBindingCount = alwaysActiveBindings.Length;
 
         if ((pageBindingCount + alwaysActiveBindingCount) == 0) {
             return;
@@ -742,21 +943,15 @@ public sealed class InputRouter {
         Dictionary<ushort, CommandPhase>? toggleFlipsThisSignal = null;
 
         for (var bindingIndex = 0; (bindingIndex < (pageBindingCount + alwaysActiveBindingCount)); bindingIndex++) {
-            var binding = ((bindingIndex < pageBindingCount)
-                ? pageBindings![bindingIndex]
-                : alwaysActiveBindings![bindingIndex - pageBindingCount]);
-
-            if (!m_registry.TryGetId(
-                name: binding.Command,
-                id: out var commandId
-            )) {
-                continue;
-            }
+            var resolved = ((bindingIndex < pageBindingCount)
+                ? pageBindings[bindingIndex]
+                : alwaysActiveBindings[bindingIndex - pageBindingCount]);
+            var binding = resolved.Binding;
+            var commandId = resolved.CommandId;
 
             if (
                 focusExemptOnly &&
-                (!m_registry.TryGetMetadata(name: binding.Command, metadata: out var metadata) ||
-                 (metadata.InputScope != CommandInputScope.FocusExempt))
+                !m_registry.IsFocusExemptCommand(commandId: commandId)
             ) {
                 continue;
             }
@@ -765,19 +960,23 @@ public sealed class InputRouter {
                 binding: in binding,
                 signal: in signal
             );
-            var controlId = new HeldControlId(
-                Device: signal.DeviceId,
-                Source: signal.Source
-            );
-            var sourceCommandActive = m_registry.IsSourceCommandActive(commandId: commandId);
+            var controlId = physicalControl;
+            var sourceCommandActive = ((commandId < activeCommands.Length) && activeCommands[commandId]);
             var ownsHeldState = IsHeldByControl(
                 commandId: commandId,
                 control: controlId,
                 slot: slot
             );
+            var isContribution = ((binding.ChannelScale is not null) && (binding.Mode == BindingEntryMode.Hold));
+
+            // A digital Active sample is state recovery, never a command edge. Continuous channel destinations may
+            // establish/refresh their contribution; ordinary commands and toggles wait for a real Started edge.
+            if (isDigitalReassertion && !isContribution) {
+                continue;
+            }
 
             // Map gating blocks new ownership, but never swallows the release of ownership acquired while the map
-            // was active. The registry likewise admits only Completed/Canceled cleanup edges through a closed map.
+            // was active. Only Completed/Canceled cleanup edges cross a closed map.
             if (!sourceCommandActive) {
                 if (
                     (binding.Mode == BindingEntryMode.Toggle) ||
@@ -786,6 +985,17 @@ public sealed class InputRouter {
                 ) {
                     continue;
                 }
+            }
+
+            // A digital release belongs to the mapping that observed its press (or recovered channel ownership).
+            // Reload/reset clears that ownership, so a release-only edge verb cannot fire merely because a held key
+            // acquired a different meaning while down.
+            if (
+                (signal.Value.Kind == CommandValueKind.Digital) &&
+                (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) &&
+                !ownsHeldState
+            ) {
+                continue;
             }
 
             if (sourceCommandActive && !acceptedBinding) {
@@ -800,7 +1010,6 @@ public sealed class InputRouter {
                 workingBySlot: workingBySlot,
                 slot: slot
             );
-            var isContribution = ((binding.ChannelScale is not null) && (binding.Mode == BindingEntryMode.Hold));
             var isDigital = ((value.Kind == CommandValueKind.Digital) && !isContribution);
             var phase = signal.Phase;
 
@@ -904,11 +1113,11 @@ public sealed class InputRouter {
                 commandId: commandId,
                 device: signal.DeviceId,
                 dispatch: dispatch,
+                origin: CommandOrigin.Binding,
                 phase: phase,
                 source: signal.Source,
                 value: value,
-                assignedSlot: assignedSlot,
-                dispatchWhenMapInactive: (ownsHeldState && (phase is CommandPhase.Completed or CommandPhase.Canceled))
+                assignedSlot: assignedSlot
             );
 
             working.Add(item: entry);
@@ -917,7 +1126,25 @@ public sealed class InputRouter {
             // therefore remain independently owned: releasing one cannot erase the other's reassertion or later
             // focus-loss cancellation.
             if (isContribution) {
-                if (active) {
+                if (active && signal.Transient) {
+                    // An impulse never becomes carried state, even when an edge-selective ActivateOn suppresses its
+                    // dispatch. When dispatched, its active value is visible for this tick and an ordered inactive
+                    // edge follows next tick so the channel handler cannot retain the final delta indefinitely. It
+                    // crosses a map close because cleanup is still owed.
+                    if (dispatch) {
+                        Enqueue(injection: new CommandInjection(
+                            CommandId: commandId,
+                            Value: CommandValue.Inactive(kind: value.Kind),
+                            Phase: CommandPhase.Completed,
+                            Origin: CommandOrigin.Binding,
+                            Principal: default,
+                            Slot: slot,
+                            Source: signal.Source
+                        ) {
+                            DispatchWhenMapInactive = true,
+                        });
+                    }
+                } else if (active) {
                     SetContribution(
                         commandId: commandId,
                         control: controlId,
@@ -934,7 +1161,7 @@ public sealed class InputRouter {
                         slot: slot
                     );
                 }
-            } else if (active) {
+            } else if (active && !signal.Transient) {
                 var state = HeldFor(
                     commandId: commandId,
                     slot: slot
@@ -1011,19 +1238,22 @@ public sealed class InputRouter {
     // IsCommandHeld lights and focus-loss cancellation covers a chord-held command); the release clears it. The
     // command-availability gate matches the bound path — an inactive-map command's chord is inert, not an error.
     private void ApplyChordEdge(Dictionary<int, List<CommandEntry>> workingBySlot, int slot, InputDeviceId device, in BindingChordEdge edge) {
-        if (!m_registry.TryGetId(
+        if (!TryResolveCommandId(
             name: edge.Command,
             id: out var commandId
         )) {
             return;
         }
 
-        var sourceCommandActive = m_registry.IsSourceCommandActive(commandId: commandId);
-        var wasHeld = IsHeld(commandId: commandId, slot: slot);
+        var sourceCommandActive = IsSourceCommandActive(
+            slot: slot,
+            commandId: commandId
+        );
+        var hadCarriedState = HasCarriedState(commandId: commandId, slot: slot);
 
         if (
             !sourceCommandActive &&
-            ((edge.Phase == CommandPhase.Started) || !wasHeld)
+            ((edge.Phase is CommandPhase.Started or CommandPhase.Active) || !hadCarriedState)
         ) {
             return;
         }
@@ -1032,9 +1262,9 @@ public sealed class InputRouter {
             commandId: commandId,
             device: device,
             dispatch: edge.Dispatch,
+            origin: CommandOrigin.Binding,
             phase: edge.Phase,
-            value: edge.Value,
-            dispatchWhenMapInactive: (wasHeld && (edge.Phase is CommandPhase.Completed or CommandPhase.Canceled))
+            value: edge.Value
         );
 
         WorkingFor(
@@ -1047,7 +1277,7 @@ public sealed class InputRouter {
         // scheduled one tick later), and it must not run the release-side removal either (it never marked
         // anything to remove, and nothing else's held entry should be disturbed by an edge that isn't a real
         // Completed transition).
-        if (edge.Phase == CommandPhase.Started) {
+        if (edge.Phase is CommandPhase.Started or CommandPhase.Active) {
             if (!edge.Momentary) {
                 var state = HeldFor(
                     commandId: commandId,
@@ -1059,6 +1289,17 @@ public sealed class InputRouter {
                     Phase = CommandPhase.Active,
                 });
                 state.HasEntry = true;
+            } else if ((edge.Phase == CommandPhase.Started) && edge.DispatchRelease) {
+                // A tapped channel carries no Active reassertion, but its scheduled release still owns
+                // cleanup. Retain only the cancellation payload so a map transition between the two ticks cannot
+                // strand the handler after its Started edge.
+                var state = HeldFor(
+                    commandId: commandId,
+                    slot: slot
+                );
+
+                state.Entry = entry;
+                state.HasPendingMomentaryRelease = true;
             }
         } else {
             DropHeld(
@@ -1067,61 +1308,130 @@ public sealed class InputRouter {
             );
         }
     }
-    private static CommandSnapshot Build(CommandRegistry registry, ulong tick, Dictionary<int, List<CommandEntry>> workingBySlot, ICommandPrincipalResolver principalResolver) {
+    private CommandSnapshot Build(ulong tick) {
+        var workingBySlot = m_workingBySlot;
+
         if (workingBySlot.Count == 0) {
             return CommandSnapshot.Empty(tick: tick);
         }
 
         var activeLaneCount = 0;
 
-        foreach (var working in workingBySlot.Values) {
+        foreach (var (slot, working) in workingBySlot) {
             if (working.Count != 0) {
                 activeLaneCount++;
+            } else if (
+                m_snapshotEntriesBySlot.TryGetValue(
+                    key: slot,
+                    value: out var idleBuffer
+                ) &&
+                (idleBuffer.Count != 0)
+            ) {
+                Array.Clear(
+                    array: idleBuffer.Items,
+                    index: 0,
+                    length: idleBuffer.Count
+                );
+                idleBuffer.Count = 0;
             }
         }
 
         if (activeLaneCount == 0) {
+            ClearRetiredLanes(activeLaneCount: 0);
+
             return CommandSnapshot.Empty(tick: tick);
         }
 
-        var lanes = ImmutableArray.CreateBuilder<CommandLane>(initialCapacity: activeLaneCount);
+        if (m_snapshotLanes.Length < activeLaneCount) {
+            Array.Resize(
+                array: ref m_snapshotLanes,
+                newSize: Math.Max(activeLaneCount, Math.Max(4, (m_snapshotLanes.Length * 2)))
+            );
+        }
+
+        var laneIndex = 0;
 
         foreach (var (slot, working) in workingBySlot) {
             if (working.Count == 0) {
                 continue;
             }
 
-            var entries = ImmutableArray.CreateBuilder<CommandEntry>(initialCapacity: working.Count);
+            if (!m_snapshotEntriesBySlot.TryGetValue(
+                key: slot,
+                value: out var buffer
+            )) {
+                buffer = new SnapshotEntryBuffer();
+                m_snapshotEntriesBySlot[slot] = buffer;
+            }
+
+            if (buffer.Items.Length < working.Count) {
+                Array.Resize(
+                    array: ref buffer.Items,
+                    newSize: Math.Max(working.Count, Math.Max(4, (buffer.Items.Length * 2)))
+                );
+            }
+
+            var entries = buffer.Items;
             // THE STAMP. Ask the host who is acting through this lane — once per lane, because the answer is a
             // property of the slot, not of the entry. A slot may be claimed by a peer or a guest module, so the slot
             // number is never turned into a seat here.
-            var lanePrincipal = principalResolver.PrincipalOf(slot: slot);
+            var lanePrincipal = m_principalResolver.PrincipalOf(slot: slot);
 
             // Entry order is semantic: held state is emitted first in command-id order, then due signals/injections in
             // their deterministic capture order. In particular, repeated console verbs in one host frame must remain
             // repeated and FIFO — collapsing by command id would silently drop scripted tape segments.
-            foreach (var entry in working) {
+            for (var entryIndex = 0; (entryIndex < working.Count); entryIndex++) {
+                var entry = working[entryIndex];
+
                 // An injected entry already carries the identity its sink was BOUND to (the console door rides slot 0
                 // without becoming that seat); everything captured is stamped from the lane.
-                entries.Add(item: (entry.Principal.IsStamped
+                entries[entryIndex] = (entry.Principal.IsStamped
                     ? entry
-                    : (entry with { Principal = lanePrincipal, })));
+                    : (entry with { Principal = lanePrincipal, }));
             }
 
-            lanes.Add(item: new CommandLane(
-                entries: entries.DrainToImmutable(),
+            if (buffer.Count > working.Count) {
+                Array.Clear(
+                    array: entries,
+                    index: working.Count,
+                    length: (buffer.Count - working.Count)
+                );
+            }
+
+            buffer.Count = working.Count;
+
+            m_snapshotLanes[laneIndex++] = new CommandLane(
+                entries: new CommandBuffer<CommandEntry>(items: entries, count: working.Count),
                 slot: slot
-            ));
+            );
         }
 
+        ClearRetiredLanes(activeLaneCount: activeLaneCount);
+
         // Order lanes by slot for a deterministic snapshot layout.
-        lanes.Sort(comparer: LaneBySlotComparer);
+        Array.Sort(
+            array: m_snapshotLanes,
+            index: 0,
+            length: activeLaneCount,
+            comparer: LaneBySlotComparer
+        );
 
         return new CommandSnapshot(
-            lanes: lanes.DrainToImmutable(),
-            registry: registry,
+            lanes: new CommandBuffer<CommandLane>(items: m_snapshotLanes, count: activeLaneCount),
+            registry: m_registry,
             tick: tick
         );
+    }
+    private void ClearRetiredLanes(int activeLaneCount) {
+        if (m_snapshotLaneCount > activeLaneCount) {
+            Array.Clear(
+                array: m_snapshotLanes,
+                index: activeLaneCount,
+                length: (m_snapshotLaneCount - activeLaneCount)
+            );
+        }
+
+        m_snapshotLaneCount = activeLaneCount;
     }
     private static List<CommandEntry> WorkingFor(Dictionary<int, List<CommandEntry>> workingBySlot, int slot) {
         if (!workingBySlot.TryGetValue(
@@ -1184,6 +1494,68 @@ public sealed class InputRouter {
         ) {
             _ = state.Controls?.Remove(item: control);
         }
+    }
+    private ResolvedBinding[] ResolveBindings(IReadOnlyList<CommandBinding>? bindings) {
+        if (bindings is null || (bindings.Count == 0)) {
+            return [];
+        }
+
+        if (m_resolvedBindingLists.TryGetValue(key: bindings, value: out var resolved)) {
+            return resolved;
+        }
+
+        var validCount = 0;
+        var candidates = new ResolvedBinding[bindings.Count];
+
+        for (var index = 0; (index < bindings.Count); index++) {
+            var binding = bindings[index];
+
+            if (!TryResolveCommandId(name: binding.Command, id: out var commandId)) {
+                continue;
+            }
+
+            candidates[validCount++] = new ResolvedBinding(
+                Binding: binding,
+                CommandId: commandId
+            );
+        }
+
+        if (validCount != candidates.Length) {
+            Array.Resize(
+                array: ref candidates,
+                newSize: validCount
+            );
+        }
+
+        m_resolvedBindingLists.Add(key: bindings, value: candidates);
+
+        return candidates;
+    }
+    private bool TryResolveCommandId(string name, out ushort id) {
+        if (m_resolvedCommandIds.TryGetValue(key: name, value: out id)) {
+            return true;
+        }
+
+        if (!m_registry.TryGetId(name: name, id: out id)) {
+            return false;
+        }
+
+        m_resolvedCommandIds[name] = id;
+
+        return true;
+    }
+    private CommandModality ModalityFor(int slot) {
+        return (m_modalityBySlot.TryGetValue(
+            key: slot,
+            value: out var modality
+        )
+            ? modality
+            : m_registry.DefaultModality);
+    }
+    private bool IsSourceCommandActive(int slot, ushort commandId) {
+        var activity = ModalityFor(slot: slot).ActiveCommands;
+
+        return ((commandId < activity.Length) && activity[commandId]);
     }
     private void SetContribution(int slot, ushort commandId, HeldControlId control, CommandEntry entry) {
         var state = HeldFor(
@@ -1268,6 +1640,7 @@ public sealed class InputRouter {
         CommandId: entry.CommandId,
         Value: CommandValue.Inactive(kind: entry.Value.Kind),
         Phase: CommandPhase.Canceled,
+        Origin: entry.Origin,
         Principal: default,
         Slot: slot,
         Source: entry.Source
@@ -1275,7 +1648,7 @@ public sealed class InputRouter {
         DispatchWhenMapInactive = true,
     };
     private static void AppendCancellations(List<CommandInjection> cancellations, int slot, HeldCommandState state) {
-        if (state.HasEntry) {
+        if (state.HasEntry || state.HasPendingMomentaryRelease) {
             cancellations.Add(item: CancellationFor(
                 entry: state.Entry,
                 slot: slot
@@ -1291,7 +1664,7 @@ public sealed class InputRouter {
             }
         }
     }
-    private bool IsHeld(ushort commandId, int slot) {
+    private bool HasCarriedState(ushort commandId, int slot) {
         return (
             m_heldBySlot.TryGetValue(
             key: slot,

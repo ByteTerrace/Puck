@@ -295,7 +295,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
             description: $"Holds the currently routed world's declared channel at ordinal {ordinal} while its source is active — an internal binding target lowered from the authored channel name, not a typed verb.",
             valueKind: CommandValueKind.Axis1D,
             handler: context => {
-                if (context.Parse is not null) {
+                if (context.Origin != CommandOrigin.Binding) {
                     return CommandResult.Error(output: $"[{commandName}: an internal bound-channel destination, not a typed verb — use player.press <channel-name> [value] [holdSeconds] [player] to script it]");
                 }
 
@@ -1740,13 +1740,13 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         // device identity at all, so it cannot consult the device-keyed m_programmaticDevices exclusion the way
         // PlayerRoster.Confirm(InputDeviceId) does — making that guard dead on exactly this pushed/lane-addressed
         // path. PlayerRoster.IsClaimed is the slot-scoped equivalent, and it is what must gate here.
-        if ((context.Parse is null) && context.AssignedSlot && m_roster.IsClaimed(slot: context.Slot)) {
+        if ((context.Origin == CommandOrigin.Binding) && context.AssignedSlot && m_roster.IsClaimed(slot: context.Slot)) {
             return CommandResult.None;
         }
 
         // Physical/snapshot input is lane-addressed. A text invocation deliberately retains the documented local
         // keyboard-device behavior (player.assign may have moved it since boot).
-        if ((context.Parse is null) && context.AssignedSlot && m_roster.IsJoined(slot: context.Slot) && !m_roster.IsPending(slot: context.Slot)) {
+        if ((context.Origin == CommandOrigin.Binding) && context.AssignedSlot && m_roster.IsJoined(slot: context.Slot) && !m_roster.IsPending(slot: context.Slot)) {
             return DescribeConfirm(outcome: ConfirmOutcome.Seated, slot: context.Slot, device: null, actingPrincipal: context.ActingPrincipal());
         }
 
@@ -1755,7 +1755,7 @@ internal sealed class PlayerCommandModule(PlayerRoster roster, WorldPopulation p
         // the text/device-keyed branch it is Console, the operator confirming context.DeviceId on its behalf.
         var actingPrincipal = context.ActingPrincipal();
 
-        var (outcome, slot) = ((context.Parse is null)
+        var (outcome, slot) = ((context.Origin == CommandOrigin.Binding)
             ? ConfirmInputSlot(slot: context.Slot, actingPrincipal: actingPrincipal, device: context.DeviceId)
             : m_roster.Confirm(device: context.DeviceId, actingPrincipal: actingPrincipal));
 

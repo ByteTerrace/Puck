@@ -128,13 +128,14 @@ Wire the registry and router, then produce one snapshot per fixed tick:
 ```csharp
 var registry = new CommandRegistry(modules: [new GameplayModule()]);
 
-registry.ActivateMap(map: "Gameplay");
-
 // Bindings answer what each source drives; the principal resolver answers who acts.
 var router = new InputRouter(
     registry: registry,
     bindings: new FlatBindings(),
     principalResolver: new LocalRoster());
+
+// Modality belongs to a logical player slot. Global remains active implicitly.
+router.SetActiveMaps(slot: 0, maps: ["Gameplay"]);
 
 // Queue simulation-class console lines with the other fixed-step input.
 registry.RouteSimulationTo(sink: router.ConsoleTextSink);
@@ -176,6 +177,13 @@ between ticks, while the window host releases it on focus loss. Bound input
 always passes through an `InputRouter`; without one, a composition root cannot
 dispatch a binding.
 
+Edge-reported controls may stream digital `Active` reassertions while physically
+held. Reassertions rebuild modifier/page state and recover continuous channel
+destinations, but never fire ordinary commands, toggles, or activator gestures.
+An analog producer marks deltas/impulses `Transient`; a transient channel value
+is active for one tick and receives its inactive edge on the next tick instead
+of becoming a stranded stick sample.
+
 ## 🔑 Values
 
 `CommandValue` packs every shape into one `Vector4`, so the value is small,
@@ -200,15 +208,25 @@ Vector2 v = move.AsAxis2D;        // read it back in its kind
 
 ## 🗺️ Maps
 
-A command map is a named group toggled together — how gameplay, menu, and
-console modes coexist without consumers caring. Only commands whose map is
-active dispatch from a snapshot; `CommandMaps.Global` is always active, is the
-default for a definition, and can never be deactivated.
+A command map is a static category on a command definition. The input router
+holds an independent active-map set for each logical player slot, so one player
+can drive a vehicle while another remains on foot and a third uses a planning
+surface. `SetActiveMaps` replaces the slot's complete set atomically. Supplying
+both gameplay and menu maps creates an overlay; supplying only menu creates a
+modal replacement.
+
+`CommandMaps.Global` is implicit for every slot and is the default map for a
+definition. Removing a map deterministically cancels that slot's affected
+holds and resets that slot's binding tracker so streamed held controls can
+re-establish only continuous state through the newly active maps. Text commands remain outside player modality; their stamped principal
+and the handler's authority checks decide what they may do.
 
 ```csharp
-registry.ActivateMap(map: "Gameplay");
-registry.DeactivateMap(map: "Gameplay");
-bool on = registry.IsMapActive(map: "Gameplay");
+router.SetActiveMaps(slot: 0, maps: ["OnFoot"]);
+router.SetActiveMaps(slot: 1, maps: ["Vehicle"]);
+router.SetActiveMaps(slot: 2, maps: ["Plan", "Menu"]);
+
+bool planning = router.IsMapActive(slot: 2, map: "Plan");
 ```
 
 ## 🎛️ Bindings
@@ -219,8 +237,9 @@ constant when a digital key should drive a fixed `move` axis. Channel
 destinations use the separate `ChannelScale` path described in the generated
 API reference.
 
-One physical input may bind to commands in several maps; only the command in an
-active map dispatches, so mode changes do not rewrite the binding table.
+One physical input may bind to commands in several maps; only commands active
+for the source's resolved slot enter its snapshot, so mode changes do not
+rewrite the binding table or affect another player.
 `PagedInputBindings` adds named pages, modifier keys, multi-key chords, and
 radial selection wheels. A flat `IInputBindings` implementation can ignore all
 of those features.
@@ -269,24 +288,24 @@ owns the complete member-by-member surface.
 
 | Type | Role |
 |------|------|
-| `CommandRegistry` | The hub. Aggregates modules, dispatches snapshots and text lines, gates by map. |
+| `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules, interns command and map metadata, and dispatches snapshots and text lines. |
 | `CommandDefinition` | Named, typed, invokable command — the shared identity behind every way it can be driven. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
 | `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
 | `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration (name, value kind, routing, bindability) — what `Definitions` returns. |
+| `CommandMetadata` | The public read-only face of a registration (name, value kind, routing, bindability, input scope, map) — what `Definitions` returns. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
-| `CommandMaps` | Well-known map names; `CommandMaps.Global` is always active. |
-| `InputSignal` | A raw input keyed by a physical source id, *before* binding. |
+| `CommandMaps` | Well-known static map names; `CommandMaps.Global` is active for every slot. |
+| `InputSignal` | A raw input keyed by a physical source id, *before* binding; distinguishes persistent samples, digital held-state reassertions, and transient impulses. |
 | `CommandBinding` | Binds an input source id to a command (constant or pass-through value). |
 | `IInputBindings` / `PagedInputBindings` | The slot-aware binding boundary, and the stateful chord/page/wheel implementation of it. |
 | `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `CommandPrincipal.Console`. |
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
-| `InputRouter` | Captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
+| `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it — ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
 
 ## 📌 Design notes

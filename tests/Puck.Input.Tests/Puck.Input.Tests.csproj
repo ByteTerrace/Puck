@@ -16,5 +16,6 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Input\Puck.Input.csproj" />
         <ProjectReference Include="..\..\src\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Scripting.Simulation\Puck.Scripting.Simulation.csproj" />
     </ItemGroup>
 </Project>

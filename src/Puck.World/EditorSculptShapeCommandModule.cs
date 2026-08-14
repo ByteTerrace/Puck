@@ -269,9 +269,8 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
             handler: $"shape {shape.Id} ({shape.Type}) at ({shape.Position.X:0.00}, {shape.Position.Y:0.00}, {shape.Position.Z:0.00})"
         ));
     }
-    // CommandContext.Source (non-null only for a bound dispatch) is the discriminator, not Value.Kind — this verb
-    // declares Axis1D, so the text path's own impulse value would read Axis1D too. See
-    // CommandDefinition.WithWireArgs's doctrine comment.
+    // CommandContext.Origin is the discriminator, not Value.Kind — this verb declares Axis1D, so the text path's
+    // own impulse value would read Axis1D too. See CommandDefinition.WithWireArgs's doctrine comment.
     private CommandResult NoArgSelectHandler(CommandContext context) {
         var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: WireArgs.Empty, at: 0, verb: SelectCommand, session: m_session, workbench: m_workbench);
 
@@ -279,7 +278,7 @@ internal sealed class EditorSculptShapeCommandModule(WorldEditorSession session,
             return benchError;
         }
 
-        if (context.Source is null) {
+        if (context.Origin != CommandOrigin.Binding) {
             return CommandResult.Error(output: "[editor.sculpt.select: expected <id|name>, next, or prev]");
         }
 

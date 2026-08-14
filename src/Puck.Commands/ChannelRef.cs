@@ -20,7 +20,6 @@ public abstract record ChannelRef {
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record Name(string Value) : ChannelRef;
 }
-
 /// <summary>Reads and writes a channel reference as its authored name string.</summary>
 public sealed class ChannelRefJsonConverter : JsonConverter<ChannelRef> {
     /// <inheritdoc/>
@@ -42,26 +41,4 @@ public sealed class ChannelRefJsonConverter : JsonConverter<ChannelRef> {
                 throw new JsonException(message: "channel reference variant is not declared.");
         }
     }
-}
-
-/// <summary>The engine role a declared channel's value drives directly. A compiled world channel table resolves each
-/// claimed role to its authored ordinal.</summary>
-public enum ChannelRole : byte {
-    /// <summary>Motion along facing, +1 forward / -1 back.</summary>
-    MoveForward,
-
-    /// <summary>Motion along the avatar's right, +1 right / -1 left.</summary>
-    MoveStrafe,
-
-    /// <summary>Yaw rate about the body's up, +1 left (counter-clockwise) / -1 right.</summary>
-    Turn,
-
-    /// <summary>Motion along the body's up, +1 up / -1 down.</summary>
-    MoveUp,
-
-    /// <summary>Pitch rate about the body's right, +1 nose-up / -1 nose-down.</summary>
-    Pitch,
-
-    /// <summary>Roll rate about the body's forward, +1 / -1.</summary>
-    Roll,
 }

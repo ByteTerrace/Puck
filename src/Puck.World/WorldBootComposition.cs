@@ -330,37 +330,11 @@ internal static class WorldBootComposition {
         // shell each fixed step) and the verb that arms it. CORE — world.wait is a server-safe verb by name (DELIVER
         // item 3), and a headless script needs the SAME read-after-write fence a windowed one does.
         services.AddSingleton<WorldConsoleWaitGate>();
+        services.AddSingleton<ITextCommandHoldGate>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleWaitGate>());
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
-        // The command source: results echo to stdout/stderr (split by verdict) and the tick barrier holds queued
-        // lines. Registered here (NOT TryAdd) so it wins over AddLauncherTerminalShared's own TryAddSingleton — the
-        // ordering AddWorldAuthoritativeCore always running before AddLauncherTerminal/AddLauncherHeadlessTerminal
-        // guarantees this. The on-screen console mirror is OPTIONAL (sp.GetService, not GetRequiredService): present
-        // when AddWorldPresentation also ran, null headless — the mirror recording is simply skipped, never a
-        // missing-service crash.
-        services.AddSingleton(implementationFactory: static sp => {
-            var output = sp.GetRequiredService<BufferedConsoleOutput>();
-            var waitGate = sp.GetRequiredService<WorldConsoleWaitGate>();
-
-            return new TextCommandSource(
-                onResult: (line, result) => {
-                    if (!string.IsNullOrEmpty(value: result.Output)) {
-                        // A REFUSED line goes to stderr, an accepted one to the buffered stdout — the same split the
-                        // launcher's own sink makes (this one replaces it to also feed the on-screen console mirror
-                        // when one is composed). Without it a rejection is byte-shaped like success on the same
-                        // stream and a scripted run reads green.
-                        if (result.IsError) {
-                            output.WriteErrorLine(value: result.Output);
-                        } else {
-                            output.WriteLine(value: result.Output);
-                        }
-                    }
-
-                },
-                registry: sp.GetRequiredService<CommandRegistry>()
-            ) {
-                HoldGate = waitGate.IsHolding,
-            };
-        });
+        // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
+        // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
+        // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.
 
         // The world-scope HUD's live binding resolver (world.tick/world.fps/seat.<n>.position.*/population.active)
         // and its console read-back — world.hud + world.hud.template. The panels and defaults themselves are

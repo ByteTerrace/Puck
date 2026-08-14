@@ -115,6 +115,51 @@ public sealed class ConsoleSessionBankTests {
         Assert.Contains(collection: operatorFrame.Lines, filter: static line => line.Text == "deferred result");
     }
 
+    [Fact]
+    public void AdministrativeSimulationResultReachesBothTapesThroughTheRegistryObserver() {
+        ConsoleSessionBank? sessions = null;
+        var terminalSessions = new TerminalConsoleSessions();
+        var observer = new ConsoleSessionCommandObserver(
+            sessions: () => sessions!,
+            terminalSessions: terminalSessions
+        );
+        var registry = new CommandRegistry(
+            modules: [new DeferredProbeModule()],
+            observers: [observer]
+        );
+        var slots = new TwoSeatSlots();
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new SeatPrincipals(),
+            slotResolver: slots
+        );
+        var source = new TextCommandSource(
+            registry: registry,
+            onResult: terminalSessions.RecordAdministrative
+        );
+        sessions = new ConsoleSessionBank(
+            seatCount: 2,
+            source: source,
+            router: router,
+            slotResolver: slots,
+            clipboard: new TestClipboard(),
+            focus: new TestFocus(),
+            terminalSessions: terminalSessions
+        );
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        source.Enqueue(line: "deferred-probe");
+        source.Collect();
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var seatFrame));
+        Assert.Contains(collection: seatFrame.Lines, filter: static line => line.Text == "[deferred-probe: ok]");
+        Assert.True(condition: terminalSessions.OperatorStore.TrySnapshot(frame: out var operatorFrame));
+        Assert.Contains(collection: operatorFrame.Lines, filter: static line => line.Text == "[deferred-probe: ok]");
+    }
+
     private static (ConsoleSessionBank Sessions, ConsoleInputSink Sink, TwoSeatSlots Slots, TestFocus Focus, TerminalConsoleSessions TerminalSessions) CreateSessions() {
         var registry = new CommandRegistry(modules: [new ProbeModule(seen: [])]);
         var slots = new TwoSeatSlots();
@@ -149,6 +194,19 @@ public sealed class ConsoleSessionBankTests {
                     return new CommandResult(Output: $"[probe: seat={context.Slot + 1}]");
                 },
                 bindability: CommandBindability.Unbindable
+            );
+        }
+    }
+
+    private sealed class DeferredProbeModule : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(
+                bindability: CommandBindability.Unbindable,
+                name: "deferred-probe",
+                description: "Reports after deterministic dispatch.",
+                valueKind: CommandValueKind.Digital,
+                handler: _ => new CommandResult(Output: "[deferred-probe: ok]"),
+                routing: CommandRouting.Simulation
             );
         }
     }

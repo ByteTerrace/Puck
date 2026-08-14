@@ -62,18 +62,12 @@ public sealed class CommandRegistryTests {
     }
 
     [Fact]
-    public void GlobalMapIsAlwaysActiveAndCustomMapsToggle() {
+    public void RegisteredMapsAreImmutableCommandMetadata() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
-        Assert.True(condition: registry.IsMapActive(map: CommandMaps.Global));
-        registry.DeactivateMap(map: CommandMaps.Global);
-        Assert.True(condition: registry.IsMapActive(map: CommandMaps.Global));   // Global cannot be removed
-
-        Assert.False(condition: registry.IsMapActive(map: "combat"));
-        registry.ActivateMap(map: "combat");
-        Assert.True(condition: registry.IsMapActive(map: "combat"));
-        registry.DeactivateMap(map: "combat");
-        Assert.False(condition: registry.IsMapActive(map: "combat"));
+        Assert.Equal(expected: [CommandMaps.Global, "combat"], actual: registry.Maps);
+        Assert.True(condition: registry.TryGetMetadata(name: "beta", metadata: out var beta));
+        Assert.Equal(expected: "combat", actual: beta.Map);
     }
 
     [Fact]
@@ -111,6 +105,28 @@ public sealed class CommandRegistryTests {
         source.Collect();
 
         Assert.Equal(expected: ["sim first", "sim\vsecond", "sum 2 3"], actual: submitted);
+    }
+
+    [Fact]
+    public void PlainSimulationLineUsesWireArgumentsWhenItsTickApplies() {
+        var seen = new List<(bool ParseWasNull, string Argument)>();
+        var registry = new CommandRegistry(modules: [new SimulationProbeModule(seen: seen)]);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "sim.probe payload"));
+        Assert.Empty(collection: seen);
+
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(expected: [(true, "payload")], actual: seen);
     }
 
     [Fact]
@@ -222,6 +238,25 @@ public sealed class CommandRegistryTests {
 
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
+    }
+
+    private sealed class SimulationProbeModule(List<(bool ParseWasNull, string Argument)> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "sim.probe",
+                description: "Deferred wire-path probe.",
+                handler: (context, args) => {
+                    seen.Add(item: (
+                        ParseWasNull: (context.Parse is null),
+                        Argument: args[0].ToString()
+                    ));
+
+                    return CommandResult.None;
+                },
+                bindability: CommandBindability.Unbindable,
+                routing: CommandRouting.Simulation
+            );
+        }
     }
 
     private sealed class FixedBindings(string command) : IInputBindings {

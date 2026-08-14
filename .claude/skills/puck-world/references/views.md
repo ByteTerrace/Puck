@@ -110,7 +110,10 @@ duration and render scale remain authored on each layout.
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
 pointer is armed. `WorldCursorFeed` asks that same adapter whether steering is
-active, so pointer consumption and cursor visibility cannot disagree.
+active, so pointer consumption and cursor visibility cannot disagree. This is
+the presentation projection only: the same relative motion, wheel, and button
+events independently enter `Puck.Commands` through `InputSources.Mouse` while
+absolute cursor position remains observer-only.
 
 `WorldEditorSession` remains a mode coordinator and supplies an explicit
 editor rig while editing; the play chase state stays on the seat and resumes

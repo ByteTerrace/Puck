@@ -16,7 +16,9 @@ public readonly record struct CommandContext {
     /// <summary>Initializes a new instance of the <see cref="CommandContext"/> struct.</summary>
     /// <param name="value">The command value for this invocation.</param>
     /// <param name="phase">The transition this invocation represents.</param>
-    /// <param name="parse">The parse result when the command was invoked from text; otherwise <see langword="null"/>.</param>
+    /// <param name="origin">How the invocation entered the command pipeline.</param>
+    /// <param name="parse">The parse result when full parsing was required; <see langword="null"/> for bindings and
+    /// wire-native text.</param>
     /// <param name="text">An optional text payload supplied by the activation.</param>
     /// <param name="registry">The registry that dispatched the invocation.</param>
     /// <param name="deviceId">The device that produced the activation, for source-driven input.</param>
@@ -27,6 +29,7 @@ public readonly record struct CommandContext {
     internal CommandContext(
         CommandValue value,
         CommandPhase phase,
+        CommandOrigin origin,
         ParseResult? parse,
         string? text = null,
         CommandRegistry? registry = null,
@@ -38,6 +41,7 @@ public readonly record struct CommandContext {
     ) {
         AssignedSlot = assignedSlot;
         DeviceId = deviceId;
+        Origin = origin;
         Parse = parse;
         Phase = phase;
         Principal = principal;
@@ -58,7 +62,13 @@ public readonly record struct CommandContext {
     /// text path.</summary>
     public InputDeviceId DeviceId { get; internal init; }
 
-    /// <summary>The parse result when the command was invoked from text; otherwise <see langword="null"/>.</summary>
+    /// <summary>How this invocation entered the command pipeline. Use this, rather than the presence of
+    /// <see cref="Source"/>, to distinguish submitted text from an authored binding: a presentation-driven or
+    /// synthesized binding has no physical source but is still a binding.</summary>
+    public CommandOrigin Origin { get; internal init; }
+
+    /// <summary>The parse result when submitted text required full parsing. This is also <see langword="null"/> for
+    /// wire-native text, so it describes parser work rather than command origin.</summary>
     public ParseResult? Parse { get; internal init; }
 
     /// <summary>The transition this invocation represents.</summary>
@@ -76,10 +86,10 @@ public readonly record struct CommandContext {
     public CommandRegistry? Registry { get; internal init; }
 
     /// <summary>The provider-neutral physical source id that produced this invocation (e.g. <c>keyboard.w</c>), or
-    /// <see langword="null"/> for the text path or an injected invocation with no physical control behind it. Unlike
+    /// <see langword="null"/> when no physical control is behind it. Unlike
     /// <see cref="DeviceId"/> (a per-connection identity, excluded from simulation state), this is deterministic
-    /// binding vocabulary — the field a handler reads to distinguish two DIFFERENT physical controls dispatching the
-    /// SAME command (e.g. two keys bound to one channel).</summary>
+    /// binding vocabulary — the field a handler reads only when it must distinguish two DIFFERENT physical controls
+    /// dispatching the SAME command (e.g. two keys bound to one channel). Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
 
     /// <summary>The stable logical player lane that owns the invocation. Snapshot-driven handlers must use this,

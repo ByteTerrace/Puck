@@ -8,12 +8,9 @@ namespace Puck.Input;
 /// <c>keyboard.escape</c>, never <c>quit</c> (that's a binding's job). Centralizing them keeps the platform
 /// emitters and the app binding tables on one vocabulary instead of scattered magic strings.
 /// </summary>
-/// <remarks>The keyboard and the gamepad are the whole vocabulary: the POINTER has no entry here, and none should
-/// be added. Cursor motion, absolute position, and held mouse buttons are browsing state — presentation/session-only,
-/// continuous rather than edge-shaped, and never an input a <c>CommandSnapshot</c> carries. Consumers read that state
-/// from the raw window-input stream (<see cref="IWindowInputObserver"/>), and a pointer act enters the simulation
-/// only by dispatching an ordinary console verb, the same door a typed line uses. Giving the pointer a source name
-/// here would be offering a binding table something it must never be allowed to bind.</remarks>
+/// <remarks>Absolute cursor position remains browsing state and has no source id. The mouse's command plane is
+/// deliberately separate: relative motion, wheel motion, and numbered buttons are ordinary bindable controls while
+/// the same raw event may also update presentation state through <see cref="IWindowInputObserver"/>.</remarks>
 public static class InputSources {
     /// <summary>
     /// Keyboard controls. The OS-modifier keys (Control/Shift/Alt/Super) each carry distinct left/right ids —
@@ -74,6 +71,18 @@ public static class InputSources {
         /// <summary>The Tab key.</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string Tab = "keyboard.tab";
+        /// <summary>The number-row minus key.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string Minus = "keyboard.minus";
+        /// <summary>The number-row equals key.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string EqualsKey = "keyboard.equals";
+        /// <summary>The numpad subtract key.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string NumpadSubtract = "keyboard.numpadSubtract";
+        /// <summary>The numpad add key.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string NumpadAdd = "keyboard.numpadAdd";
         /// <summary>
         /// Text entered through the platform text-input channel. Declares <see cref="CommandValueKind.Digital"/>
         /// like a keypress (see <see cref="Puck.Commands.InputSignal.Typed"/>), but the text itself rides a
@@ -107,6 +116,61 @@ public static class InputSources {
             }
 
             return $"keyboard.{char.ToLowerInvariant(c: letter)}";
+        }
+        /// <summary>Gets the source for a number-row digit.</summary>
+        /// <param name="number">The digit, from 0 through 9.</param>
+        public static string Digit(int number) {
+            ArgumentOutOfRangeException.ThrowIfNegative(number);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(number, 9);
+
+            return $"keyboard.{number}";
+        }
+        /// <summary>Gets the source for a numpad digit.</summary>
+        /// <param name="number">The digit, from 0 through 9.</param>
+        public static string NumpadDigit(int number) {
+            ArgumentOutOfRangeException.ThrowIfNegative(number);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(number, 9);
+
+            return $"keyboard.numpad{number}";
+        }
+    }
+
+    /// <summary>
+    /// Mouse controls. Button numbers are provider-neutral and one-based: 1 is left, 2 right, 3 middle, and every
+    /// larger number preserves the backend's stable extra-button order rather than imposing a five-button ceiling.
+    /// </summary>
+    public static class Mouse {
+        /// <summary>The left mouse button (button 1).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string LeftButton = "mouse.button1";
+        /// <summary>The right mouse button (button 2).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string RightButton = "mouse.button2";
+        /// <summary>The middle mouse button (button 3).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string MiddleButton = "mouse.button3";
+        /// <summary>The first conventional extra mouse button (button 4).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string Button4 = "mouse.button4";
+        /// <summary>The second conventional extra mouse button (button 5).</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string Button5 = "mouse.button5";
+        /// <summary>Relative mouse motion in device units.</summary>
+        [InputSourceValue(kind: CommandValueKind.Axis2D)]
+        public const string Motion = "mouse.motion";
+        /// <summary>Wheel motion in notches: X is horizontal and Y is vertical.</summary>
+        [InputSourceValue(kind: CommandValueKind.Axis2D)]
+        public const string Wheel = "mouse.wheel";
+
+        /// <summary>Gets the source id for a numbered mouse button.</summary>
+        /// <param name="number">The one-based button number, from 1 through 65535.</param>
+        /// <returns>The provider-neutral button source id.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="number"/> is outside 1 through 65535.</exception>
+        public static string Button(int number) {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value: number, other: 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: number, other: ushort.MaxValue);
+
+            return $"mouse.button{number}";
         }
     }
 
